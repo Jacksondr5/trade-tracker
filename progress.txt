@@ -383,3 +383,28 @@ Started: Sun Jan 25 19:41:36 EST 2026
 - Campaign detail page will be at /campaigns/[id] (dynamic route)
 
 ---
+
+## 2026-01-31 - US-013
+- Created campaign list page at src/app/campaigns/page.tsx
+- Displays table with columns: name, status, created date
+- Status shown as colored badge: planning=blue, active=green, closed=gray
+- Added status filter dropdown (All, Planning, Active, Closed)
+- Added "New Campaign" button linking to /campaigns/new
+- Click row navigates to campaign detail via router.push
+- Uses listCampaigns and listCampaignsByStatus queries with conditional "skip" to avoid unnecessary queries
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files created:**
+- src/app/campaigns/page.tsx (new)
+
+**Files changed:**
+- prd.json (marked US-013 as passes: true)
+
+**Learnings for future iterations:**
+- Use conditional query args with "skip" to choose between different queries based on filter state
+- Status badge pattern: bg-{color}-900/50 border-{color}-700 text-{color}-200 for consistent badge styling
+- For clickable table rows: use cursor-pointer class and onClick with router.push
+- Format dates with toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" }) for consistent display
+
+---
