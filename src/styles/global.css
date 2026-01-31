@@ -1,0 +1,191 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --font-sans:
+    var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-mono:
+    var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, "Liberation Mono", "Courier New", monospace;
+
+  --color-grass-1: #0e1511;
+  --color-grass-2: #141a15;
+  --color-grass-3: #1b2a1e;
+  --color-grass-4: #1d3a24;
+  --color-grass-5: #25482d;
+  --color-grass-6: #2d5736;
+  --color-grass-7: #366740;
+  --color-grass-8: #3e7949;
+  --color-grass-9: #46a758;
+  --color-grass-10: #53b365;
+  --color-grass-11: #71d083;
+  --color-grass-12: #c2f0c2;
+
+  --color-olive-1: #111210;
+  --color-olive-2: #181917;
+  --color-olive-3: #212220;
+  --color-olive-4: #282a27;
+  --color-olive-5: #2f312e;
+  --color-olive-6: #383a36;
+  --color-olive-7: #454843;
+  --color-olive-8: #5c625b;
+  --color-olive-9: #687066;
+  --color-olive-10: #767d74;
+  --color-olive-11: #afb5ad;
+  --color-olive-12: #eceeec;
+
+  --color-slate-1: #151718;
+  --color-slate-2: #1a1d1e;
+  --color-slate-3: #202425;
+  --color-slate-4: #26292b;
+  --color-slate-5: #2b2f31;
+  --color-slate-6: #313538;
+  --color-slate-7: #3a3f42;
+  --color-slate-8: #4c5155;
+  --color-slate-9: #697177;
+  --color-slate-10: #787f85;
+  --color-slate-11: #9ba1a6;
+  --color-slate-12: #ecedee;
+
+  --color-green-1: #0d1912;
+  --color-green-2: #0c1f17;
+  --color-green-3: #0f291e;
+  --color-green-4: #113123;
+  --color-green-5: #133929;
+  --color-green-6: #164430;
+  --color-green-7: #1b543a;
+  --color-green-8: #236e4a;
+  --color-green-9: #30a46c;
+  --color-green-10: #3cb179;
+  --color-green-11: #4cc38a;
+  --color-green-12: #e5fbeb;
+
+  --color-red-1: #1f1315;
+  --color-red-2: #291415;
+  --color-red-3: #3c181a;
+  --color-red-4: #481a1d;
+  --color-red-5: #541b1f;
+  --color-red-6: #671e22;
+  --color-red-7: #822025;
+  --color-red-8: #aa2429;
+  --color-red-9: #e5484d;
+  --color-red-10: #f2555a;
+  --color-red-11: #ff6369;
+  --color-red-12: #feecee;
+
+  --color-amber-1: #1f1300;
+  --color-amber-2: #271700;
+  --color-amber-3: #341c00;
+  --color-amber-4: #3f2200;
+  --color-amber-5: #4a2900;
+  --color-amber-6: #573300;
+  --color-amber-7: #693f05;
+  --color-amber-8: #824e00;
+  --color-amber-9: #ffb224;
+  --color-amber-10: #ffcb47;
+  --color-amber-11: #f1a10d;
+  --color-amber-12: #fef3dd;
+
+  --color-blue-1: #0f1720;
+  --color-blue-2: #0f1b2d;
+  --color-blue-3: #10243e;
+  --color-blue-4: #102a4c;
+  --color-blue-5: #0f3058;
+  --color-blue-6: #0d3868;
+  --color-blue-7: #0a4481;
+  --color-blue-8: #0954a5;
+  --color-blue-9: #0091ff;
+  --color-blue-10: #369eff;
+  --color-blue-11: #52a9ff;
+  --color-blue-12: #eaf6ff;
+}
+
+/*
+  The default border color has changed to `currentColor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+}
+
+:root {
+  --radius: 0.625rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-full: 9999px;
+  --radius-none: 0px;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
