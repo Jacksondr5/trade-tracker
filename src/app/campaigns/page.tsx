@@ -114,6 +114,15 @@ export default function CampaignsPage() {
                   key={campaign._id}
                   className="cursor-pointer hover:bg-slate-800/50"
                   onClick={() => router.push(`/campaigns/${campaign._id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      router.push(`/campaigns/${campaign._id}`);
+                    }
+                  }}
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`View campaign ${campaign.name}`}
                   data-testid={`campaign-row-${campaign._id}`}
                 >
                   <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-sm font-medium">

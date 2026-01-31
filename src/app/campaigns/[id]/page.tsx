@@ -119,6 +119,15 @@ export default function CampaignDetailPage() {
       return;
     }
 
+    // Validate percentage if provided
+    const parsedPercentage = entryTargetPercentage.trim()
+      ? parseFloat(entryTargetPercentage)
+      : undefined;
+    if (parsedPercentage !== undefined && !Number.isFinite(parsedPercentage)) {
+      setEntryTargetError("Percentage must be a valid number");
+      return;
+    }
+
     setEntryTargetError(null);
     setIsAddingEntryTarget(true);
 
@@ -127,9 +136,7 @@ export default function CampaignDetailPage() {
         campaignId,
         ticker: entryTargetTicker,
         price,
-        percentage: entryTargetPercentage.trim()
-          ? parseFloat(entryTargetPercentage)
-          : undefined,
+        percentage: parsedPercentage,
         notes: entryTargetNotes.trim() || undefined,
       });
       // Clear form on success
@@ -173,6 +180,15 @@ export default function CampaignDetailPage() {
       return;
     }
 
+    // Validate percentage if provided
+    const parsedPercentage = profitTargetPercentage.trim()
+      ? parseFloat(profitTargetPercentage)
+      : undefined;
+    if (parsedPercentage !== undefined && !Number.isFinite(parsedPercentage)) {
+      setProfitTargetError("Percentage must be a valid number");
+      return;
+    }
+
     setProfitTargetError(null);
     setIsAddingProfitTarget(true);
 
@@ -181,9 +197,7 @@ export default function CampaignDetailPage() {
         campaignId,
         ticker: profitTargetTicker,
         price,
-        percentage: profitTargetPercentage.trim()
-          ? parseFloat(profitTargetPercentage)
-          : undefined,
+        percentage: parsedPercentage,
         notes: profitTargetNotes.trim() || undefined,
       });
       // Clear form on success
@@ -288,6 +302,7 @@ export default function CampaignDetailPage() {
                     onClick={() => handleRemoveInstrument(instrument.ticker)}
                     className="ml-4 rounded px-2 py-1 text-red-400 hover:bg-red-900/30 hover:text-red-300"
                     title="Remove instrument"
+                    aria-label={`Remove ${instrument.ticker}`}
                   >
                     ✕
                   </button>
@@ -390,6 +405,7 @@ export default function CampaignDetailPage() {
                     onClick={() => handleRemoveEntryTarget(index)}
                     className="ml-4 rounded px-2 py-1 text-red-400 hover:bg-red-900/30 hover:text-red-300"
                     title="Remove entry target"
+                    aria-label={`Remove entry target for ${target.ticker}`}
                   >
                     ✕
                   </button>
@@ -517,6 +533,7 @@ export default function CampaignDetailPage() {
                     onClick={() => handleRemoveProfitTarget(index)}
                     className="ml-4 rounded px-2 py-1 text-red-400 hover:bg-red-900/30 hover:text-red-300"
                     title="Remove profit target"
+                    aria-label={`Remove profit target for ${target.ticker}`}
                   >
                     ✕
                   </button>

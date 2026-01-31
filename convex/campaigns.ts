@@ -221,25 +221,27 @@ export const addInstrument = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { campaignId, notes, ticker, underlying } = args;
+    const { campaignId, notes, underlying } = args;
+    // Normalize ticker: trim and uppercase for consistent comparison and storage
+    const normalizedTicker = args.ticker.trim().toUpperCase();
 
     const campaign = await ctx.db.get(campaignId);
     if (!campaign) {
       throw new Error("Campaign not found");
     }
 
-    // Check for duplicate ticker
+    // Check for duplicate ticker (compare normalized values)
     const existingInstrument = campaign.instruments.find(
-      (i) => i.ticker === ticker,
+      (i) => i.ticker.toUpperCase() === normalizedTicker,
     );
     if (existingInstrument) {
-      throw new Error(`Instrument with ticker "${ticker}" already exists in this campaign`);
+      throw new Error(`Instrument with ticker "${normalizedTicker}" already exists in this campaign`);
     }
 
-    // Add the new instrument to the array
+    // Add the new instrument to the array with normalized ticker
     const newInstrument = {
       notes,
-      ticker,
+      ticker: normalizedTicker,
       underlying,
     };
 
@@ -261,21 +263,23 @@ export const removeInstrument = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { campaignId, ticker } = args;
+    const { campaignId } = args;
+    // Normalize ticker for consistent comparison
+    const normalizedTicker = args.ticker.trim().toUpperCase();
 
     const campaign = await ctx.db.get(campaignId);
     if (!campaign) {
       throw new Error("Campaign not found");
     }
 
-    // Filter out the instrument with the specified ticker
+    // Filter out the instrument with the specified ticker (compare normalized values)
     const updatedInstruments = campaign.instruments.filter(
-      (i) => i.ticker !== ticker,
+      (i) => i.ticker.toUpperCase() !== normalizedTicker,
     );
 
     // Check if the instrument was found
     if (updatedInstruments.length === campaign.instruments.length) {
-      throw new Error(`Instrument with ticker "${ticker}" not found in this campaign`);
+      throw new Error(`Instrument with ticker "${normalizedTicker}" not found in this campaign`);
     }
 
     await ctx.db.patch(campaignId, {
