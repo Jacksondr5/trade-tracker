@@ -457,3 +457,29 @@ Started: Sun Jan 25 19:41:36 EST 2026
 - Instrument object has optional fields (notes, underlying) - include them in the object even if undefined
 
 ---
+
+## 2026-01-31 - US-016
+- Built Instruments UI on campaign detail page
+- Replaced placeholder with full instruments section
+- Display existing instruments showing: ticker, underlying (with arrow), notes (in parentheses)
+- Example: "GLDM → GOLD (Gold ETF proxy)"
+- Added form to add new instruments with three fields: ticker (required), underlying (optional), notes (optional)
+- Added delete button (✕) for each instrument with hover state
+- Error handling for add/remove operations with dismissible error messages
+- Ticker automatically converted to uppercase on add
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files changed:**
+- src/app/campaigns/[id]/page.tsx (added instruments section with list, form, and delete buttons)
+- prd.json (marked US-016 as passes: true)
+
+**Learnings for future iterations:**
+- Form state pattern: useState for each field + error state + submitting state
+- Clear form on successful mutation by resetting all state values
+- Use grid with responsive columns (grid-cols-1 sm:grid-cols-3) for form fields
+- Delete button styling: text-red-400 with hover:bg-red-900/30 for subtle effect
+- Convert ticker to uppercase for consistency: ticker.trim().toUpperCase()
+- Pass undefined for optional empty strings: value.trim() || undefined
+
+---

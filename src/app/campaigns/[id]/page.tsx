@@ -1,8 +1,9 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useState } from "react";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
 
@@ -24,6 +25,55 @@ export default function CampaignDetailPage() {
   const campaignId = params.id as Id<"campaigns">;
 
   const campaign = useQuery(api.campaigns.getCampaign, { campaignId });
+  const addInstrument = useMutation(api.campaigns.addInstrument);
+  const removeInstrument = useMutation(api.campaigns.removeInstrument);
+
+  // Instrument form state
+  const [instrumentTicker, setInstrumentTicker] = useState("");
+  const [instrumentUnderlying, setInstrumentUnderlying] = useState("");
+  const [instrumentNotes, setInstrumentNotes] = useState("");
+  const [instrumentError, setInstrumentError] = useState<string | null>(null);
+  const [isAddingInstrument, setIsAddingInstrument] = useState(false);
+
+  const handleAddInstrument = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!instrumentTicker.trim()) {
+      setInstrumentError("Ticker is required");
+      return;
+    }
+
+    setInstrumentError(null);
+    setIsAddingInstrument(true);
+
+    try {
+      await addInstrument({
+        campaignId,
+        ticker: instrumentTicker.trim().toUpperCase(),
+        underlying: instrumentUnderlying.trim() || undefined,
+        notes: instrumentNotes.trim() || undefined,
+      });
+      // Clear form on success
+      setInstrumentTicker("");
+      setInstrumentUnderlying("");
+      setInstrumentNotes("");
+    } catch (error) {
+      setInstrumentError(
+        error instanceof Error ? error.message : "Failed to add instrument"
+      );
+    } finally {
+      setIsAddingInstrument(false);
+    }
+  };
+
+  const handleRemoveInstrument = async (ticker: string) => {
+    try {
+      await removeInstrument({ campaignId, ticker });
+    } catch (error) {
+      setInstrumentError(
+        error instanceof Error ? error.message : "Failed to remove instrument"
+      );
+    }
+  };
 
   if (campaign === undefined) {
     return (
@@ -71,10 +121,104 @@ export default function CampaignDetailPage() {
 
       {/* Placeholder sections */}
       <div className="grid gap-6">
-        {/* Instruments placeholder */}
+        {/* Instruments section */}
         <div className="rounded-lg border border-slate-700 bg-slate-800 p-6">
           <h2 className="text-slate-12 text-lg font-semibold mb-3">Instruments</h2>
-          <p className="text-slate-11 text-sm italic">Coming soon - instruments will be displayed here.</p>
+
+          {/* Existing instruments list */}
+          {campaign.instruments.length > 0 ? (
+            <div className="mb-4 space-y-2">
+              {campaign.instruments.map((instrument) => (
+                <div
+                  key={instrument.ticker}
+                  className="flex items-center justify-between rounded border border-slate-700 bg-slate-900 px-4 py-2"
+                >
+                  <div className="flex-1">
+                    <span className="font-medium text-slate-12">
+                      {instrument.ticker}
+                    </span>
+                    {instrument.underlying && (
+                      <span className="text-slate-11">
+                        {" → "}
+                        <span className="text-slate-12">{instrument.underlying}</span>
+                      </span>
+                    )}
+                    {instrument.notes && (
+                      <span className="text-slate-11 text-sm ml-2">
+                        ({instrument.notes})
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleRemoveInstrument(instrument.ticker)}
+                    className="ml-4 rounded px-2 py-1 text-red-400 hover:bg-red-900/30 hover:text-red-300"
+                    title="Remove instrument"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-slate-11 text-sm mb-4">No instruments added yet.</p>
+          )}
+
+          {/* Add instrument form */}
+          <form onSubmit={handleAddInstrument} className="space-y-3">
+            {instrumentError && (
+              <div className="rounded border border-red-700 bg-red-900/50 px-4 py-2 text-red-200 text-sm">
+                {instrumentError}
+              </div>
+            )}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div>
+                <label htmlFor="ticker" className="block text-sm text-slate-11 mb-1">
+                  Ticker <span className="text-red-400">*</span>
+                </label>
+                <input
+                  id="ticker"
+                  type="text"
+                  value={instrumentTicker}
+                  onChange={(e) => setInstrumentTicker(e.target.value)}
+                  placeholder="e.g., GLDM"
+                  className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-slate-12 placeholder:text-slate-11 focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label htmlFor="underlying" className="block text-sm text-slate-11 mb-1">
+                  Underlying (optional)
+                </label>
+                <input
+                  id="underlying"
+                  type="text"
+                  value={instrumentUnderlying}
+                  onChange={(e) => setInstrumentUnderlying(e.target.value)}
+                  placeholder="e.g., GOLD"
+                  className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-slate-12 placeholder:text-slate-11 focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label htmlFor="notes" className="block text-sm text-slate-11 mb-1">
+                  Notes (optional)
+                </label>
+                <input
+                  id="notes"
+                  type="text"
+                  value={instrumentNotes}
+                  onChange={(e) => setInstrumentNotes(e.target.value)}
+                  placeholder="e.g., Gold ETF proxy"
+                  className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-slate-12 placeholder:text-slate-11 focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+            </div>
+            <button
+              type="submit"
+              disabled={isAddingInstrument}
+              className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isAddingInstrument ? "Adding..." : "Add Instrument"}
+            </button>
+          </form>
         </div>
 
         {/* Entry Targets placeholder */}
