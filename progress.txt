@@ -408,3 +408,30 @@ Started: Sun Jan 25 19:41:36 EST 2026
 - Format dates with toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" }) for consistent display
 
 ---
+
+## 2026-01-31 - US-014
+- Created campaign detail page at src/app/campaigns/[id]/page.tsx
+- Displays campaign name as page title with status badge beside it
+- Status badge uses same colors as list page: planning=blue, active=green, closed=gray
+- Thesis displayed in a dedicated card/section with whitespace-pre-wrap for formatting
+- Added placeholder sections for: Instruments, Entry Targets, Profit Targets, Stop Loss, Notes, Trades
+- Back link to /campaigns at the top of the page
+- Loading state while fetching campaign data
+- Not found state when campaign doesn't exist
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files created:**
+- src/app/campaigns/[id]/page.tsx (new)
+
+**Files changed:**
+- prd.json (marked US-014 as passes: true)
+
+**Learnings for future iterations:**
+- Dynamic routes use [id] folder convention in Next.js App Router
+- useParams() hook to get route params, cast to Id<"tableName"> for Convex
+- Reuse status badge styling function from list page for consistency
+- Use whitespace-pre-wrap to preserve line breaks in thesis text
+- Split Targets into Entry Targets and Profit Targets sections for clarity
+
+---
