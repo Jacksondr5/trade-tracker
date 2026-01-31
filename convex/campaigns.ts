@@ -417,3 +417,38 @@ export const removeProfitTarget = mutation({
     return null;
   },
 });
+
+/**
+ * Add a stop loss entry to a campaign's stop loss history.
+ * Stop losses are append-only to preserve history.
+ */
+export const addStopLoss = mutation({
+  args: {
+    campaignId: v.id("campaigns"),
+    price: v.number(),
+    reason: v.optional(v.string()),
+    ticker: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { campaignId, price, reason, ticker } = args;
+
+    const campaign = await ctx.db.get(campaignId);
+    if (!campaign) {
+      throw new Error("Campaign not found");
+    }
+
+    const newStopLoss = {
+      price,
+      reason,
+      setAt: Date.now(),
+      ticker,
+    };
+
+    await ctx.db.patch(campaignId, {
+      stopLossHistory: [...campaign.stopLossHistory, newStopLoss],
+    });
+
+    return null;
+  },
+});

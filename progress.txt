@@ -529,3 +529,21 @@ Started: Sun Jan 25 19:41:36 EST 2026
 - Use index-based removal for targets (passed to handler as `handleRemoveEntryTarget(index)`)
 
 ---
+
+## 2026-01-31 - US-019
+- Added addStopLoss mutation to convex/campaigns.ts
+- Mutation accepts campaignId (required), ticker (required), price (required), reason (optional)
+- Appends new stop loss entry to stopLossHistory array with setAt timestamp (Date.now())
+- Stop losses are append-only - no removal mutation, history is preserved
+- TypeScript and lint checks pass
+
+**Files changed:**
+- convex/campaigns.ts (added addStopLoss mutation)
+- prd.json (marked US-019 as passes: true)
+
+**Learnings for future iterations:**
+- Stop loss history is append-only by design - no removal mutation needed
+- The stopLossValidator already exists in campaigns.ts, so creating the entry matches the expected schema
+- Follow alphabetized field ordering in args: campaignId, price, reason, ticker
+
+---
