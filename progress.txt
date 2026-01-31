@@ -504,3 +504,28 @@ Started: Sun Jan 25 19:41:36 EST 2026
 - Follow alphabetized field ordering in args: campaignId, notes, percentage, price, ticker
 
 ---
+
+## 2026-01-31 - US-018
+- Built Entry Targets and Profit Targets UI sections on campaign detail page
+- Replaced placeholder sections with full implementations
+- Each target displays: ticker, price (formatted as currency), percentage (if set), notes (if set)
+- Added dropdown select for ticker (populated from campaign instruments)
+- Form fields: ticker (select from instruments), price (number), percentage (optional), notes (optional)
+- Delete button (✕) for each target with hover styling
+- Targets form disabled when no instruments exist with helpful message
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files changed:**
+- src/app/campaigns/[id]/page.tsx (added Entry Targets and Profit Targets sections with lists, forms, and delete buttons)
+- prd.json (marked US-018 as passes: true)
+
+**Learnings for future iterations:**
+- Target forms share similar structure with instruments but use select dropdown for ticker
+- Populate ticker dropdown from campaign.instruments for data consistency
+- Disable form submit when no instruments exist: `disabled={isAdding || campaign.instruments.length === 0}`
+- Use parseFloat for price conversion from string input to number
+- Format currency with Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
+- Use index-based removal for targets (passed to handler as `handleRemoveEntryTarget(index)`)
+
+---
