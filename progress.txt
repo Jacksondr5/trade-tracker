@@ -358,3 +358,28 @@ Started: Sun Jan 25 19:41:36 EST 2026
 - Use v.union(campaignValidator, v.null()) for queries that may return null (like getCampaign)
 
 ---
+
+## 2026-01-31 - US-012
+- Created campaign creation form at src/app/campaigns/new/page.tsx
+- Form has two fields: name (text input, required), thesis (textarea, required)
+- Uses TanStack React Form with Zod validation via useAppForm from component library
+- Calls createCampaign mutation on submit, which returns the new campaign ID
+- Shows success message and redirects to /campaigns/{campaignId} after creation
+- Includes error handling with dismissible error messages
+- Cancel button navigates back to /campaigns
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files created:**
+- src/app/campaigns/new/page.tsx (new)
+
+**Files changed:**
+- prd.json (marked US-012 as passes: true)
+
+**Learnings for future iterations:**
+- Campaign form is simpler than trade form - only needs name and thesis fields
+- The createCampaign mutation returns the campaign ID, which can be used for redirect
+- Follow the same patterns from trade form: useState for isSubmitting/success/error, useAppForm with Zod schema
+- Campaign detail page will be at /campaigns/[id] (dynamic route)
+
+---
