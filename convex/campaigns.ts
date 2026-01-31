@@ -207,3 +207,81 @@ export const getCampaign = query({
     return campaign;
   },
 });
+
+/**
+ * Add an instrument to a campaign.
+ * Prevents duplicate tickers in the same campaign.
+ */
+export const addInstrument = mutation({
+  args: {
+    campaignId: v.id("campaigns"),
+    notes: v.optional(v.string()),
+    ticker: v.string(),
+    underlying: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { campaignId, notes, ticker, underlying } = args;
+
+    const campaign = await ctx.db.get(campaignId);
+    if (!campaign) {
+      throw new Error("Campaign not found");
+    }
+
+    // Check for duplicate ticker
+    const existingInstrument = campaign.instruments.find(
+      (i) => i.ticker === ticker,
+    );
+    if (existingInstrument) {
+      throw new Error(`Instrument with ticker "${ticker}" already exists in this campaign`);
+    }
+
+    // Add the new instrument to the array
+    const newInstrument = {
+      notes,
+      ticker,
+      underlying,
+    };
+
+    await ctx.db.patch(campaignId, {
+      instruments: [...campaign.instruments, newInstrument],
+    });
+
+    return null;
+  },
+});
+
+/**
+ * Remove an instrument from a campaign by ticker.
+ */
+export const removeInstrument = mutation({
+  args: {
+    campaignId: v.id("campaigns"),
+    ticker: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { campaignId, ticker } = args;
+
+    const campaign = await ctx.db.get(campaignId);
+    if (!campaign) {
+      throw new Error("Campaign not found");
+    }
+
+    // Filter out the instrument with the specified ticker
+    const updatedInstruments = campaign.instruments.filter(
+      (i) => i.ticker !== ticker,
+    );
+
+    // Check if the instrument was found
+    if (updatedInstruments.length === campaign.instruments.length) {
+      throw new Error(`Instrument with ticker "${ticker}" not found in this campaign`);
+    }
+
+    await ctx.db.patch(campaignId, {
+      instruments: updatedInstruments,
+    });
+
+    return null;
+  },
+});

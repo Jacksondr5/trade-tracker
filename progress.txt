@@ -435,3 +435,25 @@ Started: Sun Jan 25 19:41:36 EST 2026
 - Split Targets into Entry Targets and Profit Targets sections for clarity
 
 ---
+
+## 2026-01-31 - US-015
+- Added addInstrument mutation to campaigns.ts
+- Added removeInstrument mutation to campaigns.ts
+- Both mutations accept campaignId as required parameter
+- addInstrument accepts ticker (required), underlying (optional), notes (optional)
+- removeInstrument accepts ticker to identify which instrument to remove
+- Duplicate ticker validation: throws error if ticker already exists in campaign
+- Removal validation: throws error if ticker not found in campaign
+- TypeScript and lint checks pass
+
+**Files changed:**
+- convex/campaigns.ts (added addInstrument and removeInstrument mutations)
+- prd.json (marked US-015 as passes: true)
+
+**Learnings for future iterations:**
+- Array modification pattern: spread existing array with new item for adds, filter for removes
+- Duplicate detection: use array.find() to check for existing items before adding
+- Removal detection: compare array lengths before/after filter to detect if item was found
+- Instrument object has optional fields (notes, underlying) - include them in the object even if undefined
+
+---
