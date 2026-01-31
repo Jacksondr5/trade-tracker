@@ -338,3 +338,23 @@ Started: Sun Jan 25 19:41:36 EST 2026
 - This project is standalone (not nx monorepo) - use `pnpm typecheck` and `pnpm lint` directly
 
 ---
+
+## 2026-01-31 - US-011
+- Added campaign queries to convex/campaigns.ts
+- Implemented listCampaigns query returning all campaigns sorted by _creationTime descending
+- Implemented listCampaignsByStatus query accepting status filter, sorts results by _creationTime descending in memory
+- Implemented getCampaign query accepting campaignId, returns campaign or null
+- Created campaignValidator for return type validation (includes _id, _creationTime, and all nested validators for instruments, targets, stopLossHistory)
+- TypeScript and lint checks pass
+
+**Files changed:**
+- convex/campaigns.ts (added listCampaigns, listCampaignsByStatus, getCampaign queries with campaignValidator)
+- prd.json (marked US-011 as passes: true)
+
+**Learnings for future iterations:**
+- Convex query ordering: use .order("desc") on the query builder to sort by _creationTime descending
+- When filtering by index and needing secondary sort, sort in memory: array.sort((a, b) => b._creationTime - a._creationTime)
+- Return validators for complex documents must re-declare all nested validators (instruments, targets, stopLossHistory)
+- Use v.union(campaignValidator, v.null()) for queries that may return null (like getCampaign)
+
+---

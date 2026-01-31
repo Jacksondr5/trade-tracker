@@ -1,5 +1,52 @@
-import { mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+
+// Reusable validators for nested objects (matching schema.ts)
+const instrumentValidator = v.object({
+  notes: v.optional(v.string()),
+  ticker: v.string(),
+  underlying: v.optional(v.string()),
+});
+
+const targetValidator = v.object({
+  notes: v.optional(v.string()),
+  percentage: v.optional(v.number()),
+  price: v.number(),
+  ticker: v.string(),
+});
+
+const stopLossValidator = v.object({
+  price: v.number(),
+  reason: v.optional(v.string()),
+  setAt: v.number(),
+  ticker: v.string(),
+});
+
+// Validator for campaign document returned from queries
+const campaignValidator = v.object({
+  _creationTime: v.number(),
+  _id: v.id("campaigns"),
+  closedAt: v.optional(v.number()),
+  entryTargets: v.array(targetValidator),
+  instruments: v.array(instrumentValidator),
+  name: v.string(),
+  outcome: v.optional(
+    v.union(
+      v.literal("manual"),
+      v.literal("profit_target"),
+      v.literal("stop_loss"),
+    ),
+  ),
+  profitTargets: v.array(targetValidator),
+  retrospective: v.optional(v.string()),
+  status: v.union(
+    v.literal("active"),
+    v.literal("closed"),
+    v.literal("planning"),
+  ),
+  stopLossHistory: v.array(stopLossValidator),
+  thesis: v.string(),
+});
 
 /**
  * Create a new campaign with name and thesis.
@@ -108,5 +155,55 @@ export const updateCampaignStatus = mutation({
     await ctx.db.patch(campaignId, patch);
 
     return null;
+  },
+});
+
+/**
+ * List all campaigns sorted by _creationTime descending (newest first).
+ */
+export const listCampaigns = query({
+  args: {},
+  returns: v.array(campaignValidator),
+  handler: async (ctx) => {
+    const campaigns = await ctx.db.query("campaigns").order("desc").collect();
+
+    return campaigns;
+  },
+});
+
+/**
+ * List campaigns filtered by status, sorted by _creationTime descending.
+ */
+export const listCampaignsByStatus = query({
+  args: {
+    status: v.union(
+      v.literal("active"),
+      v.literal("closed"),
+      v.literal("planning"),
+    ),
+  },
+  returns: v.array(campaignValidator),
+  handler: async (ctx, args) => {
+    const campaigns = await ctx.db
+      .query("campaigns")
+      .withIndex("by_status", (q) => q.eq("status", args.status))
+      .collect();
+
+    // Sort by _creationTime descending since we can't use two indexes
+    return campaigns.sort((a, b) => b._creationTime - a._creationTime);
+  },
+});
+
+/**
+ * Get a single campaign by ID with all nested data.
+ */
+export const getCampaign = query({
+  args: {
+    campaignId: v.id("campaigns"),
+  },
+  returns: v.union(campaignValidator, v.null()),
+  handler: async (ctx, args) => {
+    const campaign = await ctx.db.get(args.campaignId);
+    return campaign;
   },
 });
