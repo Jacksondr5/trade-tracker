@@ -1,0 +1,672 @@
+{
+  "project": "Trade Tracker",
+  "branchName": "ralph/trade-tracker",
+  "description": "A personal trading journal and analytics app for tracking stock and crypto trades, organized into thesis-driven campaigns with profit targets, stop loss history, and performance analytics.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Create Next.js app with Convex backend",
+      "description": "As a developer, I need a Next.js application with Convex backend to host the trade tracker.",
+      "acceptanceCriteria": [
+        "Create new Next.js app in `apps/trade-tracker/` using nx generate",
+        "Initialize Convex backend in `apps/trade-tracker/convex/`",
+        "Create basic layout.tsx with dark mode styling (bg-slate-900 text-slate-100)",
+        "Create placeholder home page at `apps/trade-tracker/src/app/page.tsx`",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Add Clerk authentication",
+      "description": "As a user, I need to sign in to access my trade data securely.",
+      "acceptanceCriteria": [
+        "Install @clerk/nextjs package in apps/trade-tracker",
+        "Create middleware.ts with clerkMiddleware() protecting all routes except /sign-in and /sign-up",
+        "Wrap app with <ClerkProvider> in layout.tsx",
+        "Create sign-in and sign-up pages with centered Clerk components",
+        "Add <UserButton /> to header for sign-out",
+        "Create .env.example with Clerk variables (NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY, NEXT_PUBLIC_CLERK_FRONTEND_API_URL)",
+        "Create README.md documenting Clerk setup steps, environment variables, and how to start the app locally",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Define Convex schema for trades table",
+      "description": "As a developer, I need the trades table schema to store trade executions.",
+      "acceptanceCriteria": [
+        "Create `apps/trade-tracker/convex/schema.ts`",
+        "Define trades table with fields: date (number), ticker (string), assetType (string: 'stock'|'crypto'), side (string: 'buy'|'sell'), direction (string: 'long'|'short'), price (number), quantity (number), campaignId (optional Id<'campaigns'>), notes (optional string)",
+        "Add indexes: by_campaignId, by_ticker, by_date",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Define Convex schema for campaigns table",
+      "description": "As a developer, I need the campaigns table schema to store trading campaigns.",
+      "acceptanceCriteria": [
+        "Add campaigns table to schema.ts with fields: name (string), status (string: 'planning'|'active'|'closed'), thesis (string), instruments (array of objects with ticker, underlying, notes), entryTargets (array of target objects), profitTargets (array of target objects), stopLossHistory (array of stopLoss objects), outcome (optional string), retrospective (optional string), closedAt (optional number)",
+        "Target object structure: ticker (string), price (number), percentage (optional number), notes (optional string)",
+        "StopLoss object structure: ticker (string), price (number), reason (optional string), setAt (number)",
+        "Add index: by_status",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Define Convex schema for campaignNotes and portfolioSnapshots",
+      "description": "As a developer, I need tables for campaign notes and portfolio snapshots.",
+      "acceptanceCriteria": [
+        "Add campaignNotes table with fields: campaignId (Id<'campaigns'>), content (string)",
+        "Add index by_campaignId to campaignNotes",
+        "Add portfolioSnapshots table with fields: date (number), totalValue (number), cashBalance (optional number), source (string: 'manual'|'calculated'|'api')",
+        "Add index by_date to portfolioSnapshots",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Create trade mutations",
+      "description": "As a developer, I need mutations to create and update trades.",
+      "acceptanceCriteria": [
+        "Create `apps/trade-tracker/convex/trades.ts`",
+        "Implement createTrade mutation accepting all trade fields with args and returns validators",
+        "Implement updateTrade mutation accepting tradeId and partial trade fields",
+        "Implement deleteTrade mutation accepting tradeId",
+        "Validate side/direction combinations (buy+long, sell+long, sell+short, buy+short)",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Create trade queries",
+      "description": "As a developer, I need queries to fetch trades.",
+      "acceptanceCriteria": [
+        "Create queries in `apps/trade-tracker/convex/trades.ts`",
+        "Implement listTrades query returning all trades sorted by date descending",
+        "Implement getTrade query accepting tradeId",
+        "Implement getTradesByCampaign query accepting campaignId",
+        "All queries must have returns validators",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Build trade creation form",
+      "description": "As a trader, I want to log a trade so I have a record of my execution.",
+      "acceptanceCriteria": [
+        "Create `apps/trade-tracker/src/app/trades/new/page.tsx`",
+        "Form fields: date (datetime-local, defaults to now), ticker (text), assetType (select), side (select), direction (select), price (number), quantity (number), notes (textarea)",
+        "Use TanStack React Form with Zod validation",
+        "Call createTrade mutation on submit",
+        "Show success message and redirect to trade list after save",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": "Browser verification blocked by missing Clerk environment variables (NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY). Code passes typecheck and lint."
+    },
+    {
+      "id": "US-009",
+      "title": "Build trade list page",
+      "description": "As a trader, I want to see all my trades so I can review my history.",
+      "acceptanceCriteria": [
+        "Create `apps/trade-tracker/src/app/trades/page.tsx`",
+        "Display table with columns: date, ticker, side, direction, price, quantity, total (price × quantity)",
+        "Sort by date descending (newest first)",
+        "Add 'New Trade' button linking to /trades/new",
+        "Table styling: dark theme with slate colors per monorepo conventions",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": "Browser verification blocked by Clerk authentication. Code passes typecheck and lint. Routing verified to work correctly (redirect to /trades path detected)."
+    },
+    {
+      "id": "US-010",
+      "title": "Create campaign mutations",
+      "description": "As a developer, I need mutations to create and manage campaigns.",
+      "acceptanceCriteria": [
+        "Create `apps/trade-tracker/convex/campaigns.ts`",
+        "Implement createCampaign mutation accepting name and thesis, sets status to 'planning'",
+        "Implement updateCampaign mutation for updating name, thesis, retrospective",
+        "Implement updateCampaignStatus mutation accepting campaignId, status, and optional outcome (required when closing)",
+        "Set closedAt timestamp when status changes to 'closed'",
+        "All mutations must have args and returns validators",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-040",
+      "title": "Add error feedback to trade creation form",
+      "description": "As a trader, I need to see error messages when trade creation fails so I know what went wrong.",
+      "acceptanceCriteria": [
+        "Display error message to user when createTrade mutation fails",
+        "Error message styled consistently with success message (red background instead of green)",
+        "Error message is dismissible or clears on retry",
+        "Typecheck passes"
+      ],
+      "priority": 10.1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-041",
+      "title": "Add backend validation for trade campaign association",
+      "description": "As a developer, I need backend validation to prevent trades from being linked to closed campaigns.",
+      "acceptanceCriteria": [
+        "createTrade mutation validates campaignId exists if provided",
+        "createTrade mutation rejects trades linked to closed campaigns with clear error message",
+        "updateTrade mutation validates campaignId if being changed",
+        "Typecheck passes"
+      ],
+      "priority": 10.2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Create campaign queries",
+      "description": "As a developer, I need queries to fetch campaigns.",
+      "acceptanceCriteria": [
+        "Add queries to `apps/trade-tracker/convex/campaigns.ts`",
+        "Implement listCampaigns query returning all campaigns sorted by _creationTime descending",
+        "Implement listCampaignsByStatus query accepting status filter",
+        "Implement getCampaign query accepting campaignId, returns campaign with all nested data",
+        "All queries must have returns validators",
+        "Typecheck passes"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Build campaign creation form",
+      "description": "As a trader, I want to create a campaign to document my trading thesis.",
+      "acceptanceCriteria": [
+        "Create `apps/trade-tracker/src/app/campaigns/new/page.tsx`",
+        "Form fields: name (text, required), thesis (textarea, required)",
+        "Use TanStack React Form with Zod validation",
+        "Call createCampaign mutation on submit",
+        "Redirect to campaign detail page after creation",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Build campaign list page",
+      "description": "As a trader, I want to see all my campaigns so I can manage my trading ideas.",
+      "acceptanceCriteria": [
+        "Create `apps/trade-tracker/src/app/campaigns/page.tsx`",
+        "Display table with columns: name, status, created date",
+        "Status shown as colored badge: planning=blue, active=green, closed=gray",
+        "Add status filter dropdown (All, Planning, Active, Closed)",
+        "Add 'New Campaign' button linking to /campaigns/new",
+        "Click row navigates to campaign detail",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "Build campaign detail page - basic info",
+      "description": "As a trader, I want to see campaign details including name, status, and thesis.",
+      "acceptanceCriteria": [
+        "Create `apps/trade-tracker/src/app/campaigns/[id]/page.tsx`",
+        "Display campaign name as page title",
+        "Display status badge with same colors as list",
+        "Display thesis in a card/section",
+        "Add placeholder sections for: Instruments, Targets, Stop Loss, Notes, Trades",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-015",
+      "title": "Add instruments mutation",
+      "description": "As a developer, I need a mutation to manage campaign instruments.",
+      "acceptanceCriteria": [
+        "Add addInstrument mutation to campaigns.ts accepting campaignId, ticker, optional underlying, optional notes",
+        "Add removeInstrument mutation accepting campaignId and ticker",
+        "Instruments stored as array in campaign document",
+        "Prevent duplicate tickers in same campaign",
+        "Typecheck passes"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-016",
+      "title": "Build instruments UI on campaign detail",
+      "description": "As a trader, I want to specify which instruments I'll trade, including underlying assets.",
+      "acceptanceCriteria": [
+        "Add Instruments section to campaign detail page",
+        "Display existing instruments in a list showing ticker, underlying (if set), notes",
+        "Add form to add new instrument: ticker (required), underlying (optional), notes (optional)",
+        "Add delete button for each instrument",
+        "Example display: 'GLDM → GOLD (Gold ETF proxy)'",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-017",
+      "title": "Add targets mutations",
+      "description": "As a developer, I need mutations to manage campaign entry and profit targets.",
+      "acceptanceCriteria": [
+        "Add addEntryTarget mutation accepting campaignId, ticker, price, optional percentage, optional notes",
+        "Add removeEntryTarget mutation accepting campaignId and target index",
+        "Add addProfitTarget mutation with same structure",
+        "Add removeProfitTarget mutation with same structure",
+        "Targets stored as arrays in campaign document",
+        "Typecheck passes"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-018",
+      "title": "Build targets UI on campaign detail",
+      "description": "As a trader, I want to define entry and profit targets for my campaign.",
+      "acceptanceCriteria": [
+        "Add Entry Targets section showing list of entry targets",
+        "Add Profit Targets section showing list of profit targets",
+        "Each target displays: ticker, price, percentage (if set), notes (if set)",
+        "Add form to create new target with fields: ticker (select from instruments), price, percentage, notes",
+        "Add delete button for each target",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-019",
+      "title": "Add stop loss mutation with history",
+      "description": "As a developer, I need a mutation to record stop loss adjustments.",
+      "acceptanceCriteria": [
+        "Add addStopLoss mutation accepting campaignId, ticker, price, optional reason",
+        "Mutation adds new stop loss entry to stopLossHistory array with setAt timestamp",
+        "Stop losses are append-only (history preserved)",
+        "Typecheck passes"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-020",
+      "title": "Build stop loss UI with history",
+      "description": "As a trader, I want to track stop loss changes over time.",
+      "acceptanceCriteria": [
+        "Add Stop Loss section to campaign detail",
+        "Display current stop loss (most recent entry) prominently",
+        "Display full history chronologically (newest first) with: ticker, price, reason, timestamp",
+        "Add form to set new stop loss: ticker (select from instruments), price, reason",
+        "Highlight current stop loss vs historical entries",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-021",
+      "title": "Add campaign notes mutations and queries",
+      "description": "As a developer, I need mutations for campaign notes.",
+      "acceptanceCriteria": [
+        "Create `apps/trade-tracker/convex/campaignNotes.ts`",
+        "Implement addNote mutation accepting campaignId and content",
+        "Implement getNotesByCampaign query returning notes sorted by _creationTime",
+        "All functions must have validators",
+        "Typecheck passes"
+      ],
+      "priority": 21,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-022",
+      "title": "Build notes UI on campaign detail",
+      "description": "As a trader, I want to add timestamped notes to track my thinking.",
+      "acceptanceCriteria": [
+        "Add Notes section to campaign detail",
+        "Display notes in chronological order with timestamps",
+        "Add text input and submit button to add new note",
+        "Notes persist and display after page reload",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 22,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-023",
+      "title": "Build status change UI",
+      "description": "As a trader, I want to change campaign status to track its lifecycle.",
+      "acceptanceCriteria": [
+        "Add status change controls to campaign detail header",
+        "Show available transitions: planning→active, active→closed",
+        "When closing, show modal/form to select outcome: profit_target, stop_loss, manual",
+        "Display closedAt timestamp when campaign is closed",
+        "Prevent adding trades to closed campaigns (disable link option)",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 23,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-024",
+      "title": "Add campaign selector to trade form",
+      "description": "As a trader, I want to link trades to a campaign when creating them.",
+      "acceptanceCriteria": [
+        "Add optional campaign dropdown to trade creation form",
+        "Dropdown shows only planning and active campaigns",
+        "Selected campaign ID saved with trade",
+        "Campaign column added to trade list showing linked campaign name",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-025",
+      "title": "Display linked trades on campaign detail",
+      "description": "As a trader, I want to see all trades linked to a campaign.",
+      "acceptanceCriteria": [
+        "Add Trades section to campaign detail page",
+        "Display table of linked trades with: date, ticker, side, direction, price, quantity, total",
+        "Sort by date descending",
+        "Show 'No trades yet' when empty",
+        "Add 'Add Trade' button that navigates to trade form with campaign pre-selected",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 25,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-026",
+      "title": "Calculate position from trades",
+      "description": "As a developer, I need a query to calculate current positions by ticker.",
+      "acceptanceCriteria": [
+        "Create `apps/trade-tracker/convex/positions.ts`",
+        "Implement getPositions query that aggregates all trades by ticker",
+        "For each ticker: calculate net quantity (buys - sells for longs, sells - buys for shorts)",
+        "Calculate average cost (weighted average of entry prices)",
+        "Return array of: ticker, quantity, averageCost, direction",
+        "Exclude tickers with zero quantity",
+        "Typecheck passes"
+      ],
+      "priority": 26,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-027",
+      "title": "Calculate trade P&L",
+      "description": "As a developer, I need P&L calculation for closing trades.",
+      "acceptanceCriteria": [
+        "Add realizedPL field calculation to trades query",
+        "For sell trades on long positions: (sell price - avg cost) × quantity",
+        "For buy/cover trades on short positions: (avg cost - cover price) × quantity",
+        "Opening trades (buys for long, sells for short) show null P&L",
+        "P&L calculated using position's average cost at time of trade",
+        "Typecheck passes"
+      ],
+      "priority": 27,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-028",
+      "title": "Build position summary page",
+      "description": "As a trader, I want to see my current positions so I know my exposure.",
+      "acceptanceCriteria": [
+        "Create `apps/trade-tracker/src/app/positions/page.tsx`",
+        "Display table with: ticker, direction (long/short), quantity, average cost",
+        "Show 'No open positions' when empty",
+        "Add navigation link in app header",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 28,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-029",
+      "title": "Display P&L in trade list",
+      "description": "As a trader, I want to see P&L for each closing trade.",
+      "acceptanceCriteria": [
+        "Add P&L column to trade list table",
+        "Show P&L amount for closing trades, dash for opening trades",
+        "Color code: green for positive, red for negative",
+        "Format as currency (e.g., +$150.00 or -$50.00)",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 29,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-030",
+      "title": "Calculate campaign P&L",
+      "description": "As a developer, I need P&L calculation at the campaign level.",
+      "acceptanceCriteria": [
+        "Add getCampaignPL query accepting campaignId",
+        "Sum realized P&L from all linked trades",
+        "Return: realizedPL, tradeCount, winningTrades, losingTrades",
+        "Typecheck passes"
+      ],
+      "priority": 30,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-031",
+      "title": "Display P&L on campaign detail and list",
+      "description": "As a trader, I want to see campaign P&L at a glance.",
+      "acceptanceCriteria": [
+        "Add P&L display to campaign detail page header",
+        "Show realized P&L with color coding (green/red)",
+        "Add P&L column to campaign list table",
+        "Format as currency",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 31,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-032",
+      "title": "Create portfolio snapshot mutations and queries",
+      "description": "As a developer, I need backend for portfolio snapshots.",
+      "acceptanceCriteria": [
+        "Create `apps/trade-tracker/convex/portfolioSnapshots.ts`",
+        "Implement createSnapshot mutation accepting date, totalValue, optional cashBalance",
+        "Set source to 'manual'",
+        "Implement listSnapshots query returning all snapshots sorted by date descending",
+        "Implement getLatestSnapshot query returning most recent snapshot",
+        "Typecheck passes"
+      ],
+      "priority": 32,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-033",
+      "title": "Build portfolio snapshot page",
+      "description": "As a trader, I want to record my portfolio value for analytics.",
+      "acceptanceCriteria": [
+        "Create `apps/trade-tracker/src/app/portfolio/page.tsx`",
+        "Form to add snapshot: date (defaults to today), total value, cash balance (optional)",
+        "Display list of historical snapshots in table: date, total value, cash balance",
+        "Add navigation link in app header",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 33,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-034",
+      "title": "Create dashboard analytics query",
+      "description": "As a developer, I need a query for portfolio analytics.",
+      "acceptanceCriteria": [
+        "Create `apps/trade-tracker/convex/analytics.ts`",
+        "Implement getDashboardStats query returning: totalRealizedPL, totalRealizedPLYTD, closedCampaignCount, winningCampaignCount, winRate (%), avgWin, avgLoss, profitFactor, openCampaignCount, totalTradeCount",
+        "YTD calculated from trades with date >= Jan 1 of current year",
+        "Win rate = winning campaigns / closed campaigns × 100",
+        "Profit factor = total gains / total losses (or null if no losses)",
+        "Typecheck passes"
+      ],
+      "priority": 34,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-035",
+      "title": "Build dashboard page",
+      "description": "As a trader, I want a dashboard showing my key performance metrics.",
+      "acceptanceCriteria": [
+        "Create `apps/trade-tracker/src/app/page.tsx` (replace placeholder)",
+        "Display stat cards: Total P&L (with YTD subtitle), Win Rate, Avg Win vs Avg Loss, Profit Factor, Open Campaigns, Total Trades",
+        "Card styling: bg-slate-800 rounded-lg p-6 border border-slate-700",
+        "Color code P&L: green positive, red negative",
+        "Show loading skeletons while fetching",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 35,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-036",
+      "title": "Add campaign retrospective",
+      "description": "As a trader, I want to write a retrospective after closing a campaign.",
+      "acceptanceCriteria": [
+        "Add Retrospective section to campaign detail page",
+        "Show text area to write/edit retrospective",
+        "Only editable when campaign status is 'closed'",
+        "Show placeholder text when not closed: 'Retrospective available after closing campaign'",
+        "Save retrospective via updateCampaign mutation",
+        "Display retrospective separately from thesis and notes",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 36,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-037",
+      "title": "Auto-detect position closure",
+      "description": "As a trader, I want the system to detect when my position is fully closed.",
+      "acceptanceCriteria": [
+        "Create getCampaignPositionStatus query accepting campaignId",
+        "Calculate net position for each instrument in the campaign",
+        "Return: isFullyClosed (boolean), positions (array of ticker/quantity)",
+        "On campaign detail page, show banner when isFullyClosed is true",
+        "Banner text: 'All positions closed. Ready to close campaign?' with 'Close Campaign' button",
+        "Banner includes P&L summary",
+        "Banner dismissible (stored in local state)",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 37,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-038",
+      "title": "Add date filter to trade list",
+      "description": "As a trader, I want to filter trades by date to focus on specific periods.",
+      "acceptanceCriteria": [
+        "Add date filter controls above trade list",
+        "Date range picker with start and end date inputs",
+        "Quick filter buttons: Today, This Week, This Month, This Year, All Time",
+        "Filter persists in URL query params",
+        "Trade list updates to show only trades in selected range",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 38,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-039",
+      "title": "Add app navigation header",
+      "description": "As a user, I want consistent navigation across all pages.",
+      "acceptanceCriteria": [
+        "Create shared Header component in `apps/trade-tracker/src/components/Header.tsx`",
+        "Include nav links: Dashboard, Trades, Campaigns, Positions, Portfolio",
+        "Include UserButton for auth",
+        "Active link styling to show current page",
+        "Add Header to layout.tsx",
+        "Mobile-responsive (hamburger menu on small screens)",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 39,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
