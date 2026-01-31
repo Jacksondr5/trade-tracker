@@ -483,3 +483,24 @@ Started: Sun Jan 25 19:41:36 EST 2026
 - Pass undefined for optional empty strings: value.trim() || undefined
 
 ---
+
+## 2026-01-31 - US-017
+- Added four target mutations to convex/campaigns.ts
+- Implemented addEntryTarget mutation accepting campaignId, ticker, price, optional percentage, optional notes
+- Implemented removeEntryTarget mutation accepting campaignId and target index with bounds validation
+- Implemented addProfitTarget mutation with same structure as addEntryTarget
+- Implemented removeProfitTarget mutation with same structure as removeEntryTarget
+- Targets stored as arrays in campaign document (entryTargets and profitTargets)
+- TypeScript and lint checks pass
+
+**Files changed:**
+- convex/campaigns.ts (added addEntryTarget, removeEntryTarget, addProfitTarget, removeProfitTarget mutations)
+- prd.json (marked US-017 as passes: true)
+
+**Learnings for future iterations:**
+- Target mutations use index-based removal (unlike instruments which use ticker)
+- Validate index bounds before removal: check index >= 0 && index < array.length
+- Optional fields in target objects: notes, percentage - include them even if undefined
+- Follow alphabetized field ordering in args: campaignId, notes, percentage, price, ticker
+
+---

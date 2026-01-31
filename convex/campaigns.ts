@@ -285,3 +285,135 @@ export const removeInstrument = mutation({
     return null;
   },
 });
+
+/**
+ * Add an entry target to a campaign.
+ */
+export const addEntryTarget = mutation({
+  args: {
+    campaignId: v.id("campaigns"),
+    notes: v.optional(v.string()),
+    percentage: v.optional(v.number()),
+    price: v.number(),
+    ticker: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { campaignId, notes, percentage, price, ticker } = args;
+
+    const campaign = await ctx.db.get(campaignId);
+    if (!campaign) {
+      throw new Error("Campaign not found");
+    }
+
+    const newTarget = {
+      notes,
+      percentage,
+      price,
+      ticker,
+    };
+
+    await ctx.db.patch(campaignId, {
+      entryTargets: [...campaign.entryTargets, newTarget],
+    });
+
+    return null;
+  },
+});
+
+/**
+ * Remove an entry target from a campaign by index.
+ */
+export const removeEntryTarget = mutation({
+  args: {
+    campaignId: v.id("campaigns"),
+    index: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { campaignId, index } = args;
+
+    const campaign = await ctx.db.get(campaignId);
+    if (!campaign) {
+      throw new Error("Campaign not found");
+    }
+
+    if (index < 0 || index >= campaign.entryTargets.length) {
+      throw new Error(`Invalid entry target index: ${index}`);
+    }
+
+    const updatedTargets = campaign.entryTargets.filter((_, i) => i !== index);
+
+    await ctx.db.patch(campaignId, {
+      entryTargets: updatedTargets,
+    });
+
+    return null;
+  },
+});
+
+/**
+ * Add a profit target to a campaign.
+ */
+export const addProfitTarget = mutation({
+  args: {
+    campaignId: v.id("campaigns"),
+    notes: v.optional(v.string()),
+    percentage: v.optional(v.number()),
+    price: v.number(),
+    ticker: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { campaignId, notes, percentage, price, ticker } = args;
+
+    const campaign = await ctx.db.get(campaignId);
+    if (!campaign) {
+      throw new Error("Campaign not found");
+    }
+
+    const newTarget = {
+      notes,
+      percentage,
+      price,
+      ticker,
+    };
+
+    await ctx.db.patch(campaignId, {
+      profitTargets: [...campaign.profitTargets, newTarget],
+    });
+
+    return null;
+  },
+});
+
+/**
+ * Remove a profit target from a campaign by index.
+ */
+export const removeProfitTarget = mutation({
+  args: {
+    campaignId: v.id("campaigns"),
+    index: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { campaignId, index } = args;
+
+    const campaign = await ctx.db.get(campaignId);
+    if (!campaign) {
+      throw new Error("Campaign not found");
+    }
+
+    if (index < 0 || index >= campaign.profitTargets.length) {
+      throw new Error(`Invalid profit target index: ${index}`);
+    }
+
+    const updatedTargets = campaign.profitTargets.filter((_, i) => i !== index);
+
+    await ctx.db.patch(campaignId, {
+      profitTargets: updatedTargets,
+    });
+
+    return null;
+  },
+});
