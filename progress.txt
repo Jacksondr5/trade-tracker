@@ -956,3 +956,28 @@ Fixed bug in P&L calculation where cost basis was not adjusted after closing tra
 - Navigation order in header: Trades, Campaigns, Positions, Portfolio
 
 ---
+
+---
+
+## 2026-02-01 - US-034
+- Created convex/analytics.ts with getDashboardStats query
+- Query returns all required stats: totalRealizedPL, totalRealizedPLYTD, closedCampaignCount, winningCampaignCount, winRate, avgWin, avgLoss, profitFactor, openCampaignCount, totalTradeCount
+- YTD calculated from trades with date >= Jan 1 of current year
+- Win rate calculated as winning campaigns / closed campaigns × 100
+- Profit factor calculated as total gains / total losses (null if no losses)
+- avgWin/avgLoss calculated from campaign-level P&L (not individual trades)
+- Updated convex/_generated/api.d.ts to include analytics module
+- TypeScript and lint checks pass
+
+**Files created:**
+- convex/analytics.ts (new)
+
+**Files changed:**
+- convex/_generated/api.d.ts (added analytics module import)
+- prd.json (marked US-034 as passes: true)
+
+**Learnings for future iterations:**
+- Use shared calculateTradesPL from lib/plCalculation.ts for consistent P&L calculation across queries
+- YTD start date: new Date(now.getFullYear(), 0, 1).getTime() for Jan 1 midnight local time
+- Return validators: use v.union(v.number(), v.null()) for optional numeric stats
+- Campaign-level win/loss is determined by total P&L of all trades linked to that campaign
