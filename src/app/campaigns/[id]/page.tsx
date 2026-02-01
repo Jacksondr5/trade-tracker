@@ -3,7 +3,7 @@
 import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
 
@@ -56,6 +56,7 @@ export default function CampaignDetailPage() {
   const removeProfitTarget = useMutation(api.campaigns.removeProfitTarget);
   const addStopLoss = useMutation(api.campaigns.addStopLoss);
   const updateCampaignStatus = useMutation(api.campaigns.updateCampaignStatus);
+  const updateCampaign = useMutation(api.campaigns.updateCampaign);
   const campaignNotes = useQuery(api.campaignNotes.getNotesByCampaign, { campaignId });
   const addNote = useMutation(api.campaignNotes.addNote);
   const trades = useQuery(api.trades.getTradesByCampaign, { campaignId });
@@ -100,6 +101,19 @@ export default function CampaignDetailPage() {
   const [selectedOutcome, setSelectedOutcome] = useState<CampaignOutcome | "">("");
   const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
   const [isChangingStatus, setIsChangingStatus] = useState(false);
+
+  // Retrospective state
+  const [retrospectiveContent, setRetrospectiveContent] = useState("");
+  const [retrospectiveError, setRetrospectiveError] = useState<string | null>(null);
+  const [isSavingRetrospective, setIsSavingRetrospective] = useState(false);
+  const [retrospectiveSaved, setRetrospectiveSaved] = useState(false);
+
+  // Sync retrospective content with campaign data
+  useEffect(() => {
+    if (campaign?.retrospective !== undefined) {
+      setRetrospectiveContent(campaign.retrospective ?? "");
+    }
+  }, [campaign?.retrospective]);
 
   const handleAddInstrument = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -370,6 +384,28 @@ export default function CampaignDetailPage() {
       );
     } finally {
       setIsChangingStatus(false);
+    }
+  };
+
+  const handleSaveRetrospective = async () => {
+    setRetrospectiveError(null);
+    setIsSavingRetrospective(true);
+    setRetrospectiveSaved(false);
+
+    try {
+      await updateCampaign({
+        campaignId,
+        retrospective: retrospectiveContent.trim() || undefined,
+      });
+      setRetrospectiveSaved(true);
+      // Auto-hide saved message after 3 seconds
+      setTimeout(() => setRetrospectiveSaved(false), 3000);
+    } catch (error) {
+      setRetrospectiveError(
+        error instanceof Error ? error.message : "Failed to save retrospective"
+      );
+    } finally {
+      setIsSavingRetrospective(false);
     }
   };
 
@@ -1126,6 +1162,57 @@ export default function CampaignDetailPage() {
               {isAddingNote ? "Adding..." : "Add Note"}
             </button>
           </form>
+        </div>
+
+        {/* Retrospective section */}
+        <div className="rounded-lg border border-slate-700 bg-slate-800 p-6">
+          <h2 className="text-slate-12 text-lg font-semibold mb-3">Retrospective</h2>
+
+          {campaign.status === "closed" ? (
+            <div className="space-y-3">
+              {retrospectiveError && (
+                <div className="flex items-center justify-between rounded border border-red-700 bg-red-900/50 px-4 py-2 text-red-200 text-sm">
+                  <span>{retrospectiveError}</span>
+                  <button
+                    onClick={() => setRetrospectiveError(null)}
+                    className="ml-2 text-red-300 hover:text-red-100"
+                    aria-label="Dismiss error"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+              {retrospectiveSaved && (
+                <div className="rounded border border-green-700 bg-green-900/50 px-4 py-2 text-green-200 text-sm">
+                  Retrospective saved successfully.
+                </div>
+              )}
+              <div>
+                <label htmlFor="retrospective" className="block text-sm text-slate-11 mb-1">
+                  Write your retrospective
+                </label>
+                <textarea
+                  id="retrospective"
+                  value={retrospectiveContent}
+                  onChange={(e) => setRetrospectiveContent(e.target.value)}
+                  placeholder="What went well? What could have been better? What did you learn from this campaign?"
+                  rows={6}
+                  className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-slate-12 placeholder:text-slate-11 focus:border-blue-500 focus:outline-none resize-y"
+                />
+              </div>
+              <button
+                onClick={handleSaveRetrospective}
+                disabled={isSavingRetrospective}
+                className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {isSavingRetrospective ? "Saving..." : "Save Retrospective"}
+              </button>
+            </div>
+          ) : (
+            <p className="text-slate-11 text-sm italic">
+              Retrospective available after closing campaign
+            </p>
+          )}
         </div>
 
         {/* Trades section */}

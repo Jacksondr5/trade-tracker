@@ -1021,3 +1021,29 @@ Fixed bug in P&L calculation where cost basis was not adjusted after closing tra
 - Use optional chaining with nullish coalescing for stats values: stats?.field ?? defaultValue
 
 ---
+
+## 2026-02-01 - US-036
+- Added Retrospective section to campaign detail page
+- Section placed between Notes and Trades sections (separately from thesis and notes)
+- Textarea for writing/editing retrospective content
+- Only editable when campaign status is 'closed'
+- Shows placeholder text "Retrospective available after closing campaign" for non-closed campaigns
+- Saves retrospective via updateCampaign mutation with success/error feedback
+- Added useEffect to sync retrospective content with campaign data when it loads
+- Success message auto-dismisses after 3 seconds
+- Error message is dismissible via X button
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files changed:**
+- src/app/campaigns/[id]/page.tsx (added Retrospective section, state, handler, useEffect)
+- prd.json (marked US-036 as passes: true)
+
+**Learnings for future iterations:**
+- The updateCampaign mutation already supports retrospective field (no backend changes needed)
+- Use useEffect to sync form state with Convex data when component mounts/data changes
+- Pattern for optional field: send `value.trim() || undefined` to clear or set the field
+- Place new sections in logical order on the page (Retrospective comes after Notes, before Trades)
+- Conditional rendering pattern: `campaign.status === "closed" ? (...editable form...) : (...placeholder...)`
+
+---
