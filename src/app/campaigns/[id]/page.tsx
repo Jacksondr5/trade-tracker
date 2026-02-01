@@ -8,6 +8,7 @@ import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
 
 type CampaignStatus = "planning" | "active" | "closed";
+type CampaignOutcome = "profit_target" | "stop_loss" | "manual";
 
 function getStatusBadgeClasses(status: CampaignStatus): string {
   switch (status) {
@@ -38,6 +39,11 @@ export default function CampaignDetailPage() {
   const removeEntryTarget = useMutation(api.campaigns.removeEntryTarget);
   const addProfitTarget = useMutation(api.campaigns.addProfitTarget);
   const removeProfitTarget = useMutation(api.campaigns.removeProfitTarget);
+  const addStopLoss = useMutation(api.campaigns.addStopLoss);
+  const updateCampaignStatus = useMutation(api.campaigns.updateCampaignStatus);
+  const campaignNotes = useQuery(api.campaignNotes.getNotesByCampaign, { campaignId });
+  const addNote = useMutation(api.campaignNotes.addNote);
+  const trades = useQuery(api.trades.getTradesByCampaign, { campaignId });
 
   // Instrument form state
   const [instrumentTicker, setInstrumentTicker] = useState("");
@@ -61,6 +67,24 @@ export default function CampaignDetailPage() {
   const [profitTargetNotes, setProfitTargetNotes] = useState("");
   const [profitTargetError, setProfitTargetError] = useState<string | null>(null);
   const [isAddingProfitTarget, setIsAddingProfitTarget] = useState(false);
+
+  // Stop loss form state
+  const [stopLossTicker, setStopLossTicker] = useState("");
+  const [stopLossPrice, setStopLossPrice] = useState("");
+  const [stopLossReason, setStopLossReason] = useState("");
+  const [stopLossError, setStopLossError] = useState<string | null>(null);
+  const [isAddingStopLoss, setIsAddingStopLoss] = useState(false);
+
+  // Notes form state
+  const [noteContent, setNoteContent] = useState("");
+  const [noteError, setNoteError] = useState<string | null>(null);
+  const [isAddingNote, setIsAddingNote] = useState(false);
+
+  // Status change state
+  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [selectedOutcome, setSelectedOutcome] = useState<CampaignOutcome | "">("");
+  const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
+  const [isChangingStatus, setIsChangingStatus] = useState(false);
 
   const handleAddInstrument = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -224,6 +248,116 @@ export default function CampaignDetailPage() {
     }
   };
 
+  const handleAddStopLoss = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stopLossTicker) {
+      setStopLossError("Ticker is required");
+      return;
+    }
+    if (!stopLossPrice.trim()) {
+      setStopLossError("Price is required");
+      return;
+    }
+
+    const price = parseFloat(stopLossPrice);
+    if (isNaN(price) || price <= 0) {
+      setStopLossError("Price must be a positive number");
+      return;
+    }
+
+    setStopLossError(null);
+    setIsAddingStopLoss(true);
+
+    try {
+      await addStopLoss({
+        campaignId,
+        ticker: stopLossTicker,
+        price,
+        reason: stopLossReason.trim() || undefined,
+      });
+      // Clear form on success
+      setStopLossTicker("");
+      setStopLossPrice("");
+      setStopLossReason("");
+    } catch (error) {
+      setStopLossError(
+        error instanceof Error ? error.message : "Failed to add stop loss"
+      );
+    } finally {
+      setIsAddingStopLoss(false);
+    }
+  };
+
+  const handleAddNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!noteContent.trim()) {
+      setNoteError("Note content is required");
+      return;
+    }
+
+    setNoteError(null);
+    setIsAddingNote(true);
+
+    try {
+      await addNote({
+        campaignId,
+        content: noteContent.trim(),
+      });
+      // Clear form on success
+      setNoteContent("");
+    } catch (error) {
+      setNoteError(
+        error instanceof Error ? error.message : "Failed to add note"
+      );
+    } finally {
+      setIsAddingNote(false);
+    }
+  };
+
+  const handleActivateCampaign = async () => {
+    setStatusChangeError(null);
+    setIsChangingStatus(true);
+
+    try {
+      await updateCampaignStatus({
+        campaignId,
+        status: "active",
+      });
+    } catch (error) {
+      setStatusChangeError(
+        error instanceof Error ? error.message : "Failed to activate campaign"
+      );
+    } finally {
+      setIsChangingStatus(false);
+    }
+  };
+
+  const handleCloseCampaign = async () => {
+    if (!selectedOutcome) {
+      setStatusChangeError("Please select an outcome");
+      return;
+    }
+
+    setStatusChangeError(null);
+    setIsChangingStatus(true);
+
+    try {
+      await updateCampaignStatus({
+        campaignId,
+        outcome: selectedOutcome,
+        status: "closed",
+      });
+      setShowCloseModal(false);
+      setSelectedOutcome("");
+    } catch (error) {
+      setStatusChangeError(
+        error instanceof Error ? error.message : "Failed to close campaign"
+      );
+    } finally {
+      setIsChangingStatus(false);
+    }
+  };
+
   if (campaign === undefined) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -245,6 +379,9 @@ export default function CampaignDetailPage() {
     );
   }
 
+  // Normalize stopLossHistory to handle potential missing field on older campaigns
+  const stopLossHistory = campaign.stopLossHistory ?? [];
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Header with name and status */}
@@ -252,15 +389,138 @@ export default function CampaignDetailPage() {
         <Link href="/campaigns" className="text-slate-11 hover:text-slate-12 text-sm mb-2 inline-block">
           ← Back to Campaigns
         </Link>
-        <div className="flex items-center gap-4">
-          <h1 className="text-slate-12 text-2xl font-bold">{campaign.name}</h1>
-          <span
-            className={`rounded border px-2 py-0.5 text-xs font-medium ${getStatusBadgeClasses(campaign.status)}`}
-          >
-            {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
-          </span>
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-4">
+            <h1 className="text-slate-12 text-2xl font-bold">{campaign.name}</h1>
+            <span
+              className={`rounded border px-2 py-0.5 text-xs font-medium ${getStatusBadgeClasses(campaign.status)}`}
+            >
+              {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
+            </span>
+            {campaign.status === "closed" && campaign.closedAt && (
+              <span className="text-slate-11 text-sm">
+                Closed on{" "}
+                {new Date(campaign.closedAt).toLocaleDateString("en-US", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                })}
+              </span>
+            )}
+          </div>
+
+          {/* Status change controls */}
+          <div className="flex items-center gap-2">
+            {statusChangeError && (
+              <span className="text-red-400 text-sm mr-2">{statusChangeError}</span>
+            )}
+            {campaign.status === "planning" && (
+              <button
+                onClick={handleActivateCampaign}
+                disabled={isChangingStatus}
+                className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+              >
+                {isChangingStatus ? "Activating..." : "Activate Campaign"}
+              </button>
+            )}
+            {campaign.status === "active" && (
+              <button
+                onClick={() => setShowCloseModal(true)}
+                disabled={isChangingStatus}
+                className="rounded bg-slate-600 px-4 py-2 text-sm font-medium text-white hover:bg-slate-500 disabled:opacity-50"
+              >
+                Close Campaign
+              </button>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Close campaign modal */}
+      {showCloseModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-lg border border-slate-700 p-6 max-w-md w-full mx-4">
+            <h2 className="text-slate-12 text-lg font-semibold mb-4">Close Campaign</h2>
+            <p className="text-slate-11 text-sm mb-4">
+              Select the outcome for this campaign. This action cannot be undone.
+            </p>
+
+            <div className="space-y-3 mb-6">
+              <label className="flex items-center gap-3 p-3 rounded border border-slate-700 bg-slate-900 cursor-pointer hover:border-slate-600">
+                <input
+                  type="radio"
+                  name="outcome"
+                  value="profit_target"
+                  checked={selectedOutcome === "profit_target"}
+                  onChange={() => setSelectedOutcome("profit_target")}
+                  className="text-green-600 focus:ring-green-500"
+                />
+                <div>
+                  <span className="text-slate-12 font-medium">Hit Profit Target</span>
+                  <p className="text-slate-11 text-xs">Campaign closed at profit target</p>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-3 p-3 rounded border border-slate-700 bg-slate-900 cursor-pointer hover:border-slate-600">
+                <input
+                  type="radio"
+                  name="outcome"
+                  value="stop_loss"
+                  checked={selectedOutcome === "stop_loss"}
+                  onChange={() => setSelectedOutcome("stop_loss")}
+                  className="text-red-600 focus:ring-red-500"
+                />
+                <div>
+                  <span className="text-slate-12 font-medium">Hit Stop Loss</span>
+                  <p className="text-slate-11 text-xs">Campaign closed at stop loss</p>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-3 p-3 rounded border border-slate-700 bg-slate-900 cursor-pointer hover:border-slate-600">
+                <input
+                  type="radio"
+                  name="outcome"
+                  value="manual"
+                  checked={selectedOutcome === "manual"}
+                  onChange={() => setSelectedOutcome("manual")}
+                  className="text-slate-400 focus:ring-slate-500"
+                />
+                <div>
+                  <span className="text-slate-12 font-medium">Manual Close</span>
+                  <p className="text-slate-11 text-xs">Closed manually for other reasons</p>
+                </div>
+              </label>
+            </div>
+
+            {statusChangeError && (
+              <div className="rounded border border-red-700 bg-red-900/50 px-4 py-2 text-red-200 text-sm mb-4">
+                {statusChangeError}
+              </div>
+            )}
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowCloseModal(false);
+                  setSelectedOutcome("");
+                  setStatusChangeError(null);
+                }}
+                disabled={isChangingStatus}
+                className="rounded bg-slate-700 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-600 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCloseCampaign}
+                disabled={isChangingStatus || !selectedOutcome}
+                className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {isChangingStatus ? "Closing..." : "Close Campaign"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Thesis section */}
       <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-6">
@@ -627,22 +887,302 @@ export default function CampaignDetailPage() {
           </form>
         </div>
 
-        {/* Stop Loss placeholder */}
+        {/* Stop Loss section */}
         <div className="rounded-lg border border-slate-700 bg-slate-800 p-6">
           <h2 className="text-slate-12 text-lg font-semibold mb-3">Stop Loss</h2>
-          <p className="text-slate-11 text-sm italic">Coming soon - stop loss history will be displayed here.</p>
+
+          {/* Current stop loss (most recent) - highlighted */}
+          {stopLossHistory.length > 0 && (
+            <div className="mb-4">
+              <h3 className="text-slate-11 text-sm font-medium mb-2">Current Stop Loss</h3>
+              {(() => {
+                // Get the most recent stop loss (last in array since they're appended)
+                const currentStopLoss = stopLossHistory[stopLossHistory.length - 1];
+                return (
+                  <div className="rounded border-2 border-yellow-600 bg-yellow-900/20 px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <span className="font-bold text-yellow-200 text-lg">
+                        {currentStopLoss.ticker}
+                      </span>
+                      <span className="text-yellow-100 text-lg">
+                        @ {formatCurrency(currentStopLoss.price)}
+                      </span>
+                    </div>
+                    {currentStopLoss.reason && (
+                      <p className="text-yellow-200/80 text-sm mt-1">
+                        {currentStopLoss.reason}
+                      </p>
+                    )}
+                    <p className="text-yellow-200/60 text-xs mt-1">
+                      Set on {new Date(currentStopLoss.setAt).toLocaleDateString("en-US", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* Stop loss history (all entries, newest first) */}
+          {stopLossHistory.length > 1 && (
+            <div className="mb-4">
+              <h3 className="text-slate-11 text-sm font-medium mb-2">History</h3>
+              <div className="space-y-2">
+                {/* Show all except the most recent (current), sorted newest first */}
+                {[...stopLossHistory]
+                  .slice(0, -1)
+                  .reverse()
+                  .map((stopLoss, index) => (
+                    <div
+                      key={index}
+                      className="rounded border border-slate-700 bg-slate-900 px-4 py-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-slate-12">
+                          {stopLoss.ticker}
+                        </span>
+                        <span className="text-slate-11">
+                          @ {formatCurrency(stopLoss.price)}
+                        </span>
+                        <span className="text-slate-11/60 text-xs ml-auto">
+                          {new Date(stopLoss.setAt).toLocaleDateString("en-US", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                      {stopLoss.reason && (
+                        <p className="text-slate-11 text-sm mt-1">
+                          {stopLoss.reason}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {stopLossHistory.length === 0 && (
+            <p className="text-slate-11 text-sm mb-4">No stop loss set yet.</p>
+          )}
+
+          {/* Add stop loss form */}
+          <form onSubmit={handleAddStopLoss} className="space-y-3">
+            {stopLossError && (
+              <div className="rounded border border-red-700 bg-red-900/50 px-4 py-2 text-red-200 text-sm">
+                {stopLossError}
+              </div>
+            )}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div>
+                <label htmlFor="stopLossTicker" className="block text-sm text-slate-11 mb-1">
+                  Ticker <span className="text-red-400">*</span>
+                </label>
+                <select
+                  id="stopLossTicker"
+                  value={stopLossTicker}
+                  onChange={(e) => setStopLossTicker(e.target.value)}
+                  className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-slate-12 focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="">Select instrument</option>
+                  {campaign.instruments.map((instrument) => (
+                    <option key={instrument.ticker} value={instrument.ticker}>
+                      {instrument.ticker}
+                      {instrument.underlying ? ` (${instrument.underlying})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="stopLossPrice" className="block text-sm text-slate-11 mb-1">
+                  Price <span className="text-red-400">*</span>
+                </label>
+                <input
+                  id="stopLossPrice"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={stopLossPrice}
+                  onChange={(e) => setStopLossPrice(e.target.value)}
+                  placeholder="e.g., 145.00"
+                  className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-slate-12 placeholder:text-slate-11 focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label htmlFor="stopLossReason" className="block text-sm text-slate-11 mb-1">
+                  Reason (optional)
+                </label>
+                <input
+                  id="stopLossReason"
+                  type="text"
+                  value={stopLossReason}
+                  onChange={(e) => setStopLossReason(e.target.value)}
+                  placeholder="e.g., Below support level"
+                  className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-slate-12 placeholder:text-slate-11 focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+            </div>
+            <button
+              type="submit"
+              disabled={isAddingStopLoss || campaign.instruments.length === 0}
+              className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isAddingStopLoss ? "Setting..." : "Set Stop Loss"}
+            </button>
+            {campaign.instruments.length === 0 && (
+              <p className="text-slate-11 text-sm">Add instruments first to set a stop loss.</p>
+            )}
+          </form>
         </div>
 
-        {/* Notes placeholder */}
+        {/* Notes section */}
         <div className="rounded-lg border border-slate-700 bg-slate-800 p-6">
           <h2 className="text-slate-12 text-lg font-semibold mb-3">Notes</h2>
-          <p className="text-slate-11 text-sm italic">Coming soon - campaign notes will be displayed here.</p>
+
+          {/* Existing notes list */}
+          {campaignNotes === undefined ? (
+            <p className="text-slate-11 text-sm mb-4">Loading notes...</p>
+          ) : campaignNotes.length > 0 ? (
+            <div className="mb-4 space-y-3">
+              {campaignNotes.map((note) => (
+                <div
+                  key={note._id}
+                  className="rounded border border-slate-700 bg-slate-900 px-4 py-3"
+                >
+                  <p className="text-slate-12 whitespace-pre-wrap">{note.content}</p>
+                  <p className="text-slate-11/60 text-xs mt-2">
+                    {new Date(note._creationTime).toLocaleDateString("en-US", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-slate-11 text-sm mb-4">No notes added yet.</p>
+          )}
+
+          {/* Add note form */}
+          <form onSubmit={handleAddNote} className="space-y-3">
+            {noteError && (
+              <div className="rounded border border-red-700 bg-red-900/50 px-4 py-2 text-red-200 text-sm">
+                {noteError}
+              </div>
+            )}
+            <div>
+              <label htmlFor="noteContent" className="block text-sm text-slate-11 mb-1">
+                Add a note
+              </label>
+              <textarea
+                id="noteContent"
+                value={noteContent}
+                onChange={(e) => setNoteContent(e.target.value)}
+                placeholder="Write your thoughts, observations, or updates..."
+                rows={3}
+                className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-slate-12 placeholder:text-slate-11 focus:border-blue-500 focus:outline-none resize-y"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={isAddingNote || !noteContent.trim()}
+              className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isAddingNote ? "Adding..." : "Add Note"}
+            </button>
+          </form>
         </div>
 
-        {/* Trades placeholder */}
+        {/* Trades section */}
         <div className="rounded-lg border border-slate-700 bg-slate-800 p-6">
-          <h2 className="text-slate-12 text-lg font-semibold mb-3">Trades</h2>
-          <p className="text-slate-11 text-sm italic">Coming soon - linked trades will be displayed here.</p>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-slate-12 text-lg font-semibold">Trades</h2>
+            {campaign.status !== "closed" && (
+              <Link
+                href={`/trades/new?campaignId=${campaignId}`}
+                className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                Add Trade
+              </Link>
+            )}
+          </div>
+
+          {campaign.status === "closed" && (
+            <p className="text-slate-11/60 text-sm mb-4">
+              This campaign is closed. No new trades can be added.
+            </p>
+          )}
+
+          {trades === undefined ? (
+            <p className="text-slate-11 text-sm">Loading trades...</p>
+          ) : trades.length === 0 ? (
+            <p className="text-slate-11 text-sm">No trades yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full table-auto">
+                <thead>
+                  <tr className="border-b border-slate-700 bg-slate-900/50 text-left text-sm text-slate-11">
+                    <th className="px-4 py-3">Date</th>
+                    <th className="px-4 py-3">Ticker</th>
+                    <th className="px-4 py-3">Side</th>
+                    <th className="px-4 py-3">Direction</th>
+                    <th className="px-4 py-3 text-right">Price</th>
+                    <th className="px-4 py-3 text-right">Quantity</th>
+                    <th className="px-4 py-3 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-700">
+                  {trades.map((trade) => (
+                    <tr
+                      key={trade._id}
+                      className="text-sm text-slate-12 hover:bg-slate-800/50"
+                    >
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {new Date(trade.date).toLocaleDateString("en-US", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </td>
+                      <td className="px-4 py-3 font-medium">{trade.ticker}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={
+                            trade.side === "buy"
+                              ? "text-green-400"
+                              : "text-red-400"
+                          }
+                        >
+                          {trade.side.charAt(0).toUpperCase() + trade.side.slice(1)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {trade.direction.charAt(0).toUpperCase() + trade.direction.slice(1)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {formatCurrency(trade.price)}
+                      </td>
+                      <td className="px-4 py-3 text-right">{trade.quantity}</td>
+                      <td className="px-4 py-3 text-right">
+                        {formatCurrency(trade.price * trade.quantity)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>

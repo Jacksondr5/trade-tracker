@@ -2,6 +2,7 @@
 
 import { useQuery } from "convex/react";
 import Link from "next/link";
+import { useMemo } from "react";
 import { Button } from "~/components/ui";
 import { api } from "../../../convex/_generated/api";
 
@@ -23,8 +24,23 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
+function formatPL(value: number): string {
+  const formatted = new Intl.NumberFormat("en-US", {
+    currency: "USD",
+    style: "currency",
+  }).format(Math.abs(value));
+  return value >= 0 ? `+${formatted}` : `-${formatted}`;
+}
+
 export default function TradesPage() {
   const trades = useQuery(api.trades.listTrades);
+  const campaigns = useQuery(api.campaigns.listCampaigns);
+
+  // Create a lookup map for campaign names
+  const campaignNameMap = useMemo(() => {
+    if (!campaigns) return new Map<string, string>();
+    return new Map(campaigns.map((c) => [c._id, c.name]));
+  }, [campaigns]);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -56,6 +72,9 @@ export default function TradesPage() {
                   Ticker
                 </th>
                 <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
+                  Campaign
+                </th>
+                <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
                   Side
                 </th>
                 <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
@@ -69,6 +88,9 @@ export default function TradesPage() {
                 </th>
                 <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
                   Total
+                </th>
+                <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
+                  P&L
                 </th>
               </tr>
             </thead>
@@ -84,6 +106,11 @@ export default function TradesPage() {
                   </td>
                   <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-sm font-medium">
                     {trade.ticker}
+                  </td>
+                  <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
+                    {trade.campaignId
+                      ? campaignNameMap.get(trade.campaignId) ?? "—"
+                      : "—"}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-sm">
                     <span
@@ -107,6 +134,17 @@ export default function TradesPage() {
                   </td>
                   <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm font-medium">
                     {formatCurrency(trade.price * trade.quantity)}
+                  </td>
+                  <td
+                    className={`whitespace-nowrap px-4 py-3 text-right text-sm font-medium ${
+                      trade.realizedPL === null
+                        ? "text-slate-11"
+                        : trade.realizedPL >= 0
+                          ? "text-green-400"
+                          : "text-red-400"
+                    }`}
+                  >
+                    {trade.realizedPL === null ? "—" : formatPL(trade.realizedPL)}
                   </td>
                 </tr>
               ))}

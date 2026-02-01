@@ -1,8 +1,9 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { calculateTradesPL } from "./lib/plCalculation";
 
-// Validator for trade document returned from queries
-const tradeValidator = v.object({
+// Validator for trade with realized P&L calculation
+const tradeWithPLValidator = v.object({
   _creationTime: v.number(),
   _id: v.id("trades"),
   assetType: v.union(v.literal("crypto"), v.literal("stock")),
@@ -12,6 +13,7 @@ const tradeValidator = v.object({
   notes: v.optional(v.string()),
   price: v.number(),
   quantity: v.number(),
+  realizedPL: v.union(v.number(), v.null()),
   side: v.union(v.literal("buy"), v.literal("sell")),
   ticker: v.string(),
 });
@@ -149,51 +151,77 @@ export const deleteTrade = mutation({
 });
 
 /**
- * List all trades sorted by date descending (newest first).
+ * List all trades sorted by date descending (newest first), with realized P&L.
  */
 export const listTrades = query({
   args: {},
-  returns: v.array(tradeValidator),
+  returns: v.array(tradeWithPLValidator),
   handler: async (ctx) => {
-    const trades = await ctx.db
-      .query("trades")
-      .withIndex("by_date")
-      .order("desc")
-      .collect();
+    // Fetch all trades - we need all for P&L calculation anyway
+    const trades = await ctx.db.query("trades").collect();
 
-    return trades;
+    // Calculate P&L using shared helper
+    const plMap = calculateTradesPL(trades);
+
+    // Sort by date descending for display and add P&L
+    return [...trades]
+      .sort((a, b) => b.date - a.date)
+      .map((trade) => ({
+        ...trade,
+        realizedPL: plMap.get(trade._id) ?? null,
+      }));
   },
 });
 
 /**
- * Get a single trade by ID.
+ * Get a single trade by ID, with realized P&L.
  */
 export const getTrade = query({
   args: {
     tradeId: v.id("trades"),
   },
-  returns: v.union(tradeValidator, v.null()),
+  returns: v.union(tradeWithPLValidator, v.null()),
   handler: async (ctx, args) => {
     const trade = await ctx.db.get(args.tradeId);
-    return trade;
+    if (!trade) {
+      return null;
+    }
+
+    // Calculate P&L (needs all trades for accurate position tracking)
+    const allTrades = await ctx.db.query("trades").collect();
+    const plMap = calculateTradesPL(allTrades);
+
+    return {
+      ...trade,
+      realizedPL: plMap.get(trade._id) ?? null,
+    };
   },
 });
 
 /**
- * Get all trades for a specific campaign, sorted by date descending.
+ * Get all trades for a specific campaign, sorted by date descending, with realized P&L.
  */
 export const getTradesByCampaign = query({
   args: {
     campaignId: v.id("campaigns"),
   },
-  returns: v.array(tradeValidator),
+  returns: v.array(tradeWithPLValidator),
   handler: async (ctx, args) => {
     const trades = await ctx.db
       .query("trades")
       .withIndex("by_campaignId", (q) => q.eq("campaignId", args.campaignId))
       .collect();
 
-    // Sort by date descending since we can't use two indexes
-    return trades.sort((a, b) => b.date - a.date);
+    // Calculate P&L (needs all trades for accurate position tracking)
+    const allTrades = await ctx.db.query("trades").collect();
+    const plMap = calculateTradesPL(allTrades);
+
+    // Sort by date descending and add P&L
+    return [...trades]
+      .sort((a, b) => b.date - a.date)
+      .map((trade) => ({
+        ...trade,
+        realizedPL: plMap.get(trade._id) ?? null,
+      }));
   },
 });

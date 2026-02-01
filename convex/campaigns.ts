@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { calculateTradesPL } from "./lib/plCalculation";
 
 // Reusable validators for nested objects (matching schema.ts)
 const instrumentValidator = v.object({
@@ -205,6 +206,33 @@ export const getCampaign = query({
   handler: async (ctx, args) => {
     const campaign = await ctx.db.get(args.campaignId);
     return campaign;
+  },
+});
+
+/**
+ * List campaigns that are planning or active (not closed).
+ * For use in dropdowns when linking trades to campaigns.
+ */
+export const listOpenCampaigns = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      _id: v.id("campaigns"),
+      name: v.string(),
+      status: v.union(v.literal("active"), v.literal("planning")),
+    }),
+  ),
+  handler: async (ctx) => {
+    const campaigns = await ctx.db.query("campaigns").order("desc").collect();
+
+    // Filter to only planning and active campaigns, map to minimal shape
+    return campaigns
+      .filter((c) => c.status === "planning" || c.status === "active")
+      .map((c) => ({
+        _id: c._id,
+        name: c.name,
+        status: c.status as "active" | "planning",
+      }));
   },
 });
 
@@ -419,6 +447,61 @@ export const removeProfitTarget = mutation({
     });
 
     return null;
+  },
+});
+
+/**
+ * Get P&L statistics for a campaign.
+ * Calculates total realized P&L and trade counts from linked trades.
+ */
+export const getCampaignPL = query({
+  args: {
+    campaignId: v.id("campaigns"),
+  },
+  returns: v.object({
+    losingTrades: v.number(),
+    realizedPL: v.number(),
+    tradeCount: v.number(),
+    winningTrades: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const { campaignId } = args;
+
+    // Get all trades linked to this campaign
+    const campaignTrades = await ctx.db
+      .query("trades")
+      .withIndex("by_campaignId", (q) => q.eq("campaignId", campaignId))
+      .collect();
+
+    // Get ALL trades to calculate accurate P&L (position tracking needs full history)
+    const allTrades = await ctx.db.query("trades").collect();
+
+    // Calculate P&L using shared helper
+    const tradesPLMap = calculateTradesPL(allTrades);
+
+    // Calculate campaign stats from trades linked to this campaign
+    let realizedPL = 0;
+    let winningTrades = 0;
+    let losingTrades = 0;
+
+    for (const trade of campaignTrades) {
+      const pl = tradesPLMap.get(trade._id);
+      if (pl !== null && pl !== undefined) {
+        realizedPL += pl;
+        if (pl > 0) {
+          winningTrades++;
+        } else if (pl < 0) {
+          losingTrades++;
+        }
+      }
+    }
+
+    return {
+      losingTrades,
+      realizedPL,
+      tradeCount: campaignTrades.length,
+      winningTrades,
+    };
   },
 });
 
