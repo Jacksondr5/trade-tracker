@@ -8,6 +8,7 @@ import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
 
 type CampaignStatus = "planning" | "active" | "closed";
+type CampaignOutcome = "profit_target" | "stop_loss" | "manual";
 
 function getStatusBadgeClasses(status: CampaignStatus): string {
   switch (status) {
@@ -39,6 +40,7 @@ export default function CampaignDetailPage() {
   const addProfitTarget = useMutation(api.campaigns.addProfitTarget);
   const removeProfitTarget = useMutation(api.campaigns.removeProfitTarget);
   const addStopLoss = useMutation(api.campaigns.addStopLoss);
+  const updateCampaignStatus = useMutation(api.campaigns.updateCampaignStatus);
   const campaignNotes = useQuery(api.campaignNotes.getNotesByCampaign, { campaignId });
   const addNote = useMutation(api.campaignNotes.addNote);
 
@@ -76,6 +78,12 @@ export default function CampaignDetailPage() {
   const [noteContent, setNoteContent] = useState("");
   const [noteError, setNoteError] = useState<string | null>(null);
   const [isAddingNote, setIsAddingNote] = useState(false);
+
+  // Status change state
+  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [selectedOutcome, setSelectedOutcome] = useState<CampaignOutcome | "">("");
+  const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
+  const [isChangingStatus, setIsChangingStatus] = useState(false);
 
   const handleAddInstrument = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -305,6 +313,50 @@ export default function CampaignDetailPage() {
     }
   };
 
+  const handleActivateCampaign = async () => {
+    setStatusChangeError(null);
+    setIsChangingStatus(true);
+
+    try {
+      await updateCampaignStatus({
+        campaignId,
+        status: "active",
+      });
+    } catch (error) {
+      setStatusChangeError(
+        error instanceof Error ? error.message : "Failed to activate campaign"
+      );
+    } finally {
+      setIsChangingStatus(false);
+    }
+  };
+
+  const handleCloseCampaign = async () => {
+    if (!selectedOutcome) {
+      setStatusChangeError("Please select an outcome");
+      return;
+    }
+
+    setStatusChangeError(null);
+    setIsChangingStatus(true);
+
+    try {
+      await updateCampaignStatus({
+        campaignId,
+        outcome: selectedOutcome,
+        status: "closed",
+      });
+      setShowCloseModal(false);
+      setSelectedOutcome("");
+    } catch (error) {
+      setStatusChangeError(
+        error instanceof Error ? error.message : "Failed to close campaign"
+      );
+    } finally {
+      setIsChangingStatus(false);
+    }
+  };
+
   if (campaign === undefined) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -333,15 +385,138 @@ export default function CampaignDetailPage() {
         <Link href="/campaigns" className="text-slate-11 hover:text-slate-12 text-sm mb-2 inline-block">
           ← Back to Campaigns
         </Link>
-        <div className="flex items-center gap-4">
-          <h1 className="text-slate-12 text-2xl font-bold">{campaign.name}</h1>
-          <span
-            className={`rounded border px-2 py-0.5 text-xs font-medium ${getStatusBadgeClasses(campaign.status)}`}
-          >
-            {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
-          </span>
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-4">
+            <h1 className="text-slate-12 text-2xl font-bold">{campaign.name}</h1>
+            <span
+              className={`rounded border px-2 py-0.5 text-xs font-medium ${getStatusBadgeClasses(campaign.status)}`}
+            >
+              {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
+            </span>
+            {campaign.status === "closed" && campaign.closedAt && (
+              <span className="text-slate-11 text-sm">
+                Closed on{" "}
+                {new Date(campaign.closedAt).toLocaleDateString("en-US", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                })}
+              </span>
+            )}
+          </div>
+
+          {/* Status change controls */}
+          <div className="flex items-center gap-2">
+            {statusChangeError && (
+              <span className="text-red-400 text-sm mr-2">{statusChangeError}</span>
+            )}
+            {campaign.status === "planning" && (
+              <button
+                onClick={handleActivateCampaign}
+                disabled={isChangingStatus}
+                className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+              >
+                {isChangingStatus ? "Activating..." : "Activate Campaign"}
+              </button>
+            )}
+            {campaign.status === "active" && (
+              <button
+                onClick={() => setShowCloseModal(true)}
+                disabled={isChangingStatus}
+                className="rounded bg-slate-600 px-4 py-2 text-sm font-medium text-white hover:bg-slate-500 disabled:opacity-50"
+              >
+                Close Campaign
+              </button>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Close campaign modal */}
+      {showCloseModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-lg border border-slate-700 p-6 max-w-md w-full mx-4">
+            <h2 className="text-slate-12 text-lg font-semibold mb-4">Close Campaign</h2>
+            <p className="text-slate-11 text-sm mb-4">
+              Select the outcome for this campaign. This action cannot be undone.
+            </p>
+
+            <div className="space-y-3 mb-6">
+              <label className="flex items-center gap-3 p-3 rounded border border-slate-700 bg-slate-900 cursor-pointer hover:border-slate-600">
+                <input
+                  type="radio"
+                  name="outcome"
+                  value="profit_target"
+                  checked={selectedOutcome === "profit_target"}
+                  onChange={() => setSelectedOutcome("profit_target")}
+                  className="text-green-600 focus:ring-green-500"
+                />
+                <div>
+                  <span className="text-slate-12 font-medium">Hit Profit Target</span>
+                  <p className="text-slate-11 text-xs">Campaign closed at profit target</p>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-3 p-3 rounded border border-slate-700 bg-slate-900 cursor-pointer hover:border-slate-600">
+                <input
+                  type="radio"
+                  name="outcome"
+                  value="stop_loss"
+                  checked={selectedOutcome === "stop_loss"}
+                  onChange={() => setSelectedOutcome("stop_loss")}
+                  className="text-red-600 focus:ring-red-500"
+                />
+                <div>
+                  <span className="text-slate-12 font-medium">Hit Stop Loss</span>
+                  <p className="text-slate-11 text-xs">Campaign closed at stop loss</p>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-3 p-3 rounded border border-slate-700 bg-slate-900 cursor-pointer hover:border-slate-600">
+                <input
+                  type="radio"
+                  name="outcome"
+                  value="manual"
+                  checked={selectedOutcome === "manual"}
+                  onChange={() => setSelectedOutcome("manual")}
+                  className="text-slate-400 focus:ring-slate-500"
+                />
+                <div>
+                  <span className="text-slate-12 font-medium">Manual Close</span>
+                  <p className="text-slate-11 text-xs">Closed manually for other reasons</p>
+                </div>
+              </label>
+            </div>
+
+            {statusChangeError && (
+              <div className="rounded border border-red-700 bg-red-900/50 px-4 py-2 text-red-200 text-sm mb-4">
+                {statusChangeError}
+              </div>
+            )}
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowCloseModal(false);
+                  setSelectedOutcome("");
+                  setStatusChangeError(null);
+                }}
+                disabled={isChangingStatus}
+                className="rounded bg-slate-700 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-600 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCloseCampaign}
+                disabled={isChangingStatus || !selectedOutcome}
+                className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {isChangingStatus ? "Closing..." : "Close Campaign"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Thesis section */}
       <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-6">
@@ -929,6 +1104,11 @@ export default function CampaignDetailPage() {
         <div className="rounded-lg border border-slate-700 bg-slate-800 p-6">
           <h2 className="text-slate-12 text-lg font-semibold mb-3">Trades</h2>
           <p className="text-slate-11 text-sm italic">Coming soon - linked trades will be displayed here.</p>
+          {campaign.status === "closed" && (
+            <p className="text-slate-11/60 text-sm mt-2">
+              This campaign is closed. No new trades can be added.
+            </p>
+          )}
         </div>
       </div>
     </div>

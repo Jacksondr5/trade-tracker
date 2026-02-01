@@ -619,3 +619,29 @@ Started: Sun Jan 25 19:41:36 EST 2026
 - Use whitespace-pre-wrap on note content to preserve user formatting
 
 ---
+
+## 2026-01-31 - US-023
+- Built status change UI on campaign detail page
+- Added status change controls to campaign detail header (planning→active, active→closed)
+- "Activate Campaign" button shown for planning campaigns, "Close Campaign" button for active campaigns
+- Modal dialog for selecting outcome when closing campaign with three options: profit_target, stop_loss, manual
+- Each outcome option has radio button, title, and description
+- Modal has cancel/close buttons with error handling
+- Display closedAt timestamp next to status badge when campaign is closed
+- Added note in Trades placeholder section that closed campaigns cannot have new trades added
+- Error handling for status change operations
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files changed:**
+- src/app/campaigns/[id]/page.tsx (added status change UI, modal, state, and handlers)
+- prd.json (marked US-023 as passes: true)
+
+**Learnings for future iterations:**
+- Status transitions are one-directional: planning → active → closed
+- Use fixed overlay with z-50 for modal dialogs with bg-black/50 backdrop
+- Radio button groups can use semantic labels with descriptions for better UX
+- When campaign is closed, show closedAt in header and disable trade-related actions
+- Use bg-green-600 for positive actions (activate), bg-red-600 for destructive actions (close)
+
+---
