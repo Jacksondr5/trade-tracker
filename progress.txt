@@ -1028,3 +1028,28 @@ Fixed bug in P&L calculation where cost basis was not adjusted after closing tra
 - Use useState with separate "initialized" flag to prevent re-initializing state after user edits
 - Compare current state to server value to determine if there are unsaved changes
 - The updateCampaign mutation already supports retrospective field - no backend changes needed
+
+---
+
+## 2026-02-01 - US-037
+- Added getCampaignPositionStatus query to convex/campaigns.ts
+- Query calculates net position for each instrument by aggregating campaign trades
+- Returns isFullyClosed (boolean) and positions (array of ticker/quantity)
+- Position is "open" if net quantity > 0 after all buys/sells
+- Added position closure banner to campaign detail page
+- Banner shows when: campaign is active, all positions closed, and banner not dismissed
+- Banner displays P&L summary with winning/losing trade counts
+- Includes "Close Campaign" button that opens the existing close modal
+- Banner is dismissible via X button (state stored locally)
+- TypeScript and lint checks pass
+- Browser verification blocked - dev server not running
+
+**Files changed:**
+- convex/campaigns.ts (added getCampaignPositionStatus query)
+- src/app/campaigns/[id]/page.tsx (added position status query, banner state, and banner UI)
+- prd.json (marked US-037 as passes: true)
+
+**Learnings for future iterations:**
+- Position calculation uses same logic as positions.ts: buy+long and sell+short open, sell+long and buy+short close
+- Group by ticker:direction key for accurate multi-direction tracking
+- Banner dismissal is local state only - will reappear on page reload (acceptable for this use case)

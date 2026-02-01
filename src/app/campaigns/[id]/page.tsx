@@ -54,6 +54,7 @@ export default function CampaignDetailPage() {
   const addNote = useMutation(api.campaignNotes.addNote);
   const trades = useQuery(api.trades.getTradesByCampaign, { campaignId });
   const campaignPL = useQuery(api.campaigns.getCampaignPL, { campaignId });
+  const positionStatus = useQuery(api.campaigns.getCampaignPositionStatus, { campaignId });
 
   // Instrument form state
   const [instrumentTicker, setInstrumentTicker] = useState("");
@@ -101,6 +102,9 @@ export default function CampaignDetailPage() {
   const [retrospectiveError, setRetrospectiveError] = useState<string | null>(null);
   const [isSavingRetrospective, setIsSavingRetrospective] = useState(false);
   const [retrospectiveInitialized, setRetrospectiveInitialized] = useState(false);
+
+  // Position closure banner state
+  const [closureBannerDismissed, setClosureBannerDismissed] = useState(false);
 
   const handleAddInstrument = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -485,6 +489,46 @@ export default function CampaignDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Position closure banner */}
+      {campaign.status === "active" &&
+        positionStatus?.isFullyClosed &&
+        !closureBannerDismissed && (
+          <div className="mb-6 rounded-lg border-2 border-green-600 bg-green-900/30 p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <h3 className="text-green-200 font-semibold mb-1">
+                  All positions closed. Ready to close campaign?
+                </h3>
+                {campaignPL !== undefined && (
+                  <p className={`text-lg font-bold ${
+                    campaignPL.realizedPL >= 0 ? "text-green-400" : "text-red-400"
+                  }`}>
+                    Total P&L: {formatPL(campaignPL.realizedPL)}
+                    <span className="text-slate-11 text-sm font-normal ml-2">
+                      ({campaignPL.winningTrades} winning, {campaignPL.losingTrades} losing trades)
+                    </span>
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowCloseModal(true)}
+                  className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+                >
+                  Close Campaign
+                </button>
+                <button
+                  onClick={() => setClosureBannerDismissed(true)}
+                  className="rounded px-2 py-1 text-slate-400 hover:bg-slate-700 hover:text-slate-300"
+                  title="Dismiss"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       {/* Close campaign modal */}
       {showCloseModal && (

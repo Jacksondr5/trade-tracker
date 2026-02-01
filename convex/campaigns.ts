@@ -539,3 +539,100 @@ export const addStopLoss = mutation({
     return null;
   },
 });
+
+/**
+ * Get position status for a campaign.
+ * Calculates net position for each instrument in the campaign's trades.
+ * Returns whether all positions are fully closed.
+ */
+export const getCampaignPositionStatus = query({
+  args: {
+    campaignId: v.id("campaigns"),
+  },
+  returns: v.object({
+    isFullyClosed: v.boolean(),
+    positions: v.array(
+      v.object({
+        quantity: v.number(),
+        ticker: v.string(),
+      })
+    ),
+  }),
+  handler: async (ctx, args) => {
+    const { campaignId } = args;
+
+    // Get all trades linked to this campaign
+    const campaignTrades = await ctx.db
+      .query("trades")
+      .withIndex("by_campaignId", (q) => q.eq("campaignId", campaignId))
+      .collect();
+
+    // If no trades, positions are "closed" (nothing to close)
+    if (campaignTrades.length === 0) {
+      return {
+        isFullyClosed: true,
+        positions: [],
+      };
+    }
+
+    // Group trades by ticker and direction, calculate net quantity
+    const positionMap = new Map<
+      string,
+      {
+        direction: "long" | "short";
+        netQuantity: number;
+        ticker: string;
+      }
+    >();
+
+    for (const trade of campaignTrades) {
+      const key = `${trade.ticker}:${trade.direction}`;
+
+      if (!positionMap.has(key)) {
+        positionMap.set(key, {
+          direction: trade.direction,
+          netQuantity: 0,
+          ticker: trade.ticker,
+        });
+      }
+
+      const position = positionMap.get(key)!;
+
+      // Determine if this trade opens or closes the position
+      // Long: buy opens, sell closes
+      // Short: sell opens, buy closes
+      const isOpening =
+        (trade.direction === "long" && trade.side === "buy") ||
+        (trade.direction === "short" && trade.side === "sell");
+
+      if (isOpening) {
+        position.netQuantity += trade.quantity;
+      } else {
+        position.netQuantity -= trade.quantity;
+      }
+    }
+
+    // Convert to array of positions with non-zero quantity
+    const openPositions: Array<{ quantity: number; ticker: string }> = [];
+    
+    for (const position of positionMap.values()) {
+      if (position.netQuantity > 0) {
+        openPositions.push({
+          quantity: position.netQuantity,
+          ticker: position.ticker,
+        });
+      }
+    }
+
+    // Sort by ticker for consistent ordering
+    openPositions.sort((a, b) => a.ticker.localeCompare(b.ticker));
+
+    // Campaign positions are fully closed if all positions have zero quantity
+    const isFullyClosed = openPositions.length === 0;
+
+    return {
+      isFullyClosed,
+      positions: openPositions,
+    };
+  },
+});
