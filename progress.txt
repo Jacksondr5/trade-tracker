@@ -981,3 +981,26 @@ Fixed bug in P&L calculation where cost basis was not adjusted after closing tra
 - YTD start date: new Date(now.getFullYear(), 0, 1).getTime() for Jan 1 midnight local time
 - Return validators: use v.union(v.number(), v.null()) for optional numeric stats
 - Campaign-level win/loss is determined by total P&L of all trades linked to that campaign
+
+---
+
+## 2026-02-01 - US-035
+- Replaced placeholder home page with dashboard page
+- Created stat cards displaying: Total P&L (with YTD subtitle), Win Rate, Avg Win vs Avg Loss, Profit Factor, Open Campaigns, Total Trades
+- Added StatCard component with label, value, subtitle, and valueColor props
+- Added StatCardSkeleton component for loading state with animate-pulse
+- Card styling: bg-slate-800 rounded-lg p-6 border border-slate-700
+- P&L color coding: green for positive, red for negative
+- Grid layout: 1 column on mobile, 2 on sm, 3 on lg
+- TypeScript and lint checks pass
+- Browser verification blocked - dev server not running
+
+**Files changed:**
+- src/app/page.tsx (replaced placeholder with dashboard)
+- prd.json (marked US-035 as passes: true)
+
+**Learnings for future iterations:**
+- StatCard pattern: simple component with label, value, optional subtitle and color
+- Loading skeleton pattern: animate-pulse with bg-slate-700 placeholders
+- Use formatPL for P&L values (with +/- prefix) and formatCurrency for plain amounts
+- Profit factor >= 1 is good (green), < 1 is bad (red)
