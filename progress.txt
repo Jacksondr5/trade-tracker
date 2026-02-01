@@ -571,3 +571,25 @@ Started: Sun Jan 25 19:41:36 EST 2026
 - Use toLocaleDateString with hour/minute for timestamp display: day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
 
 ---
+
+## 2026-01-31 - US-021
+- Created convex/campaignNotes.ts with campaign notes mutations and queries
+- Implemented addNote mutation accepting campaignId and content, returns note ID
+- Added campaign existence validation before creating note
+- Implemented getNotesByCampaign query returning notes sorted by _creationTime ascending (chronological order)
+- Created campaignNoteValidator for return type validation (includes _id, _creationTime, campaignId, content)
+- TypeScript and lint checks pass
+
+**Files created:**
+- convex/campaignNotes.ts (new)
+
+**Files changed:**
+- prd.json (marked US-021 as passes: true)
+
+**Learnings for future iterations:**
+- Campaign notes are stored in a separate table (campaignNotes) with foreign key to campaigns
+- Notes sorted by _creationTime ascending for chronological display (oldest first)
+- Always validate that referenced documents exist before inserting (campaign existence check)
+- Return note ID from addNote mutation so UI can react to successful creation
+
+---
