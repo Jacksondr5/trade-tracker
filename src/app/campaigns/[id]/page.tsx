@@ -38,6 +38,7 @@ export default function CampaignDetailPage() {
   const removeEntryTarget = useMutation(api.campaigns.removeEntryTarget);
   const addProfitTarget = useMutation(api.campaigns.addProfitTarget);
   const removeProfitTarget = useMutation(api.campaigns.removeProfitTarget);
+  const addStopLoss = useMutation(api.campaigns.addStopLoss);
 
   // Instrument form state
   const [instrumentTicker, setInstrumentTicker] = useState("");
@@ -61,6 +62,13 @@ export default function CampaignDetailPage() {
   const [profitTargetNotes, setProfitTargetNotes] = useState("");
   const [profitTargetError, setProfitTargetError] = useState<string | null>(null);
   const [isAddingProfitTarget, setIsAddingProfitTarget] = useState(false);
+
+  // Stop loss form state
+  const [stopLossTicker, setStopLossTicker] = useState("");
+  const [stopLossPrice, setStopLossPrice] = useState("");
+  const [stopLossReason, setStopLossReason] = useState("");
+  const [stopLossError, setStopLossError] = useState<string | null>(null);
+  const [isAddingStopLoss, setIsAddingStopLoss] = useState(false);
 
   const handleAddInstrument = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -221,6 +229,46 @@ export default function CampaignDetailPage() {
       setProfitTargetError(
         error instanceof Error ? error.message : "Failed to remove profit target"
       );
+    }
+  };
+
+  const handleAddStopLoss = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stopLossTicker) {
+      setStopLossError("Ticker is required");
+      return;
+    }
+    if (!stopLossPrice.trim()) {
+      setStopLossError("Price is required");
+      return;
+    }
+
+    const price = parseFloat(stopLossPrice);
+    if (isNaN(price) || price <= 0) {
+      setStopLossError("Price must be a positive number");
+      return;
+    }
+
+    setStopLossError(null);
+    setIsAddingStopLoss(true);
+
+    try {
+      await addStopLoss({
+        campaignId,
+        ticker: stopLossTicker,
+        price,
+        reason: stopLossReason.trim() || undefined,
+      });
+      // Clear form on success
+      setStopLossTicker("");
+      setStopLossPrice("");
+      setStopLossReason("");
+    } catch (error) {
+      setStopLossError(
+        error instanceof Error ? error.message : "Failed to add stop loss"
+      );
+    } finally {
+      setIsAddingStopLoss(false);
     }
   };
 
@@ -627,10 +675,160 @@ export default function CampaignDetailPage() {
           </form>
         </div>
 
-        {/* Stop Loss placeholder */}
+        {/* Stop Loss section */}
         <div className="rounded-lg border border-slate-700 bg-slate-800 p-6">
           <h2 className="text-slate-12 text-lg font-semibold mb-3">Stop Loss</h2>
-          <p className="text-slate-11 text-sm italic">Coming soon - stop loss history will be displayed here.</p>
+
+          {/* Current stop loss (most recent) - highlighted */}
+          {campaign.stopLossHistory.length > 0 && (
+            <div className="mb-4">
+              <h3 className="text-slate-11 text-sm font-medium mb-2">Current Stop Loss</h3>
+              {(() => {
+                // Get the most recent stop loss (last in array since they're appended)
+                const currentStopLoss = campaign.stopLossHistory[campaign.stopLossHistory.length - 1];
+                return (
+                  <div className="rounded border-2 border-yellow-600 bg-yellow-900/20 px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <span className="font-bold text-yellow-200 text-lg">
+                        {currentStopLoss.ticker}
+                      </span>
+                      <span className="text-yellow-100 text-lg">
+                        @ {formatCurrency(currentStopLoss.price)}
+                      </span>
+                    </div>
+                    {currentStopLoss.reason && (
+                      <p className="text-yellow-200/80 text-sm mt-1">
+                        {currentStopLoss.reason}
+                      </p>
+                    )}
+                    <p className="text-yellow-200/60 text-xs mt-1">
+                      Set on {new Date(currentStopLoss.setAt).toLocaleDateString("en-US", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* Stop loss history (all entries, newest first) */}
+          {campaign.stopLossHistory.length > 1 && (
+            <div className="mb-4">
+              <h3 className="text-slate-11 text-sm font-medium mb-2">History</h3>
+              <div className="space-y-2">
+                {/* Show all except the most recent (current), sorted newest first */}
+                {[...campaign.stopLossHistory]
+                  .slice(0, -1)
+                  .reverse()
+                  .map((stopLoss, index) => (
+                    <div
+                      key={index}
+                      className="rounded border border-slate-700 bg-slate-900 px-4 py-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-slate-12">
+                          {stopLoss.ticker}
+                        </span>
+                        <span className="text-slate-11">
+                          @ {formatCurrency(stopLoss.price)}
+                        </span>
+                        <span className="text-slate-11/60 text-xs ml-auto">
+                          {new Date(stopLoss.setAt).toLocaleDateString("en-US", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                      {stopLoss.reason && (
+                        <p className="text-slate-11 text-sm mt-1">
+                          {stopLoss.reason}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {campaign.stopLossHistory.length === 0 && (
+            <p className="text-slate-11 text-sm mb-4">No stop loss set yet.</p>
+          )}
+
+          {/* Add stop loss form */}
+          <form onSubmit={handleAddStopLoss} className="space-y-3">
+            {stopLossError && (
+              <div className="rounded border border-red-700 bg-red-900/50 px-4 py-2 text-red-200 text-sm">
+                {stopLossError}
+              </div>
+            )}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div>
+                <label htmlFor="stopLossTicker" className="block text-sm text-slate-11 mb-1">
+                  Ticker <span className="text-red-400">*</span>
+                </label>
+                <select
+                  id="stopLossTicker"
+                  value={stopLossTicker}
+                  onChange={(e) => setStopLossTicker(e.target.value)}
+                  className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-slate-12 focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="">Select instrument</option>
+                  {campaign.instruments.map((instrument) => (
+                    <option key={instrument.ticker} value={instrument.ticker}>
+                      {instrument.ticker}
+                      {instrument.underlying ? ` (${instrument.underlying})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="stopLossPrice" className="block text-sm text-slate-11 mb-1">
+                  Price <span className="text-red-400">*</span>
+                </label>
+                <input
+                  id="stopLossPrice"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={stopLossPrice}
+                  onChange={(e) => setStopLossPrice(e.target.value)}
+                  placeholder="e.g., 145.00"
+                  className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-slate-12 placeholder:text-slate-11 focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label htmlFor="stopLossReason" className="block text-sm text-slate-11 mb-1">
+                  Reason (optional)
+                </label>
+                <input
+                  id="stopLossReason"
+                  type="text"
+                  value={stopLossReason}
+                  onChange={(e) => setStopLossReason(e.target.value)}
+                  placeholder="e.g., Below support level"
+                  className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-slate-12 placeholder:text-slate-11 focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+            </div>
+            <button
+              type="submit"
+              disabled={isAddingStopLoss || campaign.instruments.length === 0}
+              className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isAddingStopLoss ? "Setting..." : "Set Stop Loss"}
+            </button>
+            {campaign.instruments.length === 0 && (
+              <p className="text-slate-11 text-sm">Add instruments first to set a stop loss.</p>
+            )}
+          </form>
         </div>
 
         {/* Notes placeholder */}

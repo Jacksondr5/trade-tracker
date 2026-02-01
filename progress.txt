@@ -547,3 +547,27 @@ Started: Sun Jan 25 19:41:36 EST 2026
 - Follow alphabetized field ordering in args: campaignId, price, reason, ticker
 
 ---
+
+## 2026-01-31 - US-020
+- Built Stop Loss UI section on campaign detail page
+- Current stop loss displayed prominently with yellow highlight (border-yellow-600, bg-yellow-900/20)
+- Shows ticker, price (formatted as currency), reason (if set), and timestamp
+- Full history displayed below current stop loss, sorted newest first
+- Historical entries styled with regular slate colors (border-slate-700, bg-slate-900)
+- Added form to set new stop loss: ticker (select from instruments), price, reason (optional)
+- Form disabled when no instruments exist with helpful message
+- Error handling with dismissible error messages
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files changed:**
+- src/app/campaigns/[id]/page.tsx (added stop loss UI section with current/history display and form)
+- prd.json (marked US-020 as passes: true)
+
+**Learnings for future iterations:**
+- Use slice(0, -1).reverse() to get all history except current, sorted newest first
+- Yellow color scheme for highlighting current/active items: border-yellow-600, bg-yellow-900/20, text-yellow-200
+- Stop losses are displayed from the stopLossHistory array - current is last item (appended), history is all others
+- Use toLocaleDateString with hour/minute for timestamp display: day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
+
+---
