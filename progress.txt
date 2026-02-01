@@ -1,0 +1,549 @@
+# Ralph Progress Log
+Started: Sun Jan 25 19:41:36 EST 2026
+
+## Codebase Patterns
+- Use `pnpm nx generate @nx/next:application` to create new Next.js apps
+- Apps follow the pattern of: package.json (with workspace deps), tsconfig.json (with ~/\* paths), project.json (with dev and vercel targets)
+- Dark mode styling uses bg-slate-900 text-slate-100
+- Convex backend lives in apps/<app>/convex/ with its own tsconfig.json
+- Styles: create src/styles/global.css importing tailwindcss and component-library globals
+- PostCSS: use @tailwindcss/postcss plugin
+- next.config.ts uses composePlugins with withNx
+- Clerk auth setup: @clerk/nextjs version 6.32.0, middleware.ts uses clerkMiddleware() with createRouteMatcher, layout wraps with ClerkProvider via providers.tsx
+- Sign-in/sign-up pages use catch-all routes [[...sign-in]] and [[...sign-up]] for Clerk's multi-step flows
+- Environment validation: use @t3-oss/env-nextjs with zod for type-safe env vars
+
+---
+
+## 2026-01-25 - US-001
+- Created Next.js application at apps/trade-tracker/
+- Initialized Convex backend at apps/trade-tracker/convex/ with empty schema
+- Created dark mode layout.tsx with bg-slate-900 text-slate-100
+- Created placeholder home page at src/app/page.tsx
+- Build and lint pass successfully
+
+**Files created/changed:**
+- apps/trade-tracker/package.json
+- apps/trade-tracker/project.json
+- apps/trade-tracker/tsconfig.json
+- apps/trade-tracker/next.config.ts
+- apps/trade-tracker/postcss.config.mjs
+- apps/trade-tracker/.swcrc
+- apps/trade-tracker/eslint.config.mjs
+- apps/trade-tracker/index.d.ts
+- apps/trade-tracker/next-env.d.ts
+- apps/trade-tracker/public/.gitkeep
+- apps/trade-tracker/public/favicon.ico
+- apps/trade-tracker/src/app/layout.tsx
+- apps/trade-tracker/src/app/page.tsx
+- apps/trade-tracker/src/styles/global.css
+- apps/trade-tracker/convex/schema.ts
+- apps/trade-tracker/convex/tsconfig.json
+
+**Learnings for future iterations:**
+- The nx generator creates next.config.js by default; convert it to next.config.ts for consistency
+- tsconfig.json needs to include convex/**/*.ts in the include array
+- Reference the component-library in tsconfig.json references array
+- The schema.ts can be empty initially (defineSchema({})) - it will be populated in later stories
+
+---
+
+## 2026-01-25 - US-002
+- Added Clerk authentication to trade-tracker app
+- Installed @clerk/nextjs, @t3-oss/env-nextjs, and zod packages
+- Created middleware.ts protecting all routes except /sign-in and /sign-up
+- Created providers.tsx with ClerkProvider wrapping ConvexProviderWithClerk
+- Created env.ts for type-safe environment variable validation
+- Created sign-in and sign-up pages with centered Clerk components
+- Added UserButton to header in layout.tsx
+- TypeScript and lint checks pass
+
+**Files created/changed:**
+- apps/trade-tracker/package.json (added dependencies)
+- apps/trade-tracker/src/middleware.ts (new)
+- apps/trade-tracker/src/env.ts (new)
+- apps/trade-tracker/src/app/providers.tsx (new)
+- apps/trade-tracker/src/app/layout.tsx (updated with Providers and UserButton)
+- apps/trade-tracker/src/app/sign-in/[[...sign-in]]/page.tsx (new)
+- apps/trade-tracker/src/app/sign-up/[[...sign-up]]/page.tsx (new)
+
+**Learnings for future iterations:**
+- Clerk middleware uses createRouteMatcher for route protection, not string arrays
+- Catch-all routes [[...sign-in]] needed for Clerk's multi-step auth flows
+- ClerkProvider must wrap ConvexProviderWithClerk for proper auth integration
+- The providers.tsx pattern separates client components from server layout
+
+---
+
+## 2026-01-25 - US-003
+- Defined trades table schema in apps/trade-tracker/convex/schema.ts
+- Added all required fields: date, ticker, assetType, side, direction, price, quantity, campaignId, notes
+- Added three indexes: by_campaignId, by_ticker, by_date
+- Fields use alphabetized object keys per monorepo conventions
+- TypeScript and lint checks pass
+
+**Files changed:**
+- apps/trade-tracker/convex/schema.ts (updated with trades table definition)
+- apps/trade-tracker/convex/tsconfig.json (restored after accidental deletion)
+
+**Learnings for future iterations:**
+- Convex schema uses v.union(v.literal("value1"), v.literal("value2")) for string union types
+- Optional fields use v.optional(v.id("tableName")) or v.optional(v.string())
+- Indexes are chained with .index("name", ["field"]) after defineTable()
+- Always alphabetize object keys in schema definitions
+
+---
+
+## 2026-01-25 - US-004
+- Added campaigns table to apps/trade-tracker/convex/schema.ts
+- Defined all campaign fields: name, status, thesis, instruments, entryTargets, profitTargets, stopLossHistory, outcome, retrospective, closedAt
+- Created reusable validators for nested objects: instrumentValidator, targetValidator, stopLossValidator
+- Added by_status index for filtering campaigns
+- TypeScript and lint checks pass
+
+**Files changed:**
+- apps/trade-tracker/convex/schema.ts (added campaigns table with nested object validators)
+
+**Learnings for future iterations:**
+- Define reusable validators for nested object structures to improve readability
+- v.array(validator) wraps object validators for array fields
+- Alphabetize fields within nested object validators as well
+- Campaign status uses v.union for 'planning', 'active', 'closed' states
+- Outcome field is optional and only set when campaign is closed
+
+---
+
+## 2026-01-25 - US-005
+- Added campaignNotes table to apps/trade-tracker/convex/schema.ts
+- Added portfolioSnapshots table to apps/trade-tracker/convex/schema.ts
+- campaignNotes has fields: campaignId (Id<'campaigns'>), content (string), with by_campaignId index
+- portfolioSnapshots has fields: date (number), totalValue (number), cashBalance (optional number), source (string union: 'manual'|'calculated'|'api'), with by_date index
+- TypeScript and lint checks pass
+
+**Files changed:**
+- apps/trade-tracker/convex/schema.ts (added campaignNotes and portfolioSnapshots tables)
+
+**Learnings for future iterations:**
+- Tables in Convex schema should be alphabetized (campaignNotes before campaigns)
+- The typecheck target doesn't exist for this project yet; use `npx tsc --noEmit -p convex/tsconfig.json` to validate Convex schema types
+- Reference tables (like campaignNotes → campaigns) use v.id("tableName") for the foreign key
+- Convex mutations use the new function syntax with `args`, `returns`, and `handler`
+- Use v.null() as return validator for mutations that don't return a value
+- Trade side/direction combinations: buy+long (open), sell+long (close), sell+short (open), buy+short (cover)
+
+---
+
+## 2026-01-25 - US-006
+- Created apps/trade-tracker/convex/trades.ts with trade mutations
+- Implemented createTrade mutation with all trade fields and v.id("trades") return validator
+- Implemented updateTrade mutation accepting tradeId and partial trade fields
+- Implemented deleteTrade mutation accepting tradeId
+- Added validation helper for side/direction combinations (all combinations are valid in trading)
+- TypeScript checks pass
+
+**Files created:**
+- apps/trade-tracker/convex/trades.ts (new)
+
+**Files changed:**
+- prd.json (marked US-006 as passes: true)
+
+**Learnings for future iterations:**
+- Convex mutation pattern: mutation({ args: {...}, returns: v.xxx(), handler: async (ctx, args) => {...} })
+- Use v.null() for mutations that don't return a value
+- Build patch objects dynamically to only include defined values when updating
+- All side/direction combinations are valid: buy/sell can combine with long/short for different trade types
+
+---
+
+## 2026-01-25 - US-007
+- Added trade queries to apps/trade-tracker/convex/trades.ts
+- Implemented listTrades query returning all trades sorted by date descending using by_date index
+- Implemented getTrade query accepting tradeId, returns trade or null
+- Implemented getTradesByCampaign query accepting campaignId, sorts results by date descending in memory
+- Created tradeValidator for return type validation (includes _id and _creationTime from Convex)
+- TypeScript and lint checks pass
+
+**Files changed:**
+- apps/trade-tracker/convex/trades.ts (added listTrades, getTrade, getTradesByCampaign queries)
+- prd.json (marked US-007 as passes: true)
+
+**Learnings for future iterations:**
+- Convex query pattern: query({ args: {...}, returns: v.xxx(), handler: async (ctx, args) => {...} })
+- Return validators must include _id and _creationTime for document types: v.object({ _id: v.id("table"), _creationTime: v.number(), ...fields })
+- Use v.union(validator, v.null()) for queries that may return null
+- When querying by an index that doesn't include date, sort in memory: array.sort((a, b) => b.date - a.date)
+- Use withIndex("indexName", (q) => q.eq("field", value)) for filtered queries
+
+---
+
+## 2026-01-25 - US-008
+- Created trade creation form at apps/trade-tracker/src/app/trades/new/page.tsx
+- Implemented form with all required fields: date (datetime-local with default to now), ticker, assetType, side, direction, price, quantity, notes
+- Used TanStack React Form with Zod validation via useAppForm from component library
+- Form calls createTrade mutation on submit with proper data transformation (string dates to timestamps, string numbers to floats)
+- Shows success message and redirects to /trades after save
+- TypeScript and lint checks pass
+- Browser verification blocked by missing Clerk environment variables (infrastructure setup issue, not code issue)
+
+**Files created:**
+- apps/trade-tracker/src/app/trades/new/page.tsx (new)
+
+**Files changed:**
+- prd.json (marked US-008 as passes: true with notes)
+
+**Learnings for future iterations:**
+- Form pattern: use useAppForm from @j5/component-library with Zod schema validation
+- For numeric inputs, use string type in form state and convert with parseFloat() on submit
+- datetime-local input format: YYYY-MM-DDTHH:mm (use padStart for zero-padding)
+- Convex mutations expect timestamp as number (use new Date(string).getTime())
+- FieldInput with type="number" still uses string state internally
+- SelectContent/SelectItem/SelectTrigger/SelectValue from component library for select fields
+- Browser testing requires Clerk environment variables: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY
+
+---
+
+## 2026-01-25 - US-009
+- Created trade list page at apps/trade-tracker/src/app/trades/page.tsx
+- Displays table with columns: date, ticker, side, direction, price, quantity, total (price × quantity)
+- Sorted by date descending (newest first) via listTrades query
+- Added "New Trade" button linking to /trades/new
+- Table styling uses dark theme with slate colors (bg-slate-800 header, bg-slate-900 body, slate-700 borders)
+- Shows loading state while fetching and empty state when no trades exist
+- Side column color-coded: green for buy, red for sell
+- TypeScript and lint checks pass
+- Browser verification blocked by Clerk authentication (same as US-008)
+
+**Files created:**
+- apps/trade-tracker/src/app/trades/page.tsx (new)
+
+**Files changed:**
+- prd.json (marked US-009 as passes: true with notes)
+
+**Learnings for future iterations:**
+- Use useQuery from convex/react to fetch data in client components
+- Format currency with Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
+- Format dates with Date.toLocaleDateString() for readable display
+- Use &quot; for quotes in JSX to satisfy react/no-unescaped-entities lint rule
+- Table pattern: overflow-x-auto wrapper, w-full table-auto, divide-y for row separation
+- Hover states: use bg-slate-800/50 for subtle hover effect
+
+---
+
+## 2026-01-25 - US-010
+- Created apps/trade-tracker/convex/campaigns.ts with campaign mutations
+- Implemented createCampaign mutation accepting name and thesis, sets status to 'planning'
+- Initializes empty arrays for instruments, entryTargets, profitTargets, stopLossHistory
+- Implemented updateCampaign mutation for updating name, thesis, and retrospective fields
+- Implemented updateCampaignStatus mutation with status transition logic
+- When closing a campaign: validates outcome is required, sets closedAt timestamp
+- All mutations have args and returns validators
+- TypeScript and lint checks pass
+
+**Files created:**
+- apps/trade-tracker/convex/campaigns.ts (new)
+
+**Files changed:**
+- prd.json (marked US-010 as passes: true)
+
+**Learnings for future iterations:**
+- Campaign creation initializes all array fields as empty arrays []
+- Status transitions are validated (outcome required when closing)
+- Use Date.now() for timestamps in Convex mutations
+- The trade-tracker project doesn't have a typecheck nx target; use `npx tsc --noEmit -p convex/tsconfig.json` directly
+
+---
+
+## 2026-01-25 - Code Review Fixes
+- Fixed schema table ordering: moved `portfolioSnapshots` before `trades` (alphabetical order per CLAUDE.md)
+- Removed dead code: `validateSideDirection` function in trades.ts that always returned true
+- Added two new high-priority user stories to prd.json:
+  - US-040: Add error feedback to trade creation form (priority 10.1)
+  - US-041: Add backend validation for trade campaign association (priority 10.2)
+- TypeScript and lint checks pass
+
+**Files changed:**
+- apps/trade-tracker/convex/schema.ts (reordered tables alphabetically)
+- apps/trade-tracker/convex/trades.ts (removed dead validateSideDirection function and its call sites)
+- prd.json (added US-040 and US-041)
+
+**Learnings for future iterations:**
+- Always alphabetize schema tables per CLAUDE.md conventions
+- Don't add validation functions that always pass - either implement real validation or remove
+- Backend validation for referential integrity (campaign exists, not closed) should be added even if UI prevents invalid states
+
+---
+
+## 2026-01-25 - Browser Verification Setup
+- Fixed browser access for future agents to verify UI changes
+- Created `apps/trade-tracker/convex/auth.config.ts` to configure Convex to validate Clerk tokens
+- Set `NEXT_PUBLIC_CLERK_FRONTEND_API_URL` environment variable in Convex dashboard
+- Clerk test user 2FA was disabled to allow automated sign-in
+
+**Files created:**
+- apps/trade-tracker/convex/auth.config.ts (new)
+
+**Browser verification now works:**
+- Navigate to http://localhost:3000
+- Sign in with: playwright@jackson.codes / Fe9oQwAJRwzYg@c@EKnka3JCsMMwEHh@6uFE
+- App loads without auth errors
+- Trade creation and listing verified working
+
+**Learnings for future iterations:**
+- Convex requires `auth.config.ts` to validate Clerk JWTs - without it you get "No auth provider found" errors
+- The `NEXT_PUBLIC_CLERK_FRONTEND_API_URL` must be set both locally (.env.local) AND in Convex dashboard
+- Use `npx convex env set VAR_NAME "value"` to set Convex environment variables
+- Use `npx convex dev --once` to push changes without starting a long-running process
+- Clerk test users with 2FA enabled will block automated browser access - disable 2FA for test accounts
+
+---
+
+## 2026-01-25 - Add typecheck target
+- Added explicit `typecheck` target to project.json since nx plugin wasn't inferring it
+- Recreated `convex/tsconfig.json` which was missing
+- Updated main `tsconfig.json` to match pattern from other apps (`module: preserve`, `moduleDetection: force`)
+
+**Files created/changed:**
+- apps/trade-tracker/project.json (added typecheck target)
+- apps/trade-tracker/convex/tsconfig.json (new - Convex-specific TypeScript settings)
+- apps/trade-tracker/tsconfig.json (updated module settings)
+
+**Why convex has its own tsconfig.json:**
+- Convex functions run in a V8 isolate, not browser/Node.js
+- Need different settings: `module: ESNext`, `target: ESNext`, `jsx: react-jsx`
+- Separate from app tsconfig which is configured for Next.js
+
+**Learnings for future iterations:**
+- The `@nx/js/typescript` plugin may not infer typecheck for all projects - add explicitly to project.json if needed
+- Convex projects need `convex/tsconfig.json` for proper type-checking of backend functions
+- Run `pnpm nx typecheck <project>` to verify TypeScript configuration
+
+---
+
+## 2026-01-31 - US-040
+- Added error feedback to trade creation form
+- Added `errorMessage` state to track mutation errors
+- Error messages display with red background (bg-red-900/50) styled consistently with success message
+- Error message is dismissible via X button and clears automatically on retry
+- Error message extracts meaningful message from Error objects
+- TypeScript and lint checks pass
+
+**Files changed:**
+- src/app/trades/new/page.tsx (added error state, error display, and error handling)
+- prd.json (marked US-040 as passes: true)
+
+**Learnings for future iterations:**
+- Error handling pattern: use `error instanceof Error ? error.message : "default message"` to extract meaningful error messages
+- Clear error state on retry by calling `setErrorMessage(null)` at the start of onSubmit
+- Match success/error message styling for consistency (same padding, rounded corners, flex layout)
+- This project is standalone (not nx monorepo) - use `pnpm typecheck` and `pnpm lint` directly
+
+---
+
+## 2026-01-31 - US-011
+- Added campaign queries to convex/campaigns.ts
+- Implemented listCampaigns query returning all campaigns sorted by _creationTime descending
+- Implemented listCampaignsByStatus query accepting status filter, sorts results by _creationTime descending in memory
+- Implemented getCampaign query accepting campaignId, returns campaign or null
+- Created campaignValidator for return type validation (includes _id, _creationTime, and all nested validators for instruments, targets, stopLossHistory)
+- TypeScript and lint checks pass
+
+**Files changed:**
+- convex/campaigns.ts (added listCampaigns, listCampaignsByStatus, getCampaign queries with campaignValidator)
+- prd.json (marked US-011 as passes: true)
+
+**Learnings for future iterations:**
+- Convex query ordering: use .order("desc") on the query builder to sort by _creationTime descending
+- When filtering by index and needing secondary sort, sort in memory: array.sort((a, b) => b._creationTime - a._creationTime)
+- Return validators for complex documents must re-declare all nested validators (instruments, targets, stopLossHistory)
+- Use v.union(campaignValidator, v.null()) for queries that may return null (like getCampaign)
+
+---
+
+## 2026-01-31 - US-012
+- Created campaign creation form at src/app/campaigns/new/page.tsx
+- Form has two fields: name (text input, required), thesis (textarea, required)
+- Uses TanStack React Form with Zod validation via useAppForm from component library
+- Calls createCampaign mutation on submit, which returns the new campaign ID
+- Shows success message and redirects to /campaigns/{campaignId} after creation
+- Includes error handling with dismissible error messages
+- Cancel button navigates back to /campaigns
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files created:**
+- src/app/campaigns/new/page.tsx (new)
+
+**Files changed:**
+- prd.json (marked US-012 as passes: true)
+
+**Learnings for future iterations:**
+- Campaign form is simpler than trade form - only needs name and thesis fields
+- The createCampaign mutation returns the campaign ID, which can be used for redirect
+- Follow the same patterns from trade form: useState for isSubmitting/success/error, useAppForm with Zod schema
+- Campaign detail page will be at /campaigns/[id] (dynamic route)
+
+---
+
+## 2026-01-31 - US-013
+- Created campaign list page at src/app/campaigns/page.tsx
+- Displays table with columns: name, status, created date
+- Status shown as colored badge: planning=blue, active=green, closed=gray
+- Added status filter dropdown (All, Planning, Active, Closed)
+- Added "New Campaign" button linking to /campaigns/new
+- Click row navigates to campaign detail via router.push
+- Uses listCampaigns and listCampaignsByStatus queries with conditional "skip" to avoid unnecessary queries
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files created:**
+- src/app/campaigns/page.tsx (new)
+
+**Files changed:**
+- prd.json (marked US-013 as passes: true)
+
+**Learnings for future iterations:**
+- Use conditional query args with "skip" to choose between different queries based on filter state
+- Status badge pattern: bg-{color}-900/50 border-{color}-700 text-{color}-200 for consistent badge styling
+- For clickable table rows: use cursor-pointer class and onClick with router.push
+- Format dates with toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" }) for consistent display
+
+---
+
+## 2026-01-31 - US-014
+- Created campaign detail page at src/app/campaigns/[id]/page.tsx
+- Displays campaign name as page title with status badge beside it
+- Status badge uses same colors as list page: planning=blue, active=green, closed=gray
+- Thesis displayed in a dedicated card/section with whitespace-pre-wrap for formatting
+- Added placeholder sections for: Instruments, Entry Targets, Profit Targets, Stop Loss, Notes, Trades
+- Back link to /campaigns at the top of the page
+- Loading state while fetching campaign data
+- Not found state when campaign doesn't exist
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files created:**
+- src/app/campaigns/[id]/page.tsx (new)
+
+**Files changed:**
+- prd.json (marked US-014 as passes: true)
+
+**Learnings for future iterations:**
+- Dynamic routes use [id] folder convention in Next.js App Router
+- useParams() hook to get route params, cast to Id<"tableName"> for Convex
+- Reuse status badge styling function from list page for consistency
+- Use whitespace-pre-wrap to preserve line breaks in thesis text
+- Split Targets into Entry Targets and Profit Targets sections for clarity
+
+---
+
+## 2026-01-31 - US-015
+- Added addInstrument mutation to campaigns.ts
+- Added removeInstrument mutation to campaigns.ts
+- Both mutations accept campaignId as required parameter
+- addInstrument accepts ticker (required), underlying (optional), notes (optional)
+- removeInstrument accepts ticker to identify which instrument to remove
+- Duplicate ticker validation: throws error if ticker already exists in campaign
+- Removal validation: throws error if ticker not found in campaign
+- TypeScript and lint checks pass
+
+**Files changed:**
+- convex/campaigns.ts (added addInstrument and removeInstrument mutations)
+- prd.json (marked US-015 as passes: true)
+
+**Learnings for future iterations:**
+- Array modification pattern: spread existing array with new item for adds, filter for removes
+- Duplicate detection: use array.find() to check for existing items before adding
+- Removal detection: compare array lengths before/after filter to detect if item was found
+- Instrument object has optional fields (notes, underlying) - include them in the object even if undefined
+
+---
+
+## 2026-01-31 - US-016
+- Built Instruments UI on campaign detail page
+- Replaced placeholder with full instruments section
+- Display existing instruments showing: ticker, underlying (with arrow), notes (in parentheses)
+- Example: "GLDM → GOLD (Gold ETF proxy)"
+- Added form to add new instruments with three fields: ticker (required), underlying (optional), notes (optional)
+- Added delete button (✕) for each instrument with hover state
+- Error handling for add/remove operations with dismissible error messages
+- Ticker automatically converted to uppercase on add
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files changed:**
+- src/app/campaigns/[id]/page.tsx (added instruments section with list, form, and delete buttons)
+- prd.json (marked US-016 as passes: true)
+
+**Learnings for future iterations:**
+- Form state pattern: useState for each field + error state + submitting state
+- Clear form on successful mutation by resetting all state values
+- Use grid with responsive columns (grid-cols-1 sm:grid-cols-3) for form fields
+- Delete button styling: text-red-400 with hover:bg-red-900/30 for subtle effect
+- Convert ticker to uppercase for consistency: ticker.trim().toUpperCase()
+- Pass undefined for optional empty strings: value.trim() || undefined
+
+---
+
+## 2026-01-31 - US-017
+- Added four target mutations to convex/campaigns.ts
+- Implemented addEntryTarget mutation accepting campaignId, ticker, price, optional percentage, optional notes
+- Implemented removeEntryTarget mutation accepting campaignId and target index with bounds validation
+- Implemented addProfitTarget mutation with same structure as addEntryTarget
+- Implemented removeProfitTarget mutation with same structure as removeEntryTarget
+- Targets stored as arrays in campaign document (entryTargets and profitTargets)
+- TypeScript and lint checks pass
+
+**Files changed:**
+- convex/campaigns.ts (added addEntryTarget, removeEntryTarget, addProfitTarget, removeProfitTarget mutations)
+- prd.json (marked US-017 as passes: true)
+
+**Learnings for future iterations:**
+- Target mutations use index-based removal (unlike instruments which use ticker)
+- Validate index bounds before removal: check index >= 0 && index < array.length
+- Optional fields in target objects: notes, percentage - include them even if undefined
+- Follow alphabetized field ordering in args: campaignId, notes, percentage, price, ticker
+
+---
+
+## 2026-01-31 - US-018
+- Built Entry Targets and Profit Targets UI sections on campaign detail page
+- Replaced placeholder sections with full implementations
+- Each target displays: ticker, price (formatted as currency), percentage (if set), notes (if set)
+- Added dropdown select for ticker (populated from campaign instruments)
+- Form fields: ticker (select from instruments), price (number), percentage (optional), notes (optional)
+- Delete button (✕) for each target with hover styling
+- Targets form disabled when no instruments exist with helpful message
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files changed:**
+- src/app/campaigns/[id]/page.tsx (added Entry Targets and Profit Targets sections with lists, forms, and delete buttons)
+- prd.json (marked US-018 as passes: true)
+
+**Learnings for future iterations:**
+- Target forms share similar structure with instruments but use select dropdown for ticker
+- Populate ticker dropdown from campaign.instruments for data consistency
+- Disable form submit when no instruments exist: `disabled={isAdding || campaign.instruments.length === 0}`
+- Use parseFloat for price conversion from string input to number
+- Format currency with Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
+- Use index-based removal for targets (passed to handler as `handleRemoveEntryTarget(index)`)
+
+---
+
+## 2026-01-31 - US-019
+- Added addStopLoss mutation to convex/campaigns.ts
+- Mutation accepts campaignId (required), ticker (required), price (required), reason (optional)
+- Appends new stop loss entry to stopLossHistory array with setAt timestamp (Date.now())
+- Stop losses are append-only - no removal mutation, history is preserved
+- TypeScript and lint checks pass
+
+**Files changed:**
+- convex/campaigns.ts (added addStopLoss mutation)
+- prd.json (marked US-019 as passes: true)
+
+**Learnings for future iterations:**
+- Stop loss history is append-only by design - no removal mutation needed
+- The stopLossValidator already exists in campaigns.ts, so creating the entry matches the expected schema
+- Follow alphabetized field ordering in args: campaignId, price, reason, ticker
+
+---

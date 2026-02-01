@@ -43,6 +43,7 @@ export default function NewTradePage() {
   const createTrade = useMutation(api.trades.createTrade);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const form = useAppForm({
     defaultValues: {
@@ -66,6 +67,7 @@ export default function NewTradePage() {
     },
     onSubmit: async ({ value }) => {
       setIsSubmitting(true);
+      setErrorMessage(null);
       try {
         const parsed = tradeSchema.parse(value);
         await createTrade({
@@ -83,7 +85,9 @@ export default function NewTradePage() {
           router.push("/trades");
         }, 1000);
       } catch (error) {
-        console.error("Failed to create trade:", error);
+        const message =
+          error instanceof Error ? error.message : "Failed to create trade";
+        setErrorMessage(message);
       } finally {
         setIsSubmitting(false);
       }
@@ -97,6 +101,20 @@ export default function NewTradePage() {
       {successMessage && (
         <div className="text-slate-12 mb-4 rounded-md bg-green-900/50 p-4">
           {successMessage}
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="text-slate-12 mb-4 flex items-center justify-between rounded-md bg-red-900/50 p-4">
+          <span>{errorMessage}</span>
+          <button
+            type="button"
+            onClick={() => setErrorMessage(null)}
+            className="text-slate-12 ml-4 hover:text-white"
+            aria-label="Dismiss error"
+          >
+            ✕
+          </button>
         </div>
       )}
 
