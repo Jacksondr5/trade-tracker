@@ -795,3 +795,25 @@ Started: Sun Jan 25 19:41:36 EST 2026
 - Color coding pattern for P&L: text-green-400 for positive, text-red-400 for negative, text-slate-11 for null/dash
 
 ---
+
+## 2026-01-31 - US-030
+- Added getCampaignPL query to convex/campaigns.ts
+- Query accepts campaignId and returns campaign P&L statistics
+- Returns object with: realizedPL, tradeCount, winningTrades, losingTrades
+- P&L calculation uses same logic as trades.ts - processes ALL trades chronologically for accurate position tracking
+- Only trades linked to the specified campaign are counted in stats
+- Winning trades: closing trades with positive P&L (pl > 0)
+- Losing trades: closing trades with negative P&L (pl < 0)
+- TypeScript and lint checks pass
+
+**Files changed:**
+- convex/campaigns.ts (added getCampaignPL query)
+- prd.json (marked US-030 as passes: true)
+
+**Learnings for future iterations:**
+- Campaign P&L calculation needs ALL trades (not just campaign trades) for accurate position/avg cost tracking
+- Filter campaign-specific stats AFTER calculating P&L across all trades
+- P&L stats only count closing trades (trades with non-null realizedPL)
+- The P&L calculation logic is duplicated from trades.ts - could be refactored to a shared helper in a future story
+
+---
