@@ -934,3 +934,30 @@ Fixed bug in P&L calculation where cost basis was not adjusted after closing tra
 - The createSnapshot mutation only sets source to 'manual' - future stories may add API or calculated sources
 
 ---
+
+## 2026-01-31 - US-033
+- Created portfolio snapshot page at src/app/portfolio/page.tsx
+- Form to add snapshot with three fields: date (defaults to today), total value, cash balance (optional)
+- Display list of historical snapshots in table: date, total value, cash balance
+- Uses listSnapshots query and createSnapshot mutation from portfolioSnapshots.ts
+- Added Portfolio navigation link to app header
+- Form resets after successful submission with success message
+- Error handling with dismissible error messages
+- Empty state shows helpful message when no snapshots exist
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files created:**
+- src/app/portfolio/page.tsx (new)
+
+**Files changed:**
+- src/app/layout.tsx (added Portfolio navigation link)
+- prd.json (marked US-033 as passes: true)
+
+**Learnings for future iterations:**
+- Portfolio page combines both form and list on same page (unlike trades which has separate new/list pages)
+- Use `type="date"` input for date-only fields (simpler than datetime-local)
+- Form reset pattern: call `form.reset()` after successful submission to clear fields
+- Success message auto-dismisses after 3 seconds using setTimeout
+
+---
