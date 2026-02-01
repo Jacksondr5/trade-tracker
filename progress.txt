@@ -961,3 +961,36 @@ Fixed bug in P&L calculation where cost basis was not adjusted after closing tra
 - Success message auto-dismisses after 3 seconds using setTimeout
 
 ---
+
+## 2026-02-01 - US-034
+- Created convex/analytics.ts with getDashboardStats query
+- Query returns comprehensive portfolio analytics:
+  - totalRealizedPL: Total realized P&L from all trades
+  - totalRealizedPLYTD: Realized P&L from trades this year (Jan 1+)
+  - closedCampaignCount: Number of closed campaigns
+  - winningCampaignCount: Number of closed campaigns with positive P&L
+  - winRate: Winning campaigns / closed campaigns × 100 (null if no closed campaigns)
+  - avgWin: Average P&L of winning campaigns (null if no winners)
+  - avgLoss: Average P&L of losing campaigns (null if no losers)
+  - profitFactor: Total gains / total losses (null if no losses)
+  - openCampaignCount: Number of planning + active campaigns
+  - totalTradeCount: Total number of trades
+- Uses shared calculateTradesPL helper for accurate P&L calculation
+- YTD calculation uses Date to get current year and compares trade.date to Jan 1 timestamp
+- Updated convex/_generated/api.d.ts to include analytics module
+- TypeScript and lint checks pass
+
+**Files created:**
+- convex/analytics.ts (new)
+
+**Files changed:**
+- convex/_generated/api.d.ts (added analytics import and type)
+- prd.json (marked US-034 as passes: true)
+
+**Learnings for future iterations:**
+- avgLoss is stored as negative value (user-friendly: shows actual loss amount with sign)
+- Win rate formula: (winningCampaigns / closedCampaigns) * 100 for percentage
+- Profit factor formula: totalWins / totalLosses (classic risk metric)
+- YTD calculation: new Date(currentYear, 0, 1).getTime() for Jan 1 timestamp (month is 0-indexed)
+
+---
