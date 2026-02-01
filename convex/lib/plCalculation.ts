@@ -99,6 +99,23 @@ export function calculateTradesPL(
         realizedPL = (averageCost - trade.price) * trade.quantity;
       }
 
+      // Adjust cost basis after closing: reduce by the closed quantity's share of cost
+      // This ensures future average cost calculations remain accurate
+      const closedQty = trade.quantity;
+      position.totalEntryCost = Math.max(
+        0,
+        position.totalEntryCost - averageCost * closedQty,
+      );
+      position.totalEntryQuantity = Math.max(
+        0,
+        position.totalEntryQuantity - closedQty,
+      );
+
+      // Reset cost to 0 if quantity is fully closed to avoid floating point artifacts
+      if (position.totalEntryQuantity === 0) {
+        position.totalEntryCost = 0;
+      }
+
       position.netQuantity -= trade.quantity;
       tradesPLMap.set(trade._id, realizedPL);
     }

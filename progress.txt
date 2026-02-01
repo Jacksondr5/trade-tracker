@@ -855,3 +855,30 @@ Applied three recommendations from code review:
 - Always add defensive defaults for array fields that might be missing in older documents
 
 ---
+
+## 2026-01-31 - P&L Cost Basis Bug Fix
+
+Fixed bug in P&L calculation where cost basis was not adjusted after closing trades.
+
+**The problem:**
+- When closing a partial position, totalEntryCost and totalEntryQuantity were not reduced
+- This caused incorrect average cost calculations for subsequent trades
+- Example: Buy 100@$10, Buy 50@$20, Sell 100@$15, Buy 25@$30
+  - Bug: avgCost=$15.71 (using stale totalEntryQuantity=175)
+  - Fixed: avgCost=$18.89 (correctly uses remaining 50 shares + new 25)
+
+**The fix (in convex/lib/plCalculation.ts):**
+- After calculating realizedPL for a closing trade, reduce the cost basis
+- Subtract `averageCost * closedQty` from `position.totalEntryCost`
+- Subtract `closedQty` from `position.totalEntryQuantity`
+- Clamp values to >= 0 and reset cost to 0 when quantity becomes 0
+
+**Files changed:**
+- convex/lib/plCalculation.ts (adjust cost basis after closing trades)
+
+**Learnings for future iterations:**
+- Average cost tracking requires reducing cost basis proportionally when closing positions
+- Always trace through multi-trade scenarios to verify P&L logic correctness
+- Use Math.max(0, ...) to prevent negative values from floating point errors
+
+---
