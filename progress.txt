@@ -882,3 +882,30 @@ Fixed bug in P&L calculation where cost basis was not adjusted after closing tra
 - Use Math.max(0, ...) to prevent negative values from floating point errors
 
 ---
+
+## 2026-01-31 - US-031
+- Added P&L display to campaign detail page header
+- P&L shown next to status badge with color coding: green for positive, red for negative, slate for zero
+- Currency formatted with +/- prefix (e.g., +$150.00, -$50.00, $0.00)
+- Added P&L column to campaign list table
+- Created two new queries in convex/campaigns.ts:
+  - `listCampaignsWithPL`: Returns all campaigns with their P&L data
+  - `listCampaignsByStatusWithPL`: Returns filtered campaigns with P&L data
+- P&L calculation reuses the shared `calculateTradesPL` helper from lib/plCalculation.ts
+- Campaign list page now uses the WithPL query variants
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files changed:**
+- convex/campaigns.ts (added listCampaignsWithPL and listCampaignsByStatusWithPL queries)
+- src/app/campaigns/[id]/page.tsx (added getCampaignPL query, formatPL helper, P&L display in header)
+- src/app/campaigns/page.tsx (switched to WithPL queries, added formatPL helper, P&L column in table)
+- prd.json (marked US-031 as passes: true)
+
+**Learnings for future iterations:**
+- For list views that need aggregated data (like P&L per campaign), create dedicated queries that calculate everything in one pass
+- Calculate P&L for all trades once, then group/filter by campaign - more efficient than calling getCampaignPL per campaign
+- Use consistent formatPL helper pattern: returns { text, colorClass } for easy styling
+- The listCampaignsWithPL pattern fetches all trades once and builds a campaignPLMap for efficient lookup
+
+---

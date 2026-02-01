@@ -30,17 +30,31 @@ function getStatusBadgeClasses(status: CampaignStatus): string {
   }
 }
 
+function formatPL(value: number): { text: string; colorClass: string } {
+  const formatted = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(Math.abs(value));
+
+  if (value > 0) {
+    return { text: `+${formatted}`, colorClass: "text-green-400" };
+  } else if (value < 0) {
+    return { text: `-${formatted}`, colorClass: "text-red-400" };
+  }
+  return { text: formatted, colorClass: "text-slate-11" };
+}
+
 export default function CampaignsPage() {
   const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
-  // Use listCampaignsByStatus when a specific status is selected, otherwise listCampaigns
+  // Use listCampaignsByStatusWithPL when a specific status is selected, otherwise listCampaignsWithPL
   const allCampaigns = useQuery(
-    api.campaigns.listCampaigns,
+    api.campaigns.listCampaignsWithPL,
     statusFilter === "all" ? {} : "skip"
   );
   const filteredCampaigns = useQuery(
-    api.campaigns.listCampaignsByStatus,
+    api.campaigns.listCampaignsByStatusWithPL,
     statusFilter !== "all" ? { status: statusFilter } : "skip"
   );
 
@@ -103,6 +117,9 @@ export default function CampaignsPage() {
                 <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
                   Status
                 </th>
+                <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
+                  P&L
+                </th>
                 <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
                   Created
                 </th>
@@ -134,6 +151,11 @@ export default function CampaignsPage() {
                     >
                       {campaign.status.charAt(0).toUpperCase() +
                         campaign.status.slice(1)}
+                    </span>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-sm text-right">
+                    <span className={formatPL(campaign.realizedPL).colorClass}>
+                      {formatPL(campaign.realizedPL).text}
                     </span>
                   </td>
                   <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">

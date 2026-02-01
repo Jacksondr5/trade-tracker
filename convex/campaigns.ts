@@ -506,6 +506,122 @@ export const getCampaignPL = query({
 });
 
 /**
+ * List all campaigns with their P&L data.
+ * More efficient than calling getCampaignPL for each campaign separately.
+ */
+export const listCampaignsWithPL = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      _creationTime: v.number(),
+      _id: v.id("campaigns"),
+      name: v.string(),
+      realizedPL: v.number(),
+      status: v.union(
+        v.literal("active"),
+        v.literal("closed"),
+        v.literal("planning"),
+      ),
+    }),
+  ),
+  handler: async (ctx) => {
+    // Get all campaigns
+    const campaigns = await ctx.db.query("campaigns").order("desc").collect();
+
+    // Get all trades to calculate P&L
+    const allTrades = await ctx.db.query("trades").collect();
+
+    // Calculate P&L for all trades using shared helper
+    const tradesPLMap = calculateTradesPL(allTrades);
+
+    // Calculate P&L per campaign
+    const campaignPLMap = new Map<string, number>();
+
+    for (const trade of allTrades) {
+      if (trade.campaignId) {
+        const pl = tradesPLMap.get(trade._id);
+        if (pl !== null && pl !== undefined) {
+          const currentPL = campaignPLMap.get(trade.campaignId) ?? 0;
+          campaignPLMap.set(trade.campaignId, currentPL + pl);
+        }
+      }
+    }
+
+    // Return campaigns with their P&L
+    return campaigns.map((campaign) => ({
+      _creationTime: campaign._creationTime,
+      _id: campaign._id,
+      name: campaign.name,
+      realizedPL: campaignPLMap.get(campaign._id) ?? 0,
+      status: campaign.status,
+    }));
+  },
+});
+
+/**
+ * List campaigns filtered by status with their P&L data.
+ */
+export const listCampaignsByStatusWithPL = query({
+  args: {
+    status: v.union(
+      v.literal("active"),
+      v.literal("closed"),
+      v.literal("planning"),
+    ),
+  },
+  returns: v.array(
+    v.object({
+      _creationTime: v.number(),
+      _id: v.id("campaigns"),
+      name: v.string(),
+      realizedPL: v.number(),
+      status: v.union(
+        v.literal("active"),
+        v.literal("closed"),
+        v.literal("planning"),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    // Get campaigns filtered by status
+    const campaigns = await ctx.db
+      .query("campaigns")
+      .withIndex("by_status", (q) => q.eq("status", args.status))
+      .collect();
+
+    // Get all trades to calculate P&L
+    const allTrades = await ctx.db.query("trades").collect();
+
+    // Calculate P&L for all trades using shared helper
+    const tradesPLMap = calculateTradesPL(allTrades);
+
+    // Calculate P&L per campaign
+    const campaignPLMap = new Map<string, number>();
+
+    for (const trade of allTrades) {
+      if (trade.campaignId) {
+        const pl = tradesPLMap.get(trade._id);
+        if (pl !== null && pl !== undefined) {
+          const currentPL = campaignPLMap.get(trade.campaignId) ?? 0;
+          campaignPLMap.set(trade.campaignId, currentPL + pl);
+        }
+      }
+    }
+
+    // Sort by _creationTime descending and return with P&L
+    return campaigns
+      .sort((a, b) => b._creationTime - a._creationTime)
+      .map((campaign) => ({
+        _creationTime: campaign._creationTime,
+        _id: campaign._id,
+        name: campaign.name,
+        realizedPL: campaignPLMap.get(campaign._id) ?? 0,
+        status: campaign.status,
+      }));
+  },
+});
+
+/**
  * Add a stop loss entry to a campaign's stop loss history.
  * Stop losses are append-only to preserve history.
  */

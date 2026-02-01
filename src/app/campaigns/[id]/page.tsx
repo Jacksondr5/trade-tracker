@@ -28,11 +28,26 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
+function formatPL(value: number): { text: string; colorClass: string } {
+  const formatted = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(Math.abs(value));
+
+  if (value > 0) {
+    return { text: `+${formatted}`, colorClass: "text-green-400" };
+  } else if (value < 0) {
+    return { text: `-${formatted}`, colorClass: "text-red-400" };
+  }
+  return { text: formatted, colorClass: "text-slate-11" };
+}
+
 export default function CampaignDetailPage() {
   const params = useParams();
   const campaignId = params.id as Id<"campaigns">;
 
   const campaign = useQuery(api.campaigns.getCampaign, { campaignId });
+  const campaignPL = useQuery(api.campaigns.getCampaignPL, { campaignId });
   const addInstrument = useMutation(api.campaigns.addInstrument);
   const removeInstrument = useMutation(api.campaigns.removeInstrument);
   const addEntryTarget = useMutation(api.campaigns.addEntryTarget);
@@ -406,6 +421,15 @@ export default function CampaignDetailPage() {
                   year: "numeric",
                 })}
               </span>
+            )}
+            {/* P&L Display */}
+            {campaignPL && (
+              <div className="flex items-center gap-2">
+                <span className="text-slate-11 text-sm">P&L:</span>
+                <span className={`text-lg font-semibold ${formatPL(campaignPL.realizedPL).colorClass}`}>
+                  {formatPL(campaignPL.realizedPL).text}
+                </span>
+              </div>
             )}
           </div>
 
