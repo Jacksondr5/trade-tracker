@@ -42,6 +42,12 @@ export default function RootLayout({
                 >
                   Positions
                 </Link>
+                <Link
+                  href="/portfolio"
+                  className="text-slate-11 hover:text-slate-12 text-sm transition-colors"
+                >
+                  Portfolio
+                </Link>
               </nav>
             </div>
             <UserButton />

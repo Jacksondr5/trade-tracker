@@ -929,3 +929,29 @@ Fixed bug in P&L calculation where cost basis was not adjusted after closing tra
 - Use withIndex("by_date").order("desc") for sorting by date descending
 
 ---
+
+## 2026-02-01 - US-033
+- Created src/app/portfolio/page.tsx with portfolio snapshot functionality
+- Form with three fields: date (date picker, defaults to today), total value (required), cash balance (optional)
+- Form has validation for required fields and numeric values
+- Success/error messages are dismissible
+- Historical snapshots displayed in table with columns: date, total value, cash balance
+- Currency columns right-aligned, uses formatCurrency helper
+- Cash balance shows "—" when not set
+- Added Portfolio navigation link in app header (layout.tsx)
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files created:**
+- src/app/portfolio/page.tsx (new)
+
+**Files changed:**
+- src/app/layout.tsx (added Portfolio nav link)
+- prd.json (marked US-033 as passes: true)
+
+**Learnings for future iterations:**
+- Date inputs use type="date" (YYYY-MM-DD format) instead of type="datetime-local" for date-only fields
+- Convert date string to timestamp with new Date(dateString).getTime() - gives start of day in local timezone
+- Navigation order in header: Trades, Campaigns, Positions, Portfolio
+
+---
