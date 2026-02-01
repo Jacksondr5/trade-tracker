@@ -6,9 +6,33 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "~/components/ui";
 import { api } from "../../../convex/_generated/api";
+import { Id } from "../../../convex/_generated/dataModel";
 
 type CampaignStatus = "planning" | "active" | "closed";
 type StatusFilter = "all" | CampaignStatus;
+
+function formatPL(pl: number): string {
+  const formatted = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(Math.abs(pl));
+  return pl >= 0 ? `+${formatted}` : `-${formatted}`;
+}
+
+// Component to display P&L for a single campaign (allows hook usage per row)
+function CampaignPLCell({ campaignId }: { campaignId: Id<"campaigns"> }) {
+  const pl = useQuery(api.campaigns.getCampaignPL, { campaignId });
+  
+  if (pl === undefined) {
+    return <span className="text-slate-11">—</span>;
+  }
+  
+  return (
+    <span className={pl.realizedPL >= 0 ? "text-green-400" : "text-red-400"}>
+      {formatPL(pl.realizedPL)}
+    </span>
+  );
+}
 
 function formatDate(timestamp: number): string {
   const date = new Date(timestamp);
@@ -103,6 +127,9 @@ export default function CampaignsPage() {
                 <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
                   Status
                 </th>
+                <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
+                  P&amp;L
+                </th>
                 <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
                   Created
                 </th>
@@ -135,6 +162,9 @@ export default function CampaignsPage() {
                       {campaign.status.charAt(0).toUpperCase() +
                         campaign.status.slice(1)}
                     </span>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-sm text-right">
+                    <CampaignPLCell campaignId={campaign._id} />
                   </td>
                   <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
                     {formatDate(campaign._creationTime)}

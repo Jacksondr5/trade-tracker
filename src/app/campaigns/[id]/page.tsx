@@ -7,6 +7,14 @@ import { useState } from "react";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
 
+function formatPL(pl: number): string {
+  const formatted = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(Math.abs(pl));
+  return pl >= 0 ? `+${formatted}` : `-${formatted}`;
+}
+
 type CampaignStatus = "planning" | "active" | "closed";
 type CampaignOutcome = "profit_target" | "stop_loss" | "manual";
 
@@ -44,6 +52,7 @@ export default function CampaignDetailPage() {
   const campaignNotes = useQuery(api.campaignNotes.getNotesByCampaign, { campaignId });
   const addNote = useMutation(api.campaignNotes.addNote);
   const trades = useQuery(api.trades.getTradesByCampaign, { campaignId });
+  const campaignPL = useQuery(api.campaigns.getCampaignPL, { campaignId });
 
   // Instrument form state
   const [instrumentTicker, setInstrumentTicker] = useState("");
@@ -405,6 +414,16 @@ export default function CampaignDetailPage() {
                   month: "short",
                   year: "numeric",
                 })}
+              </span>
+            )}
+            {/* P&L display */}
+            {campaignPL !== undefined && (
+              <span
+                className={`text-lg font-semibold ${
+                  campaignPL.realizedPL >= 0 ? "text-green-400" : "text-red-400"
+                }`}
+              >
+                {formatPL(campaignPL.realizedPL)}
               </span>
             )}
           </div>
