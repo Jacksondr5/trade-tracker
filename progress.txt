@@ -1053,3 +1053,29 @@ Fixed bug in P&L calculation where cost basis was not adjusted after closing tra
 - Position calculation uses same logic as positions.ts: buy+long and sell+short open, sell+long and buy+short close
 - Group by ticker:direction key for accurate multi-direction tracking
 - Banner dismissal is local state only - will reappear on page reload (acceptable for this use case)
+
+---
+
+## 2026-02-01 - US-038
+- Added date filter controls to trade list page
+- Date range picker with start and end date inputs
+- Quick filter buttons: Today, This Week, This Month, This Year, All Time
+- Filter persists in URL query params (?start=YYYY-MM-DD&end=YYYY-MM-DD)
+- Trade list filters client-side based on date range
+- Shows filter status: "Showing X of Y trades" with clear filters link
+- Active quick filter highlighted with blue background
+- Empty state message changes based on whether filters are applied
+- TypeScript and lint checks pass
+- Browser verification blocked - dev server not running
+
+**Files changed:**
+- src/app/trades/page.tsx (added date filter UI, URL state management, and client-side filtering)
+- prd.json (marked US-038 as passes: true)
+
+**Learnings for future iterations:**
+- useSearchParams() from next/navigation to read URL query params
+- useRouter().push() to update URL with new params
+- Client-side filtering with useMemo for filtered trades array
+- Quick filter detection compares start date timestamp to calculated range start
+- Use date input type="date" with ISO format (YYYY-MM-DD) for value
+- End date parsing uses endOfDay=true to include all trades on that day
