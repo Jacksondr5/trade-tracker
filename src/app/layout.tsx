@@ -1,8 +1,7 @@
 import "~/styles/global.css";
 
 import { type Metadata } from "next";
-import { UserButton } from "@clerk/nextjs";
-import Link from "next/link";
+import { Header } from "~/components/Header";
 import { Providers } from "~/app/providers";
 
 // Required for Clerk - avoid static page generation issues during CI builds
@@ -20,44 +19,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="text-slate-12 bg-slate-900">
         <Providers>
-          <header className="flex items-center justify-between border-b border-slate-700 px-6 py-4">
-            <div className="flex items-center gap-8">
-              <h1 className="text-xl font-semibold">Trade Tracker</h1>
-              <nav className="flex items-center gap-4">
-                <Link
-                  href="/"
-                  className="text-slate-11 hover:text-slate-12 text-sm transition-colors"
-                >
-                  Dashboard
-                </Link>
-                <Link
-                  href="/trades"
-                  className="text-slate-11 hover:text-slate-12 text-sm transition-colors"
-                >
-                  Trades
-                </Link>
-                <Link
-                  href="/campaigns"
-                  className="text-slate-11 hover:text-slate-12 text-sm transition-colors"
-                >
-                  Campaigns
-                </Link>
-                <Link
-                  href="/positions"
-                  className="text-slate-11 hover:text-slate-12 text-sm transition-colors"
-                >
-                  Positions
-                </Link>
-                <Link
-                  href="/portfolio"
-                  className="text-slate-11 hover:text-slate-12 text-sm transition-colors"
-                >
-                  Portfolio
-                </Link>
-              </nav>
-            </div>
-            <UserButton />
-          </header>
+          <Header />
           <main>{children}</main>
         </Providers>
       </body>

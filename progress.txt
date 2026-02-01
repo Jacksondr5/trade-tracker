@@ -1105,3 +1105,37 @@ Fixed bug in P&L calculation where cost basis was not adjusted after closing tra
 - Use input type="date" for date-only pickers (simpler than datetime-local)
 
 ---
+
+## 2026-02-01 - US-039
+- Created shared Header component at src/components/Header.tsx
+- Extracted navigation from layout.tsx into reusable Header component
+- Includes all nav links: Dashboard, Trades, Campaigns, Positions, Portfolio
+- Includes UserButton from Clerk for auth
+- Added active link styling using usePathname() hook
+- Active links show with font-medium and full opacity (text-slate-12)
+- Inactive links show with reduced opacity (text-slate-11) and hover state
+- Added mobile-responsive hamburger menu using useState toggle
+- Mobile menu hidden on md+ screens, hamburger button only visible on small screens
+- Mobile menu shows vertical nav links with background highlight on active link
+- Menu closes when a link is clicked
+- Accessibility: hamburger button has aria-label and aria-expanded attributes
+- Updated layout.tsx to use the new Header component
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files created:**
+- src/components/Header.tsx (new)
+
+**Files changed:**
+- src/app/layout.tsx (replaced inline header with Header component)
+- prd.json (marked US-039 as passes: true)
+
+**Learnings for future iterations:**
+- usePathname() from next/navigation is the canonical way to get current route for active link styling
+- For root path ("/"), exact match is needed; for other paths, use startsWith() for nested routes
+- Mobile menu pattern: useState for open/close state, hidden md:flex for desktop nav, md:hidden for mobile elements
+- SVG icons (hamburger and X) can be inlined for simple icons without adding dependencies
+- Close mobile menu on link click by calling setIsMobileMenuOpen(false) in onClick handler
+- Client component ("use client") needed for useState and usePathname hooks
+
+---
