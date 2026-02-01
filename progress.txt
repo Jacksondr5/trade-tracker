@@ -593,3 +593,29 @@ Started: Sun Jan 25 19:41:36 EST 2026
 - Return note ID from addNote mutation so UI can react to successful creation
 
 ---
+
+## 2026-01-31 - US-022
+- Built Notes UI on campaign detail page
+- Added Notes section with list of existing notes and add note form
+- Notes displayed in chronological order (oldest first) with timestamps
+- Each note shows content (with whitespace preserved) and creation timestamp
+- Added textarea input for new note content and submit button
+- Error handling for add note with dismissible error messages
+- Loading state while notes are being fetched
+- Empty state when no notes exist
+- Updated convex/_generated/api.d.ts to include campaignNotes module
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files changed:**
+- src/app/campaigns/[id]/page.tsx (added notes UI section, query, mutation, state, and handler)
+- convex/_generated/api.d.ts (added campaignNotes import and type)
+- prd.json (marked US-022 as passes: true)
+
+**Learnings for future iterations:**
+- When creating new Convex modules, the _generated/api.d.ts needs to be updated to include the new module import
+- Without access to `npx convex codegen`, manually update the api.d.ts imports and fullApi object
+- Notes are sorted chronologically (oldest first) for natural reading order in conversations
+- Use whitespace-pre-wrap on note content to preserve user formatting
+
+---

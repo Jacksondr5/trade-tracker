@@ -39,6 +39,8 @@ export default function CampaignDetailPage() {
   const addProfitTarget = useMutation(api.campaigns.addProfitTarget);
   const removeProfitTarget = useMutation(api.campaigns.removeProfitTarget);
   const addStopLoss = useMutation(api.campaigns.addStopLoss);
+  const campaignNotes = useQuery(api.campaignNotes.getNotesByCampaign, { campaignId });
+  const addNote = useMutation(api.campaignNotes.addNote);
 
   // Instrument form state
   const [instrumentTicker, setInstrumentTicker] = useState("");
@@ -69,6 +71,11 @@ export default function CampaignDetailPage() {
   const [stopLossReason, setStopLossReason] = useState("");
   const [stopLossError, setStopLossError] = useState<string | null>(null);
   const [isAddingStopLoss, setIsAddingStopLoss] = useState(false);
+
+  // Notes form state
+  const [noteContent, setNoteContent] = useState("");
+  const [noteError, setNoteError] = useState<string | null>(null);
+  const [isAddingNote, setIsAddingNote] = useState(false);
 
   const handleAddInstrument = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -269,6 +276,32 @@ export default function CampaignDetailPage() {
       );
     } finally {
       setIsAddingStopLoss(false);
+    }
+  };
+
+  const handleAddNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!noteContent.trim()) {
+      setNoteError("Note content is required");
+      return;
+    }
+
+    setNoteError(null);
+    setIsAddingNote(true);
+
+    try {
+      await addNote({
+        campaignId,
+        content: noteContent.trim(),
+      });
+      // Clear form on success
+      setNoteContent("");
+    } catch (error) {
+      setNoteError(
+        error instanceof Error ? error.message : "Failed to add note"
+      );
+    } finally {
+      setIsAddingNote(false);
     }
   };
 
@@ -831,10 +864,65 @@ export default function CampaignDetailPage() {
           </form>
         </div>
 
-        {/* Notes placeholder */}
+        {/* Notes section */}
         <div className="rounded-lg border border-slate-700 bg-slate-800 p-6">
           <h2 className="text-slate-12 text-lg font-semibold mb-3">Notes</h2>
-          <p className="text-slate-11 text-sm italic">Coming soon - campaign notes will be displayed here.</p>
+
+          {/* Existing notes list */}
+          {campaignNotes === undefined ? (
+            <p className="text-slate-11 text-sm mb-4">Loading notes...</p>
+          ) : campaignNotes.length > 0 ? (
+            <div className="mb-4 space-y-3">
+              {campaignNotes.map((note) => (
+                <div
+                  key={note._id}
+                  className="rounded border border-slate-700 bg-slate-900 px-4 py-3"
+                >
+                  <p className="text-slate-12 whitespace-pre-wrap">{note.content}</p>
+                  <p className="text-slate-11/60 text-xs mt-2">
+                    {new Date(note._creationTime).toLocaleDateString("en-US", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-slate-11 text-sm mb-4">No notes added yet.</p>
+          )}
+
+          {/* Add note form */}
+          <form onSubmit={handleAddNote} className="space-y-3">
+            {noteError && (
+              <div className="rounded border border-red-700 bg-red-900/50 px-4 py-2 text-red-200 text-sm">
+                {noteError}
+              </div>
+            )}
+            <div>
+              <label htmlFor="noteContent" className="block text-sm text-slate-11 mb-1">
+                Add a note
+              </label>
+              <textarea
+                id="noteContent"
+                value={noteContent}
+                onChange={(e) => setNoteContent(e.target.value)}
+                placeholder="Write your thoughts, observations, or updates..."
+                rows={3}
+                className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-slate-12 placeholder:text-slate-11 focus:border-blue-500 focus:outline-none resize-y"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={isAddingNote || !noteContent.trim()}
+              className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isAddingNote ? "Adding..." : "Add Note"}
+            </button>
+          </form>
         </div>
 
         {/* Trades placeholder */}
