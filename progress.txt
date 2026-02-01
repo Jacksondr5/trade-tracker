@@ -12,6 +12,7 @@ Started: Sun Jan 25 19:41:36 EST 2026
 - Clerk auth setup: @clerk/nextjs version 6.32.0, middleware.ts uses clerkMiddleware() with createRouteMatcher, layout wraps with ClerkProvider via providers.tsx
 - Sign-in/sign-up pages use catch-all routes [[...sign-in]] and [[...sign-up]] for Clerk's multi-step flows
 - Environment validation: use @t3-oss/env-nextjs with zod for type-safe env vars
+- Per-row data requiring queries: create a sub-component (e.g., `CampaignPLCell`) so useQuery can be called per row
 
 ---
 
