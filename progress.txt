@@ -645,3 +645,29 @@ Started: Sun Jan 25 19:41:36 EST 2026
 - Use bg-green-600 for positive actions (activate), bg-red-600 for destructive actions (close)
 
 ---
+
+## 2026-01-31 - US-024
+- Added campaign selector to trade creation form
+- Created listOpenCampaigns query in convex/campaigns.ts to fetch only planning and active campaigns
+- Added optional campaign dropdown to trade form with "No campaign" default option
+- Dropdown shows campaign name with status in parentheses: "Campaign Name (planning)"
+- Selected campaign ID is passed to createTrade mutation (using Id<"campaigns"> type cast)
+- Added Campaign column to trade list table between Ticker and Side columns
+- Trade list uses useMemo to create campaign name lookup map from listCampaigns query
+- Shows "—" when trade has no linked campaign
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files changed:**
+- convex/campaigns.ts (added listOpenCampaigns query)
+- src/app/trades/new/page.tsx (added campaign dropdown, campaignId in schema and form state)
+- src/app/trades/page.tsx (added Campaign column with campaign name lookup)
+- prd.json (marked US-024 as passes: true)
+
+**Learnings for future iterations:**
+- For optional foreign key fields, use z.string().optional() in Zod schema and cast to Id<"tableName"> when passing to Convex
+- Use useMemo with Map for efficient lookup of related data (campaign names by ID)
+- Native HTML `<select>` elements work well with same styling as other form inputs: bg-slate-700 border-slate-600 text-slate-12
+- When creating queries for dropdowns, return minimal shape (only needed fields like _id, name, status) to reduce data transfer
+
+---

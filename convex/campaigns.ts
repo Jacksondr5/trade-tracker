@@ -209,6 +209,33 @@ export const getCampaign = query({
 });
 
 /**
+ * List campaigns that are planning or active (not closed).
+ * For use in dropdowns when linking trades to campaigns.
+ */
+export const listOpenCampaigns = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      _id: v.id("campaigns"),
+      name: v.string(),
+      status: v.union(v.literal("active"), v.literal("planning")),
+    }),
+  ),
+  handler: async (ctx) => {
+    const campaigns = await ctx.db.query("campaigns").order("desc").collect();
+
+    // Filter to only planning and active campaigns, map to minimal shape
+    return campaigns
+      .filter((c) => c.status === "planning" || c.status === "active")
+      .map((c) => ({
+        _id: c._id,
+        name: c.name,
+        status: c.status as "active" | "planning",
+      }));
+  },
+});
+
+/**
  * Add an instrument to a campaign.
  * Prevents duplicate tickers in the same campaign.
  */

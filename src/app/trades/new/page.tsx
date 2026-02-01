@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { z } from "zod";
@@ -13,9 +13,11 @@ import {
   useAppForm,
 } from "~/components/ui";
 import { api } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
 
 const tradeSchema = z.object({
   assetType: z.enum(["stock", "crypto"]),
+  campaignId: z.string().optional(),
   date: z.string().min(1, "Date is required"),
   direction: z.enum(["long", "short"]),
   notes: z.string().optional(),
@@ -41,6 +43,7 @@ function getDefaultDateTime(): string {
 export default function NewTradePage() {
   const router = useRouter();
   const createTrade = useMutation(api.trades.createTrade);
+  const openCampaigns = useQuery(api.campaigns.listOpenCampaigns);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -48,6 +51,7 @@ export default function NewTradePage() {
   const form = useAppForm({
     defaultValues: {
       assetType: "stock" as "stock" | "crypto",
+      campaignId: "",
       date: getDefaultDateTime(),
       direction: "long" as "long" | "short",
       notes: "",
@@ -72,6 +76,9 @@ export default function NewTradePage() {
         const parsed = tradeSchema.parse(value);
         await createTrade({
           assetType: parsed.assetType,
+          campaignId: parsed.campaignId
+            ? (parsed.campaignId as Id<"campaigns">)
+            : undefined,
           date: new Date(parsed.date).getTime(),
           direction: parsed.direction,
           notes: parsed.notes || undefined,
@@ -152,6 +159,34 @@ export default function NewTradePage() {
             <form.AppField name="ticker">
               {(field) => (
                 <field.FieldInput label="Ticker" placeholder="e.g. AAPL" />
+              )}
+            </form.AppField>
+
+            <form.AppField name="campaignId">
+              {(field) => (
+                <div className="grid w-full items-center gap-1.5">
+                  <label
+                    htmlFor={field.name}
+                    className="text-slate-12 text-sm font-medium"
+                  >
+                    Campaign (optional)
+                  </label>
+                  <select
+                    id={field.name}
+                    data-testid={`${field.name}-select`}
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    className="text-slate-12 h-9 w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-slate-500"
+                  >
+                    <option value="">No campaign</option>
+                    {openCampaigns?.map((campaign) => (
+                      <option key={campaign._id} value={campaign._id}>
+                        {campaign.name} ({campaign.status})
+                      </option>
+                    ))}
+                  </select>
+                </div>
               )}
             </form.AppField>
 

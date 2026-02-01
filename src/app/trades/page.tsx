@@ -2,6 +2,7 @@
 
 import { useQuery } from "convex/react";
 import Link from "next/link";
+import { useMemo } from "react";
 import { Button } from "~/components/ui";
 import { api } from "../../../convex/_generated/api";
 
@@ -25,6 +26,13 @@ function formatCurrency(value: number): string {
 
 export default function TradesPage() {
   const trades = useQuery(api.trades.listTrades);
+  const campaigns = useQuery(api.campaigns.listCampaigns);
+
+  // Create a lookup map for campaign names
+  const campaignNameMap = useMemo(() => {
+    if (!campaigns) return new Map<string, string>();
+    return new Map(campaigns.map((c) => [c._id, c.name]));
+  }, [campaigns]);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -56,6 +64,9 @@ export default function TradesPage() {
                   Ticker
                 </th>
                 <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
+                  Campaign
+                </th>
+                <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
                   Side
                 </th>
                 <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
@@ -84,6 +95,11 @@ export default function TradesPage() {
                   </td>
                   <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-sm font-medium">
                     {trade.ticker}
+                  </td>
+                  <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
+                    {trade.campaignId
+                      ? campaignNameMap.get(trade.campaignId) ?? "—"
+                      : "—"}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-sm">
                     <span
