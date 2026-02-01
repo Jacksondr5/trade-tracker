@@ -33,6 +33,16 @@ function formatPL(value: number): string {
   return value >= 0 ? `+${formatted}` : `-${formatted}`;
 }
 
+/**
+ * Parse a YYYY-MM-DD date string as local time (not UTC).
+ * This avoids timezone issues where new Date("2026-01-15") might return Jan 14 or 15
+ * depending on the user's timezone.
+ */
+function parseDateInputLocal(dateString: string): Date {
+  const [year, month, day] = dateString.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 function getStartOfDay(date: Date): number {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -119,9 +129,9 @@ export default function TradesPage() {
       }
     }
 
-    // Use custom date range if provided
-    const start = startDateParam ? new Date(startDateParam).getTime() : null;
-    const end = endDateParam ? getEndOfDay(new Date(endDateParam)) : null;
+    // Use custom date range if provided - parse as local time to avoid timezone issues
+    const start = startDateParam ? getStartOfDay(parseDateInputLocal(startDateParam)) : null;
+    const end = endDateParam ? getEndOfDay(parseDateInputLocal(endDateParam)) : null;
 
     return { endDate: end, startDate: start };
   }, [quickFilterParam, startDateParam, endDateParam]);

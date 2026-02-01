@@ -27,6 +27,16 @@ function getTodayDateString(): string {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * Parse a YYYY-MM-DD date string as local time (not UTC).
+ * This avoids timezone issues where new Date("2026-01-15") might return Jan 14 or 15
+ * depending on the user's timezone.
+ */
+function parseDateInputLocal(dateString: string): Date {
+  const [year, month, day] = dateString.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 export default function PortfolioPage() {
   const snapshots = useQuery(api.portfolioSnapshots.listSnapshots);
   const createSnapshot = useMutation(api.portfolioSnapshots.createSnapshot);
@@ -73,7 +83,7 @@ export default function PortfolioPage() {
     try {
       await createSnapshot({
         cashBalance: parsedCashBalance,
-        date: new Date(date).getTime(),
+        date: parseDateInputLocal(date).getTime(),
         totalValue: parsedTotalValue,
       });
 

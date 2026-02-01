@@ -517,6 +517,7 @@ export const getCampaignPositionStatus = query({
     isFullyClosed: v.boolean(),
     positions: v.array(
       v.object({
+        direction: v.union(v.literal("long"), v.literal("short")),
         quantity: v.number(),
         ticker: v.string(),
       })
@@ -545,12 +546,12 @@ export const getCampaignPositionStatus = query({
     const allTrades = await ctx.db.query("trades").collect();
     const tradesPLMap = calculateTradesPL(allTrades);
 
-    // Calculate positions by ticker
+    // Calculate positions by ticker AND direction (key: "ticker|direction")
     const positionMap = new Map<string, number>();
 
     for (const trade of campaignTrades) {
-      const ticker = trade.ticker;
-      const currentQty = positionMap.get(ticker) || 0;
+      const key = `${trade.ticker}|${trade.direction}`;
+      const currentQty = positionMap.get(key) || 0;
 
       // Calculate position change based on side and direction
       let qtyChange: number;
@@ -562,12 +563,19 @@ export const getCampaignPositionStatus = query({
         qtyChange = trade.side === "sell" ? trade.quantity : -trade.quantity;
       }
 
-      positionMap.set(ticker, currentQty + qtyChange);
+      positionMap.set(key, currentQty + qtyChange);
     }
 
     // Build positions array with non-zero quantities
     const positions = Array.from(positionMap.entries())
-      .map(([ticker, quantity]) => ({ quantity, ticker }))
+      .map(([key, quantity]) => {
+        const [ticker, direction] = key.split("|");
+        return {
+          direction: direction as "long" | "short",
+          quantity,
+          ticker,
+        };
+      })
       .filter((p) => Math.abs(p.quantity) > 0.0001); // Filter out effectively zero positions
 
     // Check if all positions are closed (either no trades or all quantities are zero)
