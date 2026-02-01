@@ -2,6 +2,7 @@
 
 import { useQuery } from "convex/react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo } from "react";
 import { Button } from "~/components/ui";
 import { api } from "../../../convex/_generated/api";
@@ -32,15 +33,155 @@ function formatPL(value: number): string {
   return value >= 0 ? `+${formatted}` : `-${formatted}`;
 }
 
+function getStartOfDay(date: Date): number {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function getEndOfDay(date: Date): number {
+  const d = new Date(date);
+  d.setHours(23, 59, 59, 999);
+  return d.getTime();
+}
+
+function getStartOfWeek(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day;
+  d.setDate(diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function getStartOfMonth(date: Date): Date {
+  const d = new Date(date);
+  d.setDate(1);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function getStartOfYear(date: Date): Date {
+  const d = new Date(date);
+  d.setMonth(0, 1);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+type QuickFilter = "today" | "week" | "month" | "year" | "all";
+
 export default function TradesPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const trades = useQuery(api.trades.listTrades);
   const campaigns = useQuery(api.campaigns.listCampaigns);
+
+  // Get filter params from URL
+  const startDateParam = searchParams.get("startDate");
+  const endDateParam = searchParams.get("endDate");
+  const quickFilterParam = searchParams.get("filter") as QuickFilter | null;
 
   // Create a lookup map for campaign names
   const campaignNameMap = useMemo(() => {
     if (!campaigns) return new Map<string, string>();
     return new Map(campaigns.map((c) => [c._id, c.name]));
   }, [campaigns]);
+
+  // Calculate date range based on quick filter or custom dates
+  const { startDate, endDate } = useMemo(() => {
+    const now = new Date();
+
+    if (quickFilterParam) {
+      switch (quickFilterParam) {
+        case "today":
+          return {
+            endDate: getEndOfDay(now),
+            startDate: getStartOfDay(now),
+          };
+        case "week":
+          return {
+            endDate: getEndOfDay(now),
+            startDate: getStartOfWeek(now).getTime(),
+          };
+        case "month":
+          return {
+            endDate: getEndOfDay(now),
+            startDate: getStartOfMonth(now).getTime(),
+          };
+        case "year":
+          return {
+            endDate: getEndOfDay(now),
+            startDate: getStartOfYear(now).getTime(),
+          };
+        case "all":
+        default:
+          return { endDate: null, startDate: null };
+      }
+    }
+
+    // Use custom date range if provided
+    const start = startDateParam ? new Date(startDateParam).getTime() : null;
+    const end = endDateParam ? getEndOfDay(new Date(endDateParam)) : null;
+
+    return { endDate: end, startDate: start };
+  }, [quickFilterParam, startDateParam, endDateParam]);
+
+  // Filter trades based on date range
+  const filteredTrades = useMemo(() => {
+    if (!trades) return undefined;
+    if (startDate === null && endDate === null) return trades;
+
+    return trades.filter((trade) => {
+      if (startDate !== null && trade.date < startDate) return false;
+      if (endDate !== null && trade.date > endDate) return false;
+      return true;
+    });
+  }, [trades, startDate, endDate]);
+
+  // Update URL with filter params
+  const updateFilter = (params: {
+    endDate?: string | null;
+    filter?: QuickFilter | null;
+    startDate?: string | null;
+  }) => {
+    const newParams = new URLSearchParams();
+
+    if (params.filter && params.filter !== "all") {
+      newParams.set("filter", params.filter);
+    } else if (params.filter !== "all") {
+      // Only set date params if not using quick filter
+      if (params.startDate) newParams.set("startDate", params.startDate);
+      if (params.endDate) newParams.set("endDate", params.endDate);
+    }
+
+    const queryString = newParams.toString();
+    router.push(queryString ? `/trades?${queryString}` : "/trades");
+  };
+
+  const handleQuickFilter = (filter: QuickFilter) => {
+    updateFilter({ filter });
+  };
+
+  const handleCustomDateChange = (
+    type: "startDate" | "endDate",
+    value: string
+  ) => {
+    const currentStart = startDateParam || "";
+    const currentEnd = endDateParam || "";
+
+    updateFilter({
+      endDate: type === "endDate" ? value : currentEnd,
+      filter: null,
+      startDate: type === "startDate" ? value : currentStart,
+    });
+  };
+
+  const isQuickFilterActive = (filter: QuickFilter): boolean => {
+    if (filter === "all") {
+      return !quickFilterParam && !startDateParam && !endDateParam;
+    }
+    return quickFilterParam === filter;
+  };
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -51,14 +192,70 @@ export default function TradesPage() {
         </Link>
       </div>
 
-      {trades === undefined ? (
+      {/* Date filter controls */}
+      <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Quick filter buttons */}
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                { label: "Today", value: "today" },
+                { label: "This Week", value: "week" },
+                { label: "This Month", value: "month" },
+                { label: "This Year", value: "year" },
+                { label: "All Time", value: "all" },
+              ] as const
+            ).map(({ label, value }) => (
+              <button
+                key={value}
+                onClick={() => handleQuickFilter(value)}
+                className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+                  isQuickFilterActive(value)
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Custom date range */}
+          <div className="flex items-center gap-2">
+            <span className="text-slate-11 text-sm">or</span>
+            <input
+              type="date"
+              value={startDateParam || ""}
+              onChange={(e) => handleCustomDateChange("startDate", e.target.value)}
+              className="rounded border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm text-slate-12 focus:border-blue-500 focus:outline-none"
+              aria-label="Start date"
+            />
+            <span className="text-slate-11 text-sm">to</span>
+            <input
+              type="date"
+              value={endDateParam || ""}
+              onChange={(e) => handleCustomDateChange("endDate", e.target.value)}
+              className="rounded border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm text-slate-12 focus:border-blue-500 focus:outline-none"
+              aria-label="End date"
+            />
+          </div>
+        </div>
+      </div>
+
+      {filteredTrades === undefined ? (
         <div className="text-slate-11">Loading trades...</div>
-      ) : trades.length === 0 ? (
+      ) : filteredTrades.length === 0 ? (
         <div className="rounded-lg border border-slate-700 bg-slate-800 p-8 text-center">
-          <p className="text-slate-11">No trades yet.</p>
-          <p className="text-slate-11 mt-2 text-sm">
-            Click &quot;New Trade&quot; to record your first trade.
+          <p className="text-slate-11">
+            {trades && trades.length > 0
+              ? "No trades found for the selected date range."
+              : "No trades yet."}
           </p>
+          {trades && trades.length === 0 && (
+            <p className="text-slate-11 mt-2 text-sm">
+              Click &quot;New Trade&quot; to record your first trade.
+            </p>
+          )}
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-700">
@@ -90,12 +287,12 @@ export default function TradesPage() {
                   Total
                 </th>
                 <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
-                  P&L
+                  P&amp;L
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700 bg-slate-900">
-              {trades.map((trade) => (
+              {filteredTrades.map((trade) => (
                 <tr
                   key={trade._id}
                   className="hover:bg-slate-800/50"
