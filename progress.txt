@@ -697,3 +697,29 @@ Started: Sun Jan 25 19:41:36 EST 2026
 - Trade table follows same structure as main trades list page (date, ticker, side, direction, price, quantity, total)
 
 ---
+
+## 2026-01-31 - US-026
+- Created convex/positions.ts with getPositions query
+- Query aggregates all trades by ticker to calculate current positions
+- Position calculation logic:
+  - For long positions: buys add to position, sells reduce position
+  - For short positions: sells add to position, buys (covers) reduce position
+- Average cost calculated as weighted average of entry prices (total entry cost / total entry quantity)
+- Returns positions with non-zero quantity, sorted by ticker
+- Created positionValidator for return type validation
+- TypeScript and lint checks pass
+
+**Files created:**
+- convex/positions.ts (new)
+
+**Files changed:**
+- prd.json (marked US-026 as passes: true)
+
+**Learnings for future iterations:**
+- Position tracking groups trades by ticker AND direction (key: "ticker:direction")
+- Opening trades: buy+long or sell+short - add to position and track for average cost
+- Closing trades: sell+long or buy+short - reduce position only (don't affect average cost)
+- Weighted average cost = total entry cost / total entry quantity
+- Only include positions with netQuantity > 0 in results
+
+---
