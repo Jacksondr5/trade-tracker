@@ -1047,3 +1047,35 @@ Fixed bug in P&L calculation where cost basis was not adjusted after closing tra
 - Conditional rendering pattern: `campaign.status === "closed" ? (...editable form...) : (...placeholder...)`
 
 ---
+
+## 2026-02-01 - US-037
+- Created getCampaignPositionStatus query in convex/campaigns.ts
+- Query calculates net position for each ticker from trades linked to the campaign
+- Position calculation handles long/short directions separately (key: "ticker:direction")
+- Returns isFullyClosed (boolean) and positions (array of {ticker, quantity})
+- isFullyClosed is true when campaign has trades and all positions have zero quantity
+- Added position closure banner to campaign detail page
+- Banner shown when: isFullyClosed is true AND campaign status is "active" AND not dismissed
+- Banner text: "All positions closed. Ready to close campaign?"
+- Banner includes P&L summary (total P&L, trade count, wins, losses)
+- Banner has "Close Campaign" button that opens the existing close modal
+- Banner is dismissible via X button (stored in local state: isClosureBannerDismissed)
+- Banner styled with green theme (border-green-600, bg-green-900/30)
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files changed:**
+- convex/campaigns.ts (added getCampaignPositionStatus query)
+- src/app/campaigns/[id]/page.tsx (added positionStatus query, isClosureBannerDismissed state, position closure banner)
+- prd.json (marked US-037 as passes: true)
+
+**Learnings for future iterations:**
+- Position calculation should track by "ticker:direction" to handle long and short positions separately
+- For long positions: buys add quantity, sells reduce quantity
+- For short positions: sells add quantity (open short), buys reduce quantity (cover)
+- Use floating point epsilon (0.0001) for comparing quantities to zero due to potential float precision issues
+- Campaigns with no trades should not show as "fully closed" (nothing was ever opened)
+- Banner component pattern: show conditionally based on multiple state values (query result + campaign status + local dismiss state)
+- Reuse existing modal infrastructure (showCloseModal) for the close campaign action
+
+---

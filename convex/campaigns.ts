@@ -655,3 +655,95 @@ export const addStopLoss = mutation({
     return null;
   },
 });
+
+/**
+ * Get position status for a campaign.
+ * Calculates net position for each ticker from campaign trades.
+ * Returns whether all positions are fully closed and the current positions.
+ */
+export const getCampaignPositionStatus = query({
+  args: {
+    campaignId: v.id("campaigns"),
+  },
+  returns: v.object({
+    isFullyClosed: v.boolean(),
+    positions: v.array(
+      v.object({
+        quantity: v.number(),
+        ticker: v.string(),
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    const { campaignId } = args;
+
+    // Get all trades linked to this campaign
+    const campaignTrades = await ctx.db
+      .query("trades")
+      .withIndex("by_campaignId", (q) => q.eq("campaignId", campaignId))
+      .collect();
+
+    // If no trades, positions are empty (not "fully closed" since nothing was ever opened)
+    if (campaignTrades.length === 0) {
+      return {
+        isFullyClosed: false,
+        positions: [],
+      };
+    }
+
+    // Calculate net position for each ticker
+    // Key is "ticker:direction" to handle long and short positions separately
+    const positionMap = new Map<string, { direction: string; netQuantity: number; ticker: string }>();
+
+    for (const trade of campaignTrades) {
+      const key = `${trade.ticker}:${trade.direction}`;
+      const existing = positionMap.get(key) ?? {
+        direction: trade.direction,
+        netQuantity: 0,
+        ticker: trade.ticker,
+      };
+
+      // For long positions: buys add, sells reduce
+      // For short positions: sells add (open short), buys reduce (cover)
+      if (trade.direction === "long") {
+        if (trade.side === "buy") {
+          existing.netQuantity += trade.quantity;
+        } else {
+          existing.netQuantity -= trade.quantity;
+        }
+      } else {
+        // short
+        if (trade.side === "sell") {
+          existing.netQuantity += trade.quantity;
+        } else {
+          existing.netQuantity -= trade.quantity;
+        }
+      }
+
+      positionMap.set(key, existing);
+    }
+
+    // Build positions array with non-zero quantities
+    const positions: { quantity: number; ticker: string }[] = [];
+    let hasOpenPosition = false;
+
+    for (const pos of positionMap.values()) {
+      // Use a small epsilon for floating point comparison
+      if (Math.abs(pos.netQuantity) > 0.0001) {
+        hasOpenPosition = true;
+        positions.push({
+          quantity: pos.netQuantity,
+          ticker: pos.ticker,
+        });
+      }
+    }
+
+    // Sort positions by ticker for consistent ordering
+    positions.sort((a, b) => a.ticker.localeCompare(b.ticker));
+
+    return {
+      isFullyClosed: !hasOpenPosition,
+      positions,
+    };
+  },
+});

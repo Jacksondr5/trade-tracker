@@ -48,6 +48,7 @@ export default function CampaignDetailPage() {
 
   const campaign = useQuery(api.campaigns.getCampaign, { campaignId });
   const campaignPL = useQuery(api.campaigns.getCampaignPL, { campaignId });
+  const positionStatus = useQuery(api.campaigns.getCampaignPositionStatus, { campaignId });
   const addInstrument = useMutation(api.campaigns.addInstrument);
   const removeInstrument = useMutation(api.campaigns.removeInstrument);
   const addEntryTarget = useMutation(api.campaigns.addEntryTarget);
@@ -107,6 +108,9 @@ export default function CampaignDetailPage() {
   const [retrospectiveError, setRetrospectiveError] = useState<string | null>(null);
   const [isSavingRetrospective, setIsSavingRetrospective] = useState(false);
   const [retrospectiveSaved, setRetrospectiveSaved] = useState(false);
+
+  // Position closure banner state
+  const [isClosureBannerDismissed, setIsClosureBannerDismissed] = useState(false);
 
   // Sync retrospective content with campaign data
   useEffect(() => {
@@ -581,6 +585,51 @@ export default function CampaignDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Position closure banner - shown when all positions are closed and campaign is active */}
+      {positionStatus?.isFullyClosed &&
+        campaign.status === "active" &&
+        !isClosureBannerDismissed && (
+          <div className="mb-6 rounded-lg border-2 border-green-600 bg-green-900/30 p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <h3 className="text-green-200 font-semibold text-lg mb-1">
+                  All positions closed. Ready to close campaign?
+                </h3>
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="text-green-200/80">
+                    P&L Summary:
+                  </span>
+                  {campaignPL && (
+                    <>
+                      <span className={`font-semibold ${formatPL(campaignPL.realizedPL).colorClass}`}>
+                        {formatPL(campaignPL.realizedPL).text}
+                      </span>
+                      <span className="text-green-200/60">
+                        ({campaignPL.tradeCount} trades, {campaignPL.winningTrades} wins, {campaignPL.losingTrades} losses)
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowCloseModal(true)}
+                  className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+                >
+                  Close Campaign
+                </button>
+                <button
+                  onClick={() => setIsClosureBannerDismissed(true)}
+                  className="rounded px-2 py-2 text-green-300 hover:bg-green-800/50 hover:text-green-100"
+                  aria-label="Dismiss banner"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       {/* Thesis section */}
       <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-6">
