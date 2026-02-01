@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { calculateTradesPL } from "./lib/plCalculation";
 
 // Validator for trade with realized P&L calculation
 const tradeWithPLValidator = v.object({
@@ -16,119 +17,6 @@ const tradeWithPLValidator = v.object({
   side: v.union(v.literal("buy"), v.literal("sell")),
   ticker: v.string(),
 });
-
-// Type for position tracking during P&L calculation
-type PositionTracker = {
-  direction: "long" | "short";
-  netQuantity: number;
-  ticker: string;
-  totalEntryCost: number;
-  totalEntryQuantity: number;
-};
-
-/**
- * Calculate realized P&L for trades based on position average cost at time of trade.
- *
- * P&L logic:
- * - Opening trades (buy+long, sell+short): null P&L
- * - Closing trades on long positions (sell+long): (sell price - avg cost) × quantity
- * - Closing trades on short positions (buy+short): (avg cost - cover price) × quantity
- *
- * Trades must be processed in chronological order to calculate correct average costs.
- */
-function calculateTradesWithPL(
-  trades: Array<{
-    _creationTime: number;
-    _id: string;
-    assetType: "crypto" | "stock";
-    campaignId?: string;
-    date: number;
-    direction: "long" | "short";
-    notes?: string;
-    price: number;
-    quantity: number;
-    side: "buy" | "sell";
-    ticker: string;
-  }>,
-): Array<{
-  _creationTime: number;
-  _id: string;
-  assetType: "crypto" | "stock";
-  campaignId?: string;
-  date: number;
-  direction: "long" | "short";
-  notes?: string;
-  price: number;
-  quantity: number;
-  realizedPL: number | null;
-  side: "buy" | "sell";
-  ticker: string;
-}> {
-  // Sort trades by date ascending to process in chronological order
-  const sortedTrades = [...trades].sort((a, b) => a.date - b.date);
-
-  // Track positions by ticker:direction
-  const positionMap = new Map<string, PositionTracker>();
-
-  // Results array with P&L added (will preserve original trade order)
-  const tradesPLMap = new Map<string, number | null>();
-
-  for (const trade of sortedTrades) {
-    const key = `${trade.ticker}:${trade.direction}`;
-
-    // Initialize position if not exists
-    if (!positionMap.has(key)) {
-      positionMap.set(key, {
-        direction: trade.direction,
-        netQuantity: 0,
-        ticker: trade.ticker,
-        totalEntryCost: 0,
-        totalEntryQuantity: 0,
-      });
-    }
-
-    const position = positionMap.get(key)!;
-
-    // Determine if this is an opening or closing trade
-    // Long: buy opens, sell closes
-    // Short: sell opens, buy closes
-    const isOpening =
-      (trade.direction === "long" && trade.side === "buy") ||
-      (trade.direction === "short" && trade.side === "sell");
-
-    if (isOpening) {
-      // Opening trade - no realized P&L
-      position.netQuantity += trade.quantity;
-      position.totalEntryCost += trade.price * trade.quantity;
-      position.totalEntryQuantity += trade.quantity;
-      tradesPLMap.set(trade._id, null);
-    } else {
-      // Closing trade - calculate realized P&L
-      const averageCost =
-        position.totalEntryQuantity > 0
-          ? position.totalEntryCost / position.totalEntryQuantity
-          : 0;
-
-      let realizedPL: number;
-      if (trade.direction === "long") {
-        // Selling long position: (sell price - avg cost) × quantity
-        realizedPL = (trade.price - averageCost) * trade.quantity;
-      } else {
-        // Covering short position: (avg cost - cover price) × quantity
-        realizedPL = (averageCost - trade.price) * trade.quantity;
-      }
-
-      position.netQuantity -= trade.quantity;
-      tradesPLMap.set(trade._id, realizedPL);
-    }
-  }
-
-  // Return trades with P&L in original array order
-  return trades.map((trade) => ({
-    ...trade,
-    realizedPL: tradesPLMap.get(trade._id) ?? null,
-  }));
-}
 
 /**
  * Create a new trade record.
@@ -269,24 +157,19 @@ export const listTrades = query({
   args: {},
   returns: v.array(tradeWithPLValidator),
   handler: async (ctx) => {
-    const trades = await ctx.db
-      .query("trades")
-      .withIndex("by_date")
-      .order("desc")
-      .collect();
+    // Fetch all trades - we need all for P&L calculation anyway
+    const trades = await ctx.db.query("trades").collect();
 
-    // Calculate P&L (needs all trades for accurate position tracking)
-    const allTrades = await ctx.db.query("trades").collect();
-    const tradesWithPL = calculateTradesWithPL(allTrades);
+    // Calculate P&L using shared helper
+    const plMap = calculateTradesPL(trades);
 
-    // Create lookup map for P&L values
-    const plMap = new Map(tradesWithPL.map((t) => [t._id, t.realizedPL]));
-
-    // Return trades in original order (desc by date) with P&L added
-    return trades.map((trade) => ({
-      ...trade,
-      realizedPL: plMap.get(trade._id) ?? null,
-    }));
+    // Sort by date descending for display and add P&L
+    return [...trades]
+      .sort((a, b) => b.date - a.date)
+      .map((trade) => ({
+        ...trade,
+        realizedPL: plMap.get(trade._id) ?? null,
+      }));
   },
 });
 
@@ -306,14 +189,11 @@ export const getTrade = query({
 
     // Calculate P&L (needs all trades for accurate position tracking)
     const allTrades = await ctx.db.query("trades").collect();
-    const tradesWithPL = calculateTradesWithPL(allTrades);
-
-    // Find the P&L for this specific trade
-    const tradeWithPL = tradesWithPL.find((t) => t._id === trade._id);
+    const plMap = calculateTradesPL(allTrades);
 
     return {
       ...trade,
-      realizedPL: tradeWithPL?.realizedPL ?? null,
+      realizedPL: plMap.get(trade._id) ?? null,
     };
   },
 });
@@ -332,20 +212,16 @@ export const getTradesByCampaign = query({
       .withIndex("by_campaignId", (q) => q.eq("campaignId", args.campaignId))
       .collect();
 
-    // Sort by date descending since we can't use two indexes
-    const sortedTrades = trades.sort((a, b) => b.date - a.date);
-
     // Calculate P&L (needs all trades for accurate position tracking)
     const allTrades = await ctx.db.query("trades").collect();
-    const tradesWithPL = calculateTradesWithPL(allTrades);
+    const plMap = calculateTradesPL(allTrades);
 
-    // Create lookup map for P&L values
-    const plMap = new Map(tradesWithPL.map((t) => [t._id, t.realizedPL]));
-
-    // Return campaign trades with P&L added
-    return sortedTrades.map((trade) => ({
-      ...trade,
-      realizedPL: plMap.get(trade._id) ?? null,
-    }));
+    // Sort by date descending and add P&L
+    return [...trades]
+      .sort((a, b) => b.date - a.date)
+      .map((trade) => ({
+        ...trade,
+        realizedPL: plMap.get(trade._id) ?? null,
+      }));
   },
 });

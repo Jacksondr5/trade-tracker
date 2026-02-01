@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { calculateTradesPL } from "./lib/plCalculation";
 
 // Reusable validators for nested objects (matching schema.ts)
 const instrumentValidator = v.object({
@@ -467,7 +468,7 @@ export const getCampaignPL = query({
     const { campaignId } = args;
 
     // Get all trades linked to this campaign
-    const trades = await ctx.db
+    const campaignTrades = await ctx.db
       .query("trades")
       .withIndex("by_campaignId", (q) => q.eq("campaignId", campaignId))
       .collect();
@@ -475,68 +476,15 @@ export const getCampaignPL = query({
     // Get ALL trades to calculate accurate P&L (position tracking needs full history)
     const allTrades = await ctx.db.query("trades").collect();
 
-    // Sort all trades by date ascending to process in chronological order
-    const sortedTrades = [...allTrades].sort((a, b) => a.date - b.date);
-
-    // Track positions by ticker:direction for P&L calculation
-    type PositionTracker = {
-      direction: "long" | "short";
-      netQuantity: number;
-      ticker: string;
-      totalEntryCost: number;
-      totalEntryQuantity: number;
-    };
-    const positionMap = new Map<string, PositionTracker>();
-    const tradesPLMap = new Map<string, number | null>();
-
-    for (const trade of sortedTrades) {
-      const key = `${trade.ticker}:${trade.direction}`;
-
-      if (!positionMap.has(key)) {
-        positionMap.set(key, {
-          direction: trade.direction,
-          netQuantity: 0,
-          ticker: trade.ticker,
-          totalEntryCost: 0,
-          totalEntryQuantity: 0,
-        });
-      }
-
-      const position = positionMap.get(key)!;
-
-      const isOpening =
-        (trade.direction === "long" && trade.side === "buy") ||
-        (trade.direction === "short" && trade.side === "sell");
-
-      if (isOpening) {
-        position.netQuantity += trade.quantity;
-        position.totalEntryCost += trade.price * trade.quantity;
-        position.totalEntryQuantity += trade.quantity;
-        tradesPLMap.set(trade._id, null);
-      } else {
-        const averageCost =
-          position.totalEntryQuantity > 0
-            ? position.totalEntryCost / position.totalEntryQuantity
-            : 0;
-
-        let realizedPL: number;
-        if (trade.direction === "long") {
-          realizedPL = (trade.price - averageCost) * trade.quantity;
-        } else {
-          realizedPL = (averageCost - trade.price) * trade.quantity;
-        }
-
-        position.netQuantity -= trade.quantity;
-        tradesPLMap.set(trade._id, realizedPL);
-      }
-    }
+    // Calculate P&L using shared helper
+    const tradesPLMap = calculateTradesPL(allTrades);
 
     // Calculate campaign stats from trades linked to this campaign
     let realizedPL = 0;
     let winningTrades = 0;
     let losingTrades = 0;
 
-    for (const trade of trades) {
+    for (const trade of campaignTrades) {
       const pl = tradesPLMap.get(trade._id);
       if (pl !== null && pl !== undefined) {
         realizedPL += pl;
@@ -551,7 +499,7 @@ export const getCampaignPL = query({
     return {
       losingTrades,
       realizedPL,
-      tradeCount: trades.length,
+      tradeCount: campaignTrades.length,
       winningTrades,
     };
   },

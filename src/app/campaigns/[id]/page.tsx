@@ -379,6 +379,9 @@ export default function CampaignDetailPage() {
     );
   }
 
+  // Normalize stopLossHistory to handle potential missing field on older campaigns
+  const stopLossHistory = campaign.stopLossHistory ?? [];
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Header with name and status */}
@@ -889,12 +892,12 @@ export default function CampaignDetailPage() {
           <h2 className="text-slate-12 text-lg font-semibold mb-3">Stop Loss</h2>
 
           {/* Current stop loss (most recent) - highlighted */}
-          {campaign.stopLossHistory.length > 0 && (
+          {stopLossHistory.length > 0 && (
             <div className="mb-4">
               <h3 className="text-slate-11 text-sm font-medium mb-2">Current Stop Loss</h3>
               {(() => {
                 // Get the most recent stop loss (last in array since they're appended)
-                const currentStopLoss = campaign.stopLossHistory[campaign.stopLossHistory.length - 1];
+                const currentStopLoss = stopLossHistory[stopLossHistory.length - 1];
                 return (
                   <div className="rounded border-2 border-yellow-600 bg-yellow-900/20 px-4 py-3">
                     <div className="flex items-center gap-3">
@@ -926,12 +929,12 @@ export default function CampaignDetailPage() {
           )}
 
           {/* Stop loss history (all entries, newest first) */}
-          {campaign.stopLossHistory.length > 1 && (
+          {stopLossHistory.length > 1 && (
             <div className="mb-4">
               <h3 className="text-slate-11 text-sm font-medium mb-2">History</h3>
               <div className="space-y-2">
                 {/* Show all except the most recent (current), sorted newest first */}
-                {[...campaign.stopLossHistory]
+                {[...stopLossHistory]
                   .slice(0, -1)
                   .reverse()
                   .map((stopLoss, index) => (
@@ -967,7 +970,7 @@ export default function CampaignDetailPage() {
             </div>
           )}
 
-          {campaign.stopLossHistory.length === 0 && (
+          {stopLossHistory.length === 0 && (
             <p className="text-slate-11 text-sm mb-4">No stop loss set yet.</p>
           )}
 

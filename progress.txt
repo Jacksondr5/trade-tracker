@@ -817,3 +817,41 @@ Started: Sun Jan 25 19:41:36 EST 2026
 - The P&L calculation logic is duplicated from trades.ts - could be refactored to a shared helper in a future story
 
 ---
+
+## 2026-01-31 - Code Review Refactoring
+
+Applied three recommendations from code review:
+
+### 1. Extract shared P&L calculation logic
+- Created `convex/lib/plCalculation.ts` with shared P&L calculation utilities
+- Exports `calculateTradesPL` function that returns Map<string, number | null>
+- Exports `calculateTradesWithPL` function that returns trades with realizedPL added
+- Exports `PositionTracker` and `TradeForPL` types
+- Updated `convex/trades.ts` to use shared helper instead of inline logic
+- Updated `convex/campaigns.ts` `getCampaignPL` to use shared helper
+
+### 2. Remove duplicate query in trades.ts listTrades
+- In `listTrades` query, removed redundant second query for all trades
+- Now fetches all trades once and sorts in memory for display
+- P&L calculation uses the same fetched trades
+
+### 3. Add stopLossHistory null safety
+- In `src/app/campaigns/[id]/page.tsx`, added defensive default
+- Added `const stopLossHistory = campaign.stopLossHistory ?? []` after loading check
+- Replaced all `campaign.stopLossHistory` references with `stopLossHistory`
+- Protects against potential null/undefined for older campaign documents
+
+**Files created:**
+- convex/lib/plCalculation.ts (new)
+
+**Files changed:**
+- convex/trades.ts (use shared P&L helper, remove duplicate query)
+- convex/campaigns.ts (use shared P&L helper)
+- src/app/campaigns/[id]/page.tsx (stopLossHistory null safety)
+
+**Learnings for future iterations:**
+- Extract duplicated business logic into shared helpers early to avoid divergence
+- When P&L calculation requires all trades for position tracking, fetch once and reuse
+- Always add defensive defaults for array fields that might be missing in older documents
+
+---
