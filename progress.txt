@@ -748,3 +748,30 @@ Started: Sun Jan 25 19:41:36 EST 2026
 - All trade queries now consistently return realizedPL field (null for opening trades, number for closing trades)
 
 ---
+
+## 2026-01-31 - US-028
+- Created position summary page at src/app/positions/page.tsx
+- Displays table with columns: ticker, direction (long/short), quantity, average cost
+- Direction shown as colored badge: long=green, short=red
+- Shows "No open positions." when empty with helpful message
+- Added navigation links in app header for Trades, Campaigns, and Positions
+- Uses getPositions query from convex/positions.ts
+- Updated convex/_generated/api.d.ts to include positions module
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files created:**
+- src/app/positions/page.tsx (new)
+
+**Files changed:**
+- src/app/layout.tsx (added navigation links to header)
+- convex/_generated/api.d.ts (added positions module import)
+- prd.json (marked US-028 as passes: true)
+
+**Learnings for future iterations:**
+- When adding new Convex modules, must update convex/_generated/api.d.ts to include the module import and add to fullApi object
+- Navigation links in header use text-slate-11 for inactive state with hover:text-slate-12 for hover
+- Position table uses same structure as trades table with table-auto, divide-y, and hover:bg-slate-800/50
+- Direction badges use same green/red color scheme as buy/sell badges in trade list
+
+---
