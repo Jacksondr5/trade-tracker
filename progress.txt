@@ -905,3 +905,27 @@ Fixed bug in P&L calculation where cost basis was not adjusted after closing tra
 - Currency columns should be right-aligned (text-right) for readability
 
 ---
+
+## 2026-02-01 - US-032
+- Created convex/portfolioSnapshots.ts with portfolio snapshot mutations and queries
+- Implemented createSnapshot mutation accepting date, totalValue, optional cashBalance
+- Source is always set to 'manual' for user-created snapshots
+- Implemented listSnapshots query returning all snapshots sorted by date descending using by_date index
+- Implemented getLatestSnapshot query returning most recent snapshot
+- Created portfolioSnapshotValidator for return type validation (includes _id, _creationTime, and all fields)
+- Updated convex/_generated/api.d.ts to include portfolioSnapshots module
+- TypeScript and lint checks pass
+
+**Files created:**
+- convex/portfolioSnapshots.ts (new)
+
+**Files changed:**
+- convex/_generated/api.d.ts (added portfolioSnapshots module import and fullApi entry)
+- prd.json (marked US-032 as passes: true)
+
+**Learnings for future iterations:**
+- When creating new Convex modules, manually update convex/_generated/api.d.ts with the import and fullApi entry
+- Portfolio snapshots schema already exists from US-005, just needed the mutations/queries
+- Use withIndex("by_date").order("desc") for sorting by date descending
+
+---
