@@ -25,6 +25,12 @@ export default function RootLayout({
               <h1 className="text-xl font-semibold">Trade Tracker</h1>
               <nav className="flex items-center gap-4">
                 <Link
+                  href="/"
+                  className="text-slate-11 hover:text-slate-12 text-sm transition-colors"
+                >
+                  Dashboard
+                </Link>
+                <Link
                   href="/trades"
                   className="text-slate-11 hover:text-slate-12 text-sm transition-colors"
                 >
