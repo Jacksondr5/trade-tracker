@@ -10,6 +10,7 @@
 
 import type * as campaignNotes from "../campaignNotes.js";
 import type * as campaigns from "../campaigns.js";
+import type * as portfolioSnapshots from "../portfolioSnapshots.js";
 import type * as positions from "../positions.js";
 import type * as trades from "../trades.js";
 
@@ -22,6 +23,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   campaignNotes: typeof campaignNotes;
   campaigns: typeof campaigns;
+  portfolioSnapshots: typeof portfolioSnapshots;
   positions: typeof positions;
   trades: typeof trades;
 }>;

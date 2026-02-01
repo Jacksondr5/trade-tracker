@@ -909,3 +909,28 @@ Fixed bug in P&L calculation where cost basis was not adjusted after closing tra
 - The listCampaignsWithPL pattern fetches all trades once and builds a campaignPLMap for efficient lookup
 
 ---
+
+## 2026-01-31 - US-032
+- Created convex/portfolioSnapshots.ts with portfolio snapshot mutations and queries
+- Implemented createSnapshot mutation accepting date, totalValue, and optional cashBalance
+- Source is automatically set to 'manual' for user-entered snapshots
+- Implemented listSnapshots query returning all snapshots sorted by date descending using by_date index
+- Implemented getLatestSnapshot query returning the most recent snapshot (uses .first() after desc ordering)
+- Created portfolioSnapshotValidator for return type validation (includes _id, _creationTime, and all fields)
+- Updated convex/_generated/api.d.ts to include portfolioSnapshots module
+- TypeScript and lint checks pass
+
+**Files created:**
+- convex/portfolioSnapshots.ts (new)
+
+**Files changed:**
+- convex/_generated/api.d.ts (added portfolioSnapshots import and type)
+- prd.json (marked US-032 as passes: true)
+
+**Learnings for future iterations:**
+- Portfolio snapshots use by_date index for efficient chronological queries
+- Use .first() with .order("desc") to get the most recent snapshot efficiently
+- When creating new Convex modules, update convex/_generated/api.d.ts to include the module import and add to fullApi object
+- The createSnapshot mutation only sets source to 'manual' - future stories may add API or calculated sources
+
+---
