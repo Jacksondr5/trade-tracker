@@ -506,6 +506,99 @@ export const getCampaignPL = query({
 });
 
 /**
+ * Get the position status for a campaign.
+ * Calculates net position for each instrument based on linked trades.
+ */
+export const getCampaignPositionStatus = query({
+  args: {
+    campaignId: v.id("campaigns"),
+  },
+  returns: v.object({
+    isFullyClosed: v.boolean(),
+    positions: v.array(
+      v.object({
+        direction: v.union(v.literal("long"), v.literal("short")),
+        quantity: v.number(),
+        ticker: v.string(),
+      })
+    ),
+    realizedPL: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const { campaignId } = args;
+
+    const campaign = await ctx.db.get(campaignId);
+    if (!campaign) {
+      return {
+        isFullyClosed: false,
+        positions: [],
+        realizedPL: 0,
+      };
+    }
+
+    // Get all trades linked to this campaign
+    const campaignTrades = await ctx.db
+      .query("trades")
+      .withIndex("by_campaignId", (q) => q.eq("campaignId", campaignId))
+      .collect();
+
+    // Get ALL trades to calculate accurate P&L
+    const allTrades = await ctx.db.query("trades").collect();
+    const tradesPLMap = calculateTradesPL(allTrades);
+
+    // Calculate positions by ticker AND direction (key: "ticker|direction")
+    const positionMap = new Map<string, number>();
+
+    for (const trade of campaignTrades) {
+      const key = `${trade.ticker}|${trade.direction}`;
+      const currentQty = positionMap.get(key) || 0;
+
+      // Calculate position change based on side and direction
+      let qtyChange: number;
+      if (trade.direction === "long") {
+        // Long: buy adds, sell subtracts
+        qtyChange = trade.side === "buy" ? trade.quantity : -trade.quantity;
+      } else {
+        // Short: sell adds, buy (cover) subtracts
+        qtyChange = trade.side === "sell" ? trade.quantity : -trade.quantity;
+      }
+
+      positionMap.set(key, currentQty + qtyChange);
+    }
+
+    // Build positions array with non-zero quantities
+    const positions = Array.from(positionMap.entries())
+      .map(([key, quantity]) => {
+        const [ticker, direction] = key.split("|");
+        return {
+          direction: direction as "long" | "short",
+          quantity,
+          ticker,
+        };
+      })
+      .filter((p) => Math.abs(p.quantity) > 0.0001); // Filter out effectively zero positions
+
+    // Check if all positions are closed (either no trades or all quantities are zero)
+    const isFullyClosed = campaignTrades.length > 0 && positions.length === 0;
+
+    // Calculate realized P&L for campaign trades
+    let realizedPL = 0;
+    for (const trade of campaignTrades) {
+      const pl = tradesPLMap.get(trade._id);
+      if (pl !== null && pl !== undefined) {
+        realizedPL += pl;
+      }
+    }
+
+    return {
+      isFullyClosed,
+      positions,
+      realizedPL,
+    };
+  },
+});
+
+/**
  * Add a stop loss entry to a campaign's stop loss history.
  * Stop losses are append-only to preserve history.
  */

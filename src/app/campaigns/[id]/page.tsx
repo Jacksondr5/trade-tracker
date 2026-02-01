@@ -3,7 +3,7 @@
 import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
 
@@ -41,9 +41,12 @@ export default function CampaignDetailPage() {
   const removeProfitTarget = useMutation(api.campaigns.removeProfitTarget);
   const addStopLoss = useMutation(api.campaigns.addStopLoss);
   const updateCampaignStatus = useMutation(api.campaigns.updateCampaignStatus);
+  const updateCampaign = useMutation(api.campaigns.updateCampaign);
   const campaignNotes = useQuery(api.campaignNotes.getNotesByCampaign, { campaignId });
   const addNote = useMutation(api.campaignNotes.addNote);
   const trades = useQuery(api.trades.getTradesByCampaign, { campaignId });
+  const campaignPL = useQuery(api.campaigns.getCampaignPL, { campaignId });
+  const positionStatus = useQuery(api.campaigns.getCampaignPositionStatus, { campaignId });
 
   // Instrument form state
   const [instrumentTicker, setInstrumentTicker] = useState("");
@@ -85,6 +88,15 @@ export default function CampaignDetailPage() {
   const [selectedOutcome, setSelectedOutcome] = useState<CampaignOutcome | "">("");
   const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
   const [isChangingStatus, setIsChangingStatus] = useState(false);
+
+  // Retrospective state
+  const [retrospective, setRetrospective] = useState<string>("");
+  const [retrospectiveError, setRetrospectiveError] = useState<string | null>(null);
+  const [isSavingRetrospective, setIsSavingRetrospective] = useState(false);
+  const [retrospectiveInitialized, setRetrospectiveInitialized] = useState(false);
+
+  // Position closure banner state
+  const [closureBannerDismissed, setClosureBannerDismissed] = useState(false);
 
   const handleAddInstrument = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -358,6 +370,32 @@ export default function CampaignDetailPage() {
     }
   };
 
+  // Initialize retrospective from campaign data
+  useEffect(() => {
+    if (campaign && !retrospectiveInitialized) {
+      setRetrospective(campaign.retrospective || "");
+      setRetrospectiveInitialized(true);
+    }
+  }, [campaign, retrospectiveInitialized]);
+
+  const handleSaveRetrospective = async () => {
+    setRetrospectiveError(null);
+    setIsSavingRetrospective(true);
+
+    try {
+      await updateCampaign({
+        campaignId,
+        retrospective: retrospective.trim() || undefined,
+      });
+    } catch (error) {
+      setRetrospectiveError(
+        error instanceof Error ? error.message : "Failed to save retrospective"
+      );
+    } finally {
+      setIsSavingRetrospective(false);
+    }
+  };
+
   if (campaign === undefined) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -407,6 +445,17 @@ export default function CampaignDetailPage() {
                 })}
               </span>
             )}
+            {/* Campaign P&L */}
+            {campaignPL !== undefined && campaignPL.tradeCount > 0 && (
+              <span
+                className={`text-lg font-semibold ${
+                  campaignPL.realizedPL >= 0 ? "text-green-400" : "text-red-400"
+                }`}
+              >
+                {campaignPL.realizedPL >= 0 ? "+" : ""}
+                {formatCurrency(campaignPL.realizedPL)}
+              </span>
+            )}
           </div>
 
           {/* Status change controls */}
@@ -435,6 +484,47 @@ export default function CampaignDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Position closure banner */}
+      {campaign.status === "active" &&
+        positionStatus?.isFullyClosed &&
+        !closureBannerDismissed && (
+          <div className="mb-6 rounded-lg border-2 border-green-600 bg-green-900/30 p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <h3 className="text-green-200 font-semibold text-lg mb-1">
+                  All Positions Closed
+                </h3>
+                <p className="text-green-200/80 text-sm mb-3">
+                  All positions in this campaign have been closed. Ready to close the campaign?
+                </p>
+                <div className="flex items-center gap-4 flex-wrap">
+                  <span
+                    className={`text-lg font-bold ${
+                      positionStatus.realizedPL >= 0 ? "text-green-300" : "text-red-400"
+                    }`}
+                  >
+                    P&L: {positionStatus.realizedPL >= 0 ? "+" : ""}
+                    {formatCurrency(positionStatus.realizedPL)}
+                  </span>
+                  <button
+                    onClick={() => setShowCloseModal(true)}
+                    className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+                  >
+                    Close Campaign
+                  </button>
+                </div>
+              </div>
+              <button
+                onClick={() => setClosureBannerDismissed(true)}
+                className="text-green-300 hover:text-green-100 p-1"
+                aria-label="Dismiss banner"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
 
       {/* Close campaign modal */}
       {showCloseModal && (
@@ -526,6 +616,46 @@ export default function CampaignDetailPage() {
       <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-6">
         <h2 className="text-slate-12 text-lg font-semibold mb-3">Thesis</h2>
         <p className="text-slate-11 whitespace-pre-wrap">{campaign.thesis}</p>
+      </div>
+
+      {/* Retrospective section */}
+      <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-6">
+        <h2 className="text-slate-12 text-lg font-semibold mb-3">Retrospective</h2>
+        
+        {campaign.status === "closed" ? (
+          <div className="space-y-3">
+            {retrospectiveError && (
+              <div className="rounded border border-red-700 bg-red-900/50 px-4 py-2 text-red-200 text-sm flex items-center justify-between">
+                <span>{retrospectiveError}</span>
+                <button
+                  onClick={() => setRetrospectiveError(null)}
+                  className="ml-4 text-red-300 hover:text-red-100"
+                  aria-label="Dismiss error"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+            <textarea
+              value={retrospective}
+              onChange={(e) => setRetrospective(e.target.value)}
+              placeholder="Write your retrospective analysis. What went well? What could be improved? What did you learn?"
+              rows={5}
+              className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-slate-12 placeholder:text-slate-11 focus:border-blue-500 focus:outline-none resize-y"
+            />
+            <button
+              onClick={handleSaveRetrospective}
+              disabled={isSavingRetrospective}
+              className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isSavingRetrospective ? "Saving..." : "Save Retrospective"}
+            </button>
+          </div>
+        ) : (
+          <p className="text-slate-11 italic">
+            Retrospective available after closing campaign.
+          </p>
+        )}
       </div>
 
       {/* Placeholder sections */}

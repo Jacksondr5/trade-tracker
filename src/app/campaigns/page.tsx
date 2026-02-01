@@ -6,9 +6,40 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "~/components/ui";
 import { api } from "../../../convex/_generated/api";
+import { Id } from "../../../convex/_generated/dataModel";
 
 type CampaignStatus = "planning" | "active" | "closed";
 type StatusFilter = "all" | CampaignStatus;
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(value);
+}
+
+function CampaignPL({ campaignId }: { campaignId: Id<"campaigns"> }) {
+  const campaignPL = useQuery(api.campaigns.getCampaignPL, { campaignId });
+
+  if (campaignPL === undefined) {
+    return <span className="text-slate-11">...</span>;
+  }
+
+  if (campaignPL.tradeCount === 0) {
+    return <span className="text-slate-11">—</span>;
+  }
+
+  return (
+    <span
+      className={`font-medium ${
+        campaignPL.realizedPL >= 0 ? "text-green-400" : "text-red-400"
+      }`}
+    >
+      {campaignPL.realizedPL >= 0 ? "+" : ""}
+      {formatCurrency(campaignPL.realizedPL)}
+    </span>
+  );
+}
 
 function formatDate(timestamp: number): string {
   const date = new Date(timestamp);
@@ -103,6 +134,9 @@ export default function CampaignsPage() {
                 <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
                   Status
                 </th>
+                <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
+                  P&amp;L
+                </th>
                 <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
                   Created
                 </th>
@@ -135,6 +169,9 @@ export default function CampaignsPage() {
                       {campaign.status.charAt(0).toUpperCase() +
                         campaign.status.slice(1)}
                     </span>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-sm text-right">
+                    <CampaignPL campaignId={campaign._id} />
                   </td>
                   <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
                     {formatDate(campaign._creationTime)}
