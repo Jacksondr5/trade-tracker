@@ -1079,3 +1079,29 @@ Fixed bug in P&L calculation where cost basis was not adjusted after closing tra
 - Reuse existing modal infrastructure (showCloseModal) for the close campaign action
 
 ---
+
+## 2026-02-01 - US-038
+- Added date filter controls above trade list
+- Implemented date range picker with start and end date inputs
+- Added quick filter buttons: Today, This Week, This Month, This Year, All Time
+- Active quick filter button highlighted with blue background
+- Filter values persist in URL query params (startDate, endDate, quickFilter)
+- Trade list filters to show only trades in selected date range
+- "Clear dates" link appears when custom date range is set
+- Empty state message updates based on whether trades exist vs filtered out
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files changed:**
+- src/app/trades/page.tsx (added date filter UI, URL param handling, filtering logic)
+- prd.json (marked US-038 as passes: true)
+
+**Learnings for future iterations:**
+- Use useSearchParams() with useRouter() for persisting filter state in URL
+- Date calculations: getStartOfDay(), getEndOfDay(), getStartOfWeek(), getStartOfMonth(), getStartOfYear()
+- Quick filters calculate dates dynamically from "now", custom dates stored as ISO date strings
+- URL param pattern: quickFilter for presets, startDate/endDate for custom ranges
+- Filter in useMemo to avoid re-filtering on every render
+- Use input type="date" for date-only pickers (simpler than datetime-local)
+
+---
