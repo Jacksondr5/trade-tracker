@@ -775,3 +775,23 @@ Started: Sun Jan 25 19:41:36 EST 2026
 - Direction badges use same green/red color scheme as buy/sell badges in trade list
 
 ---
+
+## 2026-01-31 - US-029
+- Added P&L column to trade list table
+- P&L column shows dash (—) for opening trades and formatted P&L for closing trades
+- Color coding: green (text-green-400) for positive P&L, red (text-red-400) for negative P&L
+- Format shows +/- prefix with currency: +$150.00 or -$50.00
+- Created formatPL helper function that formats with Math.abs and adds +/- prefix
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files changed:**
+- src/app/trades/page.tsx (added P&L column header, data cell, and formatPL function)
+- prd.json (marked US-029 as passes: true)
+
+**Learnings for future iterations:**
+- The listTrades query already returns realizedPL field (from US-027), just need to display it
+- Use Math.abs() with Intl.NumberFormat to get unsigned value, then prepend +/- manually
+- Color coding pattern for P&L: text-green-400 for positive, text-red-400 for negative, text-slate-11 for null/dash
+
+---

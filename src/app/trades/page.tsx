@@ -24,6 +24,14 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
+function formatPL(value: number): string {
+  const formatted = new Intl.NumberFormat("en-US", {
+    currency: "USD",
+    style: "currency",
+  }).format(Math.abs(value));
+  return value >= 0 ? `+${formatted}` : `-${formatted}`;
+}
+
 export default function TradesPage() {
   const trades = useQuery(api.trades.listTrades);
   const campaigns = useQuery(api.campaigns.listCampaigns);
@@ -81,6 +89,9 @@ export default function TradesPage() {
                 <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
                   Total
                 </th>
+                <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
+                  P&L
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700 bg-slate-900">
@@ -123,6 +134,17 @@ export default function TradesPage() {
                   </td>
                   <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm font-medium">
                     {formatCurrency(trade.price * trade.quantity)}
+                  </td>
+                  <td
+                    className={`whitespace-nowrap px-4 py-3 text-right text-sm font-medium ${
+                      trade.realizedPL === null
+                        ? "text-slate-11"
+                        : trade.realizedPL >= 0
+                          ? "text-green-400"
+                          : "text-red-400"
+                    }`}
+                  >
+                    {trade.realizedPL === null ? "—" : formatPL(trade.realizedPL)}
                   </td>
                 </tr>
               ))}
