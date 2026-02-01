@@ -43,6 +43,7 @@ export default function CampaignDetailPage() {
   const updateCampaignStatus = useMutation(api.campaigns.updateCampaignStatus);
   const campaignNotes = useQuery(api.campaignNotes.getNotesByCampaign, { campaignId });
   const addNote = useMutation(api.campaignNotes.addNote);
+  const trades = useQuery(api.trades.getTradesByCampaign, { campaignId });
 
   // Instrument form state
   const [instrumentTicker, setInstrumentTicker] = useState("");
@@ -1100,14 +1101,84 @@ export default function CampaignDetailPage() {
           </form>
         </div>
 
-        {/* Trades placeholder */}
+        {/* Trades section */}
         <div className="rounded-lg border border-slate-700 bg-slate-800 p-6">
-          <h2 className="text-slate-12 text-lg font-semibold mb-3">Trades</h2>
-          <p className="text-slate-11 text-sm italic">Coming soon - linked trades will be displayed here.</p>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-slate-12 text-lg font-semibold">Trades</h2>
+            {campaign.status !== "closed" && (
+              <Link
+                href={`/trades/new?campaignId=${campaignId}`}
+                className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                Add Trade
+              </Link>
+            )}
+          </div>
+
           {campaign.status === "closed" && (
-            <p className="text-slate-11/60 text-sm mt-2">
+            <p className="text-slate-11/60 text-sm mb-4">
               This campaign is closed. No new trades can be added.
             </p>
+          )}
+
+          {trades === undefined ? (
+            <p className="text-slate-11 text-sm">Loading trades...</p>
+          ) : trades.length === 0 ? (
+            <p className="text-slate-11 text-sm">No trades yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full table-auto">
+                <thead>
+                  <tr className="border-b border-slate-700 bg-slate-900/50 text-left text-sm text-slate-11">
+                    <th className="px-4 py-3">Date</th>
+                    <th className="px-4 py-3">Ticker</th>
+                    <th className="px-4 py-3">Side</th>
+                    <th className="px-4 py-3">Direction</th>
+                    <th className="px-4 py-3 text-right">Price</th>
+                    <th className="px-4 py-3 text-right">Quantity</th>
+                    <th className="px-4 py-3 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-700">
+                  {trades.map((trade) => (
+                    <tr
+                      key={trade._id}
+                      className="text-sm text-slate-12 hover:bg-slate-800/50"
+                    >
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {new Date(trade.date).toLocaleDateString("en-US", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </td>
+                      <td className="px-4 py-3 font-medium">{trade.ticker}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={
+                            trade.side === "buy"
+                              ? "text-green-400"
+                              : "text-red-400"
+                          }
+                        >
+                          {trade.side.charAt(0).toUpperCase() + trade.side.slice(1)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {trade.direction.charAt(0).toUpperCase() + trade.direction.slice(1)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {formatCurrency(trade.price)}
+                      </td>
+                      <td className="px-4 py-3 text-right">{trade.quantity}</td>
+                      <td className="px-4 py-3 text-right">
+                        {formatCurrency(trade.price * trade.quantity)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>

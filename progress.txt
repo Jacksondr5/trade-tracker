@@ -671,3 +671,29 @@ Started: Sun Jan 25 19:41:36 EST 2026
 - When creating queries for dropdowns, return minimal shape (only needed fields like _id, name, status) to reduce data transfer
 
 ---
+
+## 2026-01-31 - US-025
+- Added Trades section to campaign detail page replacing placeholder
+- Displays table of linked trades with columns: date, ticker, side, direction, price, quantity, total
+- Trades sorted by date descending (from getTradesByCampaign query)
+- Shows "No trades yet." when empty and "Loading trades..." during fetch
+- Added "Add Trade" button that navigates to /trades/new?campaignId={id}
+- "Add Trade" button only shown for non-closed campaigns
+- Updated trade creation form to read campaignId from URL query params
+- Uses useSearchParams hook to get preselectedCampaignId from URL
+- Campaign dropdown pre-selects the campaign when accessed from campaign detail
+- TypeScript and lint checks pass
+- Browser verification blocked (dev server not responding)
+
+**Files changed:**
+- src/app/campaigns/[id]/page.tsx (added trades query, trades table, Add Trade button)
+- src/app/trades/new/page.tsx (added useSearchParams, preselectedCampaignId for campaign pre-selection)
+- prd.json (marked US-025 as passes: true)
+
+**Learnings for future iterations:**
+- Use useSearchParams() from next/navigation to read URL query parameters in client components
+- Pass query params in Link href with template strings: href={`/path?param=${value}`}
+- The getTradesByCampaign query already exists and returns trades sorted by date descending
+- Trade table follows same structure as main trades list page (date, ticker, side, direction, price, quantity, total)
+
+---

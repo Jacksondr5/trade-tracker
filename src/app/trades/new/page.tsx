@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { z } from "zod";
 import {
@@ -42,6 +42,8 @@ function getDefaultDateTime(): string {
 
 export default function NewTradePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const preselectedCampaignId = searchParams.get("campaignId") || "";
   const createTrade = useMutation(api.trades.createTrade);
   const openCampaigns = useQuery(api.campaigns.listOpenCampaigns);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -51,7 +53,7 @@ export default function NewTradePage() {
   const form = useAppForm({
     defaultValues: {
       assetType: "stock" as "stock" | "crypto",
-      campaignId: "",
+      campaignId: preselectedCampaignId,
       date: getDefaultDateTime(),
       direction: "long" as "long" | "short",
       notes: "",
