@@ -723,3 +723,28 @@ Started: Sun Jan 25 19:41:36 EST 2026
 - Only include positions with netQuantity > 0 in results
 
 ---
+
+## 2026-01-31 - US-027
+- Added realized P&L calculation to trades queries
+- Created calculateTradesWithPL helper function that processes trades chronologically
+- P&L calculation logic:
+  - Opening trades (buy+long, sell+short): null P&L
+  - Closing long positions (sell+long): (sell price - avg cost) × quantity
+  - Covering short positions (buy+short): (avg cost - cover price) × quantity
+- Updated listTrades, getTrade, and getTradesByCampaign queries to include realizedPL field
+- All queries now return tradeWithPLValidator which includes realizedPL: number | null
+- Removed unused tradeValidator (replaced by tradeWithPLValidator)
+- TypeScript and lint checks pass
+
+**Files changed:**
+- convex/trades.ts (added calculateTradesWithPL function, tradeWithPLValidator, updated all queries)
+- prd.json (marked US-027 as passes: true)
+
+**Learnings for future iterations:**
+- P&L calculation must process trades in chronological order to get correct average cost at time of each trade
+- Use a Map to track P&L by trade ID, then merge back into the original query order
+- When calculating P&L, need ALL trades (not just filtered subset) to accurately track positions
+- For closing trades, average cost is calculated from totalEntryCost / totalEntryQuantity at time of trade
+- All trade queries now consistently return realizedPL field (null for opening trades, number for closing trades)
+
+---
