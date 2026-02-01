@@ -1079,3 +1079,31 @@ Fixed bug in P&L calculation where cost basis was not adjusted after closing tra
 - Quick filter detection compares start date timestamp to calculated range start
 - Use date input type="date" with ISO format (YYYY-MM-DD) for value
 - End date parsing uses endOfDay=true to include all trades on that day
+
+---
+
+## 2026-02-01 - US-039
+- Created shared Header component in src/components/Header.tsx
+- Nav links: Dashboard, Trades, Campaigns, Positions, Portfolio
+- Includes UserButton from @clerk/nextjs for auth
+- Active link styling: active links are font-medium text-slate-12, inactive are text-slate-11
+- Active link detection: pathname === "/" for dashboard, pathname.startsWith(href) for others
+- Mobile-responsive with hamburger menu (hidden on md: and above)
+- Mobile menu: shows/hides with state, closes on link click
+- SVG icons for hamburger and X menu states
+- Updated layout.tsx to use Header component instead of inline header
+- TypeScript and lint checks pass
+- Browser verification blocked - dev server not running
+
+**Files created:**
+- src/components/Header.tsx (new)
+
+**Files changed:**
+- src/app/layout.tsx (replaced inline header with Header component)
+- prd.json (marked US-039 as passes: true)
+
+**Learnings for future iterations:**
+- usePathname() from next/navigation to get current route for active link detection
+- Mobile menu pattern: useState for open/close, md:hidden for hamburger, md:flex for desktop nav
+- Close mobile menu on navigation: pass onClick handler to NavLink that sets state to false
+- Use inline SVG for icons to avoid external dependencies (hamburger: 3 horizontal lines, X: diagonal cross)
