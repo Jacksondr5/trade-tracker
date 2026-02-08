@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     env:
       SKIP_ENV_VALIDATION: true
       NEXT_PUBLIC_CONVEX_URL: https://placeholder.convex.cloud
