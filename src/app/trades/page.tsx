@@ -38,9 +38,31 @@ function formatPL(value: number): string {
  * This avoids timezone issues where new Date("2026-01-15") might return Jan 14 or 15
  * depending on the user's timezone.
  */
-function parseDateInputLocal(dateString: string): Date {
-  const [year, month, day] = dateString.split("-").map(Number);
-  return new Date(year, month - 1, day);
+function parseDateInputLocal(dateString: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    return null;
+  }
+
+  const [yearString, monthString, dayString] = dateString.split("-");
+  const year = Number(yearString);
+  const month = Number(monthString);
+  const day = Number(dayString);
+
+  const parsedDate = new Date(year, month - 1, day);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  // Prevent overflow dates like 2026-02-31 becoming Mar 03.
+  if (
+    parsedDate.getFullYear() !== year ||
+    parsedDate.getMonth() !== month - 1 ||
+    parsedDate.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return parsedDate;
 }
 
 function getStartOfDay(date: Date): number {
@@ -79,6 +101,11 @@ function getStartOfYear(date: Date): Date {
 }
 
 type QuickFilter = "today" | "week" | "month" | "year" | "all";
+const QUICK_FILTER_VALUES = ["today", "week", "month", "year", "all"] as const;
+
+function isQuickFilter(value: string): value is QuickFilter {
+  return QUICK_FILTER_VALUES.includes(value as QuickFilter);
+}
 
 export default function TradesPage() {
   const router = useRouter();
@@ -89,7 +116,11 @@ export default function TradesPage() {
   // Get filter params from URL
   const startDateParam = searchParams.get("startDate");
   const endDateParam = searchParams.get("endDate");
-  const quickFilterParam = searchParams.get("filter") as QuickFilter | null;
+  const rawQuickFilterParam = searchParams.get("filter");
+  const quickFilterParam =
+    rawQuickFilterParam && isQuickFilter(rawQuickFilterParam)
+      ? rawQuickFilterParam
+      : null;
 
   // Create a lookup map for campaign names
   const campaignNameMap = useMemo(() => {
@@ -130,8 +161,12 @@ export default function TradesPage() {
     }
 
     // Use custom date range if provided - parse as local time to avoid timezone issues
-    const start = startDateParam ? getStartOfDay(parseDateInputLocal(startDateParam)) : null;
-    const end = endDateParam ? getEndOfDay(parseDateInputLocal(endDateParam)) : null;
+    const parsedStartDate = startDateParam
+      ? parseDateInputLocal(startDateParam)
+      : null;
+    const parsedEndDate = endDateParam ? parseDateInputLocal(endDateParam) : null;
+    const start = parsedStartDate ? getStartOfDay(parsedStartDate) : null;
+    const end = parsedEndDate ? getEndOfDay(parsedEndDate) : null;
 
     return { endDate: end, startDate: start };
   }, [quickFilterParam, startDateParam, endDateParam]);
