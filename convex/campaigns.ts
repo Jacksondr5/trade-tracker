@@ -467,14 +467,18 @@ export const getCampaignPL = query({
   handler: async (ctx, args) => {
     const { campaignId } = args;
 
-    // Get all trades linked to this campaign
-    const campaignTrades = await ctx.db
-      .query("trades")
+    // Get all trade plans linked to this campaign.
+    const campaignTradePlans = await ctx.db
+      .query("tradePlans")
       .withIndex("by_campaignId", (q) => q.eq("campaignId", campaignId))
       .collect();
+    const campaignTradePlanIds = new Set(campaignTradePlans.map((plan) => plan._id));
 
-    // Get ALL trades to calculate accurate P&L (position tracking needs full history)
+    // Get all trades then filter by trade plan linkage.
     const allTrades = await ctx.db.query("trades").collect();
+    const campaignTrades = allTrades.filter(
+      (trade) => trade.tradePlanId && campaignTradePlanIds.has(trade.tradePlanId),
+    );
 
     // Calculate P&L using shared helper
     const tradesPLMap = calculateTradesPL(allTrades);
@@ -536,14 +540,18 @@ export const getCampaignPositionStatus = query({
       };
     }
 
-    // Get all trades linked to this campaign
-    const campaignTrades = await ctx.db
-      .query("trades")
+    // Get all trade plans linked to this campaign.
+    const campaignTradePlans = await ctx.db
+      .query("tradePlans")
       .withIndex("by_campaignId", (q) => q.eq("campaignId", campaignId))
       .collect();
+    const campaignTradePlanIds = new Set(campaignTradePlans.map((plan) => plan._id));
 
-    // Get ALL trades to calculate accurate P&L
+    // Get all trades then filter by trade plan linkage.
     const allTrades = await ctx.db.query("trades").collect();
+    const campaignTrades = allTrades.filter(
+      (trade) => trade.tradePlanId && campaignTradePlanIds.has(trade.tradePlanId),
+    );
     const tradesPLMap = calculateTradesPL(allTrades);
 
     // Calculate positions by ticker AND direction (key: "ticker|direction")
