@@ -3,7 +3,7 @@
 import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
 
@@ -44,9 +44,21 @@ export default function CampaignDetailPage() {
   const updateCampaign = useMutation(api.campaigns.updateCampaign);
   const campaignNotes = useQuery(api.campaignNotes.getNotesByCampaign, { campaignId });
   const addNote = useMutation(api.campaignNotes.addNote);
-  const trades = useQuery(api.trades.getTradesByCampaign, { campaignId });
+  const tradePlans = useQuery(api.tradePlans.listTradePlansByCampaign, { campaignId });
+  const allTrades = useQuery(api.trades.listTrades);
   const campaignPL = useQuery(api.campaigns.getCampaignPL, { campaignId });
   const positionStatus = useQuery(api.campaigns.getCampaignPositionStatus, { campaignId });
+
+  const trades = useMemo(() => {
+    if (!tradePlans || !allTrades) {
+      return undefined;
+    }
+
+    const tradePlanIds = new Set(tradePlans.map((plan) => plan._id));
+    return allTrades.filter(
+      (trade) => trade.tradePlanId && tradePlanIds.has(trade.tradePlanId),
+    );
+  }, [allTrades, tradePlans]);
 
   // Instrument form state
   const [instrumentTicker, setInstrumentTicker] = useState("");
@@ -1240,7 +1252,7 @@ export default function CampaignDetailPage() {
             <h2 className="text-slate-12 text-lg font-semibold">Trades</h2>
             {campaign.status !== "closed" && (
               <Link
-                href={`/trades/new?campaignId=${campaignId}`}
+                href="/trades/new"
                 className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
               >
                 Add Trade
