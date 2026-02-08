@@ -264,6 +264,18 @@ export const listStandaloneTradePlans = query({
   },
 });
 
+export const listOpenTradePlans = query({
+  args: {},
+  returns: v.array(tradePlanValidator),
+  handler: async (ctx) => {
+    const allTradePlans = await ctx.db.query("tradePlans").collect();
+
+    return allTradePlans
+      .filter((plan) => plan.status !== "closed")
+      .sort((a, b) => b._creationTime - a._creationTime);
+  },
+});
+
 export const listTradePlansByCampaign = query({
   args: {
     campaignId: v.id("campaigns"),
