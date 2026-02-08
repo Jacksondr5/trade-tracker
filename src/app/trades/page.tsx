@@ -223,7 +223,7 @@ export default function TradesPage() {
 
   const isQuickFilterActive = (filter: QuickFilter): boolean => {
     if (filter === "all") {
-      return !quickFilterParam && !startDateParam && !endDateParam;
+      return !quickFilterParam && startDate === null && endDate === null;
     }
     return quickFilterParam === filter;
   };
