@@ -64,6 +64,29 @@ export default defineSchema({
     totalValue: v.number(),
   }).index("by_date", ["date"]),
 
+  tradePlans: defineTable({
+    campaignId: v.optional(v.id("campaigns")),
+    closedAt: v.optional(v.number()),
+    entryConditions: v.string(),
+    exitConditions: v.string(),
+    instrumentNotes: v.optional(v.string()),
+    instrumentSymbol: v.string(),
+    instrumentType: v.optional(v.string()),
+    invalidatedAt: v.optional(v.number()),
+    name: v.string(),
+    rationale: v.optional(v.string()),
+    sortOrder: v.optional(v.number()),
+    status: v.union(
+      v.literal("active"),
+      v.literal("closed"),
+      v.literal("idea"),
+      v.literal("watching"),
+    ),
+    targetConditions: v.string(),
+  })
+    .index("by_campaignId", ["campaignId"])
+    .index("by_status", ["status"]),
+
   trades: defineTable({
     assetType: v.union(v.literal("crypto"), v.literal("stock")),
     campaignId: v.optional(v.id("campaigns")),
@@ -74,8 +97,10 @@ export default defineSchema({
     quantity: v.number(),
     side: v.union(v.literal("buy"), v.literal("sell")),
     ticker: v.string(),
+    tradePlanId: v.optional(v.id("tradePlans")),
   })
     .index("by_campaignId", ["campaignId"])
     .index("by_date", ["date"])
+    .index("by_tradePlanId", ["tradePlanId"])
     .index("by_ticker", ["ticker"]),
 });

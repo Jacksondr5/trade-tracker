@@ -8,6 +8,7 @@ import { useState } from "react";
 const navLinks = [
   { href: "/", label: "Dashboard" },
   { href: "/trades", label: "Trades" },
+  { href: "/trade-plans", label: "Trade Plans" },
   { href: "/campaigns", label: "Campaigns" },
   { href: "/positions", label: "Positions" },
   { href: "/portfolio", label: "Portfolio" },

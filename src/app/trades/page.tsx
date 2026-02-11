@@ -111,7 +111,7 @@ export default function TradesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const trades = useQuery(api.trades.listTrades);
-  const campaigns = useQuery(api.campaigns.listCampaigns);
+  const tradePlans = useQuery(api.tradePlans.listTradePlans, {});
 
   // Get filter params from URL
   const startDateParam = searchParams.get("startDate");
@@ -122,11 +122,11 @@ export default function TradesPage() {
       ? rawQuickFilterParam
       : null;
 
-  // Create a lookup map for campaign names
-  const campaignNameMap = useMemo(() => {
-    if (!campaigns) return new Map<string, string>();
-    return new Map(campaigns.map((c) => [c._id, c.name]));
-  }, [campaigns]);
+  // Create a lookup map for trade plan names
+  const tradePlanNameMap = useMemo(() => {
+    if (!tradePlans) return new Map<string, string>();
+    return new Map(tradePlans.map((p) => [p._id, p.name]));
+  }, [tradePlans]);
 
   // Calculate date range based on quick filter or custom dates
   const { startDate, endDate } = useMemo(() => {
@@ -314,7 +314,7 @@ export default function TradesPage() {
                   Ticker
                 </th>
                 <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
-                  Campaign
+                  Trade Plan
                 </th>
                 <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
                   Side
@@ -350,8 +350,8 @@ export default function TradesPage() {
                     {trade.ticker}
                   </td>
                   <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
-                    {trade.campaignId
-                      ? campaignNameMap.get(trade.campaignId) ?? "—"
+                    {trade.tradePlanId
+                      ? tradePlanNameMap.get(trade.tradePlanId) ?? "—"
                       : "—"}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-sm">

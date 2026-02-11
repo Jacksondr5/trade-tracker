@@ -17,7 +17,6 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 
 const tradeSchema = z.object({
   assetType: z.enum(["stock", "crypto"]),
-  campaignId: z.string().optional(),
   date: z.string().min(1, "Date is required"),
   direction: z.enum(["long", "short"]),
   notes: z.string().optional(),
@@ -25,6 +24,7 @@ const tradeSchema = z.object({
   quantity: z.string().min(1, "Quantity is required"),
   side: z.enum(["buy", "sell"]),
   ticker: z.string().min(1, "Ticker is required"),
+  tradePlanId: z.string().optional(),
 });
 
 type TradeFormData = z.infer<typeof tradeSchema>;
@@ -43,9 +43,9 @@ function getDefaultDateTime(): string {
 export default function NewTradePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const preselectedCampaignId = searchParams.get("campaignId") || "";
+  const preselectedTradePlanId = searchParams.get("tradePlanId") || "";
   const createTrade = useMutation(api.trades.createTrade);
-  const openCampaigns = useQuery(api.campaigns.listOpenCampaigns);
+  const openTradePlans = useQuery(api.tradePlans.listOpenTradePlans);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -53,7 +53,6 @@ export default function NewTradePage() {
   const form = useAppForm({
     defaultValues: {
       assetType: "stock" as "stock" | "crypto",
-      campaignId: preselectedCampaignId,
       date: getDefaultDateTime(),
       direction: "long" as "long" | "short",
       notes: "",
@@ -61,6 +60,7 @@ export default function NewTradePage() {
       quantity: "",
       side: "buy" as "buy" | "sell",
       ticker: "",
+      tradePlanId: preselectedTradePlanId,
     } satisfies TradeFormData,
     validators: {
       onChange: ({ value }) => {
@@ -78,9 +78,6 @@ export default function NewTradePage() {
         const parsed = tradeSchema.parse(value);
         await createTrade({
           assetType: parsed.assetType,
-          campaignId: parsed.campaignId
-            ? (parsed.campaignId as Id<"campaigns">)
-            : undefined,
           date: new Date(parsed.date).getTime(),
           direction: parsed.direction,
           notes: parsed.notes || undefined,
@@ -88,6 +85,9 @@ export default function NewTradePage() {
           quantity: parseFloat(parsed.quantity),
           side: parsed.side,
           ticker: parsed.ticker.toUpperCase(),
+          tradePlanId: parsed.tradePlanId
+            ? (parsed.tradePlanId as Id<"tradePlans">)
+            : undefined,
         });
         setSuccessMessage("Trade created successfully!");
         setTimeout(() => {
@@ -164,14 +164,14 @@ export default function NewTradePage() {
               )}
             </form.AppField>
 
-            <form.AppField name="campaignId">
+            <form.AppField name="tradePlanId">
               {(field) => (
                 <div className="grid w-full items-center gap-1.5">
                   <label
                     htmlFor={field.name}
                     className="text-slate-12 text-sm font-medium"
                   >
-                    Campaign (optional)
+                    Trade Plan (optional)
                   </label>
                   <select
                     id={field.name}
@@ -181,10 +181,10 @@ export default function NewTradePage() {
                     onBlur={field.handleBlur}
                     className="text-slate-12 h-9 w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-slate-500"
                   >
-                    <option value="">No campaign</option>
-                    {openCampaigns?.map((campaign) => (
-                      <option key={campaign._id} value={campaign._id}>
-                        {campaign.name} ({campaign.status})
+                    <option value="">No trade plan</option>
+                    {openTradePlans?.map((tradePlan) => (
+                      <option key={tradePlan._id} value={tradePlan._id}>
+                        {tradePlan.name} ({tradePlan.instrumentSymbol}) [{tradePlan.status}]
                       </option>
                     ))}
                   </select>
