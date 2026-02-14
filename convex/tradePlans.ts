@@ -305,7 +305,6 @@ const tradeWithPLValidator = v.object({
   _creationTime: v.number(),
   _id: v.id("trades"),
   assetType: v.union(v.literal("crypto"), v.literal("stock")),
-  campaignId: v.optional(v.id("campaigns")),
   date: v.number(),
   direction: v.union(v.literal("long"), v.literal("short")),
   notes: v.optional(v.string()),
