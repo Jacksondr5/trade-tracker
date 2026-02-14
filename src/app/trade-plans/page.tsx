@@ -3,8 +3,8 @@
 import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 import { Button } from "~/components/ui";
-import { api } from "../../../convex/_generated/api";
-import type { Id } from "../../../convex/_generated/dataModel";
+import { api } from "~/convex/_generated/api";
+import type { Id } from "~/convex/_generated/dataModel";
 
 export default function TradePlansPage() {
   const tradePlans = useQuery(api.tradePlans.listTradePlans, {});
@@ -54,10 +54,14 @@ export default function TradePlansPage() {
   };
 
   const handleClosePlan = async (tradePlanId: Id<"tradePlans">) => {
-    await updateTradePlanStatus({
-      status: "closed",
-      tradePlanId,
-    });
+    try {
+      await updateTradePlanStatus({
+        status: "closed",
+        tradePlanId,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to close trade plan");
+    }
   };
 
   return (

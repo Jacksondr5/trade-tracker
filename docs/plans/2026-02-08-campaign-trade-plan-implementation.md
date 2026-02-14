@@ -1,7 +1,5 @@
 # Campaign + Trade Plans Redesign Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Replace campaign-level instrument/target tracking with optional campaign-linked trade plans, and re-link trades to optional `tradePlanId` (no direct campaign linkage).
 
 **Architecture:** Introduce a new `tradePlans` table as tactical planning records with free-form entry/exit/target condition fields. Keep campaigns as strategic thesis/retrospective containers. Migrate trade association from `campaignId` to optional `tradePlanId`, then roll campaign analytics up via trade plans.

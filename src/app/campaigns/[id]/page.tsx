@@ -5,8 +5,8 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { api } from "../../../../convex/_generated/api";
-import type { Doc, Id } from "../../../../convex/_generated/dataModel";
+import { api } from "~/convex/_generated/api";
+import type { Doc, Id } from "~/convex/_generated/dataModel";
 
 type CampaignStatus = "planning" | "active" | "closed";
 type TradePlanStatus = "idea" | "watching" | "active" | "closed";
