@@ -5,12 +5,17 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { z } from "zod";
+import { useAppForm } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Doc, Id } from "~/convex/_generated/dataModel";
 
 type CampaignStatus = "planning" | "active" | "closed";
 type TradePlanStatus = "idea" | "watching" | "active" | "closed";
 type SaveState = "idle" | "saving" | "saved";
+const noteSchema = z.object({
+  content: z.string().min(1, "Note content is required"),
+});
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -76,7 +81,6 @@ export default function CampaignDetailPage() {
   const [thesisError, setThesisError] = useState<string | null>(null);
   const [thesisSaveState, setThesisSaveState] = useState<SaveState>("idle");
 
-  const [noteContent, setNoteContent] = useState("");
   const [noteError, setNoteError] = useState<string | null>(null);
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<Id<"campaignNotes"> | null>(null);
@@ -150,25 +154,38 @@ export default function CampaignDetailPage() {
     }
   };
 
-  const handleAddNote = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!noteContent.trim()) {
-      setNoteError("Note content is required");
-      return;
-    }
-
-    setNoteError(null);
-    setIsAddingNote(true);
-
-    try {
-      await addNote({ campaignId, content: noteContent.trim() });
-      setNoteContent("");
-    } catch (error) {
-      setNoteError(error instanceof Error ? error.message : "Failed to add note");
-    } finally {
-      setIsAddingNote(false);
-    }
+  const handleAddNote = async (content: string) => {
+    await addNote({ campaignId, content });
   };
+
+  const noteForm = useAppForm({
+    defaultValues: {
+      content: "",
+    },
+    validators: {
+      onChange: ({ value }) => {
+        const results = noteSchema.safeParse(value);
+        if (!results.success) {
+          return results.error.flatten().fieldErrors;
+        }
+        return undefined;
+      },
+    },
+    onSubmit: async ({ value, formApi }) => {
+      setNoteError(null);
+      setIsAddingNote(true);
+
+      try {
+        const parsed = noteSchema.parse(value);
+        await handleAddNote(parsed.content.trim());
+        formApi.reset();
+      } catch (error) {
+        setNoteError(error instanceof Error ? error.message : "Failed to add note");
+      } finally {
+        setIsAddingNote(false);
+      }
+    },
+  });
 
   const startEditingNote = (note: Doc<"campaignNotes">) => {
     setEditingNoteId(note._id);
@@ -465,20 +482,26 @@ export default function CampaignDetailPage() {
 
         {noteError && <p className="mb-2 text-sm text-red-300">{noteError}</p>}
 
-        <form onSubmit={handleAddNote} className="space-y-2">
-          <textarea
-            className="min-h-24 w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
-            placeholder="Add a note"
-            value={noteContent}
-            onChange={(e) => setNoteContent(e.target.value)}
-          />
-          <button
-            className="rounded bg-slate-700 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-600"
-            type="submit"
-            disabled={isAddingNote}
-          >
-            {isAddingNote ? "Saving..." : "Add Note"}
-          </button>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            void noteForm.handleSubmit();
+          }}
+          className="space-y-2"
+        >
+          <noteForm.AppField name="content">
+            {(field) => (
+              <field.FieldTextarea
+                label="Add note"
+                placeholder="Add a note"
+                rows={4}
+              />
+            )}
+          </noteForm.AppField>
+          <noteForm.AppForm>
+            <noteForm.SubmitButton label={isAddingNote ? "Saving..." : "Add Note"} />
+          </noteForm.AppForm>
         </form>
       </section>
 
