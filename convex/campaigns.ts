@@ -7,13 +7,6 @@ const campaignValidator = v.object({
   _id: v.id("campaigns"),
   closedAt: v.optional(v.number()),
   name: v.string(),
-  outcome: v.optional(
-    v.union(
-      v.literal("manual"),
-      v.literal("profit_target"),
-      v.literal("stop_loss"),
-    ),
-  ),
   retrospective: v.optional(v.string()),
   status: v.union(
     v.literal("active"),
@@ -67,13 +60,6 @@ export const updateCampaign = mutation({
 export const updateCampaignStatus = mutation({
   args: {
     campaignId: v.id("campaigns"),
-    outcome: v.optional(
-      v.union(
-        v.literal("manual"),
-        v.literal("profit_target"),
-        v.literal("stop_loss"),
-      ),
-    ),
     status: v.union(
       v.literal("active"),
       v.literal("closed"),
@@ -87,17 +73,11 @@ export const updateCampaignStatus = mutation({
       throw new Error("Campaign not found");
     }
 
-    if (args.status === "closed" && !args.outcome) {
-      throw new Error("Outcome is required when closing a campaign");
-    }
-
     const patch: Record<string, unknown> = { status: args.status };
     if (args.status === "closed") {
       patch.closedAt = Date.now();
-      patch.outcome = args.outcome;
     } else {
       patch.closedAt = undefined;
-      patch.outcome = undefined;
     }
 
     await ctx.db.patch(args.campaignId, patch);

@@ -10,13 +10,6 @@ export default defineSchema({
   campaigns: defineTable({
     closedAt: v.optional(v.number()),
     name: v.string(),
-    outcome: v.optional(
-      v.union(
-        v.literal("manual"),
-        v.literal("profit_target"),
-        v.literal("stop_loss"),
-      ),
-    ),
     retrospective: v.optional(v.string()),
     status: v.union(
       v.literal("active"),

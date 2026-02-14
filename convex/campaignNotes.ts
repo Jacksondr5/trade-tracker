@@ -37,6 +37,29 @@ export const addNote = mutation({
 });
 
 /**
+ * Update an existing campaign note.
+ */
+export const updateNote = mutation({
+  args: {
+    content: v.string(),
+    noteId: v.id("campaignNotes"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const note = await ctx.db.get(args.noteId);
+    if (!note) {
+      throw new Error("Note not found");
+    }
+
+    await ctx.db.patch(args.noteId, {
+      content: args.content,
+    });
+
+    return null;
+  },
+});
+
+/**
  * Get all notes for a campaign, sorted by _creationTime ascending (oldest first).
  */
 export const getNotesByCampaign = query({
