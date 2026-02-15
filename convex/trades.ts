@@ -2,12 +2,10 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { calculateTradesPL } from "./lib/plCalculation";
 
-// Validator for trade with realized P&L calculation
 const tradeWithPLValidator = v.object({
   _creationTime: v.number(),
   _id: v.id("trades"),
   assetType: v.union(v.literal("crypto"), v.literal("stock")),
-  campaignId: v.optional(v.id("campaigns")),
   date: v.number(),
   direction: v.union(v.literal("long"), v.literal("short")),
   notes: v.optional(v.string()),
@@ -16,15 +14,12 @@ const tradeWithPLValidator = v.object({
   realizedPL: v.union(v.number(), v.null()),
   side: v.union(v.literal("buy"), v.literal("sell")),
   ticker: v.string(),
+  tradePlanId: v.optional(v.id("tradePlans")),
 });
 
-/**
- * Create a new trade record.
- */
 export const createTrade = mutation({
   args: {
     assetType: v.union(v.literal("crypto"), v.literal("stock")),
-    campaignId: v.optional(v.id("campaigns")),
     date: v.number(),
     direction: v.union(v.literal("long"), v.literal("short")),
     notes: v.optional(v.string()),
@@ -32,55 +27,34 @@ export const createTrade = mutation({
     quantity: v.number(),
     side: v.union(v.literal("buy"), v.literal("sell")),
     ticker: v.string(),
+    tradePlanId: v.optional(v.id("tradePlans")),
   },
   returns: v.id("trades"),
   handler: async (ctx, args) => {
-    const {
-      assetType,
-      campaignId,
-      date,
-      direction,
-      notes,
-      price,
-      quantity,
-      side,
-      ticker,
-    } = args;
-
-    // Validate campaign exists and is not closed if campaignId is provided
-    if (campaignId) {
-      const campaign = await ctx.db.get(campaignId);
-      if (!campaign) {
-        throw new Error("Campaign not found");
-      }
-      if (campaign.status === "closed") {
-        throw new Error("Cannot add trades to a closed campaign");
+    if (args.tradePlanId) {
+      const tradePlan = await ctx.db.get(args.tradePlanId);
+      if (!tradePlan) {
+        throw new Error("Trade plan not found");
       }
     }
 
-    const tradeId = await ctx.db.insert("trades", {
-      assetType,
-      campaignId,
-      date,
-      direction,
-      notes,
-      price,
-      quantity,
-      side,
-      ticker,
+    return await ctx.db.insert("trades", {
+      assetType: args.assetType,
+      date: args.date,
+      direction: args.direction,
+      notes: args.notes,
+      price: args.price,
+      quantity: args.quantity,
+      side: args.side,
+      ticker: args.ticker,
+      tradePlanId: args.tradePlanId,
     });
-
-    return tradeId;
   },
 });
 
-/**
- * Update an existing trade record.
- */
 export const updateTrade = mutation({
   args: {
     assetType: v.optional(v.union(v.literal("crypto"), v.literal("stock"))),
-    campaignId: v.optional(v.id("campaigns")),
     date: v.optional(v.number()),
     direction: v.optional(v.union(v.literal("long"), v.literal("short"))),
     notes: v.optional(v.string()),
@@ -89,6 +63,7 @@ export const updateTrade = mutation({
     side: v.optional(v.union(v.literal("buy"), v.literal("sell"))),
     ticker: v.optional(v.string()),
     tradeId: v.id("trades"),
+    tradePlanId: v.optional(v.id("tradePlans")),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -99,21 +74,15 @@ export const updateTrade = mutation({
       throw new Error("Trade not found");
     }
 
-    // Validate campaign exists and is not closed if campaignId is being changed
-    if (updates.campaignId !== undefined && updates.campaignId !== null) {
-      const campaign = await ctx.db.get(updates.campaignId);
-      if (!campaign) {
-        throw new Error("Campaign not found");
-      }
-      if (campaign.status === "closed") {
-        throw new Error("Cannot add trades to a closed campaign");
+    if (updates.tradePlanId !== undefined && updates.tradePlanId !== null) {
+      const tradePlan = await ctx.db.get(updates.tradePlanId);
+      if (!tradePlan) {
+        throw new Error("Trade plan not found");
       }
     }
 
-    // Build patch object with only defined values
     const patch: Record<string, unknown> = {};
     if (updates.assetType !== undefined) patch.assetType = updates.assetType;
-    if (updates.campaignId !== undefined) patch.campaignId = updates.campaignId;
     if (updates.date !== undefined) patch.date = updates.date;
     if (updates.direction !== undefined) patch.direction = updates.direction;
     if (updates.notes !== undefined) patch.notes = updates.notes;
@@ -121,6 +90,7 @@ export const updateTrade = mutation({
     if (updates.quantity !== undefined) patch.quantity = updates.quantity;
     if (updates.side !== undefined) patch.side = updates.side;
     if (updates.ticker !== undefined) patch.ticker = updates.ticker;
+    if (updates.tradePlanId !== undefined) patch.tradePlanId = updates.tradePlanId;
 
     await ctx.db.patch(tradeId, patch);
 
@@ -128,42 +98,30 @@ export const updateTrade = mutation({
   },
 });
 
-/**
- * Delete a trade record.
- */
 export const deleteTrade = mutation({
   args: {
     tradeId: v.id("trades"),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { tradeId } = args;
-
-    const existingTrade = await ctx.db.get(tradeId);
+    const existingTrade = await ctx.db.get(args.tradeId);
     if (!existingTrade) {
       throw new Error("Trade not found");
     }
 
-    await ctx.db.delete(tradeId);
+    await ctx.db.delete(args.tradeId);
 
     return null;
   },
 });
 
-/**
- * List all trades sorted by date descending (newest first), with realized P&L.
- */
 export const listTrades = query({
   args: {},
   returns: v.array(tradeWithPLValidator),
   handler: async (ctx) => {
-    // Fetch all trades - we need all for P&L calculation anyway
     const trades = await ctx.db.query("trades").collect();
-
-    // Calculate P&L using shared helper
     const plMap = calculateTradesPL(trades);
 
-    // Sort by date descending for display and add P&L
     return [...trades]
       .sort((a, b) => b.date - a.date)
       .map((trade) => ({
@@ -173,9 +131,6 @@ export const listTrades = query({
   },
 });
 
-/**
- * Get a single trade by ID, with realized P&L.
- */
 export const getTrade = query({
   args: {
     tradeId: v.id("trades"),
@@ -187,7 +142,6 @@ export const getTrade = query({
       return null;
     }
 
-    // Calculate P&L (needs all trades for accurate position tracking)
     const allTrades = await ctx.db.query("trades").collect();
     const plMap = calculateTradesPL(allTrades);
 
@@ -198,25 +152,20 @@ export const getTrade = query({
   },
 });
 
-/**
- * Get all trades for a specific campaign, sorted by date descending, with realized P&L.
- */
-export const getTradesByCampaign = query({
+export const getTradesByTradePlan = query({
   args: {
-    campaignId: v.id("campaigns"),
+    tradePlanId: v.id("tradePlans"),
   },
   returns: v.array(tradeWithPLValidator),
   handler: async (ctx, args) => {
     const trades = await ctx.db
       .query("trades")
-      .withIndex("by_campaignId", (q) => q.eq("campaignId", args.campaignId))
+      .withIndex("by_tradePlanId", (q) => q.eq("tradePlanId", args.tradePlanId))
       .collect();
 
-    // Calculate P&L (needs all trades for accurate position tracking)
     const allTrades = await ctx.db.query("trades").collect();
     const plMap = calculateTradesPL(allTrades);
 
-    // Sort by date descending and add P&L
     return [...trades]
       .sort((a, b) => b.date - a.date)
       .map((trade) => ({

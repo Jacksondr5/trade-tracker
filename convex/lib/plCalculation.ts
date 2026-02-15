@@ -19,7 +19,6 @@ export type TradeForPL = {
   _creationTime: number;
   _id: string;
   assetType: "crypto" | "stock";
-  campaignId?: string;
   date: number;
   direction: "long" | "short";
   notes?: string;
@@ -27,6 +26,7 @@ export type TradeForPL = {
   quantity: number;
   side: "buy" | "sell";
   ticker: string;
+  tradePlanId?: string;
 };
 
 /**

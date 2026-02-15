@@ -45,8 +45,22 @@ export const getDashboardStats = query({
       }
     }
 
-    // Fetch all campaigns
+    // Fetch all campaigns and trade plans.
     const allCampaigns = await ctx.db.query("campaigns").collect();
+    const allTradePlans = await ctx.db.query("tradePlans").collect();
+    const campaignTradePlanIds = new Map<string, Set<string>>();
+
+    for (const tradePlan of allTradePlans) {
+      if (!tradePlan.campaignId) {
+        continue;
+      }
+
+      const key = tradePlan.campaignId.toString();
+      if (!campaignTradePlanIds.has(key)) {
+        campaignTradePlanIds.set(key, new Set<string>());
+      }
+      campaignTradePlanIds.get(key)!.add(tradePlan._id.toString());
+    }
 
     // Count open and closed campaigns
     const openCampaignCount = allCampaigns.filter(
@@ -55,12 +69,13 @@ export const getDashboardStats = query({
     const closedCampaigns = allCampaigns.filter((c) => c.status === "closed");
     const closedCampaignCount = closedCampaigns.length;
 
-    // Calculate campaign P&L for closed campaigns
+    // Calculate campaign P&L for closed campaigns through linked trade plans.
     const campaignPLs: number[] = [];
     for (const campaign of closedCampaigns) {
+      const tradePlanIds = campaignTradePlanIds.get(campaign._id.toString()) ?? new Set<string>();
       let campaignPL = 0;
       for (const trade of allTrades) {
-        if (trade.campaignId?.toString() === campaign._id.toString()) {
+        if (trade.tradePlanId && tradePlanIds.has(trade.tradePlanId.toString())) {
           const pl = tradePLMap.get(trade._id.toString());
           if (pl !== null && pl !== undefined) {
             campaignPL += pl;
