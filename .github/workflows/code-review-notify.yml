@@ -1,0 +1,17 @@
+name: Code Review Notification
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+concurrency:
+  group: code-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  notify:
+    permissions:
+      pull-requests: write
+    uses: Jacksondr5/terraform/.github/workflows/code-review-notify.yml@main
+    secrets:
+      DISCORD_WEBHOOK_URL: ${{ secrets.CODE_REVIEW_DISCORD_WEBHOOK }}
