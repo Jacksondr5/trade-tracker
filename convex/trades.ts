@@ -6,13 +6,26 @@ const tradeWithPLValidator = v.object({
   _creationTime: v.number(),
   _id: v.id("trades"),
   assetType: v.union(v.literal("crypto"), v.literal("stock")),
+  brokerAccountRef: v.optional(v.string()),
+  campaignId: v.optional(v.id("campaigns")),
   date: v.number(),
   direction: v.union(v.literal("long"), v.literal("short")),
+  externalExecutionId: v.optional(v.string()),
+  externalOrderId: v.optional(v.string()),
+  importJobId: v.optional(v.id("importJobs")),
+  inboxStatus: v.optional(
+    v.union(v.literal("pending_review"), v.literal("reviewed")),
+  ),
   notes: v.optional(v.string()),
   price: v.number(),
   quantity: v.number(),
   realizedPL: v.union(v.number(), v.null()),
   side: v.union(v.literal("buy"), v.literal("sell")),
+  source: v.union(v.literal("ibkr"), v.literal("kraken"), v.literal("manual")),
+  suggestedTradePlanId: v.optional(v.id("tradePlans")),
+  suggestionReason: v.optional(
+    v.union(v.literal("none"), v.literal("symbol_and_side_match")),
+  ),
   ticker: v.string(),
   tradePlanId: v.optional(v.id("tradePlans")),
 });
@@ -20,12 +33,27 @@ const tradeWithPLValidator = v.object({
 export const createTrade = mutation({
   args: {
     assetType: v.union(v.literal("crypto"), v.literal("stock")),
+    brokerAccountRef: v.optional(v.string()),
+    campaignId: v.optional(v.id("campaigns")),
     date: v.number(),
     direction: v.union(v.literal("long"), v.literal("short")),
+    externalExecutionId: v.optional(v.string()),
+    externalOrderId: v.optional(v.string()),
+    importJobId: v.optional(v.id("importJobs")),
+    inboxStatus: v.optional(
+      v.union(v.literal("pending_review"), v.literal("reviewed")),
+    ),
     notes: v.optional(v.string()),
     price: v.number(),
     quantity: v.number(),
     side: v.union(v.literal("buy"), v.literal("sell")),
+    source: v.optional(
+      v.union(v.literal("ibkr"), v.literal("kraken"), v.literal("manual")),
+    ),
+    suggestedTradePlanId: v.optional(v.id("tradePlans")),
+    suggestionReason: v.optional(
+      v.union(v.literal("none"), v.literal("symbol_and_side_match")),
+    ),
     ticker: v.string(),
     tradePlanId: v.optional(v.id("tradePlans")),
   },
@@ -38,14 +66,37 @@ export const createTrade = mutation({
       }
     }
 
+    if (args.campaignId) {
+      const campaign = await ctx.db.get(args.campaignId);
+      if (!campaign) {
+        throw new Error("Campaign not found");
+      }
+    }
+
+    if (args.importJobId) {
+      const importJob = await ctx.db.get(args.importJobId);
+      if (!importJob) {
+        throw new Error("Import job not found");
+      }
+    }
+
     return await ctx.db.insert("trades", {
       assetType: args.assetType,
+      brokerAccountRef: args.brokerAccountRef,
+      campaignId: args.campaignId,
       date: args.date,
       direction: args.direction,
+      externalExecutionId: args.externalExecutionId,
+      externalOrderId: args.externalOrderId,
+      importJobId: args.importJobId,
+      inboxStatus: args.inboxStatus,
       notes: args.notes,
       price: args.price,
       quantity: args.quantity,
       side: args.side,
+      source: args.source ?? "manual",
+      suggestedTradePlanId: args.suggestedTradePlanId,
+      suggestionReason: args.suggestionReason,
       ticker: args.ticker,
       tradePlanId: args.tradePlanId,
     });
@@ -55,12 +106,27 @@ export const createTrade = mutation({
 export const updateTrade = mutation({
   args: {
     assetType: v.optional(v.union(v.literal("crypto"), v.literal("stock"))),
+    brokerAccountRef: v.optional(v.string()),
+    campaignId: v.optional(v.id("campaigns")),
     date: v.optional(v.number()),
     direction: v.optional(v.union(v.literal("long"), v.literal("short"))),
+    externalExecutionId: v.optional(v.string()),
+    externalOrderId: v.optional(v.string()),
+    importJobId: v.optional(v.id("importJobs")),
+    inboxStatus: v.optional(
+      v.union(v.literal("pending_review"), v.literal("reviewed")),
+    ),
     notes: v.optional(v.string()),
     price: v.optional(v.number()),
     quantity: v.optional(v.number()),
     side: v.optional(v.union(v.literal("buy"), v.literal("sell"))),
+    source: v.optional(
+      v.union(v.literal("ibkr"), v.literal("kraken"), v.literal("manual")),
+    ),
+    suggestedTradePlanId: v.optional(v.id("tradePlans")),
+    suggestionReason: v.optional(
+      v.union(v.literal("none"), v.literal("symbol_and_side_match")),
+    ),
     ticker: v.optional(v.string()),
     tradeId: v.id("trades"),
     tradePlanId: v.optional(v.id("tradePlans")),
@@ -81,14 +147,42 @@ export const updateTrade = mutation({
       }
     }
 
+    if (updates.campaignId !== undefined && updates.campaignId !== null) {
+      const campaign = await ctx.db.get(updates.campaignId);
+      if (!campaign) {
+        throw new Error("Campaign not found");
+      }
+    }
+
+    if (updates.importJobId !== undefined && updates.importJobId !== null) {
+      const importJob = await ctx.db.get(updates.importJobId);
+      if (!importJob) {
+        throw new Error("Import job not found");
+      }
+    }
+
     const patch: Record<string, unknown> = {};
     if (updates.assetType !== undefined) patch.assetType = updates.assetType;
+    if (updates.brokerAccountRef !== undefined)
+      patch.brokerAccountRef = updates.brokerAccountRef;
+    if (updates.campaignId !== undefined) patch.campaignId = updates.campaignId;
     if (updates.date !== undefined) patch.date = updates.date;
     if (updates.direction !== undefined) patch.direction = updates.direction;
+    if (updates.externalExecutionId !== undefined)
+      patch.externalExecutionId = updates.externalExecutionId;
+    if (updates.externalOrderId !== undefined)
+      patch.externalOrderId = updates.externalOrderId;
+    if (updates.importJobId !== undefined) patch.importJobId = updates.importJobId;
+    if (updates.inboxStatus !== undefined) patch.inboxStatus = updates.inboxStatus;
     if (updates.notes !== undefined) patch.notes = updates.notes;
     if (updates.price !== undefined) patch.price = updates.price;
     if (updates.quantity !== undefined) patch.quantity = updates.quantity;
     if (updates.side !== undefined) patch.side = updates.side;
+    if (updates.source !== undefined) patch.source = updates.source;
+    if (updates.suggestedTradePlanId !== undefined)
+      patch.suggestedTradePlanId = updates.suggestedTradePlanId;
+    if (updates.suggestionReason !== undefined)
+      patch.suggestionReason = updates.suggestionReason;
     if (updates.ticker !== undefined) patch.ticker = updates.ticker;
     if (updates.tradePlanId !== undefined) patch.tradePlanId = updates.tradePlanId;
 
