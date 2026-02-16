@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { buildExecutionIdentity } from "./lib/importIngestion";
 import { calculateTradesPL } from "./lib/plCalculation";
 
 const tradeWithPLValidator = v.object({
@@ -266,5 +267,85 @@ export const getTradesByTradePlan = query({
         ...trade,
         realizedPL: plMap.get(trade._id) ?? null,
       }));
+  },
+});
+
+export const ingestImportedExecution = mutation({
+  args: {
+    accountRef: v.string(),
+    assetType: v.union(v.literal("crypto"), v.literal("stock")),
+    date: v.number(),
+    direction: v.union(v.literal("long"), v.literal("short")),
+    externalExecutionId: v.optional(v.string()),
+    externalOrderId: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    price: v.number(),
+    provider: v.union(v.literal("ibkr"), v.literal("kraken")),
+    quantity: v.number(),
+    side: v.union(v.literal("buy"), v.literal("sell")),
+    ticker: v.string(),
+  },
+  returns: v.id("trades"),
+  handler: async (ctx, args) => {
+    const identity = buildExecutionIdentity({
+      accountRef: args.accountRef,
+      occurredAt: args.date,
+      price: args.price,
+      provider: args.provider,
+      quantity: args.quantity,
+      side: args.side,
+      symbol: args.ticker,
+      externalExecutionId: args.externalExecutionId ?? null,
+    });
+
+    const existingExecution = await ctx.db
+      .query("externalExecutions")
+      .withIndex("by_identity", (q) =>
+        q
+          .eq("provider", args.provider)
+          .eq("accountRef", args.accountRef)
+          .eq("identityValue", identity.value),
+      )
+      .first();
+
+    if (existingExecution?.tradeId) {
+      return existingExecution.tradeId;
+    }
+
+    const tradeId = await ctx.db.insert("trades", {
+      assetType: args.assetType,
+      brokerAccountRef: args.accountRef,
+      date: args.date,
+      direction: args.direction,
+      externalExecutionId: args.externalExecutionId,
+      externalOrderId: args.externalOrderId,
+      inboxStatus: "pending_review",
+      notes: args.notes,
+      price: args.price,
+      quantity: args.quantity,
+      side: args.side,
+      source: args.provider,
+      ticker: args.ticker.trim().toUpperCase(),
+    });
+
+    if (existingExecution) {
+      await ctx.db.patch(existingExecution._id, { tradeId });
+      return tradeId;
+    }
+
+    await ctx.db.insert("externalExecutions", {
+      accountRef: args.accountRef,
+      externalExecutionId: args.externalExecutionId,
+      externalOrderId: args.externalOrderId,
+      identityKind: identity.kind,
+      identityValue: identity.value,
+      occurredAt: args.date,
+      provider: args.provider,
+      rawPayload: undefined,
+      symbol: args.ticker.trim().toUpperCase(),
+      tradeId,
+    });
+
+    return tradeId;
   },
 });
