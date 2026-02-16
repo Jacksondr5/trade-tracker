@@ -665,3 +665,28 @@ git commit -m "chore: finalize brokerage import implementation verification"
 3. Task 5-8 (connectors + ingestion + APIs)
 4. Task 9-12 (linkage rules + UI + cron)
 5. Task 13-14 (docs + final verification)
+
+## Execution Checklist Updates (2026-02-16)
+
+- [x] Task 1 complete (`db17f56`)
+- [x] Task 2 complete (`8c7daf5`)
+- [x] Task 3 complete (`a529f0f`)
+- [x] Task 4 complete (`8fb2291`)
+- [x] Task 5 complete (`22f5a9f`)
+- [x] Task 6 complete (`ac0964f`)
+- [x] Task 7 complete (`8360a2e`)
+- [x] Task 8 complete (`3c87adb`)
+- [x] Task 9 complete (`46b6f2d`)
+- [x] Task 10 complete (`837c145`)
+- [x] Task 11 complete (`e5af9e8`)
+- [x] Task 12 complete (`96d9a4e`)
+- [x] Task 13 complete (`ab3b754`)
+- [x] Task 14 verification complete (this commit)
+
+## Post-Implementation Notes
+
+- `pnpm lint` passed with warnings only in `src/app/imports/page.tsx` (`react-hooks/exhaustive-deps`).
+- `pnpm typecheck` passed.
+- `pnpm test` passed (10 files, 15 tests).
+- `npx convex dev --once` could not be completed in this non-interactive environment because Convex CLI prompted for project configuration.
+- Manual UX smoke test was not executed in this session.
