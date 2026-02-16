@@ -18,3 +18,22 @@ TODO:
 
 1. Add trades
 2. Have data be tied to a count so that people that log in can only see their trades.
+
+---
+
+Several items to improve:
+
+1. It is not actually implementing the connector. We probably need to solve that more directly inside of the architecture because the agent is not able to figure out what to do on its own when it spawned to do the cutting.
+   - I think if I give it OpenAPI specs or pre-implement a client, that it will be able to do most of the stuff here. I just need to make sure that whatever client library I use has the ability to hook in so we can deal with IBKR's complexities.
+2. It's not using Convex very well. It's doing a lot of very strange things that I don't think fit the Convex way of doing things. We might need to make a special Convex agent that feels somewhat like an anti-pattern, but I don't know of a better way to get an understanding of Convex and allow it to get feedback from Convex.
+3. We should look into different ways to parallelize while the Ralph approach to break things down into different tasks is certainly very good. Nicholas's idea of splitting the tasks between two different sets of agents, one for UI and one for other things is probably good and should be done. I need to look into what other options there are around doing that, and see what Pete's doing.
+4. There's connectors in the convex and lib folders. They should not be in two places. We're going to need the connector to run on both the Convex backend and the Next.js backend, so I need to figure out what the right way to share code between those is. I'm pretty sure I could just import it from a lib folder, but I don't know if Convex has some weird issue with that.
+
+I need to go back and fix the design and the architecture, including more information about the connection to the backend APIs, and then split that out into a bunch of Ralph tasks. I probably need to be very specific on how to validate the Convex stuff.
+
+Different verticals:
+
+1. Connecting to brokerages. This includes establishing the connection, testing the connection, and then is used by the trade pullers, both the cron job and the backfill process. We need to establish the actions that the connector needs to be able to do (get auth token, get trades, etc.) and set up a basic interface for the connector to be able to do those things.
+2. Pulling trades (cron, manual sync). Should put in an inbox that the user can review and then assign the trade to a campaign or plan. Will need to be able to dedupe the trades and then insert new into DB.
+3. Pulling historical trades (backfill). This should be able to pull all the trades from a given start date to the current date. Builds on pulling trades, essentially feeds more trades into that system.
+4. The engine to match the trades and get feedback from the user to assign the trade to a campaign or plan.
