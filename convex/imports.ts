@@ -111,6 +111,9 @@ export const reviewImportedTrade = mutation({
       if (!tradePlan) {
         throw new Error("Trade plan not found");
       }
+      if (campaignId && tradePlan.campaignId && campaignId !== tradePlan.campaignId) {
+        throw new Error("Direct campaignId must match trade plan campaign");
+      }
       campaignId = tradePlan.campaignId ?? campaignId;
     }
 
