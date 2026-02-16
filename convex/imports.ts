@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 const inboxTradeValidator = v.object({
@@ -48,6 +48,39 @@ export const syncNow = mutation({
         status: "succeeded",
       });
 
+      queued += 1;
+    }
+
+    return { queued };
+  },
+});
+
+export const runScheduledSync = internalMutation({
+  args: {},
+  returns: v.object({ queued: v.number() }),
+  handler: async (ctx) => {
+    const activeConnections = await ctx.db
+      .query("brokerageConnections")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .collect();
+
+    let queued = 0;
+    for (const connection of activeConnections) {
+      if (connection.status !== "active") {
+        continue;
+      }
+
+      const jobId = await ctx.db.insert("importJobs", {
+        connectionId: connection._id,
+        provider: connection.provider,
+        startedAt: Date.now(),
+        status: "running",
+      });
+
+      await ctx.db.patch(jobId, {
+        finishedAt: Date.now(),
+        status: "succeeded",
+      });
       queued += 1;
     }
 
