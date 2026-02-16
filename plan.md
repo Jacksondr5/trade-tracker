@@ -17,4 +17,4 @@ V2 should definitely include trade capabilities - mainly pulling from the broker
 TODO:
 
 1. Add trades
-2. Have data be tied to a count so that people that log in can only see their trades.
+2. Have data be tied to an account so that people that log in can only see their trades.

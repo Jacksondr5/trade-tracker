@@ -33,6 +33,12 @@ export default function ImportsPage() {
   const reviewImportedTrade = useMutation((api as any).imports.reviewImportedTrade);
 
   const [isSyncing, setIsSyncing] = useState(false);
+  const [selectedTradePlanIds, setSelectedTradePlanIds] = useState<
+    Record<string, string | undefined>
+  >({});
+  const [selectedCampaignIds, setSelectedCampaignIds] = useState<
+    Record<string, string | undefined>
+  >({});
 
   const rows: ImportInboxRow[] = useMemo(
     () =>
@@ -77,12 +83,29 @@ export default function ImportsPage() {
       />
       <ImportInboxTable
         campaigns={campaignOptions}
+        onCampaignChange={(tradeId, campaignId) =>
+          setSelectedCampaignIds((prev) => ({
+            ...prev,
+            [tradeId]: campaignId || undefined,
+          }))
+        }
         onSave={async (tradeId) => {
-          await reviewImportedTrade({ tradeId });
+          const row = rows.find((r) => r._id === tradeId);
+          await reviewImportedTrade({
+            tradeId,
+            tradePlanId: selectedTradePlanIds[tradeId] ?? row?.tradePlanId ?? undefined,
+            campaignId: selectedCampaignIds[tradeId] ?? undefined,
+          });
         }}
+        onTradePlanChange={(tradeId, tradePlanId) =>
+          setSelectedTradePlanIds((prev) => ({
+            ...prev,
+            [tradeId]: tradePlanId || undefined,
+          }))
+        }
         rows={rows}
-        selectedCampaignIds={{}}
-        selectedTradePlanIds={{}}
+        selectedCampaignIds={selectedCampaignIds}
+        selectedTradePlanIds={selectedTradePlanIds}
         tradePlans={tradePlanOptions}
       />
     </div>

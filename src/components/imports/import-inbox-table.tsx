@@ -21,14 +21,18 @@ type Option = { id: string; label: string };
 
 export function ImportInboxTable({
   campaigns,
+  onCampaignChange,
   onSave,
+  onTradePlanChange,
   rows,
   selectedCampaignIds,
   selectedTradePlanIds,
   tradePlans,
 }: {
   campaigns: Option[];
+  onCampaignChange?: (tradeId: string, campaignId: string | undefined) => void;
   onSave: (tradeId: string) => void;
+  onTradePlanChange?: (tradeId: string, tradePlanId: string | undefined) => void;
   rows: ImportInboxRow[];
   selectedCampaignIds: Record<string, string | undefined>;
   selectedTradePlanIds: Record<string, string | undefined>;
@@ -76,8 +80,9 @@ export function ImportInboxTable({
               <td className="px-3 py-2">
                 <select
                   className="rounded border border-slate-600 bg-slate-800 px-2 py-1"
-                  defaultValue={selectedTradePlanIds[row._id] ?? row.tradePlanId ?? ""}
                   name={`trade-plan-${row._id}`}
+                  onChange={(e) => onTradePlanChange?.(row._id, e.target.value || undefined)}
+                  value={selectedTradePlanIds[row._id] ?? row.tradePlanId ?? ""}
                 >
                   <option value="">None</option>
                   {tradePlans.map((plan) => (
@@ -90,8 +95,9 @@ export function ImportInboxTable({
               <td className="px-3 py-2">
                 <select
                   className="rounded border border-slate-600 bg-slate-800 px-2 py-1"
-                  defaultValue={selectedCampaignIds[row._id] ?? ""}
                   name={`campaign-${row._id}`}
+                  onChange={(e) => onCampaignChange?.(row._id, e.target.value || undefined)}
+                  value={selectedCampaignIds[row._id] ?? ""}
                 >
                   <option value="">None</option>
                   {campaigns.map((campaign) => (

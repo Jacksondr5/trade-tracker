@@ -8,6 +8,7 @@ export default defineSchema({
     status: v.union(
       v.literal("active"),
       v.literal("disconnected"),
+      v.literal("error"),
       v.literal("needs_reauth"),
     ),
   })
@@ -61,7 +62,9 @@ export default defineSchema({
     provider: v.union(v.literal("ibkr"), v.literal("kraken")),
     startedAt: v.number(),
     status: v.union(
+      v.literal("blocked_reauth"),
       v.literal("failed"),
+      v.literal("partial"),
       v.literal("running"),
       v.literal("succeeded"),
     ),
