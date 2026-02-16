@@ -141,7 +141,9 @@ export const getCampaignPL = query({
 
     const allTrades = await ctx.db.query("trades").collect();
     const campaignTrades = allTrades.filter(
-      (trade) => trade.tradePlanId && tradePlanIds.has(trade.tradePlanId),
+      (trade) =>
+        trade.campaignId === args.campaignId ||
+        (trade.tradePlanId && tradePlanIds.has(trade.tradePlanId)),
     );
 
     const tradesPLMap = calculateTradesPL(allTrades);
@@ -201,7 +203,9 @@ export const getCampaignPositionStatus = query({
 
     const allTrades = await ctx.db.query("trades").collect();
     const campaignTrades = allTrades.filter(
-      (trade) => trade.tradePlanId && tradePlanIds.has(trade.tradePlanId),
+      (trade) =>
+        trade.campaignId === args.campaignId ||
+        (trade.tradePlanId && tradePlanIds.has(trade.tradePlanId)),
     );
 
     const tradesPLMap = calculateTradesPL(allTrades);

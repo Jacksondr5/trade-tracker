@@ -1,0 +1,1 @@
+export const IMPORT_SYNC_INTERVAL_MINUTES = 15;

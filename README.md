@@ -79,3 +79,10 @@ npx convex dev
 ## License
 
 MIT
+
+## Development Data Reset (Import Work)
+
+During early import feature development, Convex schema changes may be intentionally breaking.
+If a schema update fails because existing development rows no longer match validators, delete existing development data and re-run `npx convex dev`.
+
+There is currently no migration guarantee for pre-import development data.

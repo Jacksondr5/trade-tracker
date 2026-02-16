@@ -13,3 +13,8 @@ V2 should definitely include trade capabilities - mainly pulling from the broker
 - Analytics - need to be able to tell things like profit/loss, win/loss ratio, comparison to various benchmarks
 - Automatic trade execution - there may be a case where I can't set a stop-loss exactly how I want to (mainly on break of a trend line). This would give me a way to automate exiting a position in certain cases. I need to think more about this though because it's pretty poorly defined requirement
 - Alerts - not necessarily sending me a notification but bringing my attention (likely on dashboard) if a certain trade is close to its stop-loss or close to some kind of other exit condition (any exit condition other than stop-loss)
+
+TODO:
+
+1. Add trades
+2. Have data be tied to an account so that people that log in can only see their trades.
