@@ -31,32 +31,6 @@ const tradeWithPLValidator = v.object({
   tradePlanId: v.optional(v.id("tradePlans")),
 });
 
-async function resolveCampaignLinkageForTrade(
-  ctx: any,
-  input: { campaignId: unknown | undefined; tradePlanId: unknown | undefined },
-): Promise<unknown | undefined> {
-  if (!input.tradePlanId) {
-    return input.campaignId;
-  }
-
-  const tradePlan = (await ctx.db.get(input.tradePlanId)) as
-    | { campaignId?: unknown }
-    | null;
-  if (!tradePlan) {
-    throw new Error("Trade plan not found");
-  }
-
-  if (!tradePlan.campaignId) {
-    return input.campaignId;
-  }
-
-  if (input.campaignId && input.campaignId !== tradePlan.campaignId) {
-    throw new Error("Direct campaignId must match trade plan campaign");
-  }
-
-  return tradePlan.campaignId;
-}
-
 export const createTrade = mutation({
   args: {
     assetType: v.union(v.literal("crypto"), v.literal("stock")),
@@ -86,10 +60,17 @@ export const createTrade = mutation({
   },
   returns: v.id("trades"),
   handler: async (ctx, args) => {
-    const resolvedCampaignId = (await resolveCampaignLinkageForTrade(ctx, {
-      campaignId: args.campaignId,
-      tradePlanId: args.tradePlanId,
-    })) as typeof args.campaignId;
+    let resolvedCampaignId = args.campaignId;
+    if (args.tradePlanId) {
+      const tradePlan = await ctx.db.get(args.tradePlanId);
+      if (!tradePlan) {
+        throw new Error("Trade plan not found");
+      }
+      if (resolvedCampaignId && tradePlan.campaignId && resolvedCampaignId !== tradePlan.campaignId) {
+        throw new Error("Direct campaignId must match trade plan campaign");
+      }
+      resolvedCampaignId = tradePlan.campaignId ?? resolvedCampaignId;
+    }
 
     if (resolvedCampaignId) {
       const campaign = await ctx.db.get(resolvedCampaignId);
@@ -173,11 +154,17 @@ export const updateTrade = mutation({
     }
 
     const nextTradePlanId = updates.tradePlanId ?? existingTrade.tradePlanId;
-    const nextCampaignId = updates.campaignId ?? existingTrade.campaignId;
-    const resolvedCampaignId = (await resolveCampaignLinkageForTrade(ctx, {
-      campaignId: nextCampaignId,
-      tradePlanId: nextTradePlanId,
-    })) as typeof existingTrade.campaignId;
+    let resolvedCampaignId = updates.campaignId ?? existingTrade.campaignId;
+    if (nextTradePlanId) {
+      const tradePlan = await ctx.db.get(nextTradePlanId);
+      if (!tradePlan) {
+        throw new Error("Trade plan not found");
+      }
+      if (resolvedCampaignId && tradePlan.campaignId && resolvedCampaignId !== tradePlan.campaignId) {
+        throw new Error("Direct campaignId must match trade plan campaign");
+      }
+      resolvedCampaignId = tradePlan.campaignId ?? resolvedCampaignId;
+    }
 
     if (resolvedCampaignId) {
       const campaign = await ctx.db.get(resolvedCampaignId);

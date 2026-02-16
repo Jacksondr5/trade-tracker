@@ -10,6 +10,7 @@ import {
 import { ImportSyncControls } from "~/components/imports/import-sync-controls";
 
 export default function ImportsPage() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const inboxRows = (useQuery((api as any).imports.listInboxRows) ?? []) as Array<{
     _id: string;
     brokerAccountRef?: string;
@@ -26,7 +27,9 @@ export default function ImportsPage() {
   const tradePlans = useQuery(api.tradePlans.listTradePlans, {}) ?? [];
   const campaigns = useQuery(api.campaigns.listCampaigns) ?? [];
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const syncNow = useMutation((api as any).imports.syncNow);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const reviewImportedTrade = useMutation((api as any).imports.reviewImportedTrade);
 
   const [isSyncing, setIsSyncing] = useState(false);
