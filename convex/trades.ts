@@ -1,6 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { calculateTradesPL } from "./lib/plCalculation";
+import { assertOwner, requireUser } from "./lib/auth";
 
 const tradeWithPLValidator = v.object({
   _creationTime: v.number(),
@@ -9,6 +10,7 @@ const tradeWithPLValidator = v.object({
   date: v.number(),
   direction: v.union(v.literal("long"), v.literal("short")),
   notes: v.optional(v.string()),
+  ownerId: v.optional(v.string()),
   price: v.number(),
   quantity: v.number(),
   realizedPL: v.union(v.number(), v.null()),
@@ -31,11 +33,11 @@ export const createTrade = mutation({
   },
   returns: v.id("trades"),
   handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+
     if (args.tradePlanId) {
       const tradePlan = await ctx.db.get(args.tradePlanId);
-      if (!tradePlan) {
-        throw new Error("Trade plan not found");
-      }
+      assertOwner(tradePlan, ownerId, "Trade plan not found");
     }
 
     return await ctx.db.insert("trades", {
@@ -43,6 +45,7 @@ export const createTrade = mutation({
       date: args.date,
       direction: args.direction,
       notes: args.notes,
+      ownerId,
       price: args.price,
       quantity: args.quantity,
       side: args.side,
@@ -67,18 +70,15 @@ export const updateTrade = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
     const { tradeId, ...updates } = args;
 
     const existingTrade = await ctx.db.get(tradeId);
-    if (!existingTrade) {
-      throw new Error("Trade not found");
-    }
+    assertOwner(existingTrade, ownerId, "Trade not found");
 
     if (updates.tradePlanId !== undefined && updates.tradePlanId !== null) {
       const tradePlan = await ctx.db.get(updates.tradePlanId);
-      if (!tradePlan) {
-        throw new Error("Trade plan not found");
-      }
+      assertOwner(tradePlan, ownerId, "Trade plan not found");
     }
 
     const patch: Record<string, unknown> = {};
@@ -91,6 +91,7 @@ export const updateTrade = mutation({
     if (updates.side !== undefined) patch.side = updates.side;
     if (updates.ticker !== undefined) patch.ticker = updates.ticker;
     if (updates.tradePlanId !== undefined) patch.tradePlanId = updates.tradePlanId;
+    patch.ownerId = ownerId;
 
     await ctx.db.patch(tradeId, patch);
 
@@ -104,10 +105,9 @@ export const deleteTrade = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
     const existingTrade = await ctx.db.get(args.tradeId);
-    if (!existingTrade) {
-      throw new Error("Trade not found");
-    }
+    assertOwner(existingTrade, ownerId, "Trade not found");
 
     await ctx.db.delete(args.tradeId);
 
@@ -119,7 +119,11 @@ export const listTrades = query({
   args: {},
   returns: v.array(tradeWithPLValidator),
   handler: async (ctx) => {
-    const trades = await ctx.db.query("trades").collect();
+    const ownerId = await requireUser(ctx);
+    const trades = await ctx.db
+      .query("trades")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
     const plMap = calculateTradesPL(trades);
 
     return [...trades]
@@ -137,12 +141,16 @@ export const getTrade = query({
   },
   returns: v.union(tradeWithPLValidator, v.null()),
   handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
     const trade = await ctx.db.get(args.tradeId);
-    if (!trade) {
+    if (!trade || trade.ownerId !== ownerId) {
       return null;
     }
 
-    const allTrades = await ctx.db.query("trades").collect();
+    const allTrades = await ctx.db
+      .query("trades")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
     const plMap = calculateTradesPL(allTrades);
 
     return {
@@ -158,12 +166,21 @@ export const getTradesByTradePlan = query({
   },
   returns: v.array(tradeWithPLValidator),
   handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const tradePlan = await ctx.db.get(args.tradePlanId);
+    assertOwner(tradePlan, ownerId, "Trade plan not found");
+
     const trades = await ctx.db
       .query("trades")
-      .withIndex("by_tradePlanId", (q) => q.eq("tradePlanId", args.tradePlanId))
+      .withIndex("by_owner_tradePlanId", (q) =>
+        q.eq("ownerId", ownerId).eq("tradePlanId", args.tradePlanId),
+      )
       .collect();
 
-    const allTrades = await ctx.db.query("trades").collect();
+    const allTrades = await ctx.db
+      .query("trades")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
     const plMap = calculateTradesPL(allTrades);
 
     return [...trades]

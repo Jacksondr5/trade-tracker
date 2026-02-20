@@ -1,6 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { calculateTradesPL } from "./lib/plCalculation";
+import { assertOwner, requireUser } from "./lib/auth";
 
 const tradePlanStatusValidator = v.union(
   v.literal("active"),
@@ -21,6 +22,7 @@ const tradePlanValidator = v.object({
   instrumentType: v.optional(v.string()),
   invalidatedAt: v.optional(v.number()),
   name: v.string(),
+  ownerId: v.optional(v.string()),
   rationale: v.optional(v.string()),
   sortOrder: v.optional(v.number()),
   status: tradePlanStatusValidator,
@@ -64,13 +66,12 @@ export const createTradePlan = mutation({
   },
   returns: v.id("tradePlans"),
   handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
     const status = args.status ?? "idea";
 
     if (args.campaignId) {
       const campaign = await ctx.db.get(args.campaignId);
-      if (!campaign) {
-        throw new Error("Campaign not found");
-      }
+      assertOwner(campaign, ownerId, "Campaign not found");
     }
 
     return await ctx.db.insert("tradePlans", {
@@ -81,6 +82,7 @@ export const createTradePlan = mutation({
       instrumentSymbol: args.instrumentSymbol.trim().toUpperCase(),
       instrumentType: args.instrumentType,
       name: args.name,
+      ownerId,
       rationale: args.rationale,
       sortOrder: args.sortOrder,
       status,
@@ -106,18 +108,15 @@ export const updateTradePlan = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
     const { tradePlanId, ...updates } = args;
 
     const existingTradePlan = await ctx.db.get(tradePlanId);
-    if (!existingTradePlan) {
-      throw new Error("Trade plan not found");
-    }
+    assertOwner(existingTradePlan, ownerId, "Trade plan not found");
 
     if (updates.campaignId !== undefined && updates.campaignId !== null) {
       const campaign = await ctx.db.get(updates.campaignId);
-      if (!campaign) {
-        throw new Error("Campaign not found");
-      }
+      assertOwner(campaign, ownerId, "Campaign not found");
     }
 
     const patch: Record<string, unknown> = {};
@@ -142,6 +141,7 @@ export const updateTradePlan = mutation({
       patch.sortOrder = updates.sortOrder === null ? undefined : updates.sortOrder;
     if (updates.targetConditions !== undefined)
       patch.targetConditions = updates.targetConditions;
+    patch.ownerId = ownerId;
 
     await ctx.db.patch(tradePlanId, patch);
 
@@ -156,20 +156,23 @@ export const updateTradePlanStatus = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const tradePlan = await ctx.db.get(args.tradePlanId);
-    if (!tradePlan) {
-      throw new Error("Trade plan not found");
-    }
+    const ownerId = await requireUser(ctx);
+    const tradePlan = assertOwner(
+      await ctx.db.get(args.tradePlanId),
+      ownerId,
+      "Trade plan not found",
+    );
 
     if (!isValidStatusTransition(tradePlan.status, args.status)) {
       throw new Error(`Invalid trade plan status transition: ${tradePlan.status} -> ${args.status}`);
     }
 
     if (tradePlan.campaignId && args.status !== "closed") {
-      const campaign = await ctx.db.get(tradePlan.campaignId);
-      if (!campaign) {
-        throw new Error("Linked campaign not found");
-      }
+      const campaign = assertOwner(
+        await ctx.db.get(tradePlan.campaignId),
+        ownerId,
+        "Linked campaign not found",
+      );
 
       if (campaign.status === "closed") {
         throw new Error("Cannot reopen or activate a trade plan linked to a closed campaign");
@@ -185,6 +188,7 @@ export const updateTradePlanStatus = mutation({
     } else {
       patch.closedAt = undefined;
     }
+    patch.ownerId = ownerId;
 
     await ctx.db.patch(args.tradePlanId, patch);
 
@@ -198,7 +202,12 @@ export const getTradePlan = query({
   },
   returns: v.union(tradePlanValidator, v.null()),
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.tradePlanId);
+    const ownerId = await requireUser(ctx);
+    const tradePlan = await ctx.db.get(args.tradePlanId);
+    if (!tradePlan || tradePlan.ownerId !== ownerId) {
+      return null;
+    }
+    return tradePlan;
   },
 });
 
@@ -209,7 +218,11 @@ export const listTradePlans = query({
   },
   returns: v.array(tradePlanValidator),
   handler: async (ctx, args) => {
-    const allTradePlans = await ctx.db.query("tradePlans").collect();
+    const ownerId = await requireUser(ctx);
+    const allTradePlans = await ctx.db
+      .query("tradePlans")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
 
     return allTradePlans
       .filter((plan) => {
@@ -246,7 +259,11 @@ export const listStandaloneTradePlans = query({
   },
   returns: v.array(tradePlanValidator),
   handler: async (ctx, args) => {
-    const allTradePlans = await ctx.db.query("tradePlans").collect();
+    const ownerId = await requireUser(ctx);
+    const allTradePlans = await ctx.db
+      .query("tradePlans")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
 
     return allTradePlans
       .filter((plan) => {
@@ -268,7 +285,11 @@ export const listOpenTradePlans = query({
   args: {},
   returns: v.array(tradePlanValidator),
   handler: async (ctx) => {
-    const allTradePlans = await ctx.db.query("tradePlans").collect();
+    const ownerId = await requireUser(ctx);
+    const allTradePlans = await ctx.db
+      .query("tradePlans")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
 
     return allTradePlans
       .filter((plan) => plan.status !== "closed")
@@ -283,9 +304,15 @@ export const listTradePlansByCampaign = query({
   },
   returns: v.array(tradePlanValidator),
   handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const campaign = await ctx.db.get(args.campaignId);
+    assertOwner(campaign, ownerId, "Campaign not found");
+
     const tradePlans = await ctx.db
       .query("tradePlans")
-      .withIndex("by_campaignId", (q) => q.eq("campaignId", args.campaignId))
+      .withIndex("by_owner_campaignId", (q) =>
+        q.eq("ownerId", ownerId).eq("campaignId", args.campaignId),
+      )
       .collect();
 
     return tradePlans
@@ -308,6 +335,7 @@ const tradeWithPLValidator = v.object({
   date: v.number(),
   direction: v.union(v.literal("long"), v.literal("short")),
   notes: v.optional(v.string()),
+  ownerId: v.optional(v.string()),
   price: v.number(),
   quantity: v.number(),
   realizedPL: v.union(v.number(), v.null()),
@@ -322,12 +350,21 @@ export const getTradesByTradePlan = query({
   },
   returns: v.array(tradeWithPLValidator),
   handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const tradePlan = await ctx.db.get(args.tradePlanId);
+    assertOwner(tradePlan, ownerId, "Trade plan not found");
+
     const trades = await ctx.db
       .query("trades")
-      .withIndex("by_tradePlanId", (q) => q.eq("tradePlanId", args.tradePlanId))
+      .withIndex("by_owner_tradePlanId", (q) =>
+        q.eq("ownerId", ownerId).eq("tradePlanId", args.tradePlanId),
+      )
       .collect();
 
-    const allTrades = await ctx.db.query("trades").collect();
+    const allTrades = await ctx.db
+      .query("trades")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
     const plMap = calculateTradesPL(allTrades);
 
     return trades
@@ -350,12 +387,21 @@ export const getTradePlanPL = query({
     winningTrades: v.number(),
   }),
   handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const tradePlan = await ctx.db.get(args.tradePlanId);
+    assertOwner(tradePlan, ownerId, "Trade plan not found");
+
     const trades = await ctx.db
       .query("trades")
-      .withIndex("by_tradePlanId", (q) => q.eq("tradePlanId", args.tradePlanId))
+      .withIndex("by_owner_tradePlanId", (q) =>
+        q.eq("ownerId", ownerId).eq("tradePlanId", args.tradePlanId),
+      )
       .collect();
 
-    const allTrades = await ctx.db.query("trades").collect();
+    const allTrades = await ctx.db
+      .query("trades")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
     const plMap = calculateTradesPL(allTrades);
 
     let realizedPL = 0;

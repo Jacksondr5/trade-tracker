@@ -1,5 +1,6 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
+import { requireUser } from "./lib/auth";
 
 // Validator for position returned from getPositions query
 const positionValidator = v.object({
@@ -23,7 +24,11 @@ export const getPositions = query({
   args: {},
   returns: v.array(positionValidator),
   handler: async (ctx) => {
-    const trades = await ctx.db.query("trades").collect();
+    const ownerId = await requireUser(ctx);
+    const trades = await ctx.db
+      .query("trades")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
 
     // Group trades by ticker and direction
     // Key format: "ticker:direction"

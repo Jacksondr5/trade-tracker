@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { assertOwner, requireUser } from "./lib/auth";
 
 // Validator for campaign note document returned from queries
 const campaignNoteValidator = v.object({
@@ -7,6 +8,7 @@ const campaignNoteValidator = v.object({
   _id: v.id("campaignNotes"),
   campaignId: v.id("campaigns"),
   content: v.string(),
+  ownerId: v.optional(v.string()),
 });
 
 /**
@@ -19,17 +21,17 @@ export const addNote = mutation({
   },
   returns: v.id("campaignNotes"),
   handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
     const { campaignId, content } = args;
 
     // Verify campaign exists
     const campaign = await ctx.db.get(campaignId);
-    if (!campaign) {
-      throw new Error("Campaign not found");
-    }
+    assertOwner(campaign, ownerId, "Campaign not found");
 
     const noteId = await ctx.db.insert("campaignNotes", {
       campaignId,
       content,
+      ownerId,
     });
 
     return noteId;
@@ -46,13 +48,13 @@ export const updateNote = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
     const note = await ctx.db.get(args.noteId);
-    if (!note) {
-      throw new Error("Note not found");
-    }
+    assertOwner(note, ownerId, "Note not found");
 
     await ctx.db.patch(args.noteId, {
       content: args.content,
+      ownerId,
     });
 
     return null;
@@ -68,9 +70,15 @@ export const getNotesByCampaign = query({
   },
   returns: v.array(campaignNoteValidator),
   handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const campaign = await ctx.db.get(args.campaignId);
+    assertOwner(campaign, ownerId, "Campaign not found");
+
     const notes = await ctx.db
       .query("campaignNotes")
-      .withIndex("by_campaignId", (q) => q.eq("campaignId", args.campaignId))
+      .withIndex("by_owner_campaignId", (q) =>
+        q.eq("ownerId", ownerId).eq("campaignId", args.campaignId),
+      )
       .collect();
 
     // Sort by _creationTime ascending (oldest first) for chronological display
