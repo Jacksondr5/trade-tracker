@@ -23,11 +23,12 @@ export const backfillAllDataToCurrentUser = mutation({
   handler: async (ctx) => {
     const ownerId = await requireUser(ctx);
 
-    const campaigns = await ctx.db.query("campaigns").collect();
-    const tradePlans = await ctx.db.query("tradePlans").collect();
-    const trades = await ctx.db.query("trades").collect();
-    const campaignNotes = await ctx.db.query("campaignNotes").collect();
-    const portfolioSnapshots = await ctx.db.query("portfolioSnapshots").collect();
+    // Only backfill records without an ownerId to avoid overwriting existing ownership
+    const campaigns = (await ctx.db.query("campaigns").collect()).filter(r => !r.ownerId);
+    const tradePlans = (await ctx.db.query("tradePlans").collect()).filter(r => !r.ownerId);
+    const trades = (await ctx.db.query("trades").collect()).filter(r => !r.ownerId);
+    const campaignNotes = (await ctx.db.query("campaignNotes").collect()).filter(r => !r.ownerId);
+    const portfolioSnapshots = (await ctx.db.query("portfolioSnapshots").collect()).filter(r => !r.ownerId);
 
     for (const campaign of campaigns) {
       await ctx.db.patch(campaign._id, { ownerId });
