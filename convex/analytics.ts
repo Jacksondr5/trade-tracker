@@ -1,6 +1,7 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
 import { calculateTradesPL } from "./lib/plCalculation";
+import { requireUser } from "./lib/auth";
 
 export const getDashboardStats = query({
   args: {},
@@ -17,8 +18,12 @@ export const getDashboardStats = query({
     winningCampaignCount: v.number(),
   }),
   handler: async (ctx) => {
+    const ownerId = await requireUser(ctx);
     // Fetch all trades for P&L calculation
-    const allTrades = await ctx.db.query("trades").collect();
+    const allTrades = await ctx.db
+      .query("trades")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
 
     // Calculate P&L for all trades
     const tradePLMap = calculateTradesPL(allTrades);
@@ -38,7 +43,7 @@ export const getDashboardStats = query({
     let totalRealizedPLYTD = 0;
     for (const trade of allTrades) {
       if (trade.date >= ytdStartTimestamp) {
-        const pl = tradePLMap.get(trade._id.toString());
+        const pl = tradePLMap.get(trade._id);
         if (pl !== null && pl !== undefined) {
           totalRealizedPLYTD += pl;
         }
@@ -46,8 +51,14 @@ export const getDashboardStats = query({
     }
 
     // Fetch all campaigns and trade plans.
-    const allCampaigns = await ctx.db.query("campaigns").collect();
-    const allTradePlans = await ctx.db.query("tradePlans").collect();
+    const allCampaigns = await ctx.db
+      .query("campaigns")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
+    const allTradePlans = await ctx.db
+      .query("tradePlans")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
     const campaignTradePlanIds = new Map<string, Set<string>>();
 
     for (const tradePlan of allTradePlans) {
@@ -76,7 +87,7 @@ export const getDashboardStats = query({
       let campaignPL = 0;
       for (const trade of allTrades) {
         if (trade.tradePlanId && tradePlanIds.has(trade.tradePlanId.toString())) {
-          const pl = tradePLMap.get(trade._id.toString());
+          const pl = tradePLMap.get(trade._id);
           if (pl !== null && pl !== undefined) {
             campaignPL += pl;
           }

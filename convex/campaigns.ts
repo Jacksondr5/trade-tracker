@@ -1,12 +1,14 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { calculateTradesPL } from "./lib/plCalculation";
+import { assertOwner, requireUser } from "./lib/auth";
 
 const campaignValidator = v.object({
   _creationTime: v.number(),
   _id: v.id("campaigns"),
   closedAt: v.optional(v.number()),
   name: v.string(),
+  ownerId: v.optional(v.string()),
   retrospective: v.optional(v.string()),
   status: v.union(
     v.literal("active"),
@@ -23,8 +25,10 @@ export const createCampaign = mutation({
   },
   returns: v.id("campaigns"),
   handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
     return await ctx.db.insert("campaigns", {
       name: args.name,
+      ownerId,
       status: "planning",
       thesis: args.thesis,
     });
@@ -40,17 +44,17 @@ export const updateCampaign = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
     const { campaignId, ...updates } = args;
 
     const campaign = await ctx.db.get(campaignId);
-    if (!campaign) {
-      throw new Error("Campaign not found");
-    }
+    assertOwner(campaign, ownerId, "Campaign not found");
 
     const patch: Record<string, unknown> = {};
     if (updates.name !== undefined) patch.name = updates.name;
     if (updates.retrospective !== undefined) patch.retrospective = updates.retrospective;
     if (updates.thesis !== undefined) patch.thesis = updates.thesis;
+    patch.ownerId = ownerId;
 
     await ctx.db.patch(campaignId, patch);
     return null;
@@ -68,10 +72,9 @@ export const updateCampaignStatus = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
     const campaign = await ctx.db.get(args.campaignId);
-    if (!campaign) {
-      throw new Error("Campaign not found");
-    }
+    assertOwner(campaign, ownerId, "Campaign not found");
 
     const patch: Record<string, unknown> = { status: args.status };
     if (args.status === "closed") {
@@ -79,6 +82,7 @@ export const updateCampaignStatus = mutation({
     } else {
       patch.closedAt = undefined;
     }
+    patch.ownerId = ownerId;
 
     await ctx.db.patch(args.campaignId, patch);
     return null;
@@ -89,7 +93,12 @@ export const listCampaigns = query({
   args: {},
   returns: v.array(campaignValidator),
   handler: async (ctx) => {
-    return await ctx.db.query("campaigns").order("desc").collect();
+    const ownerId = await requireUser(ctx);
+    return await ctx.db
+      .query("campaigns")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .order("desc")
+      .collect();
   },
 });
 
@@ -103,9 +112,12 @@ export const listCampaignsByStatus = query({
   },
   returns: v.array(campaignValidator),
   handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
     const campaigns = await ctx.db
       .query("campaigns")
-      .withIndex("by_status", (q) => q.eq("status", args.status))
+      .withIndex("by_owner_status", (q) =>
+        q.eq("ownerId", ownerId).eq("status", args.status),
+      )
       .collect();
 
     return campaigns.sort((a, b) => b._creationTime - a._creationTime);
@@ -118,7 +130,12 @@ export const getCampaign = query({
   },
   returns: v.union(campaignValidator, v.null()),
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.campaignId);
+    const ownerId = await requireUser(ctx);
+    const campaign = await ctx.db.get(args.campaignId);
+    if (!campaign || campaign.ownerId !== ownerId) {
+      return null;
+    }
+    return campaign;
   },
 });
 
@@ -133,13 +150,22 @@ export const getCampaignPL = query({
     winningTrades: v.number(),
   }),
   handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const campaign = await ctx.db.get(args.campaignId);
+    assertOwner(campaign, ownerId, "Campaign not found");
+
     const tradePlans = await ctx.db
       .query("tradePlans")
-      .withIndex("by_campaignId", (q) => q.eq("campaignId", args.campaignId))
+      .withIndex("by_owner_campaignId", (q) =>
+        q.eq("ownerId", ownerId).eq("campaignId", args.campaignId),
+      )
       .collect();
     const tradePlanIds = new Set(tradePlans.map((plan) => plan._id));
 
-    const allTrades = await ctx.db.query("trades").collect();
+    const allTrades = await ctx.db
+      .query("trades")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
     const campaignTrades = allTrades.filter(
       (trade) => trade.tradePlanId && tradePlanIds.has(trade.tradePlanId),
     );
@@ -184,8 +210,9 @@ export const getCampaignPositionStatus = query({
     realizedPL: v.number(),
   }),
   handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
     const campaign = await ctx.db.get(args.campaignId);
-    if (!campaign) {
+    if (!campaign || campaign.ownerId !== ownerId) {
       return {
         isFullyClosed: false,
         positions: [],
@@ -195,11 +222,16 @@ export const getCampaignPositionStatus = query({
 
     const tradePlans = await ctx.db
       .query("tradePlans")
-      .withIndex("by_campaignId", (q) => q.eq("campaignId", args.campaignId))
+      .withIndex("by_owner_campaignId", (q) =>
+        q.eq("ownerId", ownerId).eq("campaignId", args.campaignId),
+      )
       .collect();
     const tradePlanIds = new Set(tradePlans.map((plan) => plan._id));
 
-    const allTrades = await ctx.db.query("trades").collect();
+    const allTrades = await ctx.db
+      .query("trades")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
     const campaignTrades = allTrades.filter(
       (trade) => trade.tradePlanId && tradePlanIds.has(trade.tradePlanId),
     );
