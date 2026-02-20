@@ -8,7 +8,7 @@ const portfolioSnapshotValidator = v.object({
   _id: v.id("portfolioSnapshots"),
   cashBalance: v.optional(v.number()),
   date: v.number(),
-  ownerId: v.optional(v.string()),
+  ownerId: v.string(),
   source: v.union(v.literal("manual"), v.literal("calculated"), v.literal("api")),
   totalValue: v.number(),
 });

@@ -8,7 +8,7 @@ const campaignValidator = v.object({
   _id: v.id("campaigns"),
   closedAt: v.optional(v.number()),
   name: v.string(),
-  ownerId: v.optional(v.string()),
+  ownerId: v.string(),
   retrospective: v.optional(v.string()),
   status: v.union(
     v.literal("active"),

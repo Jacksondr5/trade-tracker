@@ -5,13 +5,13 @@ export default defineSchema({
   campaignNotes: defineTable({
     campaignId: v.id("campaigns"),
     content: v.string(),
-    ownerId: v.optional(v.string()),
+    ownerId: v.string(),
   }).index("by_owner_campaignId", ["ownerId", "campaignId"]),
 
   campaigns: defineTable({
     closedAt: v.optional(v.number()),
     name: v.string(),
-    ownerId: v.optional(v.string()),
+    ownerId: v.string(),
     retrospective: v.optional(v.string()),
     status: v.union(
       v.literal("active"),
@@ -26,7 +26,7 @@ export default defineSchema({
   portfolioSnapshots: defineTable({
     cashBalance: v.optional(v.number()),
     date: v.number(),
-    ownerId: v.optional(v.string()),
+    ownerId: v.string(),
     source: v.union(
       v.literal("api"),
       v.literal("calculated"),
@@ -45,7 +45,7 @@ export default defineSchema({
     instrumentType: v.optional(v.string()),
     invalidatedAt: v.optional(v.number()),
     name: v.string(),
-    ownerId: v.optional(v.string()),
+    ownerId: v.string(),
     rationale: v.optional(v.string()),
     sortOrder: v.optional(v.number()),
     status: v.union(
@@ -65,7 +65,7 @@ export default defineSchema({
     date: v.number(),
     direction: v.union(v.literal("long"), v.literal("short")),
     notes: v.optional(v.string()),
-    ownerId: v.optional(v.string()),
+    ownerId: v.string(),
     price: v.number(),
     quantity: v.number(),
     side: v.union(v.literal("buy"), v.literal("sell")),
