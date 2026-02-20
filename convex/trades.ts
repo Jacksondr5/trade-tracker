@@ -10,7 +10,7 @@ const tradeWithPLValidator = v.object({
   date: v.number(),
   direction: v.union(v.literal("long"), v.literal("short")),
   notes: v.optional(v.string()),
-  ownerId: v.optional(v.string()),
+  ownerId: v.string(),
   price: v.number(),
   quantity: v.number(),
   realizedPL: v.union(v.number(), v.null()),

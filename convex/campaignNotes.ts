@@ -8,7 +8,7 @@ const campaignNoteValidator = v.object({
   _id: v.id("campaignNotes"),
   campaignId: v.id("campaigns"),
   content: v.string(),
-  ownerId: v.optional(v.string()),
+  ownerId: v.string(),
 });
 
 /**
