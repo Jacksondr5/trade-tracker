@@ -298,8 +298,8 @@ export default function CampaignDetailPageClient({
     tradePlanId: Id<"tradePlans">,
     status: TradePlanStatus,
   ) => {
+    setPlanError(null);
     try {
-      setPlanError(null);
       await updateTradePlanStatus({ tradePlanId, status });
     } catch (error) {
       setPlanError(error instanceof Error ? error.message : "Failed to update trade plan status");
@@ -551,7 +551,7 @@ export default function CampaignDetailPageClient({
                           <button
                             type="button"
                             className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-12 hover:bg-slate-700"
-                            onClick={() => setEditingPlanId(null)}
+                            onClick={() => { setEditingPlanId(null); setPlanError(null); }}
                           >
                             Cancel
                           </button>
@@ -672,7 +672,7 @@ export default function CampaignDetailPageClient({
               <button
                 type="button"
                 className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-700"
-                onClick={() => setShowCreateTradePlanForm(false)}
+                onClick={() => { setShowCreateTradePlanForm(false); setPlanError(null); }}
               >
                 Cancel
               </button>
