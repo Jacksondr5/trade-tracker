@@ -262,12 +262,11 @@ export default function TradesPageClient({
               <button
                 key={value}
                 onClick={() => handleQuickFilter(value)}
-                className={cn(
-                  "rounded px-3 py-1.5 text-sm font-medium transition-colors",
-                  isQuickFilterActive(value)
-                    ? "bg-blue-600 text-white"
-                    : "bg-slate-700 text-slate-300 hover:bg-slate-600",
-                )}
+                className={cn("rounded px-3 py-1.5 text-sm font-medium transition-colors", {
+                  "bg-blue-600 text-white": isQuickFilterActive(value),
+                  "bg-slate-700 text-slate-300 hover:bg-slate-600":
+                    !isQuickFilterActive(value),
+                })}
               >
                 {label}
               </button>
