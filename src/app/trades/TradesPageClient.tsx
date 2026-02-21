@@ -7,6 +7,11 @@ import { useMemo } from "react";
 import { Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import { formatCurrency, formatDate } from "~/lib/format";
+import { cn } from "~/lib/utils";
+import {
+  KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME,
+  isKrakenDefaultAccountId,
+} from "../../../shared/imports/constants";
 
 function formatPL(value: number): string {
   const formatted = new Intl.NumberFormat("en-US", {
@@ -91,9 +96,13 @@ function isQuickFilter(value: string): value is QuickFilter {
 }
 
 export default function TradesPageClient({
+  preloadedAccountMappings,
   preloadedTrades,
   preloadedTradePlans,
 }: {
+  preloadedAccountMappings: Preloaded<
+    typeof api.accountMappings.listAccountMappings
+  >;
   preloadedTrades: Preloaded<typeof api.trades.listTrades>;
   preloadedTradePlans: Preloaded<typeof api.tradePlans.listTradePlans>;
 }) {
@@ -101,6 +110,7 @@ export default function TradesPageClient({
   const searchParams = useSearchParams();
   const trades = usePreloadedQuery(preloadedTrades);
   const tradePlans = usePreloadedQuery(preloadedTradePlans);
+  const accountMappings = usePreloadedQuery(preloadedAccountMappings);
 
   // Get filter params from URL
   const startDateParam = searchParams.get("startDate");
@@ -115,6 +125,15 @@ export default function TradesPageClient({
   const tradePlanNameMap = useMemo(() => {
     return new Map(tradePlans.map((p) => [p._id, p.name]));
   }, [tradePlans]);
+
+  const accountNameByKey = useMemo(() => {
+    return new Map(
+      accountMappings.map((mapping) => [
+        `${mapping.source}|${mapping.accountId}`,
+        mapping.friendlyName,
+      ]),
+    );
+  }, [accountMappings]);
 
   // Calculate date range based on quick filter or custom dates
   const { startDate, endDate } = useMemo(() => {
@@ -152,7 +171,9 @@ export default function TradesPageClient({
     const parsedStartDate = startDateParam
       ? parseDateInputLocal(startDateParam)
       : null;
-    const parsedEndDate = endDateParam ? parseDateInputLocal(endDateParam) : null;
+    const parsedEndDate = endDateParam
+      ? parseDateInputLocal(endDateParam)
+      : null;
     const start = parsedStartDate ? getStartOfDay(parsedStartDate) : null;
     const end = parsedEndDate ? getEndOfDay(parsedEndDate) : null;
 
@@ -196,7 +217,7 @@ export default function TradesPageClient({
 
   const handleCustomDateChange = (
     type: "startDate" | "endDate",
-    value: string
+    value: string,
   ) => {
     const currentStart = startDateParam || "";
     const currentEnd = endDateParam || "";
@@ -241,11 +262,11 @@ export default function TradesPageClient({
               <button
                 key={value}
                 onClick={() => handleQuickFilter(value)}
-                className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
-                  isQuickFilterActive(value)
-                    ? "bg-blue-600 text-white"
-                    : "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                }`}
+                className={cn("rounded px-3 py-1.5 text-sm font-medium transition-colors", {
+                  "bg-blue-600 text-white": isQuickFilterActive(value),
+                  "bg-slate-700 text-slate-300 hover:bg-slate-600":
+                    !isQuickFilterActive(value),
+                })}
               >
                 {label}
               </button>
@@ -258,16 +279,20 @@ export default function TradesPageClient({
             <input
               type="date"
               value={startDateParam || ""}
-              onChange={(e) => handleCustomDateChange("startDate", e.target.value)}
-              className="rounded border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm text-slate-12 focus:border-blue-500 focus:outline-none"
+              onChange={(e) =>
+                handleCustomDateChange("startDate", e.target.value)
+              }
+              className="text-slate-12 rounded border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
               aria-label="Start date"
             />
             <span className="text-slate-11 text-sm">to</span>
             <input
               type="date"
               value={endDateParam || ""}
-              onChange={(e) => handleCustomDateChange("endDate", e.target.value)}
-              className="rounded border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm text-slate-12 focus:border-blue-500 focus:outline-none"
+              onChange={(e) =>
+                handleCustomDateChange("endDate", e.target.value)
+              }
+              className="text-slate-12 rounded border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
               aria-label="End date"
             />
           </div>
@@ -316,65 +341,94 @@ export default function TradesPageClient({
                 <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
                   Total
                 </th>
+                <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
+                  Account
+                </th>
                 <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
                   P&amp;L
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700 bg-slate-900">
-              {filteredTrades.map((trade) => (
-                <tr
-                  key={trade._id}
-                  className="hover:bg-slate-800/50"
-                  data-testid={`trade-row-${trade._id}`}
-                >
-                  <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-sm">
-                    {formatDate(trade.date)}
-                  </td>
-                  <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-sm font-medium">
-                    {trade.ticker}
-                  </td>
-                  <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
-                    {trade.tradePlanId
-                      ? tradePlanNameMap.get(trade.tradePlanId) ?? "—"
-                      : "—"}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-sm">
-                    <span
-                      className={`text-slate-12 rounded px-2 py-0.5 ${
-                        trade.side === "buy"
-                          ? "border border-green-700 bg-green-900/50"
-                          : "border border-red-700 bg-red-900/50"
-                      }`}
-                    >
-                      {trade.side.toUpperCase()}
-                    </span>
-                  </td>
-                  <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
-                    {trade.direction}
-                  </td>
-                  <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">
-                    {formatCurrency(trade.price)}
-                  </td>
-                  <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">
-                    {trade.quantity}
-                  </td>
-                  <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm font-medium">
-                    {formatCurrency(trade.price * trade.quantity)}
-                  </td>
-                  <td
-                    className={`whitespace-nowrap px-4 py-3 text-right text-sm font-medium ${
-                      trade.realizedPL === null
-                        ? "text-slate-11"
-                        : trade.realizedPL >= 0
-                          ? "text-green-400"
-                          : "text-red-400"
-                    }`}
+              {filteredTrades.map((trade) => {
+                let accountDisplay = "—";
+                if (
+                  trade.brokerageAccountId &&
+                  (trade.source === "ibkr" || trade.source === "kraken")
+                ) {
+                  const accountName = accountNameByKey.get(
+                    `${trade.source}|${trade.brokerageAccountId}`,
+                  );
+                  accountDisplay = accountName
+                    ? isKrakenDefaultAccountId(trade.brokerageAccountId)
+                      ? accountName
+                      : `${accountName} (${trade.brokerageAccountId})`
+                    : isKrakenDefaultAccountId(trade.brokerageAccountId)
+                      ? KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME
+                      : trade.brokerageAccountId;
+                }
+
+                return (
+                  <tr
+                    key={trade._id}
+                    className="hover:bg-slate-800/50"
+                    data-testid={`trade-row-${trade._id}`}
                   >
-                    {trade.realizedPL === null ? "—" : formatPL(trade.realizedPL)}
-                  </td>
-                </tr>
-              ))}
+                    <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-sm">
+                      {formatDate(trade.date)}
+                    </td>
+                    <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-sm font-medium">
+                      {trade.ticker}
+                    </td>
+                    <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
+                      {trade.tradePlanId
+                        ? (tradePlanNameMap.get(trade.tradePlanId) ?? "—")
+                        : "—"}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-sm">
+                      <span
+                        className={cn(
+                          "text-slate-12 rounded px-2 py-0.5",
+                          trade.side === "buy"
+                            ? "border border-green-700 bg-green-900/50"
+                            : "border border-red-700 bg-red-900/50",
+                        )}
+                      >
+                        {trade.side.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
+                      {trade.direction}
+                    </td>
+                    <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">
+                      {formatCurrency(trade.price)}
+                    </td>
+                    <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">
+                      {trade.quantity}
+                    </td>
+                    <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm font-medium">
+                      {formatCurrency(trade.price * trade.quantity)}
+                    </td>
+                    <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
+                      {accountDisplay}
+                    </td>
+                    <td
+                      className={cn(
+                        "whitespace-nowrap px-4 py-3 text-right text-sm font-medium",
+                        {
+                          "text-green-400": trade.realizedPL !== null && trade.realizedPL >= 0,
+                          "text-red-400": trade.realizedPL !== null && trade.realizedPL < 0,
+                          "text-slate-11": trade.realizedPL === null,
+                        },
+                      )}
+                    >
+                      {trade.realizedPL === null
+                        ? "—"
+                        : formatPL(trade.realizedPL)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

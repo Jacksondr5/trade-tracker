@@ -1,12 +1,15 @@
 "use client";
 
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import type { BrokerageSource } from "../../../shared/imports/types";
-import { EditTradeForm, type EditTradeFormValues } from "./components/edit-trade-form";
+import {
+  EditTradeForm,
+  type EditTradeFormValues,
+} from "./components/edit-trade-form";
 import { InboxTable } from "./components/inbox-table";
 import { UploadSection } from "./components/upload-section";
 import { useImportUpload } from "./hooks/use-import-upload";
@@ -25,22 +28,40 @@ const DEFAULT_EDIT_VALUES: EditTradeFormValues = {
 };
 
 export default function ImportsPageClient({
+  preloadedAccountMappings,
   preloadedInboxTrades,
   preloadedOpenTradePlans,
 }: {
+  preloadedAccountMappings: Preloaded<
+    typeof api.accountMappings.listAccountMappings
+  >;
   preloadedInboxTrades: Preloaded<typeof api.imports.listInboxTrades>;
   preloadedOpenTradePlans: Preloaded<typeof api.tradePlans.listOpenTradePlans>;
 }) {
   const [brokerage, setBrokerage] = useState<BrokerageSource>("ibkr");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const [editingTradeId, setEditingTradeId] = useState<Id<"inboxTrades"> | null>(null);
+  const [editingTradeId, setEditingTradeId] =
+    useState<Id<"inboxTrades"> | null>(null);
   const [editInitialValues, setEditInitialValues] =
     useState<EditTradeFormValues>(DEFAULT_EDIT_VALUES);
 
   const inboxTrades = usePreloadedQuery(preloadedInboxTrades);
   const openTradePlansRaw = usePreloadedQuery(preloadedOpenTradePlans);
-  const openTradePlans = (openTradePlansRaw ?? undefined) as OpenTradePlanOption[] | undefined;
+  const accountMappings = usePreloadedQuery(preloadedAccountMappings);
+  const openTradePlans = (openTradePlansRaw ?? undefined) as
+    | OpenTradePlanOption[]
+    | undefined;
+  const accountLabelByKey = useMemo(
+    () =>
+      new Map(
+        accountMappings.map((mapping) => [
+          `${mapping.source}|${mapping.accountId}`,
+          mapping.friendlyName,
+        ]),
+      ),
+    [accountMappings],
+  );
 
   const importTradesMutation = useMutation(api.imports.importTrades);
   const acceptTrade = useMutation(api.imports.acceptTrade);
@@ -49,26 +70,36 @@ export default function ImportsPageClient({
   const deleteAllInboxTrades = useMutation(api.imports.deleteAllInboxTrades);
   const updateInboxTrade = useMutation(api.imports.updateInboxTrade);
 
-  const { importResult, isImporting, setImportResult, handleFileChange } = useImportUpload({
-    brokerage,
-    importTrades: importTradesMutation,
-    setErrorMessage,
-  });
+  const { importResult, isImporting, setImportResult, handleFileChange } =
+    useImportUpload({
+      brokerage,
+      importTrades: importTradesMutation,
+      setErrorMessage,
+    });
 
-  const { inlineNotes, inlineTradePlanIds, setInlineNotes, setInlineTradePlanIds } =
-    useInlineInboxEdits(inboxTrades as InboxTrade[] | undefined);
+  const {
+    inlineNotes,
+    inlineTradePlanIds,
+    setInlineNotes,
+    setInlineTradePlanIds,
+  } = useInlineInboxEdits(inboxTrades as InboxTrade[] | undefined);
 
   const onBrokerageChange = (value: BrokerageSource) => {
     setBrokerage(value);
     setImportResult(null);
   };
 
-  const persistTradePlanSelection = (inboxTradeId: Id<"inboxTrades">, value: string) => {
+  const persistTradePlanSelection = (
+    inboxTradeId: Id<"inboxTrades">,
+    value: string,
+  ) => {
     void updateInboxTrade({
       inboxTradeId,
       tradePlanId: value ? (value as Id<"tradePlans">) : null,
     }).catch((error) => {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to update trade plan");
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to update trade plan",
+      );
     });
   };
 
@@ -77,7 +108,9 @@ export default function ImportsPageClient({
       inboxTradeId,
       notes: value || null,
     }).catch((error) => {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to update notes");
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to update notes",
+      );
     });
   };
 
@@ -121,7 +154,9 @@ export default function ImportsPageClient({
       setEditingTradeId(null);
       setEditInitialValues(DEFAULT_EDIT_VALUES);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to save edit");
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to save edit",
+      );
     }
   };
 
@@ -136,13 +171,17 @@ export default function ImportsPageClient({
       inboxTradeId,
       notes: notesValue,
       tradePlanId: tradePlanId ? (tradePlanId as Id<"tradePlans">) : undefined,
-    }).then((result) => {
-      if (!result.accepted && result.error) {
-        setErrorMessage(result.error);
-      }
-    }).catch((error) => {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to accept trade");
-    });
+    })
+      .then((result) => {
+        if (!result.accepted && result.error) {
+          setErrorMessage(result.error);
+        }
+      })
+      .catch((error) => {
+        setErrorMessage(
+          error instanceof Error ? error.message : "Failed to accept trade",
+        );
+      });
   };
 
   const handleAcceptAll = async () => {
@@ -152,7 +191,8 @@ export default function ImportsPageClient({
           inboxTrades.map((trade) => {
             const selected = inlineTradePlanIds[trade._id] ?? "";
             const notes = inlineNotes[trade._id] ?? "";
-            const tradePlanChanged = selected !== (trade.tradePlanId ? String(trade.tradePlanId) : "");
+            const tradePlanChanged =
+              selected !== (trade.tradePlanId ? String(trade.tradePlanId) : "");
             const notesChanged = notes !== (trade.notes ?? "");
             if (!tradePlanChanged && !notesChanged) return Promise.resolve();
 
@@ -168,20 +208,26 @@ export default function ImportsPageClient({
       const result = await acceptAllTrades();
       const messages: string[] = [];
       if (result.accepted > 0) messages.push(`Accepted ${result.accepted}`);
-      if (result.skippedInvalid > 0) messages.push(`${result.skippedInvalid} need review`);
-      if (result.errors.length > 0) messages.push(`Errors: ${result.errors.slice(0, 3).join("; ")}`);
+      if (result.skippedInvalid > 0)
+        messages.push(`${result.skippedInvalid} need review`);
+      if (result.errors.length > 0)
+        messages.push(`Errors: ${result.errors.slice(0, 3).join("; ")}`);
 
       if (result.skippedInvalid > 0 || result.errors.length > 0) {
         setErrorMessage(messages.join(". "));
       }
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Accept all failed");
+      setErrorMessage(
+        error instanceof Error ? error.message : "Accept all failed",
+      );
     }
   };
 
   const handleDeleteAll = () => {
     void deleteAllInboxTrades().catch((error) => {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to delete all trades");
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to delete all trades",
+      );
     });
   };
 
@@ -203,16 +249,26 @@ export default function ImportsPageClient({
           <h2 className="text-slate-12 text-lg font-semibold">
             Inbox
             {inboxTrades && inboxTrades.length > 0 && (
-              <span className="ml-2 text-sm font-normal text-slate-400">({inboxTrades.length} pending)</span>
+              <span className="ml-2 text-sm font-normal text-slate-400">
+                ({inboxTrades.length} pending)
+              </span>
             )}
           </h2>
 
           {inboxTrades && inboxTrades.length > 0 && (
             <div className="flex gap-2">
-              <Button dataTestId="accept-all-trades-button" onClick={() => void handleAcceptAll()} variant="outline">
+              <Button
+                dataTestId="accept-all-trades-button"
+                onClick={() => void handleAcceptAll()}
+                variant="outline"
+              >
                 Accept All ({inboxTrades.length})
               </Button>
-              <Button dataTestId="delete-all-trades-button" onClick={handleDeleteAll} variant="outline">
+              <Button
+                dataTestId="delete-all-trades-button"
+                onClick={handleDeleteAll}
+                variant="outline"
+              >
                 Delete All
               </Button>
             </div>
@@ -232,6 +288,7 @@ export default function ImportsPageClient({
         )}
 
         <InboxTable
+          accountLabelByKey={accountLabelByKey}
           editingTradeId={editingTradeId}
           inlineNotes={inlineNotes}
           inlineTradePlanIds={inlineTradePlanIds}
@@ -239,7 +296,11 @@ export default function ImportsPageClient({
           onAccept={handleAccept}
           onDelete={(inboxTradeId) => {
             void deleteInboxTrade({ inboxTradeId }).catch((error) => {
-              setErrorMessage(error instanceof Error ? error.message : "Failed to delete trade");
+              setErrorMessage(
+                error instanceof Error
+                  ? error.message
+                  : "Failed to delete trade",
+              );
             });
           }}
           onEdit={handleEdit}

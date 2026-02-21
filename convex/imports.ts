@@ -4,6 +4,7 @@ import { assertOwner, requireUser } from "./lib/auth";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { validateInboxTradeCandidate } from "../shared/imports/validation";
+import { KRAKEN_DEFAULT_ACCOUNT_ID } from "../shared/imports/constants";
 
 type CanonicalCandidate = {
   assetType: "stock" | "crypto";
@@ -33,9 +34,7 @@ const inboxTradeValidator = v.object({
   quantity: v.optional(v.number()),
   side: v.optional(v.union(v.literal("buy"), v.literal("sell"))),
   source: sourceValidator,
-  status: v.union(
-    v.literal("pending_review"),
-  ),
+  status: v.union(v.literal("pending_review")),
   taxes: v.optional(v.number()),
   ticker: v.optional(v.string()),
   tradePlanId: v.optional(v.id("tradePlans")),
@@ -45,6 +44,17 @@ const inboxTradeValidator = v.object({
 
 function dedupKey(source: "ibkr" | "kraken", externalId: string): string {
   return `${source}|${externalId}`;
+}
+
+function normalizeBrokerageAccountId(
+  source: "ibkr" | "kraken",
+  accountId: string | undefined,
+): string | undefined {
+  const normalizedAccountId = accountId?.trim() || undefined;
+  if (source === "kraken") {
+    return normalizedAccountId ?? KRAKEN_DEFAULT_ACCOUNT_ID;
+  }
+  return normalizedAccountId;
 }
 
 async function acceptInboxTradeInternal(
@@ -57,7 +67,11 @@ async function acceptInboxTradeInternal(
   },
 ): Promise<{ accepted: boolean; error?: string }> {
   const rawInboxTrade = await ctx.db.get(inboxTradeId);
-  const inboxTrade = assertOwner(rawInboxTrade, ownerId, "Inbox trade not found");
+  const inboxTrade = assertOwner(
+    rawInboxTrade,
+    ownerId,
+    "Inbox trade not found",
+  );
 
   if (inboxTrade.status !== "pending_review") {
     return { accepted: false, error: "Trade is not pending review" };
@@ -95,7 +109,10 @@ async function acceptInboxTradeInternal(
 
   await ctx.db.insert("trades", {
     assetType: candidate.assetType,
-    brokerageAccountId: inboxTrade.brokerageAccountId,
+    brokerageAccountId: normalizeBrokerageAccountId(
+      inboxTrade.source,
+      inboxTrade.brokerageAccountId,
+    ),
     date: candidate.date,
     direction: candidate.direction,
     externalId: inboxTrade.externalId,
@@ -164,13 +181,21 @@ export const importTrades = mutation({
     const existingExternalIds = new Set<string>([
       ...existingTrades
         .filter(
-          (t): t is typeof t & { externalId: string; source: "ibkr" | "kraken" } =>
+          (
+            t,
+          ): t is typeof t & {
+            externalId: string;
+            source: "ibkr" | "kraken";
+          } =>
             t.externalId !== undefined &&
             (t.source === "ibkr" || t.source === "kraken"),
         )
         .map((t) => dedupKey(t.source, t.externalId)),
       ...existingPendingInboxTrades
-        .filter((t): t is typeof t & { externalId: string } => t.externalId !== undefined)
+        .filter(
+          (t): t is typeof t & { externalId: string } =>
+            t.externalId !== undefined,
+        )
         .map((t) => dedupKey(t.source, t.externalId)),
     ]);
 
@@ -180,6 +205,11 @@ export const importTrades = mutation({
     let withWarnings = 0;
 
     for (const trade of args.trades) {
+      const brokerageAccountId = normalizeBrokerageAccountId(
+        trade.source,
+        trade.brokerageAccountId,
+      );
+
       if (trade.externalId) {
         const key = dedupKey(trade.source, trade.externalId);
         if (existingExternalIds.has(key)) {
@@ -205,7 +235,7 @@ export const importTrades = mutation({
 
       await ctx.db.insert("inboxTrades", {
         assetType: trade.assetType,
-        brokerageAccountId: trade.brokerageAccountId,
+        brokerageAccountId,
         date: trade.date,
         direction: trade.direction,
         externalId: trade.externalId,
@@ -244,7 +274,9 @@ export const listInboxTrades = query({
       )
       .collect();
 
-    return trades.sort((a, b) => (b.date ?? b._creationTime) - (a.date ?? a._creationTime));
+    return trades.sort(
+      (a, b) => (b.date ?? b._creationTime) - (a.date ?? a._creationTime),
+    );
   },
 });
 
@@ -288,7 +320,12 @@ export const acceptAllTrades = mutation({
     const errors: string[] = [];
 
     for (const trade of pendingTrades) {
-      const result = await acceptInboxTradeInternal(ctx, ownerId, trade._id, {});
+      const result = await acceptInboxTradeInternal(
+        ctx,
+        ownerId,
+        trade._id,
+        {},
+      );
       if (result.accepted) {
         accepted++;
       } else {
@@ -341,9 +378,13 @@ export const deleteAllInboxTrades = mutation({
 
 export const updateInboxTrade = mutation({
   args: {
-    assetType: v.optional(v.union(v.literal("stock"), v.literal("crypto"), v.null())),
+    assetType: v.optional(
+      v.union(v.literal("stock"), v.literal("crypto"), v.null()),
+    ),
     date: v.optional(v.union(v.number(), v.null())),
-    direction: v.optional(v.union(v.literal("long"), v.literal("short"), v.null())),
+    direction: v.optional(
+      v.union(v.literal("long"), v.literal("short"), v.null()),
+    ),
     inboxTradeId: v.id("inboxTrades"),
     notes: v.optional(v.union(v.string(), v.null())),
     price: v.optional(v.union(v.number(), v.null())),
@@ -368,15 +409,20 @@ export const updateInboxTrade = mutation({
     }
 
     const patch: Record<string, unknown> = {};
-    if (updates.direction !== undefined) patch.direction = updates.direction ?? undefined;
-    if (updates.assetType !== undefined) patch.assetType = updates.assetType ?? undefined;
+    if (updates.direction !== undefined)
+      patch.direction = updates.direction ?? undefined;
+    if (updates.assetType !== undefined)
+      patch.assetType = updates.assetType ?? undefined;
     if (updates.date !== undefined) patch.date = updates.date ?? undefined;
     if (updates.notes !== undefined) patch.notes = updates.notes ?? undefined;
     if (updates.price !== undefined) patch.price = updates.price ?? undefined;
-    if (updates.quantity !== undefined) patch.quantity = updates.quantity ?? undefined;
+    if (updates.quantity !== undefined)
+      patch.quantity = updates.quantity ?? undefined;
     if (updates.side !== undefined) patch.side = updates.side ?? undefined;
     if (updates.ticker !== undefined) {
-      patch.ticker = updates.ticker ? updates.ticker.trim().toUpperCase() : undefined;
+      patch.ticker = updates.ticker
+        ? updates.ticker.trim().toUpperCase()
+        : undefined;
     }
     if (updates.tradePlanId !== undefined) {
       patch.tradePlanId = updates.tradePlanId ?? undefined;

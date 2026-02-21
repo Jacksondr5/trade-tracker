@@ -6,13 +6,16 @@ import TradesPageClient from "./TradesPageClient";
 export default async function TradesPage() {
   const token = await getConvexTokenOrThrow();
 
-  const [preloadedTrades, preloadedTradePlans] = await Promise.all([
-    preloadQuery(api.trades.listTrades, {}, { token }),
-    preloadQuery(api.tradePlans.listTradePlans, {}, { token }),
-  ]);
+  const [preloadedTrades, preloadedTradePlans, preloadedAccountMappings] =
+    await Promise.all([
+      preloadQuery(api.trades.listTrades, {}, { token }),
+      preloadQuery(api.tradePlans.listTradePlans, {}, { token }),
+      preloadQuery(api.accountMappings.listAccountMappings, {}, { token }),
+    ]);
 
   return (
     <TradesPageClient
+      preloadedAccountMappings={preloadedAccountMappings}
       preloadedTrades={preloadedTrades}
       preloadedTradePlans={preloadedTradePlans}
     />
