@@ -238,7 +238,9 @@ export default function ImportsPageClient({
           inboxTrades={inboxTrades as InboxTrade[] | undefined}
           onAccept={handleAccept}
           onDelete={(inboxTradeId) => {
-            void deleteInboxTrade({ inboxTradeId });
+            void deleteInboxTrade({ inboxTradeId }).catch((error) => {
+              setErrorMessage(error instanceof Error ? error.message : "Failed to delete trade");
+            });
           }}
           onEdit={handleEdit}
           onInlineNotesBlur={persistNotes}
