@@ -4,7 +4,7 @@
 
 **Goal:** Add inline editing to the trades table so users can edit any trade directly from the `/trades` page.
 
-**Architecture:** A new `EditTradeForm` component renders inside an expanded table row below the trade being edited. `TradesPageClient` manages which trade is being edited via state. The existing `updateTrade` Convex mutation handles persistence — no backend changes needed.
+**Architecture:** A new `EditTradeForm` component renders inside an expanded table row below the trade being edited, while `TradesPageClient` manages editing state; persistence is handled by the new Convex `updateTrade` mutation called by `EditTradeForm`.
 
 **Tech Stack:** React, TanStack React Form (`useAppForm`), Zod validation, Convex `useMutation`, Tailwind CSS
 
@@ -105,8 +105,8 @@ export function EditTradeForm({
           date: new Date(parsed.date).getTime(),
           direction: parsed.direction,
           notes: parsed.notes || undefined,
-          price: parseFloat(parsed.price),
-          quantity: parseFloat(parsed.quantity),
+          price: parseFloat(parsed.price.trim()),
+          quantity: parseFloat(parsed.quantity.trim()),
           side: parsed.side,
           ticker: parsed.ticker.toUpperCase(),
           tradeId,
