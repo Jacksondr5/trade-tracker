@@ -119,12 +119,16 @@ export const listInboxTrades = query({
         q.eq("ownerId", ownerId).eq("inboxStatus", "pending_review"),
       )
       .collect();
-    return trades.sort((a, b) => b.date - a.date);
+    return trades.sort((a, b) => a.date - b.date);
   },
 });
 
 export const acceptTrade = mutation({
-  args: { tradeId: v.id("trades") },
+  args: {
+    notes: v.optional(v.string()),
+    tradePlanId: v.optional(v.id("tradePlans")),
+    tradeId: v.id("trades"),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
@@ -133,7 +137,16 @@ export const acceptTrade = mutation({
     if (trade.inboxStatus !== "pending_review") {
       throw new Error("Trade is not pending review");
     }
-    await ctx.db.patch(args.tradeId, { inboxStatus: "accepted" });
+
+    const patch: Record<string, unknown> = { inboxStatus: "accepted" };
+    if (args.notes !== undefined) patch.notes = args.notes;
+    if (args.tradePlanId !== undefined) {
+      const tradePlan = await ctx.db.get(args.tradePlanId);
+      assertOwner(tradePlan, ownerId, "Trade plan not found");
+      patch.tradePlanId = args.tradePlanId;
+    }
+
+    await ctx.db.patch(args.tradeId, patch);
     return null;
   },
 });

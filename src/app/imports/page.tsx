@@ -1,13 +1,14 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Card } from "~/components/ui";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { parseIBKRCSV } from "~/lib/imports/ibkr-parser";
 import { parseKrakenCSV } from "~/lib/imports/kraken-parser";
-import type { BrokerageSource, ParseResult } from "~/lib/imports/types";
+import type { BrokerageSource } from "~/lib/imports/types";
+import { Check, Pencil, Trash2 } from "lucide-react";
 
 function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString("en-US", {
@@ -29,7 +30,6 @@ function formatCurrency(value: number): string {
 export default function ImportsPage() {
   // Upload state
   const [brokerage, setBrokerage] = useState<BrokerageSource>("ibkr");
-  const [parseResult, setParseResult] = useState<ParseResult | null>(null);
   const [importResult, setImportResult] = useState<{
     imported: number;
     skipped: number;
@@ -45,12 +45,41 @@ export default function ImportsPage() {
   const [editAssetType, setEditAssetType] = useState<"stock" | "crypto">(
     "stock",
   );
-  const [editNotes, setEditNotes] = useState("");
-  const [editTradePlanId, setEditTradePlanId] = useState("");
+
+  // Inline edit state (per-row)
+  const [inlineNotes, setInlineNotes] = useState<Record<string, string>>({});
+  const [inlineTradePlanIds, setInlineTradePlanIds] = useState<
+    Record<string, string>
+  >({});
 
   // Queries
   const inboxTrades = useQuery(api.imports.listInboxTrades);
   const openTradePlans = useQuery(api.tradePlans.listOpenTradePlans);
+
+  // Initialize inline state from loaded inbox trades
+  useEffect(() => {
+    if (!inboxTrades) return;
+    setInlineNotes((prev) => {
+      const next = { ...prev };
+      for (const trade of inboxTrades) {
+        if (!(trade._id in next)) {
+          next[trade._id] = trade.notes ?? "";
+        }
+      }
+      return next;
+    });
+    setInlineTradePlanIds((prev) => {
+      const next = { ...prev };
+      for (const trade of inboxTrades) {
+        if (!(trade._id in next)) {
+          next[trade._id] = trade.tradePlanId
+            ? (trade.tradePlanId as string)
+            : "";
+        }
+      }
+      return next;
+    });
+  }, [inboxTrades]);
 
   // Mutations
   const importTradesMutation = useMutation(api.imports.importTrades);
@@ -60,46 +89,45 @@ export default function ImportsPage() {
   const deleteAllInboxTrades = useMutation(api.imports.deleteAllInboxTrades);
   const updateInboxTrade = useMutation(api.imports.updateInboxTrade);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setImportResult(null);
     setImportError(null);
+    setIsImporting(true);
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      const result =
+    try {
+      const content = await file.text();
+      const parseResult =
         brokerage === "ibkr"
           ? parseIBKRCSV(content)
           : parseKrakenCSV(content);
-      setParseResult(result);
-    };
-    reader.readAsText(file);
-  };
 
-  const handleImport = async () => {
-    if (!parseResult || parseResult.trades.length === 0) return;
-    setIsImporting(true);
-    setImportError(null);
-    try {
+      if (parseResult.trades.length === 0) {
+        setImportError(
+          parseResult.errors.length > 0
+            ? `No trades parsed. Errors: ${parseResult.errors.slice(0, 3).join("; ")}`
+            : "No trades found in CSV.",
+        );
+        return;
+      }
+
       const result = await importTradesMutation({
         trades: parseResult.trades,
       });
       setImportResult(result);
-      setParseResult(null);
-      // Reset file input
-      const fileInput = document.getElementById(
-        "csv-file-input",
-      ) as HTMLInputElement;
-      if (fileInput) fileInput.value = "";
     } catch (error) {
       setImportError(
         error instanceof Error ? error.message : "Import failed",
       );
     } finally {
       setIsImporting(false);
+      // Reset file input
+      const fileInput = document.getElementById(
+        "csv-file-input",
+      ) as HTMLInputElement;
+      if (fileInput) fileInput.value = "";
     }
   };
 
@@ -107,10 +135,6 @@ export default function ImportsPage() {
     setEditingTradeId(trade._id);
     setEditDirection(trade.direction);
     setEditAssetType(trade.assetType);
-    setEditNotes(trade.notes || "");
-    setEditTradePlanId(
-      trade.tradePlanId ? (trade.tradePlanId as string) : "",
-    );
   };
 
   const handleSaveEdit = async () => {
@@ -119,16 +143,24 @@ export default function ImportsPage() {
       await updateInboxTrade({
         assetType: editAssetType,
         direction: editDirection,
-        notes: editNotes || undefined,
-        tradePlanId: editTradePlanId
-          ? (editTradePlanId as Id<"tradePlans">)
-          : undefined,
         tradeId: editingTradeId,
       });
       setEditingTradeId(null);
     } catch (error) {
       console.error("Failed to update trade:", error);
     }
+  };
+
+  const handleAccept = (tradeId: Id<"trades">) => {
+    const notes = inlineNotes[tradeId] || undefined;
+    const tradePlanId = inlineTradePlanIds[tradeId] || undefined;
+    void acceptTrade({
+      notes,
+      tradePlanId: tradePlanId
+        ? (tradePlanId as Id<"tradePlans">)
+        : undefined,
+      tradeId,
+    });
   };
 
   return (
@@ -156,7 +188,6 @@ export default function ImportsPage() {
                 value={brokerage}
                 onChange={(e) => {
                   setBrokerage(e.target.value as BrokerageSource);
-                  setParseResult(null);
                   setImportResult(null);
                 }}
                 className="text-slate-12 h-9 rounded-md border border-slate-600 bg-slate-700 px-3 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-slate-500"
@@ -176,55 +207,14 @@ export default function ImportsPage() {
                 id="csv-file-input"
                 type="file"
                 accept=".csv"
-                onChange={handleFileChange}
+                onChange={(e) => void handleFileChange(e)}
                 className="text-slate-12 text-sm file:mr-4 file:rounded-md file:border file:border-slate-600 file:bg-slate-700 file:px-3 file:py-1.5 file:text-sm file:text-slate-300 file:hover:bg-slate-600"
               />
             </div>
+            {isImporting && (
+              <div className="text-slate-11 text-sm">Importing...</div>
+            )}
           </div>
-
-          {/* Parse Preview */}
-          {parseResult && (
-            <div className="rounded-md border border-slate-600 bg-slate-700 p-4">
-              <p className="text-slate-12 text-sm">
-                Parsed{" "}
-                <span className="font-semibold">
-                  {parseResult.trades.length}
-                </span>{" "}
-                trade{parseResult.trades.length !== 1 ? "s" : ""} from{" "}
-                {brokerage.toUpperCase()} CSV.
-              </p>
-              {parseResult.errors.length > 0 && (
-                <div className="mt-2">
-                  <p className="text-sm text-yellow-400">
-                    {parseResult.errors.length} row(s) had errors:
-                  </p>
-                  <ul className="mt-1 list-inside list-disc text-xs text-yellow-300">
-                    {parseResult.errors.slice(0, 5).map((err, i) => (
-                      <li key={i}>{err}</li>
-                    ))}
-                    {parseResult.errors.length > 5 && (
-                      <li>
-                        ...and {parseResult.errors.length - 5} more
-                      </li>
-                    )}
-                  </ul>
-                </div>
-              )}
-              <div className="mt-3">
-                <Button
-                  dataTestId="import-trades-button"
-                  onClick={() => void handleImport()}
-                  disabled={
-                    isImporting || parseResult.trades.length === 0
-                  }
-                >
-                  {isImporting
-                    ? "Importing..."
-                    : `Import ${parseResult.trades.length} Trade${parseResult.trades.length !== 1 ? "s" : ""}`}
-                </Button>
-              </div>
-            </div>
-          )}
 
           {/* Import Result */}
           {importResult && (
@@ -325,35 +315,6 @@ export default function ImportsPage() {
                   <option value="crypto">Crypto</option>
                 </select>
               </div>
-              <div>
-                <label className="text-slate-12 mb-1 block text-xs font-medium">
-                  Trade Plan
-                </label>
-                <select
-                  value={editTradePlanId}
-                  onChange={(e) => setEditTradePlanId(e.target.value)}
-                  className="text-slate-12 h-8 rounded border border-slate-600 bg-slate-700 px-2 text-sm"
-                >
-                  <option value="">None</option>
-                  {openTradePlans?.map((plan) => (
-                    <option key={plan._id} value={plan._id}>
-                      {plan.name} ({plan.instrumentSymbol})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex-1">
-                <label className="text-slate-12 mb-1 block text-xs font-medium">
-                  Notes
-                </label>
-                <input
-                  type="text"
-                  value={editNotes}
-                  onChange={(e) => setEditNotes(e.target.value)}
-                  placeholder="Optional notes..."
-                  className="text-slate-12 h-8 w-full rounded border border-slate-600 bg-slate-700 px-2 text-sm"
-                />
-              </div>
               <div className="flex gap-2">
                 <Button dataTestId="save-edit-button" onClick={() => void handleSaveEdit()}>
                   Save
@@ -402,14 +363,17 @@ export default function ImportsPage() {
                   <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
                     Qty
                   </th>
-                  <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
-                    Type
-                  </th>
-                  <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
-                    Source
+                  <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
+                    Value
                   </th>
                   <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
                     Account
+                  </th>
+                  <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
+                    Trade Plan
+                  </th>
+                  <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
+                    Notes
                   </th>
                   <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
                     Actions
@@ -420,7 +384,7 @@ export default function ImportsPage() {
                 {inboxTrades.map((trade) => (
                   <tr
                     key={trade._id}
-                    className={`hover:bg-slate-800/50 ${editingTradeId === trade._id ? "bg-slate-800/30" : ""}`}
+                    className={`hover:bg-slate-800/50 ${editingTradeId === trade._id ? "ring-2 ring-blue-500 bg-blue-900/20" : ""}`}
                   >
                     <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-sm">
                       {formatDate(trade.date)}
@@ -439,8 +403,16 @@ export default function ImportsPage() {
                         {trade.side.toUpperCase()}
                       </span>
                     </td>
-                    <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
-                      {trade.direction}
+                    <td className="whitespace-nowrap px-4 py-3 text-sm">
+                      <span
+                        className={`text-slate-12 rounded px-2 py-0.5 ${
+                          trade.direction === "long"
+                            ? "border border-blue-700 bg-blue-900/50"
+                            : "border border-red-700 bg-red-900/50"
+                        }`}
+                      >
+                        {trade.direction.toUpperCase()}
+                      </span>
                     </td>
                     <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">
                       {formatCurrency(trade.price)}
@@ -448,32 +420,60 @@ export default function ImportsPage() {
                     <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">
                       {trade.quantity}
                     </td>
-                    <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
-                      {trade.assetType}
-                    </td>
-                    <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
-                      {trade.source?.toUpperCase() ?? "---"}
+                    <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">
+                      {formatCurrency(trade.price * trade.quantity)}
                     </td>
                     <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
                       {trade.brokerageAccountId || "---"}
                     </td>
+                    <td className="px-4 py-3 text-sm">
+                      <select
+                        value={inlineTradePlanIds[trade._id] ?? ""}
+                        onChange={(e) =>
+                          setInlineTradePlanIds((prev) => ({
+                            ...prev,
+                            [trade._id]: e.target.value,
+                          }))
+                        }
+                        className="text-slate-12 h-7 w-full min-w-[120px] rounded border border-slate-600 bg-slate-700 px-1 text-xs"
+                      >
+                        <option value="">None</option>
+                        {openTradePlans?.map((plan) => (
+                          <option key={plan._id} value={plan._id}>
+                            {plan.name} ({plan.instrumentSymbol})
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      <input
+                        type="text"
+                        value={inlineNotes[trade._id] ?? ""}
+                        onChange={(e) =>
+                          setInlineNotes((prev) => ({
+                            ...prev,
+                            [trade._id]: e.target.value,
+                          }))
+                        }
+                        placeholder="Notes..."
+                        className="text-slate-12 h-7 w-full min-w-[120px] rounded border border-slate-600 bg-slate-700 px-2 text-xs"
+                      />
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
                       <div className="flex justify-end gap-1">
                         <button
-                          onClick={() =>
-                            void acceptTrade({
-                              tradeId: trade._id,
-                            })
-                          }
-                          className="rounded px-2 py-1 text-xs text-green-400 hover:bg-green-900/50"
+                          onClick={() => handleAccept(trade._id)}
+                          className="rounded p-1.5 text-green-400 hover:bg-green-900/50"
+                          title="Accept"
                         >
-                          Accept
+                          <Check className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => handleEdit(trade)}
-                          className="rounded px-2 py-1 text-xs text-blue-400 hover:bg-blue-900/50"
+                          className="rounded p-1.5 text-blue-400 hover:bg-blue-900/50"
+                          title="Edit"
                         >
-                          Edit
+                          <Pencil className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() =>
@@ -481,9 +481,10 @@ export default function ImportsPage() {
                               tradeId: trade._id,
                             })
                           }
-                          className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-900/50"
+                          className="rounded p-1.5 text-red-400 hover:bg-red-900/50"
+                          title="Delete"
                         >
-                          Delete
+                          <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
                     </td>
