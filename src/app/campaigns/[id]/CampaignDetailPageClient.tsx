@@ -299,6 +299,7 @@ export default function CampaignDetailPageClient({
     status: TradePlanStatus,
   ) => {
     try {
+      setPlanError(null);
       await updateTradePlanStatus({ tradePlanId, status });
     } catch (error) {
       setPlanError(error instanceof Error ? error.message : "Failed to update trade plan status");

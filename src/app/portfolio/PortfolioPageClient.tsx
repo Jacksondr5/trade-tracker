@@ -20,7 +20,12 @@ function getTodayDateString(): string {
  */
 function parseDateInputLocal(dateString: string): Date {
   const [year, month, day] = dateString.split("-").map(Number);
-  return new Date(year, month - 1, day);
+  const date = new Date(year, month - 1, day);
+  // Validate that the date components round-trip correctly (catches overflow like Feb 31 → Mar 3)
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    throw new Error(`Invalid date: ${dateString}`);
+  }
+  return date;
 }
 
 export default function PortfolioPageClient({
