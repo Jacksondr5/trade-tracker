@@ -9,6 +9,7 @@ export {
   CardTitle,
 } from "./card";
 export { FieldInput } from "./field-input";
+export { FieldSelect, type FieldSelectOption } from "./field-select";
 export { FieldTextarea } from "./field-textarea";
 export { fieldContext, formContext, useFieldContext, useFormContext } from "./form-contexts";
 export { FormErrorMessage, type FormErrorMessageProps } from "./form-error-message";

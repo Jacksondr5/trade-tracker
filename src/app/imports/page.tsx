@@ -29,7 +29,8 @@ export default function ImportsPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [editingTradeId, setEditingTradeId] = useState<Id<"inboxTrades"> | null>(null);
-  const [editValues, setEditValues] = useState<EditTradeFormValues>(DEFAULT_EDIT_VALUES);
+  const [editInitialValues, setEditInitialValues] =
+    useState<EditTradeFormValues>(DEFAULT_EDIT_VALUES);
 
   const inboxTrades = useQuery(api.imports.listInboxTrades);
   const openTradePlansRaw = useQuery(api.tradePlans.listOpenTradePlans);
@@ -76,7 +77,7 @@ export default function ImportsPage() {
 
   const handleEdit = (trade: InboxTrade) => {
     setEditingTradeId(trade._id);
-    setEditValues({
+    setEditInitialValues({
       assetType: trade.assetType ?? "stock",
       date: toDateTimeLocalValue(trade.date),
       direction: trade.direction ?? "long",
@@ -87,59 +88,32 @@ export default function ImportsPage() {
     });
   };
 
-  const handleEditChange = (field: keyof EditTradeFormValues, value: string) => {
-    setEditValues((prev) => {
-      if (field === "assetType") {
-        return {
-          ...prev,
-          assetType: value === "crypto" ? "crypto" : "stock",
-        };
-      }
-      if (field === "direction") {
-        return {
-          ...prev,
-          direction: value === "short" ? "short" : "long",
-        };
-      }
-      if (field === "side") {
-        return {
-          ...prev,
-          side: value === "buy" || value === "sell" ? value : "",
-        };
-      }
-      return {
-        ...prev,
-        [field]: value,
-      };
-    });
-  };
-
-  const handleSaveEdit = async () => {
+  const handleSaveEdit = async (values: EditTradeFormValues) => {
     if (!editingTradeId) return;
 
-    if (editValues.price.trim() && !Number.isFinite(Number(editValues.price))) {
+    if (values.price.trim() && !Number.isFinite(Number(values.price))) {
       setErrorMessage("Price must be a valid number");
       return;
     }
-    if (editValues.quantity.trim() && !Number.isFinite(Number(editValues.quantity))) {
+    if (values.quantity.trim() && !Number.isFinite(Number(values.quantity))) {
       setErrorMessage("Quantity must be a valid number");
       return;
     }
 
     try {
       await updateInboxTrade({
-        assetType: editValues.assetType,
-        date: editValues.date ? new Date(editValues.date).getTime() : null,
-        direction: editValues.direction,
+        assetType: values.assetType,
+        date: values.date ? new Date(values.date).getTime() : null,
+        direction: values.direction,
         inboxTradeId: editingTradeId,
-        price: editValues.price.trim() ? Number(editValues.price) : null,
-        quantity: editValues.quantity.trim() ? Number(editValues.quantity) : null,
-        side: editValues.side || null,
-        ticker: editValues.ticker.trim() || null,
+        price: values.price.trim() ? Number(values.price) : null,
+        quantity: values.quantity.trim() ? Number(values.quantity) : null,
+        side: values.side || null,
+        ticker: values.ticker.trim() || null,
       });
 
       setEditingTradeId(null);
-      setEditValues(DEFAULT_EDIT_VALUES);
+      setEditInitialValues(DEFAULT_EDIT_VALUES);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to save edit");
     }
@@ -237,12 +211,12 @@ export default function ImportsPage() {
 
         {editingTradeId && (
           <EditTradeForm
-            values={editValues}
+            key={editingTradeId}
+            initialValues={editInitialValues}
             onCancel={() => {
               setEditingTradeId(null);
-              setEditValues(DEFAULT_EDIT_VALUES);
+              setEditInitialValues(DEFAULT_EDIT_VALUES);
             }}
-            onChange={handleEditChange}
             onSave={handleSaveEdit}
           />
         )}
