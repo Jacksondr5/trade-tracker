@@ -75,7 +75,7 @@ export const updateTrade = mutation({
     side: v.optional(v.union(v.literal("buy"), v.literal("sell"))),
     ticker: v.optional(v.string()),
     tradeId: v.id("trades"),
-    tradePlanId: v.optional(v.id("tradePlans")),
+    tradePlanId: v.optional(v.union(v.id("tradePlans"), v.null())),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -99,8 +99,9 @@ export const updateTrade = mutation({
     if (updates.quantity !== undefined) patch.quantity = updates.quantity;
     if (updates.side !== undefined) patch.side = updates.side;
     if (updates.ticker !== undefined) patch.ticker = updates.ticker;
-    if (updates.tradePlanId !== undefined)
-      patch.tradePlanId = updates.tradePlanId;
+    if (updates.tradePlanId !== undefined) {
+      patch.tradePlanId = updates.tradePlanId === null ? undefined : updates.tradePlanId;
+    }
     patch.ownerId = ownerId;
 
     await ctx.db.patch(tradeId, patch);

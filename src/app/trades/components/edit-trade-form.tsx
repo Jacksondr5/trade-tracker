@@ -39,8 +39,14 @@ const editTradeSchema = z.object({
   date: z.string().min(1, "Date is required"),
   direction: z.enum(["long", "short"]),
   notes: z.string().optional(),
-  price: z.string().min(1, "Price is required"),
-  quantity: z.string().min(1, "Quantity is required"),
+  price: z
+    .string()
+    .min(1, "Price is required")
+    .refine((value) => Number.isFinite(Number(value)), "Price must be a valid number"),
+  quantity: z
+    .string()
+    .min(1, "Quantity is required")
+    .refine((value) => Number.isFinite(Number(value)), "Quantity must be a valid number"),
   side: z.enum(["buy", "sell"]),
   ticker: z.string().min(1, "Ticker is required"),
   tradePlanId: z.string().optional(),
@@ -83,7 +89,7 @@ export function EditTradeForm({
           tradeId,
           tradePlanId: parsed.tradePlanId
             ? (parsed.tradePlanId as Id<"tradePlans">)
-            : undefined,
+            : null,
         });
         onSaved();
       } catch (error) {

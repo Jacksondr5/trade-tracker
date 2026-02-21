@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Create the EditTradeForm Component
+## Task 1: Create the EditTradeForm Component
 
 **Files:**
 - Create: `src/app/trades/components/edit-trade-form.tsx`
@@ -284,7 +284,7 @@ git commit -m "feat: add EditTradeForm component for inline trade editing"
 
 ---
 
-### Task 2: Integrate Inline Editing into TradesPageClient
+## Task 2: Integrate Inline Editing into TradesPageClient
 
 **Files:**
 - Modify: `src/app/trades/TradesPageClient.tsx`
@@ -436,7 +436,7 @@ git commit -m "feat: integrate inline trade editing into trades table"
 
 ---
 
-### Task 3: Manual Verification
+## Task 3: Manual Verification
 
 **Step 1: Verify the feature works end-to-end**
 
