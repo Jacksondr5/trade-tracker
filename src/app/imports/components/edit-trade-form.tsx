@@ -23,8 +23,9 @@ export function EditTradeForm({ values, onCancel, onChange, onSave }: EditTradeF
       <h3 className="text-slate-12 mb-3 text-sm font-semibold">Edit Trade</h3>
       <div className="flex flex-wrap items-end gap-4">
         <div>
-          <label className="text-slate-12 mb-1 block text-xs font-medium">Ticker</label>
+          <label htmlFor="edit-ticker" className="text-slate-12 mb-1 block text-xs font-medium">Ticker</label>
           <input
+            id="edit-ticker"
             type="text"
             value={values.ticker}
             onChange={(e) => onChange("ticker", e.target.value)}
@@ -32,8 +33,9 @@ export function EditTradeForm({ values, onCancel, onChange, onSave }: EditTradeF
           />
         </div>
         <div>
-          <label className="text-slate-12 mb-1 block text-xs font-medium">Side</label>
+          <label htmlFor="edit-side" className="text-slate-12 mb-1 block text-xs font-medium">Side</label>
           <select
+            id="edit-side"
             value={values.side}
             onChange={(e) => onChange("side", e.target.value)}
             className="text-slate-12 h-8 rounded border border-slate-600 bg-slate-700 px-2 text-sm"
@@ -44,8 +46,9 @@ export function EditTradeForm({ values, onCancel, onChange, onSave }: EditTradeF
           </select>
         </div>
         <div>
-          <label className="text-slate-12 mb-1 block text-xs font-medium">Direction</label>
+          <label htmlFor="edit-direction" className="text-slate-12 mb-1 block text-xs font-medium">Direction</label>
           <select
+            id="edit-direction"
             value={values.direction}
             onChange={(e) => onChange("direction", e.target.value)}
             className="text-slate-12 h-8 rounded border border-slate-600 bg-slate-700 px-2 text-sm"
@@ -55,8 +58,9 @@ export function EditTradeForm({ values, onCancel, onChange, onSave }: EditTradeF
           </select>
         </div>
         <div>
-          <label className="text-slate-12 mb-1 block text-xs font-medium">Asset Type</label>
+          <label htmlFor="edit-asset-type" className="text-slate-12 mb-1 block text-xs font-medium">Asset Type</label>
           <select
+            id="edit-asset-type"
             value={values.assetType}
             onChange={(e) => onChange("assetType", e.target.value)}
             className="text-slate-12 h-8 rounded border border-slate-600 bg-slate-700 px-2 text-sm"
@@ -66,8 +70,9 @@ export function EditTradeForm({ values, onCancel, onChange, onSave }: EditTradeF
           </select>
         </div>
         <div>
-          <label className="text-slate-12 mb-1 block text-xs font-medium">Price</label>
+          <label htmlFor="edit-price" className="text-slate-12 mb-1 block text-xs font-medium">Price</label>
           <input
+            id="edit-price"
             type="number"
             step="any"
             value={values.price}
@@ -76,8 +81,9 @@ export function EditTradeForm({ values, onCancel, onChange, onSave }: EditTradeF
           />
         </div>
         <div>
-          <label className="text-slate-12 mb-1 block text-xs font-medium">Quantity</label>
+          <label htmlFor="edit-quantity" className="text-slate-12 mb-1 block text-xs font-medium">Quantity</label>
           <input
+            id="edit-quantity"
             type="number"
             step="any"
             value={values.quantity}
@@ -86,8 +92,9 @@ export function EditTradeForm({ values, onCancel, onChange, onSave }: EditTradeF
           />
         </div>
         <div>
-          <label className="text-slate-12 mb-1 block text-xs font-medium">Date</label>
+          <label htmlFor="edit-date" className="text-slate-12 mb-1 block text-xs font-medium">Date</label>
           <input
+            id="edit-date"
             type="datetime-local"
             value={values.date}
             onChange={(e) => onChange("date", e.target.value)}
