@@ -54,7 +54,6 @@ export const updateNote = mutation({
 
     await ctx.db.patch(args.noteId, {
       content: args.content,
-      ownerId,
     });
 
     return null;
@@ -72,7 +71,9 @@ export const getNotesByCampaign = query({
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
     const campaign = await ctx.db.get(args.campaignId);
-    assertOwner(campaign, ownerId, "Campaign not found");
+    if (!campaign || campaign.ownerId !== ownerId) {
+      return [];
+    }
 
     const notes = await ctx.db
       .query("campaignNotes")

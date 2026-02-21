@@ -123,21 +123,3 @@ export function calculateTradesPL(
 
   return tradesPLMap;
 }
-
-/**
- * Calculate P&L and return trades with realizedPL field added.
- * Preserves original array order.
- *
- * @param trades - Array of trades to calculate P&L for
- * @returns Array of trades with realizedPL field
- */
-export function calculateTradesWithPL(
-  trades: TradeForPL[],
-): Array<TradeForPL & { realizedPL: number | null }> {
-  const plMap = calculateTradesPL(trades);
-
-  return trades.map((trade) => ({
-    ...trade,
-    realizedPL: plMap.get(trade._id) ?? null,
-  }));
-}
