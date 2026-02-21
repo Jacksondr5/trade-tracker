@@ -1,7 +1,7 @@
 "use client";
 
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
@@ -52,11 +52,15 @@ export default function ImportsPageClient({
   const openTradePlans = (openTradePlansRaw ?? undefined) as
     | OpenTradePlanOption[]
     | undefined;
-  const accountLabelByKey = new Map(
-    accountMappings.map((mapping) => [
-      `${mapping.source}|${mapping.accountId}`,
-      mapping.friendlyName,
-    ]),
+  const accountLabelByKey = useMemo(
+    () =>
+      new Map(
+        accountMappings.map((mapping) => [
+          `${mapping.source}|${mapping.accountId}`,
+          mapping.friendlyName,
+        ]),
+      ),
+    [accountMappings],
   );
 
   const importTradesMutation = useMutation(api.imports.importTrades);

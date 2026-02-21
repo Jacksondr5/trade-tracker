@@ -80,6 +80,7 @@ export default function AccountsPageClient({
   const cancelEditing = () => {
     setEditingKey(null);
     setEditingFriendlyName("");
+    setErrorMessage(null);
   };
 
   const saveEditing = async (account: KnownAccount) => {

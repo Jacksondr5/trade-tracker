@@ -7,6 +7,7 @@ import { useMemo } from "react";
 import { Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import { formatCurrency, formatDate } from "~/lib/format";
+import { cn } from "~/lib/utils";
 import {
   KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME,
   isKrakenDefaultAccountId,
@@ -411,13 +412,14 @@ export default function TradesPageClient({
                       {accountDisplay}
                     </td>
                     <td
-                      className={`whitespace-nowrap px-4 py-3 text-right text-sm font-medium ${
-                        trade.realizedPL === null
-                          ? "text-slate-11"
-                          : trade.realizedPL >= 0
-                            ? "text-green-400"
-                            : "text-red-400"
-                      }`}
+                      className={cn(
+                        "whitespace-nowrap px-4 py-3 text-right text-sm font-medium",
+                        {
+                          "text-green-400": trade.realizedPL !== null && trade.realizedPL >= 0,
+                          "text-red-400": trade.realizedPL !== null && trade.realizedPL < 0,
+                          "text-slate-11": trade.realizedPL === null,
+                        },
+                      )}
                     >
                       {trade.realizedPL === null
                         ? "—"
