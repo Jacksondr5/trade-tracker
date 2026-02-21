@@ -442,6 +442,7 @@ export default function CampaignDetailPageClient({
                           onClick={() => {
                             setEditingNoteId(null);
                             setEditingNoteContent("");
+                            setNoteError(null);
                           }}
                         >
                           Cancel
