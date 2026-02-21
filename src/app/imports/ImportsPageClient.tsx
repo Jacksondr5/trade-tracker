@@ -140,6 +140,8 @@ export default function ImportsPageClient({
       if (!result.accepted && result.error) {
         setErrorMessage(result.error);
       }
+    }).catch((error) => {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to accept trade");
     });
   };
 
@@ -178,7 +180,9 @@ export default function ImportsPageClient({
   };
 
   const handleDeleteAll = () => {
-    void deleteAllInboxTrades();
+    void deleteAllInboxTrades().catch((error) => {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to delete all trades");
+    });
   };
 
   return (
