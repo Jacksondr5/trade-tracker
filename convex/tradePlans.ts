@@ -1,6 +1,5 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { calculateTradesPL } from "./lib/plCalculation";
 import { assertOwner, requireUser } from "./lib/auth";
 
 const tradePlanStatusValidator = v.union(
@@ -28,6 +27,24 @@ const tradePlanValidator = v.object({
   status: tradePlanStatusValidator,
   targetConditions: v.string(),
 });
+
+function sortTradePlansByOrderThenNewest(
+  a: {
+    _creationTime: number;
+    sortOrder?: number;
+  },
+  b: {
+    _creationTime: number;
+    sortOrder?: number;
+  },
+): number {
+  const sortA = a.sortOrder ?? Number.MAX_SAFE_INTEGER;
+  const sortB = b.sortOrder ?? Number.MAX_SAFE_INTEGER;
+  if (sortA !== sortB) {
+    return sortA - sortB;
+  }
+  return b._creationTime - a._creationTime;
+}
 
 const allowedTransitions: Record<
   "active" | "closed" | "idea" | "watching",
@@ -141,8 +158,6 @@ export const updateTradePlan = mutation({
       patch.sortOrder = updates.sortOrder === null ? undefined : updates.sortOrder;
     if (updates.targetConditions !== undefined)
       patch.targetConditions = updates.targetConditions;
-    patch.ownerId = ownerId;
-
     await ctx.db.patch(tradePlanId, patch);
 
     return null;
@@ -188,26 +203,9 @@ export const updateTradePlanStatus = mutation({
     } else {
       patch.closedAt = undefined;
     }
-    patch.ownerId = ownerId;
-
     await ctx.db.patch(args.tradePlanId, patch);
 
     return null;
-  },
-});
-
-export const getTradePlan = query({
-  args: {
-    tradePlanId: v.id("tradePlans"),
-  },
-  returns: v.union(tradePlanValidator, v.null()),
-  handler: async (ctx, args) => {
-    const ownerId = await requireUser(ctx);
-    const tradePlan = await ctx.db.get(args.tradePlanId);
-    if (!tradePlan || tradePlan.ownerId !== ownerId) {
-      return null;
-    }
-    return tradePlan;
   },
 });
 
@@ -219,65 +217,43 @@ export const listTradePlans = query({
   returns: v.array(tradePlanValidator),
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
-    const allTradePlans = await ctx.db
-      .query("tradePlans")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect();
+    if (args.campaignId === undefined) {
+      const tradePlans =
+        args.status === undefined
+          ? await ctx.db
+              .query("tradePlans")
+              .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+              .collect()
+          : await ctx.db
+              .query("tradePlans")
+              .withIndex("by_owner_status", (q) =>
+                q.eq("ownerId", ownerId).eq("status", args.status!),
+              )
+              .collect();
 
-    return allTradePlans
-      .filter((plan) => {
-        if (args.campaignId !== undefined) {
-          if (args.campaignId === null) {
-            if (plan.campaignId !== undefined) {
-              return false;
-            }
-          } else if (plan.campaignId !== args.campaignId) {
-            return false;
-          }
-        }
+      return tradePlans.sort(sortTradePlansByOrderThenNewest);
+    }
 
-        if (args.status !== undefined && plan.status !== args.status) {
-          return false;
-        }
+    const campaignId = args.campaignId === null ? undefined : args.campaignId;
+    const tradePlans =
+      args.status === undefined
+        ? await ctx.db
+            .query("tradePlans")
+            .withIndex("by_owner_campaignId", (q) =>
+              q.eq("ownerId", ownerId).eq("campaignId", campaignId),
+            )
+            .collect()
+        : await ctx.db
+            .query("tradePlans")
+            .withIndex("by_owner_campaignId_status", (q) =>
+              q
+                .eq("ownerId", ownerId)
+                .eq("campaignId", campaignId)
+                .eq("status", args.status!),
+            )
+            .collect();
 
-        return true;
-      })
-      .sort((a, b) => {
-        const sortA = a.sortOrder ?? Number.MAX_SAFE_INTEGER;
-        const sortB = b.sortOrder ?? Number.MAX_SAFE_INTEGER;
-        if (sortA !== sortB) {
-          return sortA - sortB;
-        }
-        return b._creationTime - a._creationTime;
-      });
-  },
-});
-
-export const listStandaloneTradePlans = query({
-  args: {
-    status: v.optional(tradePlanStatusValidator),
-  },
-  returns: v.array(tradePlanValidator),
-  handler: async (ctx, args) => {
-    const ownerId = await requireUser(ctx);
-    const allTradePlans = await ctx.db
-      .query("tradePlans")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect();
-
-    return allTradePlans
-      .filter((plan) => {
-        if (plan.campaignId !== undefined) {
-          return false;
-        }
-
-        if (args.status !== undefined && plan.status !== args.status) {
-          return false;
-        }
-
-        return true;
-      })
-      .sort((a, b) => b._creationTime - a._creationTime);
+    return tradePlans.sort(sortTradePlansByOrderThenNewest);
   },
 });
 
@@ -286,14 +262,30 @@ export const listOpenTradePlans = query({
   returns: v.array(tradePlanValidator),
   handler: async (ctx) => {
     const ownerId = await requireUser(ctx);
-    const allTradePlans = await ctx.db
-      .query("tradePlans")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect();
+    const [activePlans, ideaPlans, watchingPlans] = await Promise.all([
+      ctx.db
+        .query("tradePlans")
+        .withIndex("by_owner_status", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "active"),
+        )
+        .collect(),
+      ctx.db
+        .query("tradePlans")
+        .withIndex("by_owner_status", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "idea"),
+        )
+        .collect(),
+      ctx.db
+        .query("tradePlans")
+        .withIndex("by_owner_status", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "watching"),
+        )
+        .collect(),
+    ]);
 
-    return allTradePlans
-      .filter((plan) => plan.status !== "closed")
-      .sort((a, b) => b._creationTime - a._creationTime);
+    return [...activePlans, ...ideaPlans, ...watchingPlans].sort(
+      (a, b) => b._creationTime - a._creationTime,
+    );
   },
 });
 
@@ -306,141 +298,28 @@ export const listTradePlansByCampaign = query({
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
     const campaign = await ctx.db.get(args.campaignId);
-    assertOwner(campaign, ownerId, "Campaign not found");
-
-    const tradePlans = await ctx.db
-      .query("tradePlans")
-      .withIndex("by_owner_campaignId", (q) =>
-        q.eq("ownerId", ownerId).eq("campaignId", args.campaignId),
-      )
-      .collect();
-
-    return tradePlans
-      .filter((plan) => (args.status ? plan.status === args.status : true))
-      .sort((a, b) => {
-        const sortA = a.sortOrder ?? Number.MAX_SAFE_INTEGER;
-        const sortB = b.sortOrder ?? Number.MAX_SAFE_INTEGER;
-        if (sortA !== sortB) {
-          return sortA - sortB;
-        }
-        return b._creationTime - a._creationTime;
-      });
-  },
-});
-
-const tradeWithPLValidator = v.object({
-  _creationTime: v.number(),
-  _id: v.id("trades"),
-  assetType: v.union(v.literal("crypto"), v.literal("stock")),
-  brokerageAccountId: v.optional(v.string()),
-  date: v.number(),
-  direction: v.union(v.literal("long"), v.literal("short")),
-  externalId: v.optional(v.string()),
-  fees: v.optional(v.number()),
-  notes: v.optional(v.string()),
-  orderType: v.optional(v.string()),
-  ownerId: v.string(),
-  price: v.number(),
-  quantity: v.number(),
-  realizedPL: v.union(v.number(), v.null()),
-  side: v.union(v.literal("buy"), v.literal("sell")),
-  source: v.optional(
-    v.union(v.literal("manual"), v.literal("ibkr"), v.literal("kraken")),
-  ),
-  taxes: v.optional(v.number()),
-  ticker: v.string(),
-  tradePlanId: v.optional(v.id("tradePlans")),
-});
-
-export const getTradesByTradePlan = query({
-  args: {
-    tradePlanId: v.id("tradePlans"),
-  },
-  returns: v.array(tradeWithPLValidator),
-  handler: async (ctx, args) => {
-    const ownerId = await requireUser(ctx);
-    const tradePlan = await ctx.db.get(args.tradePlanId);
-    assertOwner(tradePlan, ownerId, "Trade plan not found");
-
-    const trades = (
-      await ctx.db
-        .query("trades")
-        .withIndex("by_owner_tradePlanId", (q) =>
-          q.eq("ownerId", ownerId).eq("tradePlanId", args.tradePlanId),
-        )
-        .collect()
-    );
-
-    const allTrades = (
-      await ctx.db
-        .query("trades")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-        .collect()
-    );
-    const plMap = calculateTradesPL(allTrades);
-
-    return trades
-      .sort((a, b) => b.date - a.date)
-      .map((trade) => ({
-        ...trade,
-        realizedPL: plMap.get(trade._id) ?? null,
-      }));
-  },
-});
-
-export const getTradePlanPL = query({
-  args: {
-    tradePlanId: v.id("tradePlans"),
-  },
-  returns: v.object({
-    losingTrades: v.number(),
-    realizedPL: v.number(),
-    tradeCount: v.number(),
-    winningTrades: v.number(),
-  }),
-  handler: async (ctx, args) => {
-    const ownerId = await requireUser(ctx);
-    const tradePlan = await ctx.db.get(args.tradePlanId);
-    assertOwner(tradePlan, ownerId, "Trade plan not found");
-
-    const trades = (
-      await ctx.db
-        .query("trades")
-        .withIndex("by_owner_tradePlanId", (q) =>
-          q.eq("ownerId", ownerId).eq("tradePlanId", args.tradePlanId),
-        )
-        .collect()
-    );
-
-    const allTrades = (
-      await ctx.db
-        .query("trades")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-        .collect()
-    );
-    const plMap = calculateTradesPL(allTrades);
-
-    let realizedPL = 0;
-    let winningTrades = 0;
-    let losingTrades = 0;
-
-    for (const trade of trades) {
-      const pl = plMap.get(trade._id);
-      if (pl !== null && pl !== undefined) {
-        realizedPL += pl;
-        if (pl > 0) {
-          winningTrades++;
-        } else if (pl < 0) {
-          losingTrades++;
-        }
-      }
+    if (!campaign || campaign.ownerId !== ownerId) {
+      return [];
     }
 
-    return {
-      losingTrades,
-      realizedPL,
-      tradeCount: trades.length,
-      winningTrades,
-    };
+    const tradePlans =
+      args.status === undefined
+        ? await ctx.db
+            .query("tradePlans")
+            .withIndex("by_owner_campaignId", (q) =>
+              q.eq("ownerId", ownerId).eq("campaignId", args.campaignId),
+            )
+            .collect()
+        : await ctx.db
+            .query("tradePlans")
+            .withIndex("by_owner_campaignId_status", (q) =>
+              q
+                .eq("ownerId", ownerId)
+                .eq("campaignId", args.campaignId)
+                .eq("status", args.status!),
+            )
+            .collect();
+
+    return tradePlans.sort(sortTradePlansByOrderThenNewest);
   },
 });

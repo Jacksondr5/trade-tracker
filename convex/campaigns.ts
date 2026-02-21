@@ -54,7 +54,6 @@ export const updateCampaign = mutation({
     if (updates.name !== undefined) patch.name = updates.name;
     if (updates.retrospective !== undefined) patch.retrospective = updates.retrospective;
     if (updates.thesis !== undefined) patch.thesis = updates.thesis;
-    patch.ownerId = ownerId;
 
     await ctx.db.patch(campaignId, patch);
     return null;
@@ -82,7 +81,6 @@ export const updateCampaignStatus = mutation({
     } else {
       patch.closedAt = undefined;
     }
-    patch.ownerId = ownerId;
 
     await ctx.db.patch(args.campaignId, patch);
     return null;
@@ -143,16 +141,21 @@ export const getCampaignPL = query({
   args: {
     campaignId: v.id("campaigns"),
   },
-  returns: v.object({
-    losingTrades: v.number(),
-    realizedPL: v.number(),
-    tradeCount: v.number(),
-    winningTrades: v.number(),
-  }),
+  returns: v.union(
+    v.object({
+      losingTrades: v.number(),
+      realizedPL: v.number(),
+      tradeCount: v.number(),
+      winningTrades: v.number(),
+    }),
+    v.null(),
+  ),
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
     const campaign = await ctx.db.get(args.campaignId);
-    assertOwner(campaign, ownerId, "Campaign not found");
+    if (!campaign || campaign.ownerId !== ownerId) {
+      return null;
+    }
 
     const tradePlans = await ctx.db
       .query("tradePlans")
@@ -160,7 +163,14 @@ export const getCampaignPL = query({
         q.eq("ownerId", ownerId).eq("campaignId", args.campaignId),
       )
       .collect();
-    const tradePlanIds = new Set(tradePlans.map((plan) => plan._id));
+    if (tradePlans.length === 0) {
+      return {
+        losingTrades: 0,
+        realizedPL: 0,
+        tradeCount: 0,
+        winningTrades: 0,
+      };
+    }
 
     const allTrades = (
       await ctx.db
@@ -168,8 +178,11 @@ export const getCampaignPL = query({
         .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .collect()
     );
+    const tradePlanIds = new Set(
+      tradePlans.map((tradePlan) => tradePlan._id.toString()),
+    );
     const campaignTrades = allTrades.filter(
-      (trade) => trade.tradePlanId && tradePlanIds.has(trade.tradePlanId),
+      (trade) => trade.tradePlanId && tradePlanIds.has(trade.tradePlanId.toString()),
     );
 
     const tradesPLMap = calculateTradesPL(allTrades);
@@ -192,98 +205,6 @@ export const getCampaignPL = query({
       realizedPL,
       tradeCount: campaignTrades.length,
       winningTrades,
-    };
-  },
-});
-
-export const getCampaignPositionStatus = query({
-  args: {
-    campaignId: v.id("campaigns"),
-  },
-  returns: v.object({
-    isFullyClosed: v.boolean(),
-    positions: v.array(
-      v.object({
-        direction: v.union(v.literal("long"), v.literal("short")),
-        quantity: v.number(),
-        ticker: v.string(),
-      }),
-    ),
-    realizedPL: v.number(),
-  }),
-  handler: async (ctx, args) => {
-    const ownerId = await requireUser(ctx);
-    const campaign = await ctx.db.get(args.campaignId);
-    if (!campaign || campaign.ownerId !== ownerId) {
-      return {
-        isFullyClosed: false,
-        positions: [],
-        realizedPL: 0,
-      };
-    }
-
-    const tradePlans = await ctx.db
-      .query("tradePlans")
-      .withIndex("by_owner_campaignId", (q) =>
-        q.eq("ownerId", ownerId).eq("campaignId", args.campaignId),
-      )
-      .collect();
-    const tradePlanIds = new Set(tradePlans.map((plan) => plan._id));
-
-    const allTrades = (
-      await ctx.db
-        .query("trades")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-        .collect()
-    );
-    const campaignTrades = allTrades.filter(
-      (trade) => trade.tradePlanId && tradePlanIds.has(trade.tradePlanId),
-    );
-
-    const tradesPLMap = calculateTradesPL(allTrades);
-    const positionMap = new Map<string, number>();
-
-    for (const trade of campaignTrades) {
-      const key = `${trade.ticker}|${trade.direction}`;
-      const currentQty = positionMap.get(key) || 0;
-
-      const qtyChange =
-        trade.direction === "long"
-          ? trade.side === "buy"
-            ? trade.quantity
-            : -trade.quantity
-          : trade.side === "sell"
-            ? trade.quantity
-            : -trade.quantity;
-
-      positionMap.set(key, currentQty + qtyChange);
-    }
-
-    const positions = Array.from(positionMap.entries())
-      .map(([key, quantity]) => {
-        const [ticker, direction] = key.split("|");
-        return {
-          direction: direction as "long" | "short",
-          quantity,
-          ticker,
-        };
-      })
-      .filter((position) => Math.abs(position.quantity) > 0.0001);
-
-    const isFullyClosed = campaignTrades.length > 0 && positions.length === 0;
-
-    let realizedPL = 0;
-    for (const trade of campaignTrades) {
-      const pl = tradesPLMap.get(trade._id);
-      if (pl !== null && pl !== undefined) {
-        realizedPL += pl;
-      }
-    }
-
-    return {
-      isFullyClosed,
-      positions,
-      realizedPL,
     };
   },
 });

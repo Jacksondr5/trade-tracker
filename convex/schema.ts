@@ -58,7 +58,8 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_status", ["ownerId", "status"])
-    .index("by_owner_campaignId", ["ownerId", "campaignId"]),
+    .index("by_owner_campaignId", ["ownerId", "campaignId"])
+    .index("by_owner_campaignId_status", ["ownerId", "campaignId", "status"]),
 
   accountMappings: defineTable({
     accountId: v.string(),
