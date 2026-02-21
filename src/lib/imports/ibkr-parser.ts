@@ -64,6 +64,9 @@ export function parseIBKRCSV(csvContent: string): ParseResult {
   });
 
   const errors: string[] = [];
+  for (const err of parsed.errors) {
+    errors.push(`CSV parse error (row ${err.row}): ${err.message}`);
+  }
   const trades: InboxTradeCandidate[] = [];
 
   for (const row of parsed.data) {

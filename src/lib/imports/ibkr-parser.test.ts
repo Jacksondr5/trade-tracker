@@ -102,4 +102,16 @@ describe("parseIBKRCSV", () => {
     expect(result.trades[0].validationErrors).toContain("Side is required");
     expect(result.trades[0].validationErrors).toContain("Direction is required");
   });
+
+  it("surfaces Papa Parse CSV errors", () => {
+    const csv = [
+      "ClientAccountID,Symbol,Buy/Sell,Open/CloseIndicator,TradePrice,Quantity,DateTime,Taxes,OrderType,TransactionType",
+      'U1,"AAPL,BUY,O,100,1,20260220;101500,0,MKT,',
+    ].join("\n");
+
+    const result = parseIBKRCSV(csv);
+
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors[0]).toContain("CSV parse error");
+  });
 });

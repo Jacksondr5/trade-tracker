@@ -94,14 +94,14 @@ Per-order aggregation:
 2. Selects brokerage (IBKR / Kraken)
 3. Uploads CSV via file input
 4. Client-side parse + normalize
-5. Preview: trade count + duplicate count
-6. User confirms → Convex mutation creates trades with `inboxStatus: "pending_review"`
-7. Shows result (imported X, skipped Y duplicates)
+5. Import executes immediately after file selection (no separate confirm click)
+6. Convex mutation creates inbox records with `status: "pending_review"`
+7. UI shows result summary (imported X, skipped Y duplicates, validation counts)
 
 ### Inbox Review
-- Table of pending trades: Date, Ticker, Side, Direction, Price, Qty, Asset Type, Source, Account
+- Table of pending trades: Date, Ticker (with validation errors/warnings), Side, Direction, Price, Qty, Value, Account, Trade Plan, Notes
 - Row actions: Accept, Delete, Edit
-- Edit: direction, assetType, notes, tradePlanId
+- Edit: ticker, side, direction, assetType, price, quantity, date, notes, tradePlanId
 - Bulk: "Accept All" and "Delete All" buttons
 - Empty state when no pending trades
 
@@ -135,8 +135,7 @@ Per-order aggregation:
 **Upload section (top):**
 - Brokerage selector dropdown (IBKR / Kraken)
 - File input for CSV
-- Preview area showing parsed trade count + skipped duplicates
-- Import button
+- Import runs on file selection and then shows summary (imported/skipped/validation)
 
 **Inbox section (bottom):**
 - Table of pending_review trades

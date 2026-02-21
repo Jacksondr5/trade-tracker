@@ -82,7 +82,7 @@ export function parseKrakenCSV(csvContent: string): ParseResult {
             : undefined;
 
       const trade = withParserValidation({
-        assetType: "crypto",
+        assetType: "stock",
         date: Number.isFinite(earliestTime) ? earliestTime : undefined,
         direction: "long",
         externalId: orderId,

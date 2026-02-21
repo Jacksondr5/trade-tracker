@@ -10,6 +10,11 @@
 
 **Design doc:** `docs/plans/2026-02-20-trade-import-csv-mvp.md`
 
+## Implemented Behavior Notes
+
+- Upload/import is currently one-step: selecting a CSV file parses and imports immediately (no separate confirm button).
+- Inbox table currently focuses on actionable review fields and shows: Date, Ticker (with validation diagnostics), Side, Direction, Price, Qty, Value, Account, Trade Plan, Notes, Actions.
+
 ---
 
 ## Critical Context
