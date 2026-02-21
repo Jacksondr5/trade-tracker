@@ -63,6 +63,8 @@ export default function AccountsPageClient({
   );
 
   const startEditing = (account: KnownAccount) => {
+    if (isSavingEdit) return;
+
     const key = `${account.source}|${account.accountId}`;
     const existingName = mappingNameByKey.get(key);
 
@@ -78,8 +80,6 @@ export default function AccountsPageClient({
   };
 
   const cancelEditing = () => {
-    if (isSavingEdit) return;
-
     setEditingKey(null);
     setEditingFriendlyName("");
     setErrorMessage(null);
