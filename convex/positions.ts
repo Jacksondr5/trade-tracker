@@ -25,10 +25,12 @@ export const getPositions = query({
   returns: v.array(positionValidator),
   handler: async (ctx) => {
     const ownerId = await requireUser(ctx);
-    const trades = await ctx.db
-      .query("trades")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect();
+    const trades = (
+      await ctx.db
+        .query("trades")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .collect()
+    );
 
     // Group trades by ticker and direction
     // Key format: "ticker:direction"

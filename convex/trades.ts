@@ -7,14 +7,22 @@ const tradeWithPLValidator = v.object({
   _creationTime: v.number(),
   _id: v.id("trades"),
   assetType: v.union(v.literal("crypto"), v.literal("stock")),
+  brokerageAccountId: v.optional(v.string()),
   date: v.number(),
   direction: v.union(v.literal("long"), v.literal("short")),
+  externalId: v.optional(v.string()),
+  fees: v.optional(v.number()),
   notes: v.optional(v.string()),
+  orderType: v.optional(v.string()),
   ownerId: v.string(),
   price: v.number(),
   quantity: v.number(),
   realizedPL: v.union(v.number(), v.null()),
   side: v.union(v.literal("buy"), v.literal("sell")),
+  source: v.optional(
+    v.union(v.literal("manual"), v.literal("ibkr"), v.literal("kraken")),
+  ),
+  taxes: v.optional(v.number()),
   ticker: v.string(),
   tradePlanId: v.optional(v.id("tradePlans")),
 });
@@ -49,6 +57,7 @@ export const createTrade = mutation({
       price: args.price,
       quantity: args.quantity,
       side: args.side,
+      source: "manual",
       ticker: args.ticker,
       tradePlanId: args.tradePlanId,
     });
@@ -120,10 +129,12 @@ export const listTrades = query({
   returns: v.array(tradeWithPLValidator),
   handler: async (ctx) => {
     const ownerId = await requireUser(ctx);
-    const trades = await ctx.db
-      .query("trades")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect();
+    const trades = (
+      await ctx.db
+        .query("trades")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .collect()
+    );
     const plMap = calculateTradesPL(trades);
 
     return [...trades]
@@ -147,10 +158,12 @@ export const getTrade = query({
       return null;
     }
 
-    const allTrades = await ctx.db
-      .query("trades")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect();
+    const allTrades = (
+      await ctx.db
+        .query("trades")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .collect()
+    );
     const plMap = calculateTradesPL(allTrades);
 
     return {
@@ -170,17 +183,21 @@ export const getTradesByTradePlan = query({
     const tradePlan = await ctx.db.get(args.tradePlanId);
     assertOwner(tradePlan, ownerId, "Trade plan not found");
 
-    const trades = await ctx.db
-      .query("trades")
-      .withIndex("by_owner_tradePlanId", (q) =>
-        q.eq("ownerId", ownerId).eq("tradePlanId", args.tradePlanId),
-      )
-      .collect();
+    const trades = (
+      await ctx.db
+        .query("trades")
+        .withIndex("by_owner_tradePlanId", (q) =>
+          q.eq("ownerId", ownerId).eq("tradePlanId", args.tradePlanId),
+        )
+        .collect()
+    );
 
-    const allTrades = await ctx.db
-      .query("trades")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect();
+    const allTrades = (
+      await ctx.db
+        .query("trades")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .collect()
+    );
     const plMap = calculateTradesPL(allTrades);
 
     return [...trades]

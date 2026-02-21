@@ -11,6 +11,7 @@
 import type * as analytics from "../analytics.js";
 import type * as campaignNotes from "../campaignNotes.js";
 import type * as campaigns from "../campaigns.js";
+import type * as imports from "../imports.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_plCalculation from "../lib/plCalculation.js";
 import type * as portfolioSnapshots from "../portfolioSnapshots.js";
@@ -28,6 +29,7 @@ declare const fullApi: ApiFromModules<{
   analytics: typeof analytics;
   campaignNotes: typeof campaignNotes;
   campaigns: typeof campaigns;
+  imports: typeof imports;
   "lib/auth": typeof lib_auth;
   "lib/plCalculation": typeof lib_plCalculation;
   portfolioSnapshots: typeof portfolioSnapshots;
