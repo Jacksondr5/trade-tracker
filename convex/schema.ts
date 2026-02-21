@@ -67,9 +67,6 @@ export default defineSchema({
     direction: v.union(v.literal("long"), v.literal("short")),
     externalId: v.optional(v.string()),
     fees: v.optional(v.number()),
-    inboxStatus: v.optional(
-      v.union(v.literal("pending_review"), v.literal("accepted")),
-    ),
     notes: v.optional(v.string()),
     orderType: v.optional(v.string()),
     ownerId: v.string(),
@@ -86,7 +83,35 @@ export default defineSchema({
     .index("by_owner", ["ownerId"])
     .index("by_owner_date", ["ownerId", "date"])
     .index("by_owner_externalId", ["ownerId", "externalId"])
-    .index("by_owner_inboxStatus", ["ownerId", "inboxStatus"])
     .index("by_owner_ticker", ["ownerId", "ticker"])
     .index("by_owner_tradePlanId", ["ownerId", "tradePlanId"]),
+
+  inboxTrades: defineTable({
+    assetType: v.optional(v.union(v.literal("crypto"), v.literal("stock"))),
+    brokerageAccountId: v.optional(v.string()),
+    date: v.optional(v.number()),
+    direction: v.optional(v.union(v.literal("long"), v.literal("short"))),
+    externalId: v.optional(v.string()),
+    fees: v.optional(v.number()),
+    notes: v.optional(v.string()),
+    orderType: v.optional(v.string()),
+    ownerId: v.string(),
+    price: v.optional(v.number()),
+    quantity: v.optional(v.number()),
+    side: v.optional(v.union(v.literal("buy"), v.literal("sell"))),
+    source: v.union(v.literal("ibkr"), v.literal("kraken")),
+    status: v.union(
+      v.literal("pending_review"),
+      v.literal("accepted"),
+      v.literal("deleted"),
+    ),
+    taxes: v.optional(v.number()),
+    ticker: v.optional(v.string()),
+    tradePlanId: v.optional(v.id("tradePlans")),
+    validationErrors: v.array(v.string()),
+    validationWarnings: v.array(v.string()),
+  })
+    .index("by_owner_status", ["ownerId", "status"])
+    .index("by_owner_source_externalId", ["ownerId", "source", "externalId"])
+    .index("by_owner_date", ["ownerId", "date"]),
 });

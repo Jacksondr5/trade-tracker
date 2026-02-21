@@ -12,9 +12,6 @@ const tradeWithPLValidator = v.object({
   direction: v.union(v.literal("long"), v.literal("short")),
   externalId: v.optional(v.string()),
   fees: v.optional(v.number()),
-  inboxStatus: v.optional(
-    v.union(v.literal("pending_review"), v.literal("accepted")),
-  ),
   notes: v.optional(v.string()),
   orderType: v.optional(v.string()),
   ownerId: v.string(),
@@ -137,7 +134,7 @@ export const listTrades = query({
         .query("trades")
         .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .collect()
-    ).filter((t) => t.inboxStatus !== "pending_review");
+    );
     const plMap = calculateTradesPL(trades);
 
     return [...trades]
@@ -157,7 +154,7 @@ export const getTrade = query({
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
     const trade = await ctx.db.get(args.tradeId);
-    if (!trade || trade.ownerId !== ownerId || trade.inboxStatus === "pending_review") {
+    if (!trade || trade.ownerId !== ownerId) {
       return null;
     }
 
@@ -166,7 +163,7 @@ export const getTrade = query({
         .query("trades")
         .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .collect()
-    ).filter((t) => t.inboxStatus !== "pending_review");
+    );
     const plMap = calculateTradesPL(allTrades);
 
     return {
@@ -193,14 +190,14 @@ export const getTradesByTradePlan = query({
           q.eq("ownerId", ownerId).eq("tradePlanId", args.tradePlanId),
         )
         .collect()
-    ).filter((t) => t.inboxStatus !== "pending_review");
+    );
 
     const allTrades = (
       await ctx.db
         .query("trades")
         .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .collect()
-    ).filter((t) => t.inboxStatus !== "pending_review");
+    );
     const plMap = calculateTradesPL(allTrades);
 
     return [...trades]

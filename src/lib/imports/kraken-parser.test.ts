@@ -44,6 +44,8 @@ describe("parseKrakenCSV", () => {
       fees: 0.3,
       orderType: "market",
     });
+    expect(order2?.validationErrors).toEqual([]);
+    expect(order2?.validationWarnings).toEqual([]);
   });
 
   it("uses ordertxid as externalId and omits rows without ordertxid", () => {
@@ -71,5 +73,19 @@ describe("parseKrakenCSV", () => {
     expect(result.errors).toEqual([]);
     expect(result.trades).toHaveLength(1);
     expect(result.trades[0].taxes).toBe(0);
+  });
+
+  it("adds parser validation errors when side cannot be inferred", () => {
+    const csv = [
+      "aclass,cost,fee,ordertxid,ordertype,pair,time,type,vol",
+      "equity_pair,10,0.1,order-5,market,SHOP/USD,2026-02-20 09:00:00,hold,1",
+    ].join("\n");
+
+    const result = parseKrakenCSV(csv);
+
+    expect(result.errors).toEqual([]);
+    expect(result.trades).toHaveLength(1);
+    expect(result.trades[0].side).toBeUndefined();
+    expect(result.trades[0].validationErrors).toContain("Side is required");
   });
 });

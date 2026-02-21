@@ -25,7 +25,7 @@ export const getDashboardStats = query({
         .query("trades")
         .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .collect()
-    ).filter((t) => t.inboxStatus !== "pending_review");
+    );
 
     // Calculate P&L for all trades
     const tradePLMap = calculateTradesPL(allTrades);

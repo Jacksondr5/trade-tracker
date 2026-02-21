@@ -30,7 +30,7 @@ export const getPositions = query({
         .query("trades")
         .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .collect()
-    ).filter((t) => t.inboxStatus !== "pending_review");
+    );
 
     // Group trades by ticker and direction
     // Key format: "ticker:direction"

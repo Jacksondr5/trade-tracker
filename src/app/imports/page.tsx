@@ -7,7 +7,7 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { parseIBKRCSV } from "~/lib/imports/ibkr-parser";
 import { parseKrakenCSV } from "~/lib/imports/kraken-parser";
-import type { BrokerageSource } from "~/lib/imports/types";
+import type { BrokerageSource } from "../../../shared/imports/types";
 import { Check, Pencil, Trash2 } from "lucide-react";
 
 function formatDate(timestamp: number): string {
@@ -27,24 +27,42 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
+function toDateTimeLocalValue(timestamp?: number): string {
+  if (timestamp === undefined || !Number.isFinite(timestamp)) return "";
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+
 export default function ImportsPage() {
   // Upload state
   const [brokerage, setBrokerage] = useState<BrokerageSource>("ibkr");
   const [importResult, setImportResult] = useState<{
     imported: number;
-    skipped: number;
+    skippedDuplicates: number;
+    withValidationErrors: number;
+    withWarnings: number;
   } | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
 
   // Edit state
-  const [editingTradeId, setEditingTradeId] = useState<Id<"trades"> | null>(
+  const [editingTradeId, setEditingTradeId] = useState<Id<"inboxTrades"> | null>(
     null,
   );
   const [editDirection, setEditDirection] = useState<"long" | "short">("long");
   const [editAssetType, setEditAssetType] = useState<"stock" | "crypto">(
     "stock",
   );
+  const [editSide, setEditSide] = useState<"buy" | "sell" | "">("");
+  const [editTicker, setEditTicker] = useState("");
+  const [editPrice, setEditPrice] = useState("");
+  const [editQuantity, setEditQuantity] = useState("");
+  const [editDate, setEditDate] = useState("");
 
   // Inline edit state (per-row)
   const [inlineNotes, setInlineNotes] = useState<Record<string, string>>({});
@@ -88,6 +106,31 @@ export default function ImportsPage() {
   const deleteInboxTrade = useMutation(api.imports.deleteInboxTrade);
   const deleteAllInboxTrades = useMutation(api.imports.deleteAllInboxTrades);
   const updateInboxTrade = useMutation(api.imports.updateInboxTrade);
+
+  const persistTradePlanSelection = (
+    inboxTradeId: Id<"inboxTrades">,
+    value: string,
+  ) => {
+    void updateInboxTrade({
+      inboxTradeId,
+      tradePlanId: value ? (value as Id<"tradePlans">) : null,
+    }).catch((error) => {
+      setImportError(
+        error instanceof Error ? error.message : "Failed to update trade plan",
+      );
+    });
+  };
+
+  const persistNotes = (inboxTradeId: Id<"inboxTrades">, value: string) => {
+    void updateInboxTrade({
+      inboxTradeId,
+      notes: value || null,
+    }).catch((error) => {
+      setImportError(
+        error instanceof Error ? error.message : "Failed to update notes",
+      );
+    });
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -133,8 +176,13 @@ export default function ImportsPage() {
 
   const handleEdit = (trade: NonNullable<typeof inboxTrades>[number]) => {
     setEditingTradeId(trade._id);
-    setEditDirection(trade.direction);
-    setEditAssetType(trade.assetType);
+    setEditDirection(trade.direction ?? "long");
+    setEditAssetType(trade.assetType ?? "stock");
+    setEditSide(trade.side ?? "");
+    setEditTicker(trade.ticker ?? "");
+    setEditPrice(trade.price !== undefined ? String(trade.price) : "");
+    setEditQuantity(trade.quantity !== undefined ? String(trade.quantity) : "");
+    setEditDate(toDateTimeLocalValue(trade.date));
   };
 
   const handleSaveEdit = async () => {
@@ -142,8 +190,13 @@ export default function ImportsPage() {
     try {
       await updateInboxTrade({
         assetType: editAssetType,
+        date: editDate ? new Date(editDate).getTime() : null,
         direction: editDirection,
-        tradeId: editingTradeId,
+        inboxTradeId: editingTradeId,
+        price: editPrice.trim() ? Number(editPrice) : null,
+        quantity: editQuantity.trim() ? Number(editQuantity) : null,
+        side: editSide || null,
+        ticker: editTicker.trim() || null,
       });
       setEditingTradeId(null);
     } catch (error) {
@@ -151,16 +204,41 @@ export default function ImportsPage() {
     }
   };
 
-  const handleAccept = (tradeId: Id<"trades">) => {
-    const notes = inlineNotes[tradeId] || undefined;
-    const tradePlanId = inlineTradePlanIds[tradeId] || undefined;
+  const handleAccept = (inboxTradeId: Id<"inboxTrades">) => {
+    const trade = inboxTrades?.find((t) => t._id === inboxTradeId);
+    if (!trade) return;
+    if (!isTradeReadyForAcceptance(trade)) return;
+
+    const tradePlanId = inlineTradePlanIds[inboxTradeId] || undefined;
+    const notesValue = inlineNotes[inboxTradeId] || undefined;
     void acceptTrade({
-      notes,
-      tradePlanId: tradePlanId
-        ? (tradePlanId as Id<"tradePlans">)
-        : undefined,
-      tradeId,
+      inboxTradeId,
+      notes: notesValue,
+      tradePlanId: tradePlanId ? (tradePlanId as Id<"tradePlans">) : undefined,
+    }).then((result) => {
+      if (!result.accepted && result.error) {
+        setImportError(result.error);
+      }
     });
+  };
+
+  const isTradeReadyForAcceptance = (
+    trade: NonNullable<typeof inboxTrades>[number],
+  ): boolean => {
+    return !!(
+      trade.ticker &&
+      trade.assetType &&
+      trade.side &&
+      trade.direction &&
+      trade.date !== undefined &&
+      Number.isFinite(trade.date) &&
+      trade.price !== undefined &&
+      Number.isFinite(trade.price) &&
+      trade.price > 0 &&
+      trade.quantity !== undefined &&
+      Number.isFinite(trade.quantity) &&
+      trade.quantity > 0
+    );
   };
 
   return (
@@ -222,14 +300,30 @@ export default function ImportsPage() {
               Imported{" "}
               <span className="font-semibold">{importResult.imported}</span>{" "}
               trade{importResult.imported !== 1 ? "s" : ""}.
-              {importResult.skipped > 0 && (
+              {importResult.skippedDuplicates > 0 && (
                 <>
                   {" "}
                   Skipped{" "}
                   <span className="font-semibold">
-                    {importResult.skipped}
+                    {importResult.skippedDuplicates}
                   </span>{" "}
-                  duplicate{importResult.skipped !== 1 ? "s" : ""}.
+                  duplicate{importResult.skippedDuplicates !== 1 ? "s" : ""}.
+                </>
+              )}
+              {importResult.withValidationErrors > 0 && (
+                <>
+                  {" "}
+                  <span className="font-semibold">
+                    {importResult.withValidationErrors}
+                  </span>{" "}
+                  need review.
+                </>
+              )}
+              {importResult.withWarnings > 0 && (
+                <>
+                  {" "}
+                  <span className="font-semibold">{importResult.withWarnings}</span>{" "}
+                  with warnings.
                 </>
               )}
             </div>
@@ -258,7 +352,37 @@ export default function ImportsPage() {
             <div className="flex gap-2">
               <Button
                 dataTestId="accept-all-trades-button"
-                onClick={() => void acceptAllTrades()}
+                onClick={() =>
+                  void (async () => {
+                    if (inboxTrades) {
+                      await Promise.all(
+                        inboxTrades.map((trade) => {
+                          const selected = inlineTradePlanIds[trade._id] ?? "";
+                          const notes = inlineNotes[trade._id] ?? "";
+                          const tradePlanChanged =
+                            selected !==
+                            (trade.tradePlanId ? String(trade.tradePlanId) : "");
+                          const notesChanged = notes !== (trade.notes ?? "");
+                          if (!tradePlanChanged && !notesChanged) return Promise.resolve();
+                          return updateInboxTrade({
+                            inboxTradeId: trade._id,
+                            notes: notes || null,
+                            tradePlanId: selected
+                              ? (selected as Id<"tradePlans">)
+                              : null,
+                          });
+                        }),
+                      );
+                    }
+
+                    const result = await acceptAllTrades();
+                    if (result.skippedInvalid > 0) {
+                      setImportError(
+                        `Accepted ${result.accepted}. ${result.skippedInvalid} need review.`,
+                      );
+                    }
+                  })()
+                }
                 variant="outline"
               >
                 Accept All ({inboxTrades.length})
@@ -281,6 +405,33 @@ export default function ImportsPage() {
               Edit Trade
             </h3>
             <div className="flex flex-wrap items-end gap-4">
+              <div>
+                <label className="text-slate-12 mb-1 block text-xs font-medium">
+                  Ticker
+                </label>
+                <input
+                  type="text"
+                  value={editTicker}
+                  onChange={(e) => setEditTicker(e.target.value)}
+                  className="text-slate-12 h-8 rounded border border-slate-600 bg-slate-700 px-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-slate-12 mb-1 block text-xs font-medium">
+                  Side
+                </label>
+                <select
+                  value={editSide}
+                  onChange={(e) =>
+                    setEditSide(e.target.value as "buy" | "sell" | "")
+                  }
+                  className="text-slate-12 h-8 rounded border border-slate-600 bg-slate-700 px-2 text-sm"
+                >
+                  <option value="">---</option>
+                  <option value="buy">Buy</option>
+                  <option value="sell">Sell</option>
+                </select>
+              </div>
               <div>
                 <label className="text-slate-12 mb-1 block text-xs font-medium">
                   Direction
@@ -314,6 +465,41 @@ export default function ImportsPage() {
                   <option value="stock">Stock</option>
                   <option value="crypto">Crypto</option>
                 </select>
+              </div>
+              <div>
+                <label className="text-slate-12 mb-1 block text-xs font-medium">
+                  Price
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  value={editPrice}
+                  onChange={(e) => setEditPrice(e.target.value)}
+                  className="text-slate-12 h-8 rounded border border-slate-600 bg-slate-700 px-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-slate-12 mb-1 block text-xs font-medium">
+                  Quantity
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  value={editQuantity}
+                  onChange={(e) => setEditQuantity(e.target.value)}
+                  className="text-slate-12 h-8 rounded border border-slate-600 bg-slate-700 px-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-slate-12 mb-1 block text-xs font-medium">
+                  Date
+                </label>
+                <input
+                  type="datetime-local"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="text-slate-12 h-8 rounded border border-slate-600 bg-slate-700 px-2 text-sm"
+                />
               </div>
               <div className="flex gap-2">
                 <Button dataTestId="save-edit-button" onClick={() => void handleSaveEdit()}>
@@ -387,41 +573,64 @@ export default function ImportsPage() {
                     className={`hover:bg-slate-800/50 ${editingTradeId === trade._id ? "ring-2 ring-blue-500 bg-blue-900/20" : ""}`}
                   >
                     <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-sm">
-                      {formatDate(trade.date)}
+                      {trade.date !== undefined ? formatDate(trade.date) : "---"}
                     </td>
                     <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-sm font-medium">
-                      {trade.ticker}
+                      {trade.ticker ?? "---"}
+                      {(trade.validationErrors.length > 0 ||
+                        trade.validationWarnings.length > 0) && (
+                        <div className="mt-1 space-y-1 text-xs">
+                          {trade.validationErrors.slice(0, 2).map((error) => (
+                            <div key={error} className="text-red-300">
+                              Error: {error}
+                            </div>
+                          ))}
+                          {trade.validationWarnings.slice(0, 2).map((warning) => (
+                            <div key={warning} className="text-amber-300">
+                              Warning: {warning}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm">
-                      <span
-                        className={`text-slate-12 rounded px-2 py-0.5 ${
-                          trade.side === "buy"
-                            ? "border border-green-700 bg-green-900/50"
-                            : "border border-red-700 bg-red-900/50"
-                        }`}
-                      >
-                        {trade.side.toUpperCase()}
-                      </span>
+                      {trade.side ? (
+                        <span
+                          className={`text-slate-12 rounded px-2 py-0.5 ${trade.side === "buy"
+                              ? "border border-green-700 bg-green-900/50"
+                              : "border border-red-700 bg-red-900/50"
+                            }`}
+                        >
+                          {trade.side.toUpperCase()}
+                        </span>
+                      ) : (
+                        <span className="text-slate-11">---</span>
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm">
-                      <span
-                        className={`text-slate-12 rounded px-2 py-0.5 ${
-                          trade.direction === "long"
-                            ? "border border-blue-700 bg-blue-900/50"
-                            : "border border-red-700 bg-red-900/50"
-                        }`}
-                      >
-                        {trade.direction.toUpperCase()}
-                      </span>
+                      {trade.direction ? (
+                        <span
+                          className={`text-slate-12 rounded px-2 py-0.5 ${trade.direction === "long"
+                              ? "border border-blue-700 bg-blue-900/50"
+                              : "border border-red-700 bg-red-900/50"
+                            }`}
+                        >
+                          {trade.direction.toUpperCase()}
+                        </span>
+                      ) : (
+                        <span className="text-slate-11">---</span>
+                      )}
                     </td>
                     <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">
-                      {formatCurrency(trade.price)}
+                      {trade.price !== undefined ? formatCurrency(trade.price) : "---"}
                     </td>
                     <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">
-                      {trade.quantity}
+                      {trade.quantity ?? "---"}
                     </td>
                     <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">
-                      {formatCurrency(trade.price * trade.quantity)}
+                      {trade.price !== undefined && trade.quantity !== undefined
+                        ? formatCurrency(trade.price * trade.quantity)
+                        : "---"}
                     </td>
                     <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
                       {trade.brokerageAccountId || "---"}
@@ -429,12 +638,14 @@ export default function ImportsPage() {
                     <td className="px-4 py-3 text-sm">
                       <select
                         value={inlineTradePlanIds[trade._id] ?? ""}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          const nextValue = e.target.value;
                           setInlineTradePlanIds((prev) => ({
                             ...prev,
-                            [trade._id]: e.target.value,
-                          }))
-                        }
+                            [trade._id]: nextValue,
+                          }));
+                          persistTradePlanSelection(trade._id, nextValue);
+                        }}
                         className="text-slate-12 h-7 w-full min-w-[120px] rounded border border-slate-600 bg-slate-700 px-1 text-xs"
                       >
                         <option value="">None</option>
@@ -455,6 +666,7 @@ export default function ImportsPage() {
                             [trade._id]: e.target.value,
                           }))
                         }
+                        onBlur={(e) => persistNotes(trade._id, e.target.value)}
                         placeholder="Notes..."
                         className="text-slate-12 h-7 w-full min-w-[120px] rounded border border-slate-600 bg-slate-700 px-2 text-xs"
                       />
@@ -463,8 +675,13 @@ export default function ImportsPage() {
                       <div className="flex justify-end gap-1">
                         <button
                           onClick={() => handleAccept(trade._id)}
-                          className="rounded p-1.5 text-green-400 hover:bg-green-900/50"
-                          title="Accept"
+                          disabled={!isTradeReadyForAcceptance(trade)}
+                          className="rounded p-1.5 text-green-400 hover:bg-green-900/50 disabled:cursor-not-allowed disabled:opacity-40"
+                          title={
+                            isTradeReadyForAcceptance(trade)
+                              ? "Accept"
+                              : "Missing required fields"
+                          }
                         >
                           <Check className="h-4 w-4" />
                         </button>
@@ -478,7 +695,7 @@ export default function ImportsPage() {
                         <button
                           onClick={() =>
                             void deleteInboxTrade({
-                              tradeId: trade._id,
+                              inboxTradeId: trade._id,
                             })
                           }
                           className="rounded p-1.5 text-red-400 hover:bg-red-900/50"

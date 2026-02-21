@@ -1,5 +1,7 @@
 import Papa from "papaparse";
-import type { NormalizedTrade, ParseResult } from "./types";
+import type { ParseResult } from "./types";
+import { withParserValidation } from "./validation";
+import { InboxTradeCandidate } from "../../../shared/imports/types";
 
 interface IBKRRow {
   "Buy/Sell": string;
@@ -35,14 +37,14 @@ function parseIBKRDateTime(dt: string): number {
 function inferDirection(
   openClose: string,
   buySell: string,
-): "long" | "short" {
+): "long" | "short" | undefined {
   const oc = openClose.trim().toUpperCase();
   const bs = buySell.trim().toUpperCase();
   if (oc === "O" && bs === "BUY") return "long";
   if (oc === "O" && bs === "SELL") return "short";
   if (oc === "C" && bs === "SELL") return "long";
   if (oc === "C" && bs === "BUY") return "short";
-  return "long";
+  return undefined;
 }
 
 export function parseIBKRCSV(csvContent: string): ParseResult {
@@ -52,7 +54,7 @@ export function parseIBKRCSV(csvContent: string): ParseResult {
   });
 
   const errors: string[] = [];
-  const trades: NormalizedTrade[] = [];
+  const trades: InboxTradeCandidate[] = [];
 
   for (const row of parsed.data) {
     // Skip repeated header rows (multi-account exports)
@@ -68,35 +70,44 @@ export function parseIBKRCSV(csvContent: string): ParseResult {
     if (!row.DateTime?.trim()) continue;
 
     try {
-      const quantity = Math.abs(parseFloat(row.Quantity));
-      const price = parseFloat(row.TradePrice);
-      const taxes = parseFloat(row.Taxes) || 0;
-      const date = parseIBKRDateTime(row.DateTime);
+      const parsedQuantity = Math.abs(parseFloat(row.Quantity));
+      const parsedPrice = parseFloat(row.TradePrice);
+      const parsedTaxes = parseFloat(row.Taxes);
+      const parsedDate = parseIBKRDateTime(row.DateTime);
       const buySell = row["Buy/Sell"].trim().toUpperCase();
-      const side: "buy" | "sell" = buySell === "BUY" ? "buy" : "sell";
+      const side: "buy" | "sell" | undefined =
+        buySell === "BUY" ? "buy" : buySell === "SELL" ? "sell" : undefined;
       const direction = inferDirection(
         row["Open/CloseIndicator"],
         row["Buy/Sell"],
       );
 
       // Composite string for dedup (unique per order)
-      const externalId = `${row.ClientAccountID}|${row.Symbol}|${row.DateTime}|${row.TradePrice}|${row.Quantity}`;
+      const externalId =
+        row.ClientAccountID &&
+        row.Symbol &&
+        row.DateTime &&
+        row.TradePrice &&
+        row.Quantity
+          ? `${row.ClientAccountID}|${row.Symbol}|${row.DateTime}|${row.TradePrice}|${row.Quantity}`
+          : undefined;
 
-      trades.push({
+      const trade = withParserValidation({
         assetType: "stock",
         brokerageAccountId: row.ClientAccountID,
-        date,
+        date: Number.isFinite(parsedDate) ? parsedDate : undefined,
         direction,
         externalId,
         fees: 0,
         orderType: row.OrderType?.trim() || undefined,
-        price,
-        quantity,
+        price: Number.isFinite(parsedPrice) ? parsedPrice : undefined,
+        quantity: Number.isFinite(parsedQuantity) ? parsedQuantity : undefined,
         side,
         source: "ibkr",
-        taxes: taxes || undefined,
+        taxes: Number.isFinite(parsedTaxes) ? parsedTaxes : undefined,
         ticker: row.Symbol.trim().toUpperCase(),
       });
+      trades.push(trade);
     } catch (e) {
       errors.push(
         `Failed to parse IBKR row for ${row.Symbol}: ${e instanceof Error ? e.message : String(e)}`,

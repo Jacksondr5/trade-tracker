@@ -1,5 +1,7 @@
 import Papa from "papaparse";
-import type { NormalizedTrade, ParseResult } from "./types";
+import type { ParseResult } from "./types";
+import { InboxTradeCandidate } from "../../../shared/imports/types";
+import { withParserValidation } from "./validation";
 
 interface KrakenRow {
   aclass: string;
@@ -37,7 +39,7 @@ export function parseKrakenCSV(csvContent: string): ParseResult {
     orderMap.get(orderId)!.push(row);
   }
 
-  const trades: NormalizedTrade[] = [];
+  const trades: InboxTradeCandidate[] = [];
 
   for (const [orderId, fills] of orderMap) {
     try {
@@ -55,23 +57,30 @@ export function parseKrakenCSV(csvContent: string): ParseResult {
         const fee = parseFloat(fill.fee);
         const time = new Date(fill.time.replace(" ", "T")).getTime();
 
-        totalCost += cost;
-        totalVol += vol;
-        totalFee += fee;
-        if (time < earliestTime) earliestTime = time;
+        if (Number.isFinite(cost)) totalCost += cost;
+        if (Number.isFinite(vol)) totalVol += vol;
+        if (Number.isFinite(fee)) totalFee += fee;
+        if (Number.isFinite(time) && time < earliestTime) earliestTime = time;
         pair = fill.pair;
         type = fill.type;
         ordertype = fill.ordertype;
       }
 
-      const avgPrice = totalVol > 0 ? totalCost / totalVol : 0;
-      const ticker = pair.split("/")[0].toUpperCase();
-      const side: "buy" | "sell" =
-        type.trim().toLowerCase() === "buy" ? "buy" : "sell";
+      const avgPrice = totalVol > 0 ? totalCost / totalVol : undefined;
+      const ticker = pair.includes("/")
+        ? pair.split("/")[0].toUpperCase()
+        : undefined;
+      const normalizedType = type.trim().toLowerCase();
+      const side: "buy" | "sell" | undefined =
+        normalizedType === "buy"
+          ? "buy"
+          : normalizedType === "sell"
+            ? "sell"
+            : undefined;
 
-      trades.push({
+      const trade = withParserValidation({
         assetType: "stock",
-        date: earliestTime,
+        date: Number.isFinite(earliestTime) ? earliestTime : undefined,
         direction: "long",
         externalId: orderId,
         fees: totalFee || undefined,
@@ -80,9 +89,10 @@ export function parseKrakenCSV(csvContent: string): ParseResult {
         quantity: totalVol,
         side,
         source: "kraken",
-        taxes: undefined,
+        taxes: 0,
         ticker,
       });
+      trades.push(trade);
     } catch (e) {
       errors.push(
         `Failed to parse Kraken order ${orderId}: ${e instanceof Error ? e.message : String(e)}`,

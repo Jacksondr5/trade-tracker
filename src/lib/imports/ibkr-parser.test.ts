@@ -27,6 +27,8 @@ describe("parseIBKRCSV", () => {
       orderType: "LMT",
       brokerageAccountId: "U18731407",
     });
+    expect(trade.validationErrors).toEqual([]);
+    expect(trade.validationWarnings).toEqual([]);
 
     expect(trade.date).toBe(new Date(2026, 1, 20, 9, 30, 0).getTime());
   });
@@ -83,5 +85,21 @@ describe("parseIBKRCSV", () => {
     expect(result.trades[0].externalId).toContain("20260220;150501");
     expect(result.trades[0].externalId).toContain("555.1");
     expect(result.trades[0].externalId).toContain("-2");
+  });
+
+  it("adds parser validation errors when side/direction cannot be inferred", () => {
+    const csv = [
+      "ClientAccountID,Symbol,Buy/Sell,Open/CloseIndicator,TradePrice,Quantity,DateTime,Taxes,OrderType,TransactionType",
+      "U1,NVDA,HOLD,X,555.1,-2,20260220;150501,0,MKT,",
+    ].join("\n");
+
+    const result = parseIBKRCSV(csv);
+
+    expect(result.errors).toEqual([]);
+    expect(result.trades).toHaveLength(1);
+    expect(result.trades[0].side).toBeUndefined();
+    expect(result.trades[0].direction).toBeUndefined();
+    expect(result.trades[0].validationErrors).toContain("Side is required");
+    expect(result.trades[0].validationErrors).toContain("Direction is required");
   });
 });
