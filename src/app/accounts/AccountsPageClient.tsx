@@ -78,6 +78,8 @@ export default function AccountsPageClient({
   };
 
   const cancelEditing = () => {
+    if (isSavingEdit) return;
+
     setEditingKey(null);
     setEditingFriendlyName("");
     setErrorMessage(null);
@@ -180,9 +182,11 @@ export default function AccountsPageClient({
                           {isEditing ? (
                             <Input
                               dataTestId={`edit-mapping-name-${key}`}
-                              onChange={(event) =>
-                                setEditingFriendlyName(event.target.value)
-                              }
+                              disabled={isSavingEdit}
+                              onChange={(event) => {
+                                if (isSavingEdit) return;
+                                setEditingFriendlyName(event.target.value);
+                              }}
                               placeholder="Friendly name"
                               value={editingFriendlyName}
                             />
@@ -206,6 +210,7 @@ export default function AccountsPageClient({
                               </Button>
                               <Button
                                 dataTestId={`cancel-mapping-${key}`}
+                                disabled={isSavingEdit}
                                 onClick={cancelEditing}
                                 size="sm"
                                 type="button"
