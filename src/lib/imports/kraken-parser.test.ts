@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseKrakenCSV } from "./kraken-parser";
+import { KRAKEN_DEFAULT_ACCOUNT_ID } from "../../../shared/imports/constants";
 
 describe("parseKrakenCSV", () => {
   it("filters non-equity rows and aggregates fills by ordertxid", () => {
@@ -24,6 +25,7 @@ describe("parseKrakenCSV", () => {
       direction: "long",
       assetType: "stock",
       source: "kraken",
+      brokerageAccountId: KRAKEN_DEFAULT_ACCOUNT_ID,
       quantity: 3,
       price: 35 / 3,
       orderType: "limit",
@@ -39,6 +41,7 @@ describe("parseKrakenCSV", () => {
       direction: "long",
       assetType: "stock",
       source: "kraken",
+      brokerageAccountId: KRAKEN_DEFAULT_ACCOUNT_ID,
       quantity: 4,
       price: 10,
       fees: 0.3,
@@ -73,6 +76,19 @@ describe("parseKrakenCSV", () => {
     expect(result.errors).toEqual([]);
     expect(result.trades).toHaveLength(1);
     expect(result.trades[0].taxes).toBe(0);
+  });
+
+  it("assigns synthetic default account ID for Kraken trades", () => {
+    const csv = [
+      "aclass,cost,fee,ordertxid,ordertype,pair,time,type,vol",
+      "equity_pair,10,0.1,order-6,market,SHOP/USD,2026-02-20 09:00:00,buy,1",
+    ].join("\n");
+
+    const result = parseKrakenCSV(csv);
+
+    expect(result.errors).toEqual([]);
+    expect(result.trades).toHaveLength(1);
+    expect(result.trades[0].brokerageAccountId).toBe(KRAKEN_DEFAULT_ACCOUNT_ID);
   });
 
   it("adds parser validation errors when side cannot be inferred", () => {

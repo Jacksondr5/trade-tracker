@@ -1,6 +1,12 @@
 "use client";
 
-import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
+import {
+  SignedIn,
+  SignedOut,
+  SignInButton,
+  SignUpButton,
+  UserButton,
+} from "@clerk/nextjs";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -13,6 +19,7 @@ const navLinks = [
   { href: "/positions", label: "Positions" },
   { href: "/portfolio", label: "Portfolio" },
   { href: "/imports", label: "Import" },
+  { href: "/accounts", label: "Accounts" },
 ];
 
 export function Header() {
@@ -30,7 +37,10 @@ export function Header() {
     <header className="border-b border-slate-700 bg-slate-900">
       <div className="flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-8">
-          <Link href="/" className="text-xl font-semibold text-slate-12 hover:text-white">
+          <Link
+            href="/"
+            className="text-slate-12 text-xl font-semibold hover:text-white"
+          >
             Trade Tracker
           </Link>
 
@@ -75,7 +85,7 @@ export function Header() {
           <SignedIn>
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 text-slate-12 hover:bg-slate-800 md:hidden"
+              className="text-slate-12 flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 hover:bg-slate-800 md:hidden"
               aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
               aria-expanded={mobileMenuOpen}
             >
@@ -118,24 +128,24 @@ export function Header() {
       {/* Mobile navigation */}
       <SignedIn>
         {mobileMenuOpen && (
-        <nav className="border-t border-slate-700 px-6 py-4 md:hidden">
-          <div className="flex flex-col gap-3">
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                onClick={() => setMobileMenuOpen(false)}
-                className={`rounded-md px-3 py-2 text-sm transition-colors ${
-                  isActiveLink(link.href)
-                    ? "bg-slate-800 font-medium text-white"
-                    : "text-slate-11 hover:bg-slate-800 hover:text-slate-12"
-                }`}
-              >
-                {link.label}
-              </Link>
-            ))}
-          </div>
-        </nav>
+          <nav className="border-t border-slate-700 px-6 py-4 md:hidden">
+            <div className="flex flex-col gap-3">
+              {navLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`rounded-md px-3 py-2 text-sm transition-colors ${
+                    isActiveLink(link.href)
+                      ? "bg-slate-800 font-medium text-white"
+                      : "text-slate-11 hover:text-slate-12 hover:bg-slate-800"
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+          </nav>
         )}
       </SignedIn>
     </header>

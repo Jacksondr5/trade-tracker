@@ -8,12 +8,14 @@
  * @module
  */
 
+import type * as accountMappings from "../accountMappings.js";
 import type * as analytics from "../analytics.js";
 import type * as campaignNotes from "../campaignNotes.js";
 import type * as campaigns from "../campaigns.js";
 import type * as imports from "../imports.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_plCalculation from "../lib/plCalculation.js";
+import type * as migrations from "../migrations.js";
 import type * as portfolioSnapshots from "../portfolioSnapshots.js";
 import type * as positions from "../positions.js";
 import type * as tradePlans from "../tradePlans.js";
@@ -26,12 +28,14 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  accountMappings: typeof accountMappings;
   analytics: typeof analytics;
   campaignNotes: typeof campaignNotes;
   campaigns: typeof campaigns;
   imports: typeof imports;
   "lib/auth": typeof lib_auth;
   "lib/plCalculation": typeof lib_plCalculation;
+  migrations: typeof migrations;
   portfolioSnapshots: typeof portfolioSnapshots;
   positions: typeof positions;
   tradePlans: typeof tradePlans;

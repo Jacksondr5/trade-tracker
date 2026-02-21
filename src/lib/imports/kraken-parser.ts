@@ -2,6 +2,7 @@ import Papa from "papaparse";
 import type { ParseResult } from "./types";
 import type { InboxTradeCandidate } from "../../../shared/imports/types";
 import { withParserValidation } from "./validation";
+import { KRAKEN_DEFAULT_ACCOUNT_ID } from "../../../shared/imports/constants";
 
 interface KrakenRow {
   aclass: string;
@@ -83,6 +84,7 @@ export function parseKrakenCSV(csvContent: string): ParseResult {
 
       const trade = withParserValidation({
         assetType: "stock",
+        brokerageAccountId: KRAKEN_DEFAULT_ACCOUNT_ID,
         date: Number.isFinite(earliestTime) ? earliestTime : undefined,
         direction: "long",
         externalId: orderId,

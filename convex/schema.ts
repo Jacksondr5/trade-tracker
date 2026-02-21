@@ -60,6 +60,15 @@ export default defineSchema({
     .index("by_owner_status", ["ownerId", "status"])
     .index("by_owner_campaignId", ["ownerId", "campaignId"]),
 
+  accountMappings: defineTable({
+    accountId: v.string(),
+    friendlyName: v.string(),
+    ownerId: v.string(),
+    source: v.union(v.literal("ibkr"), v.literal("kraken")),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_source_accountId", ["ownerId", "source", "accountId"]),
+
   trades: defineTable({
     assetType: v.union(v.literal("crypto"), v.literal("stock")),
     brokerageAccountId: v.optional(v.string()),
