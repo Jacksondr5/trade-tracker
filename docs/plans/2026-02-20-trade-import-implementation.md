@@ -828,7 +828,7 @@ export function parseKrakenCSV(csvContent: string): ParseResult {
         const cost = parseFloat(fill.cost);
         const vol = parseFloat(fill.vol);
         const fee = parseFloat(fill.fee);
-        const time = new Date(fill.time.replace(" ", "T")).getTime();
+        const time = new Date(fill.time.replace(" ", "T") + "Z").getTime();
 
         totalCost += cost;
         totalVol += vol;
