@@ -7,16 +7,10 @@ import { useState } from "react";
 import { Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import { Id } from "~/convex/_generated/dataModel";
+import { formatCurrency, formatDate } from "~/lib/format";
 
 type CampaignStatus = "planning" | "active" | "closed";
 type StatusFilter = "all" | CampaignStatus;
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(value);
-}
 
 function CampaignPL({ campaignId }: { campaignId: Id<"campaigns"> }) {
   const campaignPL = useQuery(api.campaigns.getCampaignPL, { campaignId });
@@ -39,15 +33,6 @@ function CampaignPL({ campaignId }: { campaignId: Id<"campaigns"> }) {
       {formatCurrency(campaignPL.realizedPL)}
     </span>
   );
-}
-
-function formatDate(timestamp: number): string {
-  const date = new Date(timestamp);
-  return date.toLocaleDateString("en-US", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
 }
 
 function getStatusBadgeClasses(status: CampaignStatus): string {

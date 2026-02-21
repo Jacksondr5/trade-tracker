@@ -2,13 +2,7 @@
 
 import { Preloaded, usePreloadedQuery } from "convex/react";
 import { api } from "~/convex/_generated/api";
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    currency: "USD",
-    style: "currency",
-  }).format(value);
-}
+import { formatCurrency } from "~/lib/format";
 
 export default function PositionsPageClient({
   preloadedPositions,

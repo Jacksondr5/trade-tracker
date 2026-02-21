@@ -8,6 +8,7 @@ import { z } from "zod";
 import { useAppForm } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Doc, Id } from "~/convex/_generated/dataModel";
+import { formatCurrency, formatDate } from "~/lib/format";
 
 type CampaignStatus = "planning" | "active" | "closed";
 type TradePlanStatus = "idea" | "watching" | "active" | "closed";
@@ -15,23 +16,6 @@ type SaveState = "idle" | "saving" | "saved";
 const noteSchema = z.object({
   content: z.string().min(1, "Note content is required"),
 });
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(value);
-}
-
-function formatDateTime(timestamp: number): string {
-  return new Date(timestamp).toLocaleString("en-US", {
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
 
 export default function CampaignDetailPageClient({
   campaignId,
@@ -423,7 +407,7 @@ export default function CampaignDetailPageClient({
               return (
                 <div key={note._id} className="rounded border border-slate-600 p-3">
                   <div className="mb-2 flex items-center justify-between gap-2">
-                    <span className="text-xs text-slate-11">{formatDateTime(note._creationTime)}</span>
+                    <span className="text-xs text-slate-11">{formatDate(note._creationTime)}</span>
                     {!isEditing && (
                       <button
                         type="button"

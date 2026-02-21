@@ -6,24 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo } from "react";
 import { Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
-
-function formatDate(timestamp: number): string {
-  const date = new Date(timestamp);
-  return date.toLocaleDateString("en-US", {
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    currency: "USD",
-    style: "currency",
-  }).format(value);
-}
+import { formatCurrency, formatDate } from "~/lib/format";
 
 function formatPL(value: number): string {
   const formatted = new Intl.NumberFormat("en-US", {

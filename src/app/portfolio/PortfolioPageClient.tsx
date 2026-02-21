@@ -3,21 +3,7 @@
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
 import { useState } from "react";
 import { api } from "~/convex/_generated/api";
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(value);
-}
-
-function formatDate(timestamp: number): string {
-  return new Date(timestamp).toLocaleDateString("en-US", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
+import { formatCurrency, formatDate } from "~/lib/format";
 
 function getTodayDateString(): string {
   const today = new Date();

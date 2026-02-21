@@ -3,13 +3,7 @@
 import { SignInButton, SignUpButton, useAuth } from "@clerk/nextjs";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(value);
-}
+import { formatCurrency } from "~/lib/format";
 
 function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`;
