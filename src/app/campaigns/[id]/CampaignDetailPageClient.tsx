@@ -344,7 +344,7 @@ export default function CampaignDetailPageClient({
           <p className="text-xs text-slate-11">Closed {new Date(campaign.closedAt).toLocaleDateString("en-US")}</p>
         )}
 
-        {campaignPL.tradeCount > 0 && (
+        {campaignPL !== null && campaignPL.tradeCount > 0 && (
           <p className="mt-2 text-sm text-slate-11">
             Realized P&amp;L:{" "}
             <span className={campaignPL.realizedPL >= 0 ? "text-green-400" : "text-red-400"}>

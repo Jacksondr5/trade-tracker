@@ -48,18 +48,3 @@ export const listSnapshots = query({
     return snapshots;
   },
 });
-
-export const getLatestSnapshot = query({
-  args: {},
-  returns: v.union(portfolioSnapshotValidator, v.null()),
-  handler: async (ctx) => {
-    const ownerId = await requireUser(ctx);
-    const snapshot = await ctx.db
-      .query("portfolioSnapshots")
-      .withIndex("by_owner_date", (q) => q.eq("ownerId", ownerId))
-      .order("desc")
-      .first();
-
-    return snapshot;
-  },
-});

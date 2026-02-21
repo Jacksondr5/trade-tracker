@@ -19,7 +19,7 @@ function CampaignPL({ campaignId }: { campaignId: Id<"campaigns"> }) {
     return <span className="text-slate-11">...</span>;
   }
 
-  if (campaignPL.tradeCount === 0) {
+  if (campaignPL === null || campaignPL.tradeCount === 0) {
     return <span className="text-slate-11">—</span>;
   }
 
