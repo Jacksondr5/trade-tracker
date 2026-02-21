@@ -100,11 +100,7 @@ export default defineSchema({
     quantity: v.optional(v.number()),
     side: v.optional(v.union(v.literal("buy"), v.literal("sell"))),
     source: v.union(v.literal("ibkr"), v.literal("kraken")),
-    status: v.union(
-      v.literal("pending_review"),
-      v.literal("accepted"),
-      v.literal("deleted"),
-    ),
+    status: v.literal("pending_review"),
     taxes: v.optional(v.number()),
     ticker: v.optional(v.string()),
     tradePlanId: v.optional(v.id("tradePlans")),

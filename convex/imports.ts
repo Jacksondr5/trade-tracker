@@ -35,8 +35,6 @@ const inboxTradeValidator = v.object({
   source: sourceValidator,
   status: v.union(
     v.literal("pending_review"),
-    v.literal("accepted"),
-    v.literal("deleted"),
   ),
   taxes: v.optional(v.number()),
   ticker: v.optional(v.string()),
@@ -397,40 +395,5 @@ export const updateInboxTrade = mutation({
 
     await ctx.db.patch(inboxTradeId, patch);
     return null;
-  },
-});
-
-export const purgeResolvedInboxTrades = mutation({
-  args: {
-    olderThanDays: v.optional(v.number()),
-  },
-  returns: v.number(),
-  handler: async (ctx, args) => {
-    const ownerId = await requireUser(ctx);
-    const olderThanDays = args.olderThanDays ?? 30;
-    const cutoff = Date.now() - olderThanDays * 24 * 60 * 60 * 1000;
-
-    const accepted = await ctx.db
-      .query("inboxTrades")
-      .withIndex("by_owner_status", (q) =>
-        q.eq("ownerId", ownerId).eq("status", "accepted"),
-      )
-      .collect();
-    const deleted = await ctx.db
-      .query("inboxTrades")
-      .withIndex("by_owner_status", (q) =>
-        q.eq("ownerId", ownerId).eq("status", "deleted"),
-      )
-      .collect();
-
-    const candidates = [...accepted, ...deleted].filter(
-      (t) => t._creationTime < cutoff,
-    );
-
-    for (const trade of candidates) {
-      await ctx.db.delete(trade._id);
-    }
-
-    return candidates.length;
   },
 });
