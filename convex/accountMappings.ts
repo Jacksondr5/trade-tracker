@@ -1,6 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { assertOwner, requireUser } from "./lib/auth";
+import { requireUser } from "./lib/auth";
 import {
   KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME,
   KRAKEN_DEFAULT_ACCOUNT_ID,
@@ -208,20 +208,5 @@ export const upsertAccountMapping = mutation({
       ownerId,
       source,
     });
-  },
-});
-
-export const deleteAccountMapping = mutation({
-  args: {
-    mappingId: v.id("accountMappings"),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const ownerId = await requireUser(ctx);
-    const rawMapping = await ctx.db.get(args.mappingId);
-    assertOwner(rawMapping, ownerId, "Account mapping not found");
-
-    await ctx.db.delete(args.mappingId);
-    return null;
   },
 });
