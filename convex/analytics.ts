@@ -20,10 +20,12 @@ export const getDashboardStats = query({
   handler: async (ctx) => {
     const ownerId = await requireUser(ctx);
     // Fetch all trades for P&L calculation
-    const allTrades = await ctx.db
-      .query("trades")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect();
+    const allTrades = (
+      await ctx.db
+        .query("trades")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .collect()
+    );
 
     // Calculate P&L for all trades
     const tradePLMap = calculateTradesPL(allTrades);
