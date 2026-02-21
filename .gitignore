@@ -39,3 +39,6 @@ coverage/
 *.log
 *.tsbuildinfo
 .worktrees/
+
+# Loal data
+data/
