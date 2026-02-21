@@ -64,17 +64,60 @@ export const createTrade = mutation({
   },
 });
 
+export const updateTrade = mutation({
+  args: {
+    assetType: v.optional(v.union(v.literal("crypto"), v.literal("stock"))),
+    date: v.optional(v.number()),
+    direction: v.optional(v.union(v.literal("long"), v.literal("short"))),
+    notes: v.optional(v.string()),
+    price: v.optional(v.number()),
+    quantity: v.optional(v.number()),
+    side: v.optional(v.union(v.literal("buy"), v.literal("sell"))),
+    ticker: v.optional(v.string()),
+    tradeId: v.id("trades"),
+    tradePlanId: v.optional(v.id("tradePlans")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const { tradeId, ...updates } = args;
+
+    const existingTrade = await ctx.db.get(tradeId);
+    assertOwner(existingTrade, ownerId, "Trade not found");
+
+    if (updates.tradePlanId !== undefined && updates.tradePlanId !== null) {
+      const tradePlan = await ctx.db.get(updates.tradePlanId);
+      assertOwner(tradePlan, ownerId, "Trade plan not found");
+    }
+
+    const patch: Record<string, unknown> = {};
+    if (updates.assetType !== undefined) patch.assetType = updates.assetType;
+    if (updates.date !== undefined) patch.date = updates.date;
+    if (updates.direction !== undefined) patch.direction = updates.direction;
+    if (updates.notes !== undefined) patch.notes = updates.notes;
+    if (updates.price !== undefined) patch.price = updates.price;
+    if (updates.quantity !== undefined) patch.quantity = updates.quantity;
+    if (updates.side !== undefined) patch.side = updates.side;
+    if (updates.ticker !== undefined) patch.ticker = updates.ticker;
+    if (updates.tradePlanId !== undefined)
+      patch.tradePlanId = updates.tradePlanId;
+    patch.ownerId = ownerId;
+
+    await ctx.db.patch(tradeId, patch);
+
+    return null;
+  },
+});
+
 export const listTrades = query({
   args: {},
   returns: v.array(tradeWithPLValidator),
   handler: async (ctx) => {
     const ownerId = await requireUser(ctx);
-    const trades = (
-      await ctx.db
-        .query("trades")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-        .collect()
-    );
+    const trades = await ctx.db
+      .query("trades")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
     const plMap = calculateTradesPL(trades);
 
     return [...trades]
