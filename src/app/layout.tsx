@@ -2,6 +2,7 @@ import "~/styles/global.css";
 
 import { type Metadata } from "next";
 import { Providers } from "~/app/providers";
+import { AuthGate } from "~/components/AuthGate";
 import { Header } from "~/components/Header";
 
 // Required for Clerk - avoid static page generation issues during CI builds
@@ -20,7 +21,9 @@ export default function RootLayout({
       <body className="text-slate-12 bg-slate-900">
         <Providers>
           <Header />
-          <main>{children}</main>
+          <main>
+            <AuthGate>{children}</AuthGate>
+          </main>
         </Providers>
       </body>
     </html>
