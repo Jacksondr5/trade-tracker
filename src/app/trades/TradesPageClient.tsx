@@ -3,15 +3,17 @@
 import { Preloaded, usePreloadedQuery } from "convex/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
+import type { Id } from "~/convex/_generated/dataModel";
 import { formatCurrency, formatDate } from "~/lib/format";
 import { cn } from "~/lib/utils";
 import {
   KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME,
   isKrakenDefaultAccountId,
 } from "../../../shared/imports/constants";
+import { EditTradeForm } from "./components/edit-trade-form";
 
 function formatPL(value: number): string {
   const formatted = new Intl.NumberFormat("en-US", {
@@ -88,6 +90,16 @@ function getStartOfYear(date: Date): Date {
   return d;
 }
 
+function formatDateForInput(epochMs: number): string {
+  const d = new Date(epochMs);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 type QuickFilter = "today" | "week" | "month" | "year" | "all";
 const QUICK_FILTER_VALUES = ["today", "week", "month", "year", "all"] as const;
 
@@ -111,6 +123,7 @@ export default function TradesPageClient({
   const trades = usePreloadedQuery(preloadedTrades);
   const tradePlans = usePreloadedQuery(preloadedTradePlans);
   const accountMappings = usePreloadedQuery(preloadedAccountMappings);
+  const [editingTradeId, setEditingTradeId] = useState<Id<"trades"> | null>(null);
 
   // Get filter params from URL
   const startDateParam = searchParams.get("startDate");
@@ -347,6 +360,9 @@ export default function TradesPageClient({
                 <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
                   P&amp;L
                 </th>
+                <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700 bg-slate-900">
@@ -369,64 +385,103 @@ export default function TradesPageClient({
                 }
 
                 return (
-                  <tr
-                    key={trade._id}
-                    className="hover:bg-slate-800/50"
-                    data-testid={`trade-row-${trade._id}`}
-                  >
-                    <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-sm">
-                      {formatDate(trade.date)}
-                    </td>
-                    <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-sm font-medium">
-                      {trade.ticker}
-                    </td>
-                    <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
-                      {trade.tradePlanId
-                        ? (tradePlanNameMap.get(trade.tradePlanId) ?? "—")
-                        : "—"}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm">
-                      <span
+                  <React.Fragment key={trade._id}>
+                    <tr
+                      className="hover:bg-slate-800/50"
+                      data-testid={`trade-row-${trade._id}`}
+                    >
+                      <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-sm">
+                        {formatDate(trade.date)}
+                      </td>
+                      <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-sm font-medium">
+                        {trade.ticker}
+                      </td>
+                      <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
+                        {trade.tradePlanId
+                          ? (tradePlanNameMap.get(trade.tradePlanId) ?? "—")
+                          : "—"}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-sm">
+                        <span
+                          className={cn(
+                            "text-slate-12 rounded px-2 py-0.5",
+                            trade.side === "buy"
+                              ? "border border-green-700 bg-green-900/50"
+                              : "border border-red-700 bg-red-900/50",
+                          )}
+                        >
+                          {trade.side.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
+                        {trade.direction}
+                      </td>
+                      <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">
+                        {formatCurrency(trade.price)}
+                      </td>
+                      <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">
+                        {trade.quantity}
+                      </td>
+                      <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm font-medium">
+                        {formatCurrency(trade.price * trade.quantity)}
+                      </td>
+                      <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
+                        {accountDisplay}
+                      </td>
+                      <td
                         className={cn(
-                          "text-slate-12 rounded px-2 py-0.5",
-                          trade.side === "buy"
-                            ? "border border-green-700 bg-green-900/50"
-                            : "border border-red-700 bg-red-900/50",
+                          "whitespace-nowrap px-4 py-3 text-right text-sm font-medium",
+                          {
+                            "text-green-400": trade.realizedPL !== null && trade.realizedPL >= 0,
+                            "text-red-400": trade.realizedPL !== null && trade.realizedPL < 0,
+                            "text-slate-11": trade.realizedPL === null,
+                          },
                         )}
                       >
-                        {trade.side.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
-                      {trade.direction}
-                    </td>
-                    <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">
-                      {formatCurrency(trade.price)}
-                    </td>
-                    <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">
-                      {trade.quantity}
-                    </td>
-                    <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm font-medium">
-                      {formatCurrency(trade.price * trade.quantity)}
-                    </td>
-                    <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
-                      {accountDisplay}
-                    </td>
-                    <td
-                      className={cn(
-                        "whitespace-nowrap px-4 py-3 text-right text-sm font-medium",
-                        {
-                          "text-green-400": trade.realizedPL !== null && trade.realizedPL >= 0,
-                          "text-red-400": trade.realizedPL !== null && trade.realizedPL < 0,
-                          "text-slate-11": trade.realizedPL === null,
-                        },
-                      )}
-                    >
-                      {trade.realizedPL === null
-                        ? "—"
-                        : formatPL(trade.realizedPL)}
-                    </td>
-                  </tr>
+                        {trade.realizedPL === null
+                          ? "—"
+                          : formatPL(trade.realizedPL)}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditingTradeId(
+                              editingTradeId === trade._id ? null : trade._id,
+                            )
+                          }
+                          className="text-slate-11 hover:text-slate-12 transition-colors"
+                          aria-label="Edit trade"
+                          data-testid={`edit-trade-${trade._id}`}
+                        >
+                          ✎
+                        </button>
+                      </td>
+                    </tr>
+                    {editingTradeId === trade._id && (
+                      <tr>
+                        <td colSpan={11} className="px-4 py-3">
+                          <EditTradeForm
+                            tradeId={trade._id}
+                            initialValues={{
+                              assetType: trade.assetType,
+                              date: formatDateForInput(trade.date),
+                              direction: trade.direction,
+                              notes: trade.notes ?? "",
+                              price: String(trade.price),
+                              quantity: String(trade.quantity),
+                              side: trade.side,
+                              ticker: trade.ticker,
+                              tradePlanId: trade.tradePlanId ?? "",
+                            }}
+                            tradePlans={tradePlans}
+                            onCancel={() => setEditingTradeId(null)}
+                            onSaved={() => setEditingTradeId(null)}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 );
               })}
             </tbody>

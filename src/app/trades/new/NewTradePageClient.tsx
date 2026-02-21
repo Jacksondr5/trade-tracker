@@ -20,8 +20,14 @@ const tradeSchema = z.object({
   date: z.string().min(1, "Date is required"),
   direction: z.enum(["long", "short"]),
   notes: z.string().optional(),
-  price: z.string().min(1, "Price is required"),
-  quantity: z.string().min(1, "Quantity is required"),
+  price: z
+    .string()
+    .min(1, "Price is required")
+    .refine((value) => Number.isFinite(parseFloat(value.trim())), "Price must be a valid number"),
+  quantity: z
+    .string()
+    .min(1, "Quantity is required")
+    .refine((value) => Number.isFinite(parseFloat(value.trim())), "Quantity must be a valid number"),
   side: z.enum(["buy", "sell"]),
   ticker: z.string().min(1, "Ticker is required"),
   tradePlanId: z.string().optional(),
@@ -85,8 +91,8 @@ export default function NewTradePageClient({
           date: new Date(parsed.date).getTime(),
           direction: parsed.direction,
           notes: parsed.notes || undefined,
-          price: parseFloat(parsed.price),
-          quantity: parseFloat(parsed.quantity),
+          price: parseFloat(parsed.price.trim()),
+          quantity: parseFloat(parsed.quantity.trim()),
           side: parsed.side,
           ticker: parsed.ticker.toUpperCase(),
           tradePlanId: parsed.tradePlanId
