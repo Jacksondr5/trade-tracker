@@ -178,17 +178,12 @@ export const getCampaignPL = query({
         .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .collect()
     );
-    const campaignTradesByPlan = await Promise.all(
-      tradePlans.map((tradePlan) =>
-        ctx.db
-          .query("trades")
-          .withIndex("by_owner_tradePlanId", (q) =>
-            q.eq("ownerId", ownerId).eq("tradePlanId", tradePlan._id),
-          )
-          .collect(),
-      ),
+    const tradePlanIds = new Set(
+      tradePlans.map((tradePlan) => tradePlan._id.toString()),
     );
-    const campaignTrades = campaignTradesByPlan.flat();
+    const campaignTrades = allTrades.filter(
+      (trade) => trade.tradePlanId && tradePlanIds.has(trade.tradePlanId.toString()),
+    );
 
     const tradesPLMap = calculateTradesPL(allTrades);
 
