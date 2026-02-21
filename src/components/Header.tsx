@@ -12,6 +12,7 @@ const navLinks = [
   { href: "/campaigns", label: "Campaigns" },
   { href: "/positions", label: "Positions" },
   { href: "/portfolio", label: "Portfolio" },
+  { href: "/imports", label: "Import" },
 ];
 
 export function Header() {
