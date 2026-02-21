@@ -45,13 +45,8 @@ export default function AccountsPageClient({
   const upsertAccountMapping = useMutation(
     api.accountMappings.upsertAccountMapping,
   );
-  const backfillKrakenDefaultAccountIds = useMutation(
-    api.migrations.backfillKrakenDefaultAccountIds,
-  );
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [migrationMessage, setMigrationMessage] = useState<string | null>(null);
-  const [isRunningMigration, setIsRunningMigration] = useState(false);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editingFriendlyName, setEditingFriendlyName] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
@@ -66,30 +61,6 @@ export default function AccountsPageClient({
       ),
     [mappings],
   );
-
-  const handleRunKrakenBackfill = async () => {
-    setErrorMessage(null);
-    setMigrationMessage(null);
-    setIsRunningMigration(true);
-    try {
-      const result = await backfillKrakenDefaultAccountIds({});
-      setMigrationMessage(
-        [
-          `Updated ${result.updatedTrades} trade(s)`,
-          `Updated ${result.updatedInboxTrades} inbox trade(s)`,
-          result.createdDefaultMapping
-            ? "Created default Kraken mapping"
-            : "Default Kraken mapping already existed or was not needed",
-        ].join(". "),
-      );
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to run migration",
-      );
-    } finally {
-      setIsRunningMigration(false);
-    }
-  };
 
   const startEditing = (account: KnownAccount) => {
     const key = `${account.source}|${account.accountId}`;
@@ -145,40 +116,14 @@ export default function AccountsPageClient({
 
       <Card className="bg-slate-800">
         <CardHeader>
-          <CardTitle>Kraken Backfill</CardTitle>
+          <CardTitle>Detected Brokerage Accounts</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-slate-11 text-sm">
-            Backfill existing Kraken trades/imports without account IDs to the
-            default Kraken account and create the default mapping if needed.
-          </p>
-          <Button
-            dataTestId="run-kraken-backfill-button"
-            isLoading={isRunningMigration}
-            onClick={() => void handleRunKrakenBackfill()}
-            type="button"
-            variant="outline"
-          >
-            Run Kraken Backfill
-          </Button>
-          {migrationMessage && (
-            <p className="rounded-md bg-green-900/40 px-3 py-2 text-sm text-green-300">
-              {migrationMessage}
-            </p>
-          )}
           {errorMessage && (
             <p className="rounded-md bg-red-900/50 px-3 py-2 text-sm text-red-300">
               {errorMessage}
             </p>
           )}
-        </CardContent>
-      </Card>
-
-      <Card className="bg-slate-800">
-        <CardHeader>
-          <CardTitle>Detected Brokerage Accounts</CardTitle>
-        </CardHeader>
-        <CardContent>
           {knownAccounts.length === 0 ? (
             <p className="text-slate-11 text-sm">
               No brokerage account IDs detected in imports or trades yet.
