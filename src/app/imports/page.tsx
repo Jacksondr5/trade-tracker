@@ -11,7 +11,7 @@ import type { BrokerageSource } from "../../../shared/imports/types";
 import { Check, Pencil, Trash2 } from "lucide-react";
 
 function formatDate(timestamp: number): string {
-  return new Date(timestamp).toLocaleDateString("en-US", {
+  return new Date(timestamp).toLocaleString("en-US", {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
@@ -187,6 +187,14 @@ export default function ImportsPage() {
 
   const handleSaveEdit = async () => {
     if (!editingTradeId) return;
+    if (editPrice.trim() && !Number.isFinite(Number(editPrice))) {
+      setImportError("Price must be a valid number");
+      return;
+    }
+    if (editQuantity.trim() && !Number.isFinite(Number(editQuantity))) {
+      setImportError("Quantity must be a valid number");
+      return;
+    }
     try {
       await updateInboxTrade({
         assetType: editAssetType,
@@ -200,7 +208,7 @@ export default function ImportsPage() {
       });
       setEditingTradeId(null);
     } catch (error) {
-      console.error("Failed to update trade:", error);
+      setImportError(error instanceof Error ? error.message : "Failed to save edit");
     }
   };
 
@@ -354,31 +362,39 @@ export default function ImportsPage() {
                 dataTestId="accept-all-trades-button"
                 onClick={() =>
                   void (async () => {
-                    if (inboxTrades) {
-                      await Promise.all(
-                        inboxTrades.map((trade) => {
-                          const selected = inlineTradePlanIds[trade._id] ?? "";
-                          const notes = inlineNotes[trade._id] ?? "";
-                          const tradePlanChanged =
-                            selected !==
-                            (trade.tradePlanId ? String(trade.tradePlanId) : "");
-                          const notesChanged = notes !== (trade.notes ?? "");
-                          if (!tradePlanChanged && !notesChanged) return Promise.resolve();
-                          return updateInboxTrade({
-                            inboxTradeId: trade._id,
-                            notes: notes || null,
-                            tradePlanId: selected
-                              ? (selected as Id<"tradePlans">)
-                              : null,
-                          });
-                        }),
-                      );
-                    }
+                    try {
+                      if (inboxTrades) {
+                        await Promise.all(
+                          inboxTrades.map((trade) => {
+                            const selected = inlineTradePlanIds[trade._id] ?? "";
+                            const notes = inlineNotes[trade._id] ?? "";
+                            const tradePlanChanged =
+                              selected !==
+                              (trade.tradePlanId ? String(trade.tradePlanId) : "");
+                            const notesChanged = notes !== (trade.notes ?? "");
+                            if (!tradePlanChanged && !notesChanged) return Promise.resolve();
+                            return updateInboxTrade({
+                              inboxTradeId: trade._id,
+                              notes: notes || null,
+                              tradePlanId: selected
+                                ? (selected as Id<"tradePlans">)
+                                : null,
+                            });
+                          }),
+                        );
+                      }
 
-                    const result = await acceptAllTrades();
-                    if (result.skippedInvalid > 0) {
+                      const result = await acceptAllTrades();
+                      const messages: string[] = [];
+                      if (result.accepted > 0) messages.push(`Accepted ${result.accepted}`);
+                      if (result.skippedInvalid > 0) messages.push(`${result.skippedInvalid} need review`);
+                      if (result.errors.length > 0) messages.push(`Errors: ${result.errors.slice(0, 3).join("; ")}`);
+                      if (result.skippedInvalid > 0 || result.errors.length > 0) {
+                        setImportError(messages.join(". "));
+                      }
+                    } catch (error) {
                       setImportError(
-                        `Accepted ${result.accepted}. ${result.skippedInvalid} need review.`,
+                        error instanceof Error ? error.message : "Accept all failed",
                       );
                     }
                   })()
@@ -674,6 +690,8 @@ export default function ImportsPage() {
                     <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
                       <div className="flex justify-end gap-1">
                         <button
+                          type="button"
+                          aria-label="Accept trade"
                           onClick={() => handleAccept(trade._id)}
                           disabled={!isTradeReadyForAcceptance(trade)}
                           className="rounded p-1.5 text-green-400 hover:bg-green-900/50 disabled:cursor-not-allowed disabled:opacity-40"
@@ -686,6 +704,8 @@ export default function ImportsPage() {
                           <Check className="h-4 w-4" />
                         </button>
                         <button
+                          type="button"
+                          aria-label="Edit trade"
                           onClick={() => handleEdit(trade)}
                           className="rounded p-1.5 text-blue-400 hover:bg-blue-900/50"
                           title="Edit"
@@ -693,6 +713,8 @@ export default function ImportsPage() {
                           <Pencil className="h-4 w-4" />
                         </button>
                         <button
+                          type="button"
+                          aria-label="Delete trade"
                           onClick={() =>
                             void deleteInboxTrade({
                               inboxTradeId: trade._id,

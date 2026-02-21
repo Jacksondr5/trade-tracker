@@ -10,7 +10,7 @@ Trades are currently managed manually in the app. We want to move to a system wh
 
 ## Design Decisions
 
-- **Single trades table with inbox status** — imported trades land in the existing `trades` table with `inboxStatus: "pending_review"`. No separate staging table.
+- **Separate inbox table** — imported trades land in an `inboxTrades` table with `status: "pending_review"`. Accepted trades are copied to the canonical `trades` table.
 - **Client-side CSV parsing** — CSV files are parsed in the browser using Papa Parse. Normalized trade objects are sent to Convex mutations.
 - **Order-level granularity** — IBKR CSV will be pre-filtered by the user to only include order-level rows (no summary/fill rows). Kraken fills are aggregated by `ordertxid`.
 - **Direction inference** — IBKR: inferred from `Open/CloseIndicator` + `Buy/Sell`. Kraken: defaults to "long", editable in inbox.

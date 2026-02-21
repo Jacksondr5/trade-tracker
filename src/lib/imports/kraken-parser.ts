@@ -1,6 +1,6 @@
 import Papa from "papaparse";
 import type { ParseResult } from "./types";
-import { InboxTradeCandidate } from "../../../shared/imports/types";
+import type { InboxTradeCandidate } from "../../../shared/imports/types";
 import { withParserValidation } from "./validation";
 
 interface KrakenRow {
@@ -55,7 +55,7 @@ export function parseKrakenCSV(csvContent: string): ParseResult {
         const cost = parseFloat(fill.cost);
         const vol = parseFloat(fill.vol);
         const fee = parseFloat(fill.fee);
-        const time = new Date(fill.time.replace(" ", "T")).getTime();
+        const time = new Date(fill.time.replace(" ", "T") + "Z").getTime();
 
         if (Number.isFinite(cost)) totalCost += cost;
         if (Number.isFinite(vol)) totalVol += vol;
@@ -79,7 +79,7 @@ export function parseKrakenCSV(csvContent: string): ParseResult {
             : undefined;
 
       const trade = withParserValidation({
-        assetType: "stock",
+        assetType: "crypto",
         date: Number.isFinite(earliestTime) ? earliestTime : undefined,
         direction: "long",
         externalId: orderId,

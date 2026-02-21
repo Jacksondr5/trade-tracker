@@ -1,4 +1,4 @@
-import { InboxTradeCandidate } from "../../../shared/imports/types";
+import type { InboxTradeCandidate } from "../../../shared/imports/types";
 import { validateInboxTradeCandidate } from "../../../shared/imports/validation";
 
 export function withParserValidation(

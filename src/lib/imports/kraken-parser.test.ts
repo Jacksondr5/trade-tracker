@@ -22,14 +22,14 @@ describe("parseKrakenCSV", () => {
       ticker: "WAB",
       side: "buy",
       direction: "long",
-      assetType: "stock",
+      assetType: "crypto",
       source: "kraken",
       quantity: 3,
       price: 35 / 3,
       orderType: "limit",
     });
     expect(order1?.fees).toBeCloseTo(0.3);
-    expect(order1?.date).toBe(new Date("2026-02-20T09:30:00").getTime());
+    expect(order1?.date).toBe(new Date("2026-02-20T09:30:00Z").getTime());
 
     const order2 = result.trades.find((t) => t.externalId === "order-2");
     expect(order2).toBeDefined();
@@ -37,7 +37,7 @@ describe("parseKrakenCSV", () => {
       ticker: "MSFT",
       side: "sell",
       direction: "long",
-      assetType: "stock",
+      assetType: "crypto",
       source: "kraken",
       quantity: 4,
       price: 10,

@@ -845,7 +845,7 @@ export function parseKrakenCSV(csvContent: string): ParseResult {
         type.trim().toLowerCase() === "buy" ? "buy" : "sell";
 
       trades.push({
-        assetType: "stock",
+        assetType: "crypto",
         date: earliestTime,
         direction: "long",
         externalId: orderId,
