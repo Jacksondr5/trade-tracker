@@ -162,10 +162,12 @@ export const getCampaignPL = query({
       .collect();
     const tradePlanIds = new Set(tradePlans.map((plan) => plan._id));
 
-    const allTrades = await ctx.db
-      .query("trades")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect();
+    const allTrades = (
+      await ctx.db
+        .query("trades")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .collect()
+    ).filter((t) => t.inboxStatus !== "pending_review");
     const campaignTrades = allTrades.filter(
       (trade) => trade.tradePlanId && tradePlanIds.has(trade.tradePlanId),
     );
@@ -228,10 +230,12 @@ export const getCampaignPositionStatus = query({
       .collect();
     const tradePlanIds = new Set(tradePlans.map((plan) => plan._id));
 
-    const allTrades = await ctx.db
-      .query("trades")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect();
+    const allTrades = (
+      await ctx.db
+        .query("trades")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .collect()
+    ).filter((t) => t.inboxStatus !== "pending_review");
     const campaignTrades = allTrades.filter(
       (trade) => trade.tradePlanId && tradePlanIds.has(trade.tradePlanId),
     );
