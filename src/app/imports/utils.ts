@@ -1,21 +1,6 @@
 import type { InboxTrade } from "./types";
 
-export function formatDate(timestamp: number): string {
-  return new Date(timestamp).toLocaleString("en-US", {
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-export function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    currency: "USD",
-    style: "currency",
-  }).format(value);
-}
+export { formatCurrency, formatDate } from "~/lib/format";
 
 export function toDateTimeLocalValue(timestamp?: number): string {
   if (timestamp === undefined || !Number.isFinite(timestamp)) return "";
