@@ -100,13 +100,13 @@ export default function TradesPageClient({
         return { endDate: getEndOfDay(now), startDate: getStartOfDay(now) };
       }
       if (quickFilterParam === "week") {
-        return { endDate: getEndOfDay(now), startDate: getStartOfWeek(now).getTime() };
+        return { endDate: getEndOfDay(now), startDate: getStartOfWeek(now) };
       }
       if (quickFilterParam === "month") {
-        return { endDate: getEndOfDay(now), startDate: getStartOfMonth(now).getTime() };
+        return { endDate: getEndOfDay(now), startDate: getStartOfMonth(now) };
       }
       if (quickFilterParam === "year") {
-        return { endDate: getEndOfDay(now), startDate: getStartOfYear(now).getTime() };
+        return { endDate: getEndOfDay(now), startDate: getStartOfYear(now) };
       }
       return { endDate: null, startDate: null };
     }

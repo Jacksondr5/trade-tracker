@@ -30,25 +30,25 @@ export function getEndOfDay(date: Date): number {
   return d.getTime();
 }
 
-export function getStartOfWeek(date: Date): Date {
+export function getStartOfWeek(date: Date): number {
   const d = new Date(date);
   const day = d.getDay();
   const diff = d.getDate() - day;
   d.setDate(diff);
   d.setHours(0, 0, 0, 0);
-  return d;
+  return d.getTime();
 }
 
-export function getStartOfMonth(date: Date): Date {
+export function getStartOfMonth(date: Date): number {
   const d = new Date(date);
   d.setDate(1);
   d.setHours(0, 0, 0, 0);
-  return d;
+  return d.getTime();
 }
 
-export function getStartOfYear(date: Date): Date {
+export function getStartOfYear(date: Date): number {
   const d = new Date(date);
   d.setMonth(0, 1);
   d.setHours(0, 0, 0, 0);
-  return d;
+  return d.getTime();
 }

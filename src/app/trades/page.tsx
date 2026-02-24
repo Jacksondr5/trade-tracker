@@ -31,13 +31,13 @@ function parseTradesQueryState(searchParams: {
     startDate = getStartOfDay(now);
     endDate = getEndOfDay(now);
   } else if (filter === "week") {
-    startDate = getStartOfWeek(now).getTime();
+    startDate = getStartOfWeek(now);
     endDate = getEndOfDay(now);
   } else if (filter === "month") {
-    startDate = getStartOfMonth(now).getTime();
+    startDate = getStartOfMonth(now);
     endDate = getEndOfDay(now);
   } else if (filter === "year") {
-    startDate = getStartOfYear(now).getTime();
+    startDate = getStartOfYear(now);
     endDate = getEndOfDay(now);
   } else {
     const rawStartDate = searchParams.startDate;
