@@ -3,11 +3,17 @@
 import { Preloaded, usePreloadedQuery } from "convex/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useTransition } from "react";
 import { Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { formatCurrency, formatDate } from "~/lib/format";
+import {
+  DEFAULT_TRADES_PAGE_SIZE,
+  TRADES_PAGE_SIZE_OPTIONS,
+  normalizeTradesPage,
+  normalizeTradesPageSize,
+} from "~/lib/trades/pagination";
 import { cn } from "~/lib/utils";
 import {
   KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME,
@@ -23,27 +29,15 @@ function formatPL(value: number): string {
   return value >= 0 ? `+${formatted}` : `-${formatted}`;
 }
 
-/**
- * Parse a YYYY-MM-DD date string as local time (not UTC).
- * This avoids timezone issues where new Date("2026-01-15") might return Jan 14 or 15
- * depending on the user's timezone.
- */
 function parseDateInputLocal(dateString: string): Date | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-    return null;
-  }
-
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return null;
   const [yearString, monthString, dayString] = dateString.split("-");
   const year = Number(yearString);
   const month = Number(monthString);
   const day = Number(dayString);
 
   const parsedDate = new Date(year, month - 1, day);
-  if (Number.isNaN(parsedDate.getTime())) {
-    return null;
-  }
-
-  // Prevent overflow dates like 2026-02-31 becoming Mar 03.
+  if (Number.isNaN(parsedDate.getTime())) return null;
   if (
     parsedDate.getFullYear() !== year ||
     parsedDate.getMonth() !== month - 1 ||
@@ -109,23 +103,23 @@ function isQuickFilter(value: string): value is QuickFilter {
 
 export default function TradesPageClient({
   preloadedAccountMappings,
-  preloadedTrades,
+  preloadedTradesPage,
   preloadedTradePlans,
 }: {
   preloadedAccountMappings: Preloaded<
     typeof api.accountMappings.listAccountMappings
   >;
-  preloadedTrades: Preloaded<typeof api.trades.listTrades>;
+  preloadedTradesPage: Preloaded<typeof api.trades.listTradesPage>;
   preloadedTradePlans: Preloaded<typeof api.tradePlans.listTradePlans>;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const trades = usePreloadedQuery(preloadedTrades);
+  const tradesPage = usePreloadedQuery(preloadedTradesPage);
   const tradePlans = usePreloadedQuery(preloadedTradePlans);
   const accountMappings = usePreloadedQuery(preloadedAccountMappings);
   const [editingTradeId, setEditingTradeId] = useState<Id<"trades"> | null>(null);
+  const [isNavigating, startTransition] = useTransition();
 
-  // Get filter params from URL
   const startDateParam = searchParams.get("startDate");
   const endDateParam = searchParams.get("endDate");
   const rawQuickFilterParam = searchParams.get("filter");
@@ -134,80 +128,59 @@ export default function TradesPageClient({
       ? rawQuickFilterParam
       : null;
 
-  // Create a lookup map for trade plan names
-  const tradePlanNameMap = useMemo(() => {
-    return new Map(tradePlans.map((p) => [p._id, p.name]));
-  }, [tradePlans]);
+  const currentPage = normalizeTradesPage(Number(searchParams.get("page") ?? "1"));
+  const pageSize = normalizeTradesPageSize(
+    Number(searchParams.get("pageSize") ?? String(DEFAULT_TRADES_PAGE_SIZE)),
+  );
 
-  const accountNameByKey = useMemo(() => {
-    return new Map(
-      accountMappings.map((mapping) => [
-        `${mapping.source}|${mapping.accountId}`,
-        mapping.friendlyName,
-      ]),
-    );
-  }, [accountMappings]);
+  const tradePlanNameMap = useMemo(
+    () => new Map(tradePlans.map((p) => [p._id, p.name])),
+    [tradePlans],
+  );
 
-  // Calculate date range based on quick filter or custom dates
+  const accountNameByKey = useMemo(
+    () =>
+      new Map(
+        accountMappings.map((mapping) => [
+          `${mapping.source}|${mapping.accountId}`,
+          mapping.friendlyName,
+        ]),
+      ),
+    [accountMappings],
+  );
+
   const { startDate, endDate } = useMemo(() => {
     const now = new Date();
 
     if (quickFilterParam) {
-      switch (quickFilterParam) {
-        case "today":
-          return {
-            endDate: getEndOfDay(now),
-            startDate: getStartOfDay(now),
-          };
-        case "week":
-          return {
-            endDate: getEndOfDay(now),
-            startDate: getStartOfWeek(now).getTime(),
-          };
-        case "month":
-          return {
-            endDate: getEndOfDay(now),
-            startDate: getStartOfMonth(now).getTime(),
-          };
-        case "year":
-          return {
-            endDate: getEndOfDay(now),
-            startDate: getStartOfYear(now).getTime(),
-          };
-        case "all":
-        default:
-          return { endDate: null, startDate: null };
+      if (quickFilterParam === "today") {
+        return { endDate: getEndOfDay(now), startDate: getStartOfDay(now) };
       }
+      if (quickFilterParam === "week") {
+        return { endDate: getEndOfDay(now), startDate: getStartOfWeek(now).getTime() };
+      }
+      if (quickFilterParam === "month") {
+        return { endDate: getEndOfDay(now), startDate: getStartOfMonth(now).getTime() };
+      }
+      if (quickFilterParam === "year") {
+        return { endDate: getEndOfDay(now), startDate: getStartOfYear(now).getTime() };
+      }
+      return { endDate: null, startDate: null };
     }
 
-    // Use custom date range if provided - parse as local time to avoid timezone issues
-    const parsedStartDate = startDateParam
-      ? parseDateInputLocal(startDateParam)
-      : null;
-    const parsedEndDate = endDateParam
-      ? parseDateInputLocal(endDateParam)
-      : null;
-    const start = parsedStartDate ? getStartOfDay(parsedStartDate) : null;
-    const end = parsedEndDate ? getEndOfDay(parsedEndDate) : null;
+    const parsedStartDate = startDateParam ? parseDateInputLocal(startDateParam) : null;
+    const parsedEndDate = endDateParam ? parseDateInputLocal(endDateParam) : null;
+    return {
+      endDate: parsedEndDate ? getEndOfDay(parsedEndDate) : null,
+      startDate: parsedStartDate ? getStartOfDay(parsedStartDate) : null,
+    };
+  }, [endDateParam, quickFilterParam, startDateParam]);
 
-    return { endDate: end, startDate: start };
-  }, [quickFilterParam, startDateParam, endDateParam]);
-
-  // Filter trades based on date range
-  const filteredTrades = useMemo(() => {
-    if (startDate === null && endDate === null) return trades;
-
-    return trades.filter((trade) => {
-      if (startDate !== null && trade.date < startDate) return false;
-      if (endDate !== null && trade.date > endDate) return false;
-      return true;
-    });
-  }, [trades, startDate, endDate]);
-
-  // Update URL with filter params
   const updateFilter = (params: {
     endDate?: string | null;
     filter?: QuickFilter | null;
+    page?: number | null;
+    pageSize?: number | null;
     startDate?: string | null;
   }) => {
     const newParams = new URLSearchParams();
@@ -215,30 +188,55 @@ export default function TradesPageClient({
     if (params.filter && params.filter !== "all") {
       newParams.set("filter", params.filter);
     } else if (params.filter !== "all") {
-      // Only set date params if not using quick filter
       if (params.startDate) newParams.set("startDate", params.startDate);
       if (params.endDate) newParams.set("endDate", params.endDate);
     }
 
+    if (params.pageSize && params.pageSize !== DEFAULT_TRADES_PAGE_SIZE) {
+      newParams.set("pageSize", String(params.pageSize));
+    }
+
+    if (params.page && params.page > 1) {
+      newParams.set("page", String(params.page));
+    }
+
     const queryString = newParams.toString();
-    router.push(queryString ? `/trades?${queryString}` : "/trades");
+    startTransition(() => {
+      router.push(queryString ? `/trades?${queryString}` : "/trades");
+    });
   };
 
   const handleQuickFilter = (filter: QuickFilter) => {
-    updateFilter({ filter });
+    updateFilter({ filter, page: 1, pageSize });
   };
 
-  const handleCustomDateChange = (
-    type: "startDate" | "endDate",
-    value: string,
-  ) => {
-    const currentStart = startDateParam || "";
-    const currentEnd = endDateParam || "";
-
+  const handleCustomDateChange = (type: "startDate" | "endDate", value: string) => {
     updateFilter({
-      endDate: type === "endDate" ? value : currentEnd,
+      endDate: type === "endDate" ? value : (endDateParam ?? ""),
       filter: null,
-      startDate: type === "startDate" ? value : currentStart,
+      page: 1,
+      pageSize,
+      startDate: type === "startDate" ? value : (startDateParam ?? ""),
+    });
+  };
+
+  const handlePageChange = (nextPage: number) => {
+    updateFilter({
+      endDate: endDateParam,
+      filter: quickFilterParam,
+      page: nextPage,
+      pageSize,
+      startDate: startDateParam,
+    });
+  };
+
+  const handlePageSizeChange = (nextPageSize: number) => {
+    updateFilter({
+      endDate: endDateParam,
+      filter: quickFilterParam,
+      page: 1,
+      pageSize: nextPageSize,
+      startDate: startDateParam,
     });
   };
 
@@ -249,6 +247,8 @@ export default function TradesPageClient({
     return quickFilterParam === filter;
   };
 
+  const trades = tradesPage.items;
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-6 flex items-center justify-between">
@@ -258,10 +258,8 @@ export default function TradesPageClient({
         </Link>
       </div>
 
-      {/* Date filter controls */}
       <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
         <div className="flex flex-wrap items-center gap-4">
-          {/* Quick filter buttons */}
           <div className="flex flex-wrap gap-2">
             {(
               [
@@ -286,15 +284,12 @@ export default function TradesPageClient({
             ))}
           </div>
 
-          {/* Custom date range */}
           <div className="flex items-center gap-2">
             <span className="text-slate-11 text-sm">or</span>
             <input
               type="date"
               value={startDateParam || ""}
-              onChange={(e) =>
-                handleCustomDateChange("startDate", e.target.value)
-              }
+              onChange={(e) => handleCustomDateChange("startDate", e.target.value)}
               className="text-slate-12 rounded border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
               aria-label="Start date"
             />
@@ -302,9 +297,7 @@ export default function TradesPageClient({
             <input
               type="date"
               value={endDateParam || ""}
-              onChange={(e) =>
-                handleCustomDateChange("endDate", e.target.value)
-              }
+              onChange={(e) => handleCustomDateChange("endDate", e.target.value)}
               className="text-slate-12 rounded border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
               aria-label="End date"
             />
@@ -312,181 +305,181 @@ export default function TradesPageClient({
         </div>
       </div>
 
-      {filteredTrades.length === 0 ? (
+      {tradesPage.totalCount === 0 ? (
         <div className="rounded-lg border border-slate-700 bg-slate-800 p-8 text-center">
           <p className="text-slate-11">
-            {trades.length > 0
+            {startDate !== null || endDate !== null
               ? "No trades found for the selected date range."
               : "No trades yet."}
           </p>
-          {trades.length === 0 && (
+          {startDate === null && endDate === null && (
             <p className="text-slate-11 mt-2 text-sm">
               Click &quot;New Trade&quot; to record your first trade.
             </p>
           )}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-700">
-          <table className="w-full table-auto">
-            <thead className="bg-slate-800">
-              <tr>
-                <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
-                  Date
-                </th>
-                <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
-                  Ticker
-                </th>
-                <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
-                  Trade Plan
-                </th>
-                <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
-                  Side
-                </th>
-                <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
-                  Direction
-                </th>
-                <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
-                  Price
-                </th>
-                <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
-                  Quantity
-                </th>
-                <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
-                  Total
-                </th>
-                <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
-                  Account
-                </th>
-                <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
-                  P&amp;L
-                </th>
-                <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-700 bg-slate-900">
-              {filteredTrades.map((trade) => {
-                let accountDisplay = "—";
-                if (
-                  trade.brokerageAccountId &&
-                  (trade.source === "ibkr" || trade.source === "kraken")
-                ) {
-                  const accountName = accountNameByKey.get(
-                    `${trade.source}|${trade.brokerageAccountId}`,
-                  );
-                  accountDisplay = accountName
-                    ? isKrakenDefaultAccountId(trade.brokerageAccountId)
-                      ? accountName
-                      : `${accountName} (${trade.brokerageAccountId})`
-                    : isKrakenDefaultAccountId(trade.brokerageAccountId)
-                      ? KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME
-                      : trade.brokerageAccountId;
-                }
+        <>
+          <div className="overflow-x-auto rounded-lg border border-slate-700">
+            <table className="w-full table-auto">
+              <thead className="bg-slate-800">
+                <tr>
+                  <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">Date</th>
+                  <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">Ticker</th>
+                  <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">Trade Plan</th>
+                  <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">Side</th>
+                  <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">Direction</th>
+                  <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">Price</th>
+                  <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">Quantity</th>
+                  <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">Total</th>
+                  <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">Account</th>
+                  <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">P&amp;L</th>
+                  <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700 bg-slate-900">
+                {trades.map((trade) => {
+                  let accountDisplay = "—";
+                  if (
+                    trade.brokerageAccountId &&
+                    (trade.source === "ibkr" || trade.source === "kraken")
+                  ) {
+                    const accountName = accountNameByKey.get(
+                      `${trade.source}|${trade.brokerageAccountId}`,
+                    );
+                    accountDisplay = accountName
+                      ? isKrakenDefaultAccountId(trade.brokerageAccountId)
+                        ? accountName
+                        : `${accountName} (${trade.brokerageAccountId})`
+                      : isKrakenDefaultAccountId(trade.brokerageAccountId)
+                        ? KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME
+                        : trade.brokerageAccountId;
+                  }
 
-                return (
-                  <React.Fragment key={trade._id}>
-                    <tr
-                      className="hover:bg-slate-800/50"
-                      data-testid={`trade-row-${trade._id}`}
-                    >
-                      <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-sm">
-                        {formatDate(trade.date)}
-                      </td>
-                      <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-sm font-medium">
-                        {trade.ticker}
-                      </td>
-                      <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
-                        {trade.tradePlanId
-                          ? (tradePlanNameMap.get(trade.tradePlanId) ?? "—")
-                          : "—"}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm">
-                        <span
-                          className={cn(
-                            "text-slate-12 rounded px-2 py-0.5",
-                            trade.side === "buy"
-                              ? "border border-green-700 bg-green-900/50"
-                              : "border border-red-700 bg-red-900/50",
-                          )}
-                        >
-                          {trade.side.toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
-                        {trade.direction}
-                      </td>
-                      <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">
-                        {formatCurrency(trade.price)}
-                      </td>
-                      <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">
-                        {trade.quantity}
-                      </td>
-                      <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm font-medium">
-                        {formatCurrency(trade.price * trade.quantity)}
-                      </td>
-                      <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
-                        {accountDisplay}
-                      </td>
-                      <td
-                        className={cn(
-                          "whitespace-nowrap px-4 py-3 text-right text-sm font-medium",
-                          {
+                  return (
+                    <React.Fragment key={trade._id}>
+                      <tr className="hover:bg-slate-800/50" data-testid={`trade-row-${trade._id}`}>
+                        <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-sm">{formatDate(trade.date)}</td>
+                        <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-sm font-medium">{trade.ticker}</td>
+                        <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
+                          {trade.tradePlanId ? (tradePlanNameMap.get(trade.tradePlanId) ?? "—") : "—"}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-sm">
+                          <span
+                            className={cn(
+                              "text-slate-12 rounded px-2 py-0.5",
+                              trade.side === "buy"
+                                ? "border border-green-700 bg-green-900/50"
+                                : "border border-red-700 bg-red-900/50",
+                            )}
+                          >
+                            {trade.side.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">{trade.direction}</td>
+                        <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">{formatCurrency(trade.price)}</td>
+                        <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">{trade.quantity}</td>
+                        <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm font-medium">
+                          {formatCurrency(trade.price * trade.quantity)}
+                        </td>
+                        <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">{accountDisplay}</td>
+                        <td
+                          className={cn("whitespace-nowrap px-4 py-3 text-right text-sm font-medium", {
                             "text-green-400": trade.realizedPL !== null && trade.realizedPL >= 0,
                             "text-red-400": trade.realizedPL !== null && trade.realizedPL < 0,
                             "text-slate-11": trade.realizedPL === null,
-                          },
-                        )}
-                      >
-                        {trade.realizedPL === null
-                          ? "—"
-                          : formatPL(trade.realizedPL)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setEditingTradeId(
-                              editingTradeId === trade._id ? null : trade._id,
-                            )
-                          }
-                          className="text-slate-11 hover:text-slate-12 transition-colors"
-                          aria-label="Edit trade"
-                          data-testid={`edit-trade-${trade._id}`}
+                          })}
                         >
-                          ✎
-                        </button>
-                      </td>
-                    </tr>
-                    {editingTradeId === trade._id && (
-                      <tr>
-                        <td colSpan={11} className="px-4 py-3">
-                          <EditTradeForm
-                            tradeId={trade._id}
-                            initialValues={{
-                              assetType: trade.assetType,
-                              date: formatDateForInput(trade.date),
-                              direction: trade.direction,
-                              notes: trade.notes ?? "",
-                              price: String(trade.price),
-                              quantity: String(trade.quantity),
-                              side: trade.side,
-                              ticker: trade.ticker,
-                              tradePlanId: trade.tradePlanId ?? "",
-                            }}
-                            tradePlans={tradePlans}
-                            onCancel={() => setEditingTradeId(null)}
-                            onSaved={() => setEditingTradeId(null)}
-                          />
+                          {trade.realizedPL === null ? "—" : formatPL(trade.realizedPL)}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditingTradeId(editingTradeId === trade._id ? null : trade._id)
+                            }
+                            className="text-slate-11 hover:text-slate-12 transition-colors"
+                            aria-label="Edit trade"
+                            data-testid={`edit-trade-${trade._id}`}
+                          >
+                            ✎
+                          </button>
                         </td>
                       </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                      {editingTradeId === trade._id && (
+                        <tr>
+                          <td colSpan={11} className="px-4 py-3">
+                            <EditTradeForm
+                              tradeId={trade._id}
+                              initialValues={{
+                                assetType: trade.assetType,
+                                date: formatDateForInput(trade.date),
+                                direction: trade.direction,
+                                notes: trade.notes ?? "",
+                                price: String(trade.price),
+                                quantity: String(trade.quantity),
+                                side: trade.side,
+                                ticker: trade.ticker,
+                                tradePlanId: trade.tradePlanId ?? "",
+                              }}
+                              tradePlans={tradePlans}
+                              onCancel={() => setEditingTradeId(null)}
+                              onSaved={() => setEditingTradeId(null)}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3 rounded-lg border border-slate-700 bg-slate-800 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-slate-11 text-sm">
+              Showing {(tradesPage.currentPage - 1) * tradesPage.pageSize + 1}–
+              {Math.min(tradesPage.currentPage * tradesPage.pageSize, tradesPage.totalCount)} of {tradesPage.totalCount}
+            </div>
+            <div className="flex items-center gap-3">
+              <label className="text-slate-11 text-sm" htmlFor="page-size-select">
+                Rows per page
+              </label>
+              <select
+                id="page-size-select"
+                className="text-slate-12 rounded border border-slate-600 bg-slate-700 px-2 py-1 text-sm"
+                value={pageSize}
+                onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                disabled={isNavigating}
+              >
+                {TRADES_PAGE_SIZE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="text-slate-12 rounded border border-slate-600 px-3 py-1.5 text-sm disabled:opacity-50"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={!tradesPage.hasPrevPage || isNavigating}
+              >
+                Prev
+              </button>
+              <span className="text-slate-11 text-sm">
+                Page {tradesPage.currentPage} of {tradesPage.totalPages}
+              </span>
+              <button
+                type="button"
+                className="text-slate-12 rounded border border-slate-600 px-3 py-1.5 text-sm disabled:opacity-50"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={!tradesPage.hasNextPage || isNavigating}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

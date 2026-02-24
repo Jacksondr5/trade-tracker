@@ -129,3 +129,61 @@ export const listTrades = query({
       }));
   },
 });
+
+const paginatedTradesValidator = v.object({
+  currentPage: v.number(),
+  hasNextPage: v.boolean(),
+  hasPrevPage: v.boolean(),
+  items: v.array(tradeWithPLValidator),
+  pageSize: v.number(),
+  totalCount: v.number(),
+  totalPages: v.number(),
+});
+
+export const listTradesPage = query({
+  args: {
+    endDate: v.optional(v.number()),
+    page: v.number(),
+    pageSize: v.number(),
+    startDate: v.optional(v.number()),
+  },
+  returns: paginatedTradesValidator,
+  handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const trades = await ctx.db
+      .query("trades")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
+    const plMap = calculateTradesPL(trades);
+
+    const filteredTrades = trades.filter((trade) => {
+      if (args.startDate !== undefined && trade.date < args.startDate) return false;
+      if (args.endDate !== undefined && trade.date > args.endDate) return false;
+      return true;
+    });
+
+    const sortedTrades = filteredTrades
+      .sort((a, b) => b.date - a.date)
+      .map((trade) => ({
+        ...trade,
+        realizedPL: plMap.get(trade._id) ?? null,
+      }));
+
+    const normalizedPageSize = Math.max(1, Math.floor(args.pageSize));
+    const requestedPage = Math.max(1, Math.floor(args.page));
+    const totalCount = sortedTrades.length;
+    const totalPages = Math.max(1, Math.ceil(totalCount / normalizedPageSize));
+    const currentPage = Math.min(requestedPage, totalPages);
+    const startIndex = (currentPage - 1) * normalizedPageSize;
+
+    return {
+      currentPage,
+      hasNextPage: currentPage < totalPages,
+      hasPrevPage: currentPage > 1,
+      items: sortedTrades.slice(startIndex, startIndex + normalizedPageSize),
+      pageSize: normalizedPageSize,
+      totalCount,
+      totalPages,
+    };
+  },
+});
