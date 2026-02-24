@@ -9,9 +9,16 @@ import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { formatCurrency, formatDate } from "~/lib/format";
 import {
+  getEndOfDay,
+  getStartOfDay,
+  getStartOfMonth,
+  getStartOfWeek,
+  getStartOfYear,
+  parseDateInputLocal,
+} from "~/lib/trades/dateUtils";
+import {
   DEFAULT_TRADES_PAGE_SIZE,
   TRADES_PAGE_SIZE_OPTIONS,
-  normalizeTradesPage,
   normalizeTradesPageSize,
 } from "~/lib/trades/pagination";
 import { cn } from "~/lib/utils";
@@ -27,61 +34,6 @@ function formatPL(value: number): string {
     style: "currency",
   }).format(Math.abs(value));
   return value >= 0 ? `+${formatted}` : `-${formatted}`;
-}
-
-function parseDateInputLocal(dateString: string): Date | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return null;
-  const [yearString, monthString, dayString] = dateString.split("-");
-  const year = Number(yearString);
-  const month = Number(monthString);
-  const day = Number(dayString);
-
-  const parsedDate = new Date(year, month - 1, day);
-  if (Number.isNaN(parsedDate.getTime())) return null;
-  if (
-    parsedDate.getFullYear() !== year ||
-    parsedDate.getMonth() !== month - 1 ||
-    parsedDate.getDate() !== day
-  ) {
-    return null;
-  }
-
-  return parsedDate;
-}
-
-function getStartOfDay(date: Date): number {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
-function getEndOfDay(date: Date): number {
-  const d = new Date(date);
-  d.setHours(23, 59, 59, 999);
-  return d.getTime();
-}
-
-function getStartOfWeek(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day;
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function getStartOfMonth(date: Date): Date {
-  const d = new Date(date);
-  d.setDate(1);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function getStartOfYear(date: Date): Date {
-  const d = new Date(date);
-  d.setMonth(0, 1);
-  d.setHours(0, 0, 0, 0);
-  return d;
 }
 
 function formatDateForInput(epochMs: number): string {
@@ -128,7 +80,6 @@ export default function TradesPageClient({
       ? rawQuickFilterParam
       : null;
 
-  const currentPage = normalizeTradesPage(Number(searchParams.get("page") ?? "1"));
   const pageSize = normalizeTradesPageSize(
     Number(searchParams.get("pageSize") ?? String(DEFAULT_TRADES_PAGE_SIZE)),
   );
@@ -185,9 +136,11 @@ export default function TradesPageClient({
   }) => {
     const newParams = new URLSearchParams();
 
-    if (params.filter && params.filter !== "all") {
+    if (params.filter === "all") {
+      // "All Time" intentionally clears filter/startDate/endDate from the URL.
+    } else if (params.filter) {
       newParams.set("filter", params.filter);
-    } else if (params.filter !== "all") {
+    } else {
       if (params.startDate) newParams.set("startDate", params.startDate);
       if (params.endDate) newParams.set("endDate", params.endDate);
     }
@@ -461,7 +414,7 @@ export default function TradesPageClient({
               <button
                 type="button"
                 className="text-slate-12 rounded border border-slate-600 px-3 py-1.5 text-sm disabled:opacity-50"
-                onClick={() => handlePageChange(currentPage - 1)}
+                onClick={() => handlePageChange(tradesPage.currentPage - 1)}
                 disabled={!tradesPage.hasPrevPage || isNavigating}
               >
                 Prev
@@ -472,7 +425,7 @@ export default function TradesPageClient({
               <button
                 type="button"
                 className="text-slate-12 rounded border border-slate-600 px-3 py-1.5 text-sm disabled:opacity-50"
-                onClick={() => handlePageChange(currentPage + 1)}
+                onClick={() => handlePageChange(tradesPage.currentPage + 1)}
                 disabled={!tradesPage.hasNextPage || isNavigating}
               >
                 Next

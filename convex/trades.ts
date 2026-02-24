@@ -130,6 +130,9 @@ export const listTrades = query({
   },
 });
 
+const SERVER_TRADES_PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+const SERVER_DEFAULT_TRADES_PAGE_SIZE = 25;
+
 const paginatedTradesValidator = v.object({
   currentPage: v.number(),
   hasNextPage: v.boolean(),
@@ -150,6 +153,9 @@ export const listTradesPage = query({
   returns: paginatedTradesValidator,
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
+    // TODO: listTradesPage currently loads all owner trades to preserve accurate
+    // chronological realized P&L from calculateTradesPL. Revisit with a write-time
+    // precomputed/cumulative P&L model to avoid full-collection reads at scale.
     const trades = await ctx.db
       .query("trades")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
@@ -169,7 +175,11 @@ export const listTradesPage = query({
         realizedPL: plMap.get(trade._id) ?? null,
       }));
 
-    const normalizedPageSize = Math.max(1, Math.floor(args.pageSize));
+    const normalizedPageSize = SERVER_TRADES_PAGE_SIZE_OPTIONS.includes(
+      args.pageSize as (typeof SERVER_TRADES_PAGE_SIZE_OPTIONS)[number],
+    )
+      ? args.pageSize
+      : SERVER_DEFAULT_TRADES_PAGE_SIZE;
     const requestedPage = Math.max(1, Math.floor(args.page));
     const totalCount = sortedTrades.length;
     const totalPages = Math.max(1, Math.ceil(totalCount / normalizedPageSize));

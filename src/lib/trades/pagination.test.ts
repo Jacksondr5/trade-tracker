@@ -12,6 +12,10 @@ describe("normalizeTradesPage", () => {
     expect(normalizeTradesPage(Number.NaN)).toBe(1);
   });
 
+  it("returns valid page values unchanged", () => {
+    expect(normalizeTradesPage(5)).toBe(5);
+  });
+
   it("floors positive decimal page values", () => {
     expect(normalizeTradesPage(3.9)).toBe(3);
   });
