@@ -62,6 +62,11 @@ export default function CampaignDetailPageClient({
   const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
   const [isChangingCampaignStatus, setIsChangingCampaignStatus] = useState(false);
 
+  const [campaignName, setCampaignName] = useState("");
+  const [campaignNameInitialized, setCampaignNameInitialized] = useState(false);
+  const [campaignNameError, setCampaignNameError] = useState<string | null>(null);
+  const [campaignNameSaveState, setCampaignNameSaveState] = useState<SaveState>("idle");
+
   const [thesis, setThesis] = useState("");
   const [thesisInitialized, setThesisInitialized] = useState(false);
   const [thesisError, setThesisError] = useState<string | null>(null);
@@ -96,6 +101,13 @@ export default function CampaignDetailPageClient({
   const [isSavingPlan, setIsSavingPlan] = useState(false);
 
   useEffect(() => {
+    if (campaign && !campaignNameInitialized) {
+      setCampaignName(campaign.name);
+      setCampaignNameInitialized(true);
+    }
+  }, [campaign, campaignNameInitialized]);
+
+  useEffect(() => {
     if (campaign && !thesisInitialized) {
       setThesis(campaign.thesis);
       setThesisInitialized(true);
@@ -121,6 +133,22 @@ export default function CampaignDetailPageClient({
       );
     } finally {
       setIsChangingCampaignStatus(false);
+    }
+  };
+
+  const handleSaveCampaignName = async () => {
+    setCampaignNameError(null);
+    setCampaignNameSaveState("saving");
+
+    try {
+      await updateCampaign({
+        campaignId,
+        name: campaignName.trim(),
+      });
+      setCampaignNameSaveState("saved");
+    } catch (error) {
+      setCampaignNameError(error instanceof Error ? error.message : "Failed to save campaign name");
+      setCampaignNameSaveState("idle");
     }
   };
 
@@ -324,8 +352,44 @@ export default function CampaignDetailPageClient({
       </Link>
 
       <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <h1 className="truncate text-2xl font-bold text-slate-12">{campaign.name}</h1>
+        <div className="mb-2 flex items-start justify-between gap-3">
+          <div className="flex-1">
+            <label className="mb-1 block text-xs uppercase tracking-wide text-slate-11">Campaign Name</label>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                className="w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-xl font-bold text-slate-12"
+                value={campaignName}
+                onChange={(e) => {
+                  setCampaignName(e.target.value);
+                  setCampaignNameError(null);
+                  if (campaignNameSaveState === "saved") {
+                    setCampaignNameSaveState("idle");
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="rounded bg-slate-700 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-600"
+                onClick={() => void handleSaveCampaignName()}
+                disabled={campaignNameSaveState === "saving"}
+              >
+                Save Name
+              </button>
+            </div>
+            {campaignNameError && <p className="mt-2 text-sm text-red-300">{campaignNameError}</p>}
+            {campaignNameSaveState === "saving" && (
+              <span className="mt-2 flex items-center gap-1 text-sm text-slate-11">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Saving...
+              </span>
+            )}
+            {campaignNameSaveState === "saved" && (
+              <span className="mt-2 flex items-center gap-1 text-sm text-green-400">
+                <CheckCircle2 className="h-4 w-4" />
+                Saved
+              </span>
+            )}
+          </div>
           <div className="w-44">
             <select
               value={campaign.status}

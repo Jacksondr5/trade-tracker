@@ -18,6 +18,17 @@ const campaignValidator = v.object({
   thesis: v.string(),
 });
 
+function validateCampaignName(name: string): string {
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    throw new Error("Campaign name is required");
+  }
+  if (trimmedName.length > 120) {
+    throw new Error("Campaign name must be 120 characters or fewer");
+  }
+  return trimmedName;
+}
+
 export const createCampaign = mutation({
   args: {
     name: v.string(),
@@ -27,7 +38,7 @@ export const createCampaign = mutation({
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
     return await ctx.db.insert("campaigns", {
-      name: args.name,
+      name: validateCampaignName(args.name),
       ownerId,
       status: "planning",
       thesis: args.thesis,
@@ -51,7 +62,9 @@ export const updateCampaign = mutation({
     assertOwner(campaign, ownerId, "Campaign not found");
 
     const patch: Record<string, unknown> = {};
-    if (updates.name !== undefined) patch.name = updates.name;
+    if (updates.name !== undefined) {
+      patch.name = validateCampaignName(updates.name);
+    }
     if (updates.retrospective !== undefined) patch.retrospective = updates.retrospective;
     if (updates.thesis !== undefined) patch.thesis = updates.thesis;
 
