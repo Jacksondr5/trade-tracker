@@ -1,5 +1,6 @@
 "use client";
 
+import { ConvexError } from "convex/values";
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
@@ -140,14 +141,25 @@ export default function CampaignDetailPageClient({
     setCampaignNameError(null);
     setCampaignNameSaveState("saving");
 
+    const trimmedName = campaignName.trim();
+
     try {
       await updateCampaign({
         campaignId,
-        name: campaignName.trim(),
+        name: trimmedName,
       });
+      setCampaignName(trimmedName);
       setCampaignNameSaveState("saved");
     } catch (error) {
-      setCampaignNameError(error instanceof Error ? error.message : "Failed to save campaign name");
+      setCampaignNameError(
+        error instanceof ConvexError
+          ? typeof error.data === "string"
+            ? error.data
+            : "Failed to save campaign name"
+          : error instanceof Error
+            ? error.message
+            : "Failed to save campaign name",
+      );
       setCampaignNameSaveState("idle");
     }
   };
@@ -354,9 +366,13 @@ export default function CampaignDetailPageClient({
       <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
         <div className="mb-2 flex items-start justify-between gap-3">
           <div className="flex-1">
-            <label className="mb-1 block text-xs uppercase tracking-wide text-slate-11">Campaign Name</label>
+            <label htmlFor="campaign-name" className="mb-1 block text-xs uppercase tracking-wide text-slate-11">
+              Campaign Name
+            </label>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <input
+                id="campaign-name"
+                maxLength={120}
                 className="w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-xl font-bold text-slate-12"
                 value={campaignName}
                 onChange={(e) => {

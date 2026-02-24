@@ -1,5 +1,5 @@
 import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { calculateTradesPL } from "./lib/plCalculation";
 import { assertOwner, requireUser } from "./lib/auth";
 
@@ -21,10 +21,10 @@ const campaignValidator = v.object({
 function validateCampaignName(name: string): string {
   const trimmedName = name.trim();
   if (!trimmedName) {
-    throw new Error("Campaign name is required");
+    throw new ConvexError("Campaign name is required");
   }
   if (trimmedName.length > 120) {
-    throw new Error("Campaign name must be 120 characters or fewer");
+    throw new ConvexError("Campaign name must be 120 characters or fewer");
   }
   return trimmedName;
 }
