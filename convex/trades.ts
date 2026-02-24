@@ -3,6 +3,29 @@ import { v } from "convex/values";
 import { calculateTradesPL } from "./lib/plCalculation";
 import { assertOwner, requireUser } from "./lib/auth";
 
+const tradeValidator = v.object({
+  _creationTime: v.number(),
+  _id: v.id("trades"),
+  assetType: v.union(v.literal("crypto"), v.literal("stock")),
+  brokerageAccountId: v.optional(v.string()),
+  date: v.number(),
+  direction: v.union(v.literal("long"), v.literal("short")),
+  externalId: v.optional(v.string()),
+  fees: v.optional(v.number()),
+  notes: v.optional(v.string()),
+  orderType: v.optional(v.string()),
+  ownerId: v.string(),
+  price: v.number(),
+  quantity: v.number(),
+  side: v.union(v.literal("buy"), v.literal("sell")),
+  source: v.optional(
+    v.union(v.literal("manual"), v.literal("ibkr"), v.literal("kraken")),
+  ),
+  taxes: v.optional(v.number()),
+  ticker: v.string(),
+  tradePlanId: v.optional(v.id("tradePlans")),
+});
+
 const tradeWithPLValidator = v.object({
   _creationTime: v.number(),
   _id: v.id("trades"),
@@ -137,7 +160,7 @@ const paginatedTradesValidator = v.object({
   currentPage: v.number(),
   hasNextPage: v.boolean(),
   hasPrevPage: v.boolean(),
-  items: v.array(tradeWithPLValidator),
+  items: v.array(tradeValidator),
   pageSize: v.number(),
   totalCount: v.number(),
   totalPages: v.number(),
@@ -153,27 +176,18 @@ export const listTradesPage = query({
   returns: paginatedTradesValidator,
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
-    // TODO: listTradesPage currently loads all owner trades to preserve accurate
-    // chronological realized P&L from calculateTradesPL. Revisit with a write-time
-    // precomputed/cumulative P&L model to avoid full-collection reads at scale.
     const trades = await ctx.db
       .query("trades")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
       .collect();
-    const plMap = calculateTradesPL(trades);
 
-    const filteredTrades = trades.filter((trade) => {
-      if (args.startDate !== undefined && trade.date < args.startDate) return false;
-      if (args.endDate !== undefined && trade.date > args.endDate) return false;
-      return true;
-    });
-
-    const sortedTrades = filteredTrades
-      .sort((a, b) => b.date - a.date)
-      .map((trade) => ({
-        ...trade,
-        realizedPL: plMap.get(trade._id) ?? null,
-      }));
+    const sortedTrades = trades
+      .filter((trade) => {
+        if (args.startDate !== undefined && trade.date < args.startDate) return false;
+        if (args.endDate !== undefined && trade.date > args.endDate) return false;
+        return true;
+      })
+      .sort((a, b) => b.date - a.date);
 
     const normalizedPageSize = SERVER_TRADES_PAGE_SIZE_OPTIONS.includes(
       args.pageSize as (typeof SERVER_TRADES_PAGE_SIZE_OPTIONS)[number],

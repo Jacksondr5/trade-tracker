@@ -28,14 +28,6 @@ import {
 } from "../../../shared/imports/constants";
 import { EditTradeForm } from "./components/edit-trade-form";
 
-function formatPL(value: number): string {
-  const formatted = new Intl.NumberFormat("en-US", {
-    currency: "USD",
-    style: "currency",
-  }).format(Math.abs(value));
-  return value >= 0 ? `+${formatted}` : `-${formatted}`;
-}
-
 function formatDateForInput(epochMs: number): string {
   const d = new Date(epochMs);
   const year = d.getFullYear();
@@ -286,7 +278,6 @@ export default function TradesPageClient({
                   <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">Quantity</th>
                   <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">Total</th>
                   <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">Account</th>
-                  <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">P&amp;L</th>
                   <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">Actions</th>
                 </tr>
               </thead>
@@ -336,15 +327,6 @@ export default function TradesPageClient({
                           {formatCurrency(trade.price * trade.quantity)}
                         </td>
                         <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">{accountDisplay}</td>
-                        <td
-                          className={cn("whitespace-nowrap px-4 py-3 text-right text-sm font-medium", {
-                            "text-green-400": trade.realizedPL !== null && trade.realizedPL >= 0,
-                            "text-red-400": trade.realizedPL !== null && trade.realizedPL < 0,
-                            "text-slate-11": trade.realizedPL === null,
-                          })}
-                        >
-                          {trade.realizedPL === null ? "—" : formatPL(trade.realizedPL)}
-                        </td>
                         <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
                           <button
                             type="button"
@@ -361,7 +343,7 @@ export default function TradesPageClient({
                       </tr>
                       {editingTradeId === trade._id && (
                         <tr>
-                          <td colSpan={11} className="px-4 py-3">
+                          <td colSpan={10} className="px-4 py-3">
                             <EditTradeForm
                               tradeId={trade._id}
                               initialValues={{
