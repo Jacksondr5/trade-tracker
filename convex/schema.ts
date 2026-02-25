@@ -8,6 +8,11 @@ export default defineSchema({
     ownerId: v.string(),
   }).index("by_owner_campaignId", ["ownerId", "campaignId"]),
 
+  generalNotes: defineTable({
+    content: v.string(),
+    ownerId: v.string(),
+  }).index("by_owner", ["ownerId"]),
+
   campaigns: defineTable({
     closedAt: v.optional(v.number()),
     name: v.string(),
