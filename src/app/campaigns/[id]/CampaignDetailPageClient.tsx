@@ -20,6 +20,7 @@ const noteSchema = z.object({
 
 export default function CampaignDetailPageClient({
   campaignId,
+  preloadedAccountMappings,
   preloadedAllTrades,
   preloadedCampaign,
   preloadedCampaignNotes,
@@ -27,12 +28,14 @@ export default function CampaignDetailPageClient({
   preloadedTradePlans,
 }: {
   campaignId: Id<"campaigns">;
+  preloadedAccountMappings: Preloaded<typeof api.accountMappings.listAccountMappings>;
   preloadedAllTrades: Preloaded<typeof api.trades.listTrades>;
   preloadedCampaign: Preloaded<typeof api.campaigns.getCampaign>;
   preloadedCampaignNotes: Preloaded<typeof api.campaignNotes.getNotesByCampaign>;
   preloadedCampaignPL: Preloaded<typeof api.campaigns.getCampaignPL>;
   preloadedTradePlans: Preloaded<typeof api.tradePlans.listTradePlansByCampaign>;
 }) {
+  const accountMappings = usePreloadedQuery(preloadedAccountMappings);
   const campaign = usePreloadedQuery(preloadedCampaign);
   const campaignNotes = usePreloadedQuery(preloadedCampaignNotes);
   const tradePlans = usePreloadedQuery(preloadedTradePlans);
@@ -59,6 +62,14 @@ export default function CampaignDetailPageClient({
     }
     return map;
   }, [tradePlans]);
+
+  const accountNameByAccountId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const mapping of accountMappings) {
+      map.set(mapping.accountId, mapping.friendlyName);
+    }
+    return map;
+  }, [accountMappings]);
 
   const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
   const [isChangingCampaignStatus, setIsChangingCampaignStatus] = useState(false);
@@ -865,6 +876,7 @@ export default function CampaignDetailPageClient({
                 <tr className="border-b border-slate-700 text-left text-slate-11">
                   <th className="px-2 py-2">Date</th>
                   <th className="px-2 py-2">Ticker</th>
+                  <th className="px-2 py-2">Account</th>
                   <th className="px-2 py-2">Trade Plan</th>
                   <th className="px-2 py-2">Side</th>
                   <th className="px-2 py-2">Qty</th>
@@ -877,6 +889,9 @@ export default function CampaignDetailPageClient({
                   <tr key={trade._id} className="border-b border-slate-700/60">
                     <td className="px-2 py-2 text-slate-11">{new Date(trade.date).toLocaleDateString("en-US")}</td>
                     <td className="px-2 py-2 text-slate-12">{trade.ticker}</td>
+                    <td className="px-2 py-2 text-slate-11">
+                      {trade.brokerageAccountId ? accountNameByAccountId.get(trade.brokerageAccountId) ?? trade.brokerageAccountId : "—"}
+                    </td>
                     <td className="px-2 py-2 text-slate-11">
                       {trade.tradePlanId ? tradePlanNameById.get(trade.tradePlanId) ?? "—" : "—"}
                     </td>
