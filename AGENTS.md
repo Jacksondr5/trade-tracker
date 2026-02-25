@@ -38,6 +38,8 @@ Validation uses Zod.
 
 Reusable UI components are exported from `src/components/ui/index.ts`.
 
+Prefer icon buttons over text.
+
 ### Path Aliases
 
 - `~/*` → `./src/*`

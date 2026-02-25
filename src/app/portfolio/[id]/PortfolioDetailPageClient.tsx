@@ -2,7 +2,7 @@
 
 import { ConvexError } from "convex/values";
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { Check, CheckCircle2, Loader2, Save, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -110,19 +110,18 @@ export default function PortfolioDetailPageClient({
 
       {/* Header section */}
       <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
-        <div className="mb-2 flex items-start justify-between gap-3">
-          <div className="flex-1">
-            <label
-              htmlFor="portfolio-name"
-              className="mb-1 block text-xs uppercase tracking-wide text-slate-11"
-            >
-              Portfolio Name
-            </label>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div>
+          <label
+            htmlFor="portfolio-name"
+            className="mb-1 block text-xs uppercase tracking-wide text-slate-11"
+          >
+            Portfolio Name
+          </label>
+            <div className="flex items-center gap-2">
               <input
                 id="portfolio-name"
                 maxLength={120}
-                className="w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-xl font-bold text-slate-12"
+                className="min-w-0 flex-1 rounded border border-slate-600 bg-slate-700 px-3 py-2 text-xl font-bold text-slate-12"
                 value={portfolioName}
                 onChange={(e) => {
                   setPortfolioName(e.target.value);
@@ -134,60 +133,61 @@ export default function PortfolioDetailPageClient({
               />
               <button
                 type="button"
-                className="rounded bg-slate-700 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-600"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-blue-700 text-blue-400 hover:bg-blue-900/50 hover:text-blue-300 disabled:opacity-50"
                 onClick={() => void handleSaveName()}
                 disabled={nameSaveState === "saving"}
+                title="Save name"
+                aria-label="Save name"
               >
-                Save Name
+                {nameSaveState === "saving" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : nameSaveState === "saved" ? (
+                  <CheckCircle2 className="h-4 w-4 text-green-400" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
               </button>
+              {showDeleteConfirm ? (
+                <>
+                  <button
+                    type="button"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-red-700 text-red-400 hover:bg-red-900/50 disabled:opacity-50"
+                    onClick={() => void handleDelete()}
+                    disabled={isDeleting}
+                    title="Confirm delete"
+                    aria-label="Confirm delete"
+                  >
+                    {isDeleting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Check className="h-4 w-4" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-slate-600 text-slate-11 hover:bg-slate-600 hover:text-slate-12"
+                    onClick={() => setShowDeleteConfirm(false)}
+                    title="Cancel delete"
+                    aria-label="Cancel delete"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-red-700 text-red-400 hover:bg-red-900/50 hover:text-red-300"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  title="Delete portfolio"
+                  aria-label="Delete portfolio"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
             </div>
-            {nameError && (
-              <p className="mt-2 text-sm text-red-300">{nameError}</p>
-            )}
-            {nameSaveState === "saving" && (
-              <span className="mt-2 flex items-center gap-1 text-sm text-slate-11">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Saving...
-              </span>
-            )}
-            {nameSaveState === "saved" && (
-              <span className="mt-2 flex items-center gap-1 text-sm text-green-400">
-                <CheckCircle2 className="h-4 w-4" />
-                Saved
-              </span>
-            )}
-          </div>
-
-          <div>
-            {showDeleteConfirm ? (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-slate-11">Delete?</span>
-                <button
-                  type="button"
-                  className="rounded bg-red-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-600"
-                  onClick={() => void handleDelete()}
-                  disabled={isDeleting}
-                >
-                  {isDeleting ? "Deleting..." : "Confirm"}
-                </button>
-                <button
-                  type="button"
-                  className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-700"
-                  onClick={() => setShowDeleteConfirm(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="rounded border border-red-700 px-3 py-1.5 text-sm text-red-300 hover:bg-red-900/50"
-                onClick={() => setShowDeleteConfirm(true)}
-              >
-                Delete
-              </button>
-            )}
-          </div>
+          {nameError && (
+            <p className="mt-2 text-sm text-red-300">{nameError}</p>
+          )}
         </div>
       </div>
 
