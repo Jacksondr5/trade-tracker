@@ -1,3 +1,4 @@
+export { Badge, badgeVariants, type BadgeProps } from "./badge";
 export { Button, buttonClassName, buttonVariants, type ButtonProps } from "./button";
 export {
   Card,
