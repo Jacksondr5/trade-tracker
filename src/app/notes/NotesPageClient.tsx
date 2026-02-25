@@ -119,6 +119,7 @@ export default function NotesPageClient({
                     <>
                       <textarea
                         className="min-h-24 w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
+                        disabled={isSavingNote}
                         value={editingNoteContent}
                         onChange={(e) => setEditingNoteContent(e.target.value)}
                       />
