@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import { Alert, Badge } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
-import { formatCurrency, formatDate } from "~/lib/format";
+import { capitalize, formatCurrency, formatDate } from "~/lib/format";
 
 type SaveState = "idle" | "saving" | "saved";
 
@@ -321,7 +321,7 @@ export default function PortfolioDetailPageClient({
                               : "neutral"
                         }
                       >
-                        {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
+                        {capitalize(campaign.status)}
                       </Badge>
                     </td>
                     <td className="px-2 py-2 text-right text-slate-11">

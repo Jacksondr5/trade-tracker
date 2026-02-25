@@ -271,6 +271,7 @@ export default function ImportsPageClient({
         importResult={importResult}
         isImporting={isImporting}
         onBrokerageChange={onBrokerageChange}
+        onClearError={() => setErrorMessage(null)}
         onFileChange={handleFileChange}
       />
 

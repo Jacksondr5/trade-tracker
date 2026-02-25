@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import { X } from "lucide-react";
 import { cn } from "~/lib/utils";
 
 const alertVariants = cva(
@@ -46,9 +47,9 @@ function Alert({
           type="button"
           onClick={onDismiss}
           className="ml-4 shrink-0 opacity-70 hover:opacity-100"
-          aria-label="Dismiss"
+          aria-label="Dismiss alert"
         >
-          ✕
+          <X className="h-4 w-4" aria-hidden="true" />
         </button>
       )}
     </div>

@@ -67,9 +67,9 @@ Status/label badges with semantic color variants:
 
 | Variant    | Use for                                      |
 |------------|----------------------------------------------|
-| `success`  | Active campaigns, buy side, long direction    |
+| `success`  | Active campaigns, buy side, long direction (positions) |
 | `danger`   | Sell side, short direction                    |
-| `info`     | Planning status, long direction (imports)     |
+| `info`     | Planning status, long direction (import inbox) |
 | `warning`  | (reserved for future use)                     |
 | `neutral`  | Closed campaigns, trade plan statuses         |
 

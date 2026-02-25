@@ -15,6 +15,7 @@ interface UploadSectionProps {
   importResult: ImportResult | null;
   isImporting: boolean;
   onBrokerageChange: (value: BrokerageSource) => void;
+  onClearError?: () => void;
   onFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
 }
 
@@ -24,6 +25,7 @@ export function UploadSection({
   importResult,
   isImporting,
   onBrokerageChange,
+  onClearError,
   onFileChange,
 }: UploadSectionProps) {
   return (
@@ -83,7 +85,7 @@ export function UploadSection({
         )}
 
         {errorMessage && (
-          <Alert variant="error">{errorMessage}</Alert>
+          <Alert variant="error" onDismiss={onClearError}>{errorMessage}</Alert>
         )}
       </div>
     </Card>

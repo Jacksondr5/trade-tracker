@@ -7,7 +7,7 @@ import { useState } from "react";
 import { Badge, Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import { Id } from "~/convex/_generated/dataModel";
-import { formatCurrency, formatDate } from "~/lib/format";
+import { capitalize, formatCurrency, formatDate } from "~/lib/format";
 
 type CampaignStatus = "planning" | "active" | "closed";
 type StatusFilter = "all" | CampaignStatus;
@@ -146,7 +146,7 @@ export default function CampaignsPageClient({
                             : "neutral"
                       }
                     >
-                      {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
+                      {capitalize(campaign.status)}
                     </Badge>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-sm text-right">
