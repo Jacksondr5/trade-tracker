@@ -44,9 +44,15 @@ export default function PortfolioDetailPageClient({
 
   const handleSaveName = async () => {
     setNameError(null);
-    setNameSaveState("saving");
 
     const trimmedName = portfolioName.trim();
+    if (!trimmedName) {
+      setNameError("Portfolio name cannot be empty");
+      setNameSaveState("idle");
+      return;
+    }
+
+    setNameSaveState("saving");
 
     try {
       await updatePortfolio({
@@ -76,7 +82,13 @@ export default function PortfolioDetailPageClient({
       router.push("/portfolio");
     } catch (error) {
       setNameError(
-        error instanceof Error ? error.message : "Failed to delete portfolio",
+        error instanceof ConvexError
+          ? typeof error.data === "string"
+            ? error.data
+            : "Failed to delete portfolio"
+          : error instanceof Error
+            ? error.message
+            : "Failed to delete portfolio",
       );
       setIsDeleting(false);
       setShowDeleteConfirm(false);

@@ -216,6 +216,7 @@ export const importTrades = mutation({
     let withWarnings = 0;
 
     const portfolioOwnerCache = new Map<Id<"portfolios">, true>();
+    const tradePlanOwnerCache = new Map<Id<"tradePlans">, true>();
 
     for (const trade of args.trades) {
       const brokerageAccountId = normalizeBrokerageAccountId(
@@ -242,8 +243,11 @@ export const importTrades = mutation({
       if (validationWarnings.length > 0) withWarnings++;
 
       if (trade.tradePlanId !== undefined) {
-        const tradePlan = await ctx.db.get(trade.tradePlanId);
-        assertOwner(tradePlan, ownerId, "Trade plan not found");
+        if (!tradePlanOwnerCache.has(trade.tradePlanId)) {
+          const tradePlan = await ctx.db.get(trade.tradePlanId);
+          assertOwner(tradePlan, ownerId, "Trade plan not found");
+          tradePlanOwnerCache.set(trade.tradePlanId, true);
+        }
       }
 
       if (trade.portfolioId !== undefined) {

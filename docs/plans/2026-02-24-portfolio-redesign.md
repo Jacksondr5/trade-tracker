@@ -10,7 +10,7 @@ User decisions:
 
 - Deleting a portfolio unlinks its trades (sets portfolioId to null)
 - Campaigns shown on portfolio detail page are derived (through trades -> trade plans -> campaigns), no direct link
-- Old portfolioSnapshots table and all related code removed completely
+- portfolioSnapshots table is retained in schema (`recordedAt`, `value`) for historical compatibility
 
 ---
 
@@ -26,7 +26,7 @@ File: convex/schema.ts
 - Add portfolioId: v.optional(v.id("portfolios")) to trades table
 - Add index by_owner_portfolioId on trades: ["ownerId", "portfolioId"]
 - Add portfolioId: v.optional(v.id("portfolios")) to inboxTrades table
-- Remove portfolioSnapshots table definition
+- Keep portfolioSnapshots table definition (owner-scoped snapshots with `recordedAt` and `value`)
 
 Step 2: Backend — New Portfolio Functions
 
@@ -64,7 +64,7 @@ File: convex/imports.ts
 
 Step 5: Backend — Remove Old Portfolio Code
 
-- Delete convex/portfolioSnapshots.ts
+- Keep `portfolioSnapshots` schema support for compatibility; if snapshot APIs are deprecated, remove them in a separate migration PR
 
 Step 6: Frontend — Portfolio List Page
 

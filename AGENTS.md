@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 This file provides guidance to AI agents when working with code in this repository.
 
@@ -23,6 +23,9 @@ No test framework is configured yet. CI runs lint, typecheck, and build.
 
 All backend logic lives in Convex. There are no Next.js API routes.
 
+### Frontend: Next.js App Router (`src/app/`)
+
+The UI uses Next.js App Router with server/client components under `src/app/`, following App Router routing and layout conventions.
 
 ### Forms: TanStack React Form
 

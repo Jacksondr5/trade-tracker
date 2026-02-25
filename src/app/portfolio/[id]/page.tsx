@@ -21,8 +21,14 @@ export default async function PortfolioDetailPage({
       { portfolioId },
       { token },
     );
-  } catch {
-    notFound();
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      /(not found|invalid|validator|argument)/i.test(error.message)
+    ) {
+      notFound();
+    }
+    throw error;
   }
 
   return (
