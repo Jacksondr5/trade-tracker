@@ -120,6 +120,10 @@
   td, th {
     font-variant-numeric: tabular-nums;
   }
+
+  tr {
+    transition: background-color 150ms ease;
+  }
 }
 
 :root {
