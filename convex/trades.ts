@@ -2,6 +2,7 @@ import { mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
 import { calculateTradesPL } from "./lib/plCalculation";
 import { assertOwner, requireUser } from "./lib/auth";
+import { paginationOptsValidator } from "convex/server";
 
 function normalizeTicker(ticker: string): string {
   const normalizedTicker = ticker.trim().toUpperCase();
@@ -10,6 +11,30 @@ function normalizeTicker(ticker: string): string {
   }
   return normalizedTicker;
 }
+
+const tradeValidator = v.object({
+  _creationTime: v.number(),
+  _id: v.id("trades"),
+  assetType: v.union(v.literal("crypto"), v.literal("stock")),
+  brokerageAccountId: v.optional(v.string()),
+  date: v.number(),
+  direction: v.union(v.literal("long"), v.literal("short")),
+  externalId: v.optional(v.string()),
+  fees: v.optional(v.number()),
+  notes: v.optional(v.string()),
+  orderType: v.optional(v.string()),
+  ownerId: v.string(),
+  portfolioId: v.optional(v.id("portfolios")),
+  price: v.number(),
+  quantity: v.number(),
+  side: v.union(v.literal("buy"), v.literal("sell")),
+  source: v.optional(
+    v.union(v.literal("manual"), v.literal("ibkr"), v.literal("kraken")),
+  ),
+  taxes: v.optional(v.number()),
+  ticker: v.string(),
+  tradePlanId: v.optional(v.id("tradePlans")),
+});
 
 const tradeWithPLValidator = v.object({
   _creationTime: v.number(),
@@ -118,14 +143,17 @@ export const updateTrade = mutation({
     if (updates.direction !== undefined) patch.direction = updates.direction;
     if (updates.notes !== undefined) patch.notes = updates.notes;
     if (updates.portfolioId !== undefined) {
-      patch.portfolioId = updates.portfolioId === null ? undefined : updates.portfolioId;
+      patch.portfolioId =
+        updates.portfolioId === null ? undefined : updates.portfolioId;
     }
     if (updates.price !== undefined) patch.price = updates.price;
     if (updates.quantity !== undefined) patch.quantity = updates.quantity;
     if (updates.side !== undefined) patch.side = updates.side;
-    if (updates.ticker !== undefined) patch.ticker = normalizeTicker(updates.ticker);
+    if (updates.ticker !== undefined)
+      patch.ticker = normalizeTicker(updates.ticker);
     if (updates.tradePlanId !== undefined) {
-      patch.tradePlanId = updates.tradePlanId === null ? undefined : updates.tradePlanId;
+      patch.tradePlanId =
+        updates.tradePlanId === null ? undefined : updates.tradePlanId;
     }
     patch.ownerId = ownerId;
 
@@ -152,5 +180,59 @@ export const listTrades = query({
         ...trade,
         realizedPL: plMap.get(trade._id) ?? null,
       }));
+  },
+});
+
+const paginatedTradesValidator = v.object({
+  continueCursor: v.string(),
+  isDone: v.boolean(),
+  page: v.array(tradeValidator),
+  pageStatus: v.optional(v.union(v.string(), v.null())),
+  splitCursor: v.optional(v.union(v.string(), v.null())),
+});
+
+export const listTradesPage = query({
+  args: {
+    endDate: v.optional(v.number()),
+    paginationOpts: paginationOptsValidator,
+    startDate: v.optional(v.number()),
+  },
+  returns: paginatedTradesValidator,
+  handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const { endDate, paginationOpts, startDate } = args;
+    const queryByDate = ctx.db.query("trades");
+
+    if (startDate !== undefined && endDate !== undefined) {
+      return await queryByDate
+        .withIndex("by_owner_date", (q) =>
+          q.eq("ownerId", ownerId).gte("date", startDate).lte("date", endDate),
+        )
+        .order("desc")
+        .paginate(paginationOpts);
+    }
+
+    if (startDate !== undefined) {
+      return await queryByDate
+        .withIndex("by_owner_date", (q) =>
+          q.eq("ownerId", ownerId).gte("date", startDate),
+        )
+        .order("desc")
+        .paginate(paginationOpts);
+    }
+
+    if (endDate !== undefined) {
+      return await queryByDate
+        .withIndex("by_owner_date", (q) =>
+          q.eq("ownerId", ownerId).lte("date", endDate),
+        )
+        .order("desc")
+        .paginate(paginationOpts);
+    }
+
+    return await queryByDate
+      .withIndex("by_owner_date", (q) => q.eq("ownerId", ownerId))
+      .order("desc")
+      .paginate(paginationOpts);
   },
 });
