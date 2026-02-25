@@ -4,6 +4,7 @@ import { Preloaded, usePreloadedQuery } from "convex/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useMemo, useState, useTransition } from "react";
+import { ChevronLeft, ChevronRight, Pencil } from "lucide-react";
 import { Badge, Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
@@ -374,7 +375,7 @@ export default function TradesPageClient({
                             aria-label="Edit trade"
                             data-testid={`edit-trade-${trade._id}`}
                           >
-                            ✎
+                            <Pencil className="h-4 w-4" />
                           </button>
                         </td>
                       </tr>
@@ -433,20 +434,24 @@ export default function TradesPageClient({
               </select>
               <button
                 type="button"
-                className="text-slate-12 rounded border border-slate-600 px-3 py-1.5 text-sm disabled:opacity-50"
+                aria-label="Previous page"
+                title="Previous page"
+                className="rounded border border-slate-600 p-1.5 text-slate-12 disabled:opacity-50"
                 onClick={handlePrevPage}
                 disabled={cursorHistory.length === 0 || isNavigating}
               >
-                Prev
+                <ChevronLeft className="h-4 w-4" />
               </button>
               <span className="text-slate-11 text-sm">Page {currentPage}</span>
               <button
                 type="button"
-                className="text-slate-12 rounded border border-slate-600 px-3 py-1.5 text-sm disabled:opacity-50"
+                aria-label="Next page"
+                title="Next page"
+                className="rounded border border-slate-600 p-1.5 text-slate-12 disabled:opacity-50"
                 onClick={handleNextPage}
                 disabled={tradesPage.isDone || isNavigating}
               >
-                Next
+                <ChevronRight className="h-4 w-4" />
               </button>
             </div>
           </div>

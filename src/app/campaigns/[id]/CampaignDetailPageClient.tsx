@@ -2,7 +2,7 @@
 
 import { ConvexError } from "convex/values";
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { Check, CheckCircle2, Loader2, Pencil, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
@@ -407,7 +407,11 @@ export default function CampaignDetailPageClient({
             )}
           </div>
           <div className="w-44">
+            <label htmlFor="campaign-status" className="mb-1 block text-xs uppercase tracking-wide text-slate-11">
+              Status
+            </label>
             <select
+              id="campaign-status"
               value={campaign.status}
               disabled={isChangingCampaignStatus}
               onChange={(e) => void handleCampaignStatusChange(e.target.value as CampaignStatus)}
@@ -492,10 +496,12 @@ export default function CampaignDetailPageClient({
                     {!isEditing && (
                       <button
                         type="button"
-                        className="rounded border border-slate-600 px-2 py-0.5 text-xs text-slate-12 hover:bg-slate-700"
+                        aria-label="Edit note"
+                        title="Edit"
+                        className="rounded p-1.5 text-slate-11 hover:text-slate-12 hover:bg-slate-700"
                         onClick={() => startEditingNote(note)}
                       >
-                        Edit
+                        <Pencil className="h-4 w-4" />
                       </button>
                     )}
                   </div>
@@ -510,22 +516,26 @@ export default function CampaignDetailPageClient({
                       <div className="mt-2 flex gap-2">
                         <button
                           type="button"
-                          className="rounded bg-slate-700 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-600"
+                          aria-label="Save note"
+                          title="Save"
+                          className="rounded p-1.5 text-green-400 hover:bg-green-900/50 disabled:opacity-50"
                           onClick={() => void handleSaveNote()}
                           disabled={isSavingNote}
                         >
-                          {isSavingNote ? "Saving..." : "Save"}
+                          {isSavingNote ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                         </button>
                         <button
                           type="button"
-                          className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-700"
+                          aria-label="Cancel editing"
+                          title="Cancel"
+                          className="rounded p-1.5 text-slate-11 hover:text-slate-12 hover:bg-slate-700"
                           onClick={() => {
                             setEditingNoteId(null);
                             setEditingNoteContent("");
                             setNoteError(null);
                           }}
                         >
-                          Cancel
+                          <X className="h-4 w-4" />
                         </button>
                       </div>
                     </>
@@ -622,27 +632,33 @@ export default function CampaignDetailPageClient({
                         <>
                           <button
                             type="button"
-                            className="rounded bg-slate-700 px-2 py-1 text-xs text-slate-12 hover:bg-slate-600"
+                            aria-label="Save trade plan"
+                            title="Save"
+                            className="rounded p-1.5 text-green-400 hover:bg-green-900/50 disabled:opacity-50"
                             onClick={() => void handleSaveTradePlan()}
                             disabled={isSavingPlan}
                           >
-                            {isSavingPlan ? "Saving..." : "Save"}
+                            {isSavingPlan ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                           </button>
                           <button
                             type="button"
-                            className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-12 hover:bg-slate-700"
+                            aria-label="Cancel editing"
+                            title="Cancel"
+                            className="rounded p-1.5 text-slate-11 hover:text-slate-12 hover:bg-slate-700"
                             onClick={() => { setEditingPlanId(null); setPlanError(null); }}
                           >
-                            Cancel
+                            <X className="h-4 w-4" />
                           </button>
                         </>
                       ) : (
                         <button
                           type="button"
-                          className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-12 hover:bg-slate-700"
+                          aria-label="Edit trade plan"
+                          title="Edit"
+                          className="rounded p-1.5 text-slate-11 hover:text-slate-12 hover:bg-slate-700"
                           onClick={() => startEditingTradePlan(plan)}
                         >
-                          Edit
+                          <Pencil className="h-4 w-4" />
                         </button>
                       )}
                     </div>

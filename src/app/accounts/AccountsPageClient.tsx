@@ -2,9 +2,9 @@
 
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
 import { useMemo, useState } from "react";
+import { Check, Pencil, X } from "lucide-react";
 import {
   Alert,
-  Button,
   Card,
   CardContent,
   CardHeader,
@@ -200,36 +200,40 @@ export default function AccountsPageClient({
                         <td className="px-4 py-3 text-right">
                           {isEditing ? (
                             <div className="flex justify-end gap-2">
-                              <Button
-                                dataTestId={`save-mapping-${key}`}
-                                isLoading={isSavingEdit}
+                              <button
+                                type="button"
+                                aria-label="Save mapping"
+                                title="Save"
+                                data-testid={`save-mapping-${key}`}
+                                className="rounded p-1.5 text-green-400 hover:bg-green-900/50 disabled:opacity-50"
                                 onClick={() => void saveEditing(account)}
-                                size="sm"
-                                type="button"
-                              >
-                                Save
-                              </Button>
-                              <Button
-                                dataTestId={`cancel-mapping-${key}`}
                                 disabled={isSavingEdit}
-                                onClick={cancelEditing}
-                                size="sm"
-                                type="button"
-                                variant="outline"
                               >
-                                Cancel
-                              </Button>
+                                <Check className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label="Cancel editing"
+                                title="Cancel"
+                                data-testid={`cancel-mapping-${key}`}
+                                className="rounded p-1.5 text-slate-11 hover:text-slate-12 hover:bg-slate-700 disabled:opacity-50"
+                                onClick={cancelEditing}
+                                disabled={isSavingEdit}
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
                             </div>
                           ) : (
-                            <Button
-                              dataTestId={`edit-mapping-${key}`}
-                              onClick={() => startEditing(account)}
-                              size="sm"
+                            <button
                               type="button"
-                              variant="outline"
+                              aria-label="Edit mapping"
+                              title="Edit"
+                              data-testid={`edit-mapping-${key}`}
+                              className="rounded p-1.5 text-slate-11 hover:text-slate-12 hover:bg-slate-700"
+                              onClick={() => startEditing(account)}
                             >
-                              Edit
-                            </Button>
+                              <Pencil className="h-4 w-4" />
+                            </button>
                           )}
                         </td>
                       </tr>
