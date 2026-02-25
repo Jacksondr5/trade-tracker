@@ -133,15 +133,13 @@ export const deletePortfolio = mutation({
 
     const inboxTrades = await ctx.db
       .query("inboxTrades")
-      .withIndex("by_owner_status", (q) =>
-        q.eq("ownerId", ownerId).eq("status", "pending_review"),
+      .withIndex("by_owner_portfolioId", (q) =>
+        q.eq("ownerId", ownerId).eq("portfolioId", args.portfolioId),
       )
       .collect();
 
     for (const inboxTrade of inboxTrades) {
-      if (inboxTrade.portfolioId === args.portfolioId) {
-        await ctx.db.patch(inboxTrade._id, { portfolioId: undefined });
-      }
+      await ctx.db.patch(inboxTrade._id, { portfolioId: undefined });
     }
 
     await ctx.db.delete(args.portfolioId);

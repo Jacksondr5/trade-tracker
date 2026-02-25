@@ -123,5 +123,6 @@ export default defineSchema({
   })
     .index("by_owner_status", ["ownerId", "status"])
     .index("by_owner_source_externalId", ["ownerId", "source", "externalId"])
+    .index("by_owner_portfolioId", ["ownerId", "portfolioId"])
     .index("by_owner_date", ["ownerId", "date"]),
 });

@@ -1,7 +1,15 @@
 import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { calculateTradesPL } from "./lib/plCalculation";
 import { assertOwner, requireUser } from "./lib/auth";
+
+function normalizeTicker(ticker: string): string {
+  const normalizedTicker = ticker.trim().toUpperCase();
+  if (!normalizedTicker) {
+    throw new ConvexError("Ticker is required");
+  }
+  return normalizedTicker;
+}
 
 const tradeWithPLValidator = v.object({
   _creationTime: v.number(),
@@ -66,7 +74,7 @@ export const createTrade = mutation({
       quantity: args.quantity,
       side: args.side,
       source: "manual",
-      ticker: args.ticker,
+      ticker: normalizeTicker(args.ticker),
       tradePlanId: args.tradePlanId,
     });
   },
@@ -115,7 +123,7 @@ export const updateTrade = mutation({
     if (updates.price !== undefined) patch.price = updates.price;
     if (updates.quantity !== undefined) patch.quantity = updates.quantity;
     if (updates.side !== undefined) patch.side = updates.side;
-    if (updates.ticker !== undefined) patch.ticker = updates.ticker;
+    if (updates.ticker !== undefined) patch.ticker = normalizeTicker(updates.ticker);
     if (updates.tradePlanId !== undefined) {
       patch.tradePlanId = updates.tradePlanId === null ? undefined : updates.tradePlanId;
     }
