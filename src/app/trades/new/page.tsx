@@ -5,11 +5,15 @@ import NewTradePageClient from "./NewTradePageClient";
 
 export default async function NewTradePage() {
   const token = await getConvexTokenOrThrow();
-  const preloadedOpenTradePlans = await preloadQuery(
-    api.tradePlans.listOpenTradePlans,
-    {},
-    { token },
-  );
+  const [preloadedOpenTradePlans, preloadedPortfolios] = await Promise.all([
+    preloadQuery(api.tradePlans.listOpenTradePlans, {}, { token }),
+    preloadQuery(api.portfolios.listPortfolios, {}, { token }),
+  ]);
 
-  return <NewTradePageClient preloadedOpenTradePlans={preloadedOpenTradePlans} />;
+  return (
+    <NewTradePageClient
+      preloadedOpenTradePlans={preloadedOpenTradePlans}
+      preloadedPortfolios={preloadedPortfolios}
+    />
+  );
 }

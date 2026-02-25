@@ -15,6 +15,7 @@ const tradeWithPLValidator = v.object({
   notes: v.optional(v.string()),
   orderType: v.optional(v.string()),
   ownerId: v.string(),
+  portfolioId: v.optional(v.id("portfolios")),
   price: v.number(),
   quantity: v.number(),
   realizedPL: v.union(v.number(), v.null()),
@@ -33,6 +34,7 @@ export const createTrade = mutation({
     date: v.number(),
     direction: v.union(v.literal("long"), v.literal("short")),
     notes: v.optional(v.string()),
+    portfolioId: v.optional(v.id("portfolios")),
     price: v.number(),
     quantity: v.number(),
     side: v.union(v.literal("buy"), v.literal("sell")),
@@ -48,12 +50,18 @@ export const createTrade = mutation({
       assertOwner(tradePlan, ownerId, "Trade plan not found");
     }
 
+    if (args.portfolioId) {
+      const portfolio = await ctx.db.get(args.portfolioId);
+      assertOwner(portfolio, ownerId, "Portfolio not found");
+    }
+
     return await ctx.db.insert("trades", {
       assetType: args.assetType,
       date: args.date,
       direction: args.direction,
       notes: args.notes,
       ownerId,
+      portfolioId: args.portfolioId,
       price: args.price,
       quantity: args.quantity,
       side: args.side,
@@ -70,6 +78,7 @@ export const updateTrade = mutation({
     date: v.optional(v.number()),
     direction: v.optional(v.union(v.literal("long"), v.literal("short"))),
     notes: v.optional(v.string()),
+    portfolioId: v.optional(v.union(v.id("portfolios"), v.null())),
     price: v.optional(v.number()),
     quantity: v.optional(v.number()),
     side: v.optional(v.union(v.literal("buy"), v.literal("sell"))),
@@ -90,11 +99,19 @@ export const updateTrade = mutation({
       assertOwner(tradePlan, ownerId, "Trade plan not found");
     }
 
+    if (updates.portfolioId !== undefined && updates.portfolioId !== null) {
+      const portfolio = await ctx.db.get(updates.portfolioId);
+      assertOwner(portfolio, ownerId, "Portfolio not found");
+    }
+
     const patch: Record<string, unknown> = {};
     if (updates.assetType !== undefined) patch.assetType = updates.assetType;
     if (updates.date !== undefined) patch.date = updates.date;
     if (updates.direction !== undefined) patch.direction = updates.direction;
     if (updates.notes !== undefined) patch.notes = updates.notes;
+    if (updates.portfolioId !== undefined) {
+      patch.portfolioId = updates.portfolioId === null ? undefined : updates.portfolioId;
+    }
     if (updates.price !== undefined) patch.price = updates.price;
     if (updates.quantity !== undefined) patch.quantity = updates.quantity;
     if (updates.side !== undefined) patch.side = updates.side;

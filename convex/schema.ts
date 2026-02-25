@@ -23,17 +23,10 @@ export default defineSchema({
     .index("by_owner", ["ownerId"])
     .index("by_owner_status", ["ownerId", "status"]),
 
-  portfolioSnapshots: defineTable({
-    cashBalance: v.optional(v.number()),
-    date: v.number(),
+  portfolios: defineTable({
+    name: v.string(),
     ownerId: v.string(),
-    source: v.union(
-      v.literal("api"),
-      v.literal("calculated"),
-      v.literal("manual"),
-    ),
-    totalValue: v.number(),
-  }).index("by_owner_date", ["ownerId", "date"]),
+  }).index("by_owner", ["ownerId"]),
 
   tradePlans: defineTable({
     campaignId: v.optional(v.id("campaigns")),
@@ -80,6 +73,7 @@ export default defineSchema({
     notes: v.optional(v.string()),
     orderType: v.optional(v.string()),
     ownerId: v.string(),
+    portfolioId: v.optional(v.id("portfolios")),
     price: v.number(),
     quantity: v.number(),
     side: v.union(v.literal("buy"), v.literal("sell")),
@@ -93,6 +87,7 @@ export default defineSchema({
     .index("by_owner", ["ownerId"])
     .index("by_owner_date", ["ownerId", "date"])
     .index("by_owner_externalId", ["ownerId", "externalId"])
+    .index("by_owner_portfolioId", ["ownerId", "portfolioId"])
     .index("by_owner_ticker", ["ownerId", "ticker"])
     .index("by_owner_tradePlanId", ["ownerId", "tradePlanId"]),
 
@@ -106,6 +101,7 @@ export default defineSchema({
     notes: v.optional(v.string()),
     orderType: v.optional(v.string()),
     ownerId: v.string(),
+    portfolioId: v.optional(v.id("portfolios")),
     price: v.optional(v.number()),
     quantity: v.optional(v.number()),
     side: v.optional(v.union(v.literal("buy"), v.literal("sell"))),

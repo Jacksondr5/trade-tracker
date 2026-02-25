@@ -14,11 +14,17 @@ interface TradePlanOption {
   status: string;
 }
 
+interface PortfolioOption {
+  _id: Id<"portfolios">;
+  name: string;
+}
+
 export interface EditTradeFormValues {
   assetType: "stock" | "crypto";
   date: string;
   direction: "long" | "short";
   notes: string;
+  portfolioId: string;
   price: string;
   quantity: string;
   side: "buy" | "sell";
@@ -30,6 +36,7 @@ interface EditTradeFormProps {
   initialValues: EditTradeFormValues;
   onCancel: () => void;
   onSaved: () => void;
+  portfolios: PortfolioOption[];
   tradeId: Id<"trades">;
   tradePlans: TradePlanOption[];
 }
@@ -39,6 +46,7 @@ const editTradeSchema = z.object({
   date: z.string().min(1, "Date is required"),
   direction: z.enum(["long", "short"]),
   notes: z.string().optional(),
+  portfolioId: z.string().optional(),
   price: z
     .string()
     .min(1, "Price is required")
@@ -56,6 +64,7 @@ export function EditTradeForm({
   initialValues,
   onCancel,
   onSaved,
+  portfolios,
   tradeId,
   tradePlans,
 }: EditTradeFormProps) {
@@ -82,6 +91,9 @@ export function EditTradeForm({
           date: new Date(parsed.date).getTime(),
           direction: parsed.direction,
           notes: parsed.notes || undefined,
+          portfolioId: parsed.portfolioId
+            ? (parsed.portfolioId as Id<"portfolios">)
+            : null,
           price: parseFloat(parsed.price.trim()),
           quantity: parseFloat(parsed.quantity.trim()),
           side: parsed.side,
@@ -143,6 +155,19 @@ export function EditTradeForm({
                   options={tradePlans.map((tp) => ({
                     label: `${tp.name} (${tp.instrumentSymbol}) [${tp.status}]`,
                     value: tp._id,
+                  }))}
+                />
+              )}
+            </form.AppField>
+            <form.AppField name="portfolioId">
+              {(field) => (
+                <field.FieldSelect
+                  label="Portfolio"
+                  className="w-[180px]"
+                  placeholder="No portfolio"
+                  options={portfolios.map((p) => ({
+                    label: p.name,
+                    value: p._id,
                   }))}
                 />
               )}

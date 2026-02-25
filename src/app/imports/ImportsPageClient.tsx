@@ -31,12 +31,14 @@ export default function ImportsPageClient({
   preloadedAccountMappings,
   preloadedInboxTrades,
   preloadedOpenTradePlans,
+  preloadedPortfolios,
 }: {
   preloadedAccountMappings: Preloaded<
     typeof api.accountMappings.listAccountMappings
   >;
   preloadedInboxTrades: Preloaded<typeof api.imports.listInboxTrades>;
   preloadedOpenTradePlans: Preloaded<typeof api.tradePlans.listOpenTradePlans>;
+  preloadedPortfolios: Preloaded<typeof api.portfolios.listPortfolios>;
 }) {
   const [brokerage, setBrokerage] = useState<BrokerageSource>("ibkr");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -49,6 +51,7 @@ export default function ImportsPageClient({
   const inboxTrades = usePreloadedQuery(preloadedInboxTrades);
   const openTradePlansRaw = usePreloadedQuery(preloadedOpenTradePlans);
   const accountMappings = usePreloadedQuery(preloadedAccountMappings);
+  const portfolios = usePreloadedQuery(preloadedPortfolios);
   const openTradePlans = (openTradePlansRaw ?? undefined) as
     | OpenTradePlanOption[]
     | undefined;
@@ -79,8 +82,10 @@ export default function ImportsPageClient({
 
   const {
     inlineNotes,
+    inlinePortfolioIds,
     inlineTradePlanIds,
     setInlineNotes,
+    setInlinePortfolioIds,
     setInlineTradePlanIds,
   } = useInlineInboxEdits(inboxTrades as InboxTrade[] | undefined);
 
@@ -110,6 +115,20 @@ export default function ImportsPageClient({
     }).catch((error) => {
       setErrorMessage(
         error instanceof Error ? error.message : "Failed to update notes",
+      );
+    });
+  };
+
+  const persistPortfolioSelection = (
+    inboxTradeId: Id<"inboxTrades">,
+    value: string,
+  ) => {
+    void updateInboxTrade({
+      inboxTradeId,
+      portfolioId: value ? (value as Id<"portfolios">) : null,
+    }).catch((error) => {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to update portfolio",
       );
     });
   };
@@ -166,10 +185,14 @@ export default function ImportsPageClient({
 
     const tradePlanId = inlineTradePlanIds[inboxTradeId] || undefined;
     const notesValue = inlineNotes[inboxTradeId] || undefined;
+    const portfolioId = inlinePortfolioIds[inboxTradeId] || undefined;
 
     void acceptTrade({
       inboxTradeId,
       notes: notesValue,
+      portfolioId: portfolioId
+        ? (portfolioId as Id<"portfolios">)
+        : undefined,
       tradePlanId: tradePlanId ? (tradePlanId as Id<"tradePlans">) : undefined,
     })
       .then((result) => {
@@ -191,14 +214,21 @@ export default function ImportsPageClient({
           inboxTrades.map((trade) => {
             const selected = inlineTradePlanIds[trade._id] ?? "";
             const notes = inlineNotes[trade._id] ?? "";
+            const portfolio = inlinePortfolioIds[trade._id] ?? "";
             const tradePlanChanged =
               selected !== (trade.tradePlanId ? String(trade.tradePlanId) : "");
             const notesChanged = notes !== (trade.notes ?? "");
-            if (!tradePlanChanged && !notesChanged) return Promise.resolve();
+            const portfolioChanged =
+              portfolio !== (trade.portfolioId ? String(trade.portfolioId) : "");
+            if (!tradePlanChanged && !notesChanged && !portfolioChanged)
+              return Promise.resolve();
 
             return updateInboxTrade({
               inboxTradeId: trade._id,
               notes: notes || null,
+              portfolioId: portfolio
+                ? (portfolio as Id<"portfolios">)
+                : null,
               tradePlanId: selected ? (selected as Id<"tradePlans">) : null,
             });
           }),
@@ -291,6 +321,7 @@ export default function ImportsPageClient({
           accountLabelByKey={accountLabelByKey}
           editingTradeId={editingTradeId}
           inlineNotes={inlineNotes}
+          inlinePortfolioIds={inlinePortfolioIds}
           inlineTradePlanIds={inlineTradePlanIds}
           inboxTrades={inboxTrades as InboxTrade[] | undefined}
           onAccept={handleAccept}
@@ -311,6 +342,13 @@ export default function ImportsPageClient({
               [inboxTradeId]: value,
             }));
           }}
+          onInlinePortfolioChange={(inboxTradeId, value) => {
+            setInlinePortfolioIds((prev) => ({
+              ...prev,
+              [inboxTradeId]: value,
+            }));
+            persistPortfolioSelection(inboxTradeId, value);
+          }}
           onInlineTradePlanChange={(inboxTradeId, value) => {
             setInlineTradePlanIds((prev) => ({
               ...prev,
@@ -319,6 +357,7 @@ export default function ImportsPageClient({
             persistTradePlanSelection(inboxTradeId, value);
           }}
           openTradePlans={openTradePlans}
+          portfolios={portfolios}
         />
       </div>
     </div>

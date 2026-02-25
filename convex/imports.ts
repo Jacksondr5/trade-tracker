@@ -30,6 +30,7 @@ const inboxTradeValidator = v.object({
   notes: v.optional(v.string()),
   orderType: v.optional(v.string()),
   ownerId: v.string(),
+  portfolioId: v.optional(v.id("portfolios")),
   price: v.optional(v.number()),
   quantity: v.optional(v.number()),
   side: v.optional(v.union(v.literal("buy"), v.literal("sell"))),
@@ -63,6 +64,7 @@ async function acceptInboxTradeInternal(
   inboxTradeId: Id<"inboxTrades">,
   args: {
     notes?: string;
+    portfolioId?: Id<"portfolios">;
     tradePlanId?: Id<"tradePlans">;
   },
 ): Promise<{ accepted: boolean; error?: string }> {
@@ -80,10 +82,17 @@ async function acceptInboxTradeInternal(
   const notes = args.notes !== undefined ? args.notes : inboxTrade.notes;
   const tradePlanId =
     args.tradePlanId !== undefined ? args.tradePlanId : inboxTrade.tradePlanId;
+  const portfolioId =
+    args.portfolioId !== undefined ? args.portfolioId : inboxTrade.portfolioId;
 
   if (tradePlanId !== undefined) {
     const tradePlan = await ctx.db.get(tradePlanId);
     assertOwner(tradePlan, ownerId, "Trade plan not found");
+  }
+
+  if (portfolioId !== undefined) {
+    const portfolio = await ctx.db.get(portfolioId);
+    assertOwner(portfolio, ownerId, "Portfolio not found");
   }
 
   const validation = validateInboxTradeCandidate(inboxTrade, {
@@ -120,6 +129,7 @@ async function acceptInboxTradeInternal(
     notes,
     orderType: inboxTrade.orderType,
     ownerId,
+    portfolioId,
     price: candidate.price,
     quantity: candidate.quantity,
     side: candidate.side,
@@ -146,6 +156,7 @@ export const importTrades = mutation({
         fees: v.optional(v.number()),
         notes: v.optional(v.string()),
         orderType: v.optional(v.string()),
+        portfolioId: v.optional(v.id("portfolios")),
         price: v.optional(v.number()),
         quantity: v.optional(v.number()),
         side: v.optional(v.union(v.literal("buy"), v.literal("sell"))),
@@ -243,6 +254,7 @@ export const importTrades = mutation({
         notes: trade.notes,
         orderType: trade.orderType,
         ownerId,
+        portfolioId: trade.portfolioId,
         price: trade.price,
         quantity: trade.quantity,
         side: trade.side,
@@ -284,6 +296,7 @@ export const acceptTrade = mutation({
   args: {
     inboxTradeId: v.id("inboxTrades"),
     notes: v.optional(v.string()),
+    portfolioId: v.optional(v.id("portfolios")),
     tradePlanId: v.optional(v.id("tradePlans")),
   },
   returns: v.object({
@@ -294,6 +307,7 @@ export const acceptTrade = mutation({
     const ownerId = await requireUser(ctx);
     return await acceptInboxTradeInternal(ctx, ownerId, args.inboxTradeId, {
       notes: args.notes,
+      portfolioId: args.portfolioId,
       tradePlanId: args.tradePlanId,
     });
   },
@@ -387,6 +401,7 @@ export const updateInboxTrade = mutation({
     ),
     inboxTradeId: v.id("inboxTrades"),
     notes: v.optional(v.union(v.string(), v.null())),
+    portfolioId: v.optional(v.union(v.id("portfolios"), v.null())),
     price: v.optional(v.union(v.number(), v.null())),
     quantity: v.optional(v.union(v.number(), v.null())),
     side: v.optional(v.union(v.literal("buy"), v.literal("sell"), v.null())),
@@ -408,6 +423,11 @@ export const updateInboxTrade = mutation({
       assertOwner(tradePlan, ownerId, "Trade plan not found");
     }
 
+    if (updates.portfolioId !== undefined && updates.portfolioId !== null) {
+      const portfolio = await ctx.db.get(updates.portfolioId);
+      assertOwner(portfolio, ownerId, "Portfolio not found");
+    }
+
     const patch: Record<string, unknown> = {};
     if (updates.direction !== undefined)
       patch.direction = updates.direction ?? undefined;
@@ -415,6 +435,9 @@ export const updateInboxTrade = mutation({
       patch.assetType = updates.assetType ?? undefined;
     if (updates.date !== undefined) patch.date = updates.date ?? undefined;
     if (updates.notes !== undefined) patch.notes = updates.notes ?? undefined;
+    if (updates.portfolioId !== undefined) {
+      patch.portfolioId = updates.portfolioId ?? undefined;
+    }
     if (updates.price !== undefined) patch.price = updates.price ?? undefined;
     if (updates.quantity !== undefined)
       patch.quantity = updates.quantity ?? undefined;

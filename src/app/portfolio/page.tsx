@@ -5,11 +5,11 @@ import PortfolioPageClient from "./PortfolioPageClient";
 
 export default async function PortfolioPage() {
   const token = await getConvexTokenOrThrow();
-  const preloadedSnapshots = await preloadQuery(
-    api.portfolioSnapshots.listSnapshots,
+  const preloadedPortfolios = await preloadQuery(
+    api.portfolios.listPortfolios,
     {},
     { token },
   );
 
-  return <PortfolioPageClient preloadedSnapshots={preloadedSnapshots} />;
+  return <PortfolioPageClient preloadedPortfolios={preloadedPortfolios} />;
 }

@@ -9,10 +9,12 @@ export default async function ImportsPage() {
     preloadedInboxTrades,
     preloadedOpenTradePlans,
     preloadedAccountMappings,
+    preloadedPortfolios,
   ] = await Promise.all([
     preloadQuery(api.imports.listInboxTrades, {}, { token }),
     preloadQuery(api.tradePlans.listOpenTradePlans, {}, { token }),
     preloadQuery(api.accountMappings.listAccountMappings, {}, { token }),
+    preloadQuery(api.portfolios.listPortfolios, {}, { token }),
   ]);
 
   return (
@@ -20,6 +22,7 @@ export default async function ImportsPage() {
       preloadedAccountMappings={preloadedAccountMappings}
       preloadedInboxTrades={preloadedInboxTrades}
       preloadedOpenTradePlans={preloadedOpenTradePlans}
+      preloadedPortfolios={preloadedPortfolios}
     />
   );
 }

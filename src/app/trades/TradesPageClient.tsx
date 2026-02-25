@@ -109,12 +109,14 @@ function isQuickFilter(value: string): value is QuickFilter {
 
 export default function TradesPageClient({
   preloadedAccountMappings,
+  preloadedPortfolios,
   preloadedTrades,
   preloadedTradePlans,
 }: {
   preloadedAccountMappings: Preloaded<
     typeof api.accountMappings.listAccountMappings
   >;
+  preloadedPortfolios: Preloaded<typeof api.portfolios.listPortfolios>;
   preloadedTrades: Preloaded<typeof api.trades.listTrades>;
   preloadedTradePlans: Preloaded<typeof api.tradePlans.listTradePlans>;
 }) {
@@ -123,6 +125,7 @@ export default function TradesPageClient({
   const trades = usePreloadedQuery(preloadedTrades);
   const tradePlans = usePreloadedQuery(preloadedTradePlans);
   const accountMappings = usePreloadedQuery(preloadedAccountMappings);
+  const portfolios = usePreloadedQuery(preloadedPortfolios);
   const [editingTradeId, setEditingTradeId] = useState<Id<"trades"> | null>(null);
 
   // Get filter params from URL
@@ -138,6 +141,10 @@ export default function TradesPageClient({
   const tradePlanNameMap = useMemo(() => {
     return new Map(tradePlans.map((p) => [p._id, p.name]));
   }, [tradePlans]);
+
+  const portfolioNameMap = useMemo(() => {
+    return new Map(portfolios.map((p) => [p._id, p.name]));
+  }, [portfolios]);
 
   const accountNameByKey = useMemo(() => {
     return new Map(
@@ -340,6 +347,9 @@ export default function TradesPageClient({
                   Trade Plan
                 </th>
                 <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
+                  Portfolio
+                </th>
+                <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
                   Side
                 </th>
                 <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
@@ -401,6 +411,11 @@ export default function TradesPageClient({
                           ? (tradePlanNameMap.get(trade.tradePlanId) ?? "—")
                           : "—"}
                       </td>
+                      <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
+                        {trade.portfolioId
+                          ? (portfolioNameMap.get(trade.portfolioId) ?? "—")
+                          : "—"}
+                      </td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm">
                         <span
                           className={cn(
@@ -460,7 +475,7 @@ export default function TradesPageClient({
                     </tr>
                     {editingTradeId === trade._id && (
                       <tr>
-                        <td colSpan={11} className="px-4 py-3">
+                        <td colSpan={12} className="px-4 py-3">
                           <EditTradeForm
                             tradeId={trade._id}
                             initialValues={{
@@ -468,12 +483,14 @@ export default function TradesPageClient({
                               date: formatDateForInput(trade.date),
                               direction: trade.direction,
                               notes: trade.notes ?? "",
+                              portfolioId: trade.portfolioId ?? "",
                               price: String(trade.price),
                               quantity: String(trade.quantity),
                               side: trade.side,
                               ticker: trade.ticker,
                               tradePlanId: trade.tradePlanId ?? "",
                             }}
+                            portfolios={portfolios}
                             tradePlans={tradePlans}
                             onCancel={() => setEditingTradeId(null)}
                             onSaved={() => setEditingTradeId(null)}

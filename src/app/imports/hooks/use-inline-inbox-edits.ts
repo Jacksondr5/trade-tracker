@@ -6,6 +6,7 @@ import type { InboxTrade } from "../types";
 export function useInlineInboxEdits(inboxTrades: InboxTrade[] | undefined) {
   const [inlineNotes, setInlineNotes] = useState<Record<string, string>>({});
   const [inlineTradePlanIds, setInlineTradePlanIds] = useState<Record<string, string>>({});
+  const [inlinePortfolioIds, setInlinePortfolioIds] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!inboxTrades) return;
@@ -29,12 +30,24 @@ export function useInlineInboxEdits(inboxTrades: InboxTrade[] | undefined) {
       }
       return next;
     });
+
+    setInlinePortfolioIds((prev) => {
+      const next = { ...prev };
+      for (const trade of inboxTrades) {
+        if (!(trade._id in next)) {
+          next[trade._id] = trade.portfolioId ? String(trade.portfolioId) : "";
+        }
+      }
+      return next;
+    });
   }, [inboxTrades]);
 
   return {
     inlineNotes,
+    inlinePortfolioIds,
     inlineTradePlanIds,
     setInlineNotes,
+    setInlinePortfolioIds,
     setInlineTradePlanIds,
   };
 }
