@@ -28,6 +28,17 @@ export const getNotes = query({
 });
 
 /**
+ * Normalize and validate note content.
+ */
+const trimNoteContent = (content: string) => {
+  const trimmed = content.trim();
+  if (!trimmed) {
+    throw new Error("Note content is required");
+  }
+  return trimmed;
+};
+
+/**
  * Add a new general note.
  */
 export const addNote = mutation({
@@ -39,7 +50,7 @@ export const addNote = mutation({
     const ownerId = await requireUser(ctx);
 
     const noteId = await ctx.db.insert("generalNotes", {
-      content: args.content,
+      content: trimNoteContent(args.content),
       ownerId,
     });
 
@@ -62,7 +73,7 @@ export const updateNote = mutation({
     assertOwner(note, ownerId, "Note not found");
 
     await ctx.db.patch(args.noteId, {
-      content: args.content,
+      content: trimNoteContent(args.content),
     });
 
     return null;

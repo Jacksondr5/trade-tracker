@@ -10,7 +10,7 @@ import type { Doc, Id } from "~/convex/_generated/dataModel";
 import { formatDate } from "~/lib/format";
 
 const noteSchema = z.object({
-  content: z.string().min(1, "Note content is required"),
+  content: z.string().trim().min(1, "Note content is required"),
 });
 
 export default function NotesPageClient({
@@ -69,8 +69,10 @@ export default function NotesPageClient({
     if (!editingNoteId) {
       return;
     }
-    if (!editingNoteContent.trim()) {
-      setEditNoteError("Note content is required");
+
+    const parsed = noteSchema.safeParse({ content: editingNoteContent });
+    if (!parsed.success) {
+      setEditNoteError(parsed.error.flatten().fieldErrors.content?.[0] ?? "Note content is required");
       return;
     }
 
@@ -78,7 +80,7 @@ export default function NotesPageClient({
     setIsSavingNote(true);
 
     try {
-      await updateNote({ noteId: editingNoteId, content: editingNoteContent.trim() });
+      await updateNote({ noteId: editingNoteId, content: parsed.data.content });
       setEditingNoteId(null);
       setEditingNoteContent("");
     } catch (error) {
@@ -149,7 +151,7 @@ export default function NotesPageClient({
                         </button>
                       </div>
                       {editNoteError && (
-                        <Alert variant="error" className="mt-2">
+                        <Alert variant="error" className="mt-2" onDismiss={() => setEditNoteError(null)}>
                           {editNoteError}
                         </Alert>
                       )}
@@ -163,7 +165,11 @@ export default function NotesPageClient({
           </div>
         )}
 
-        {addNoteError && <Alert variant="error" className="mb-2">{addNoteError}</Alert>}
+        {addNoteError && (
+          <Alert variant="error" className="mb-2" onDismiss={() => setAddNoteError(null)}>
+            {addNoteError}
+          </Alert>
+        )}
 
         <form
           onSubmit={(e) => {
