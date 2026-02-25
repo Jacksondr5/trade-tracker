@@ -6,6 +6,7 @@ import { Check, CheckCircle2, Loader2, Save, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Badge } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { formatCurrency, formatDate } from "~/lib/format";
@@ -309,8 +310,17 @@ export default function PortfolioDetailPageClient({
                       </Link>
                     </td>
                     <td className="px-2 py-2 text-slate-11">
-                      {campaign.status.charAt(0).toUpperCase() +
-                        campaign.status.slice(1)}
+                      <Badge
+                        variant={
+                          campaign.status === "active"
+                            ? "success"
+                            : campaign.status === "planning"
+                              ? "info"
+                              : "neutral"
+                        }
+                      >
+                        {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
+                      </Badge>
                     </td>
                     <td className="px-2 py-2 text-right text-slate-11">
                       {campaign.tradeCount}

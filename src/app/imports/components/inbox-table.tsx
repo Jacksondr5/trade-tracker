@@ -10,6 +10,7 @@ import {
   formatDate,
   isTradeReadyForAcceptance,
 } from "../utils";
+import { Badge } from "~/components/ui";
 import { cn } from "~/lib/utils";
 
 interface PortfolioOption {
@@ -164,32 +165,18 @@ export function InboxTable({
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-sm">
                   {trade.side ? (
-                    <span
-                      className={cn("text-slate-12 rounded px-2 py-0.5", {
-                        "border border-green-700 bg-green-900/50":
-                          trade.side === "buy",
-                        "border border-red-700 bg-red-900/50":
-                          trade.side !== "buy",
-                      })}
-                    >
+                    <Badge variant={trade.side === "buy" ? "success" : "danger"}>
                       {trade.side.toUpperCase()}
-                    </span>
+                    </Badge>
                   ) : (
                     <span className="text-slate-11">---</span>
                   )}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-sm">
                   {trade.direction ? (
-                    <span
-                      className={cn("text-slate-12 rounded px-2 py-0.5", {
-                        "border border-blue-700 bg-blue-900/50":
-                          trade.direction === "long",
-                        "border border-red-700 bg-red-900/50":
-                          trade.direction !== "long",
-                      })}
-                    >
+                    <Badge variant={trade.direction === "long" ? "info" : "danger"}>
                       {trade.direction.toUpperCase()}
-                    </span>
+                    </Badge>
                   ) : (
                     <span className="text-slate-11">---</span>
                   )}

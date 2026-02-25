@@ -4,7 +4,7 @@ import { Preloaded, usePreloadedQuery } from "convex/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useMemo, useState, useTransition } from "react";
-import { Button } from "~/components/ui";
+import { Badge, Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { formatCurrency, formatDate } from "~/lib/format";
@@ -353,16 +353,9 @@ export default function TradesPageClient({
                           {trade.portfolioId ? (portfolioNameMap.get(trade.portfolioId) ?? "—") : "—"}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-sm">
-                          <span
-                            className={cn(
-                              "text-slate-12 rounded px-2 py-0.5",
-                              trade.side === "buy"
-                                ? "border border-green-700 bg-green-900/50"
-                                : "border border-red-700 bg-red-900/50",
-                            )}
-                          >
+                          <Badge variant={trade.side === "buy" ? "success" : "danger"}>
                             {trade.side.toUpperCase()}
-                          </span>
+                          </Badge>
                         </td>
                         <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">{trade.direction}</td>
                         <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">{formatCurrency(trade.price)}</td>
