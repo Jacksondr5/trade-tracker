@@ -72,16 +72,22 @@ export default async function TradesPage({
   const resolvedSearchParams = await searchParams;
   const queryState = parseTradesQueryState(resolvedSearchParams);
 
-  const [preloadedTradesPage, preloadedTradePlans, preloadedAccountMappings] =
-    await Promise.all([
-      preloadQuery(api.trades.listTradesPage, queryState, { token }),
-      preloadQuery(api.tradePlans.listTradePlans, {}, { token }),
-      preloadQuery(api.accountMappings.listAccountMappings, {}, { token }),
-    ]);
+  const [
+    preloadedTradesPage,
+    preloadedTradePlans,
+    preloadedAccountMappings,
+    preloadedPortfolios,
+  ] = await Promise.all([
+    preloadQuery(api.trades.listTradesPage, queryState, { token }),
+    preloadQuery(api.tradePlans.listTradePlans, {}, { token }),
+    preloadQuery(api.accountMappings.listAccountMappings, {}, { token }),
+    preloadQuery(api.portfolios.listPortfolios, {}, { token }),
+  ]);
 
   return (
     <TradesPageClient
       preloadedAccountMappings={preloadedAccountMappings}
+      preloadedPortfolios={preloadedPortfolios}
       preloadedTradesPage={preloadedTradesPage}
       preloadedTradePlans={preloadedTradePlans}
     />

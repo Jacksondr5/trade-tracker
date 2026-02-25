@@ -12,10 +12,16 @@ import {
 } from "../utils";
 import { cn } from "~/lib/utils";
 
+interface PortfolioOption {
+  _id: Id<"portfolios">;
+  name: string;
+}
+
 interface InboxTableProps {
   accountLabelByKey: Map<string, string>;
   editingTradeId: Id<"inboxTrades"> | null;
   inlineNotes: Record<string, string>;
+  inlinePortfolioIds: Record<string, string>;
   inlineTradePlanIds: Record<string, string>;
   inboxTrades: InboxTrade[] | undefined;
   onAccept: (inboxTradeId: Id<"inboxTrades">) => void;
@@ -23,17 +29,23 @@ interface InboxTableProps {
   onEdit: (trade: InboxTrade) => void;
   onInlineNotesBlur: (inboxTradeId: Id<"inboxTrades">, value: string) => void;
   onInlineNotesChange: (inboxTradeId: Id<"inboxTrades">, value: string) => void;
+  onInlinePortfolioChange: (
+    inboxTradeId: Id<"inboxTrades">,
+    value: string,
+  ) => void;
   onInlineTradePlanChange: (
     inboxTradeId: Id<"inboxTrades">,
     value: string,
   ) => void;
   openTradePlans: OpenTradePlanOption[] | undefined;
+  portfolios: PortfolioOption[] | undefined;
 }
 
 export function InboxTable({
   accountLabelByKey,
   editingTradeId,
   inlineNotes,
+  inlinePortfolioIds,
   inlineTradePlanIds,
   inboxTrades,
   onAccept,
@@ -41,8 +53,10 @@ export function InboxTable({
   onEdit,
   onInlineNotesBlur,
   onInlineNotesChange,
+  onInlinePortfolioChange,
   onInlineTradePlanChange,
   openTradePlans,
+  portfolios,
 }: InboxTableProps) {
   if (inboxTrades === undefined) {
     return <div className="text-slate-11">Loading...</div>;
@@ -89,6 +103,9 @@ export function InboxTable({
             </th>
             <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
               Trade Plan
+            </th>
+            <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
+              Portfolio
             </th>
             <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
               Notes
@@ -213,6 +230,23 @@ export function InboxTable({
                     {openTradePlans?.map((plan) => (
                       <option key={plan._id} value={plan._id}>
                         {plan.name} ({plan.instrumentSymbol})
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td className="px-4 py-3 text-sm">
+                  <select
+                    aria-label={`Portfolio for ${trade.ticker || "trade"}`}
+                    value={inlinePortfolioIds[trade._id] ?? ""}
+                    onChange={(e) =>
+                      onInlinePortfolioChange(trade._id, e.target.value)
+                    }
+                    className="text-slate-12 h-7 w-full min-w-[120px] rounded border border-slate-600 bg-slate-700 px-1 text-xs"
+                  >
+                    <option value="">None</option>
+                    {portfolios?.map((portfolio) => (
+                      <option key={portfolio._id} value={portfolio._id}>
+                        {portfolio.name}
                       </option>
                     ))}
                   </select>

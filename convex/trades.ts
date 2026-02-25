@@ -1,8 +1,16 @@
 import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
-import { paginationOptsValidator } from "convex/server";
+import { ConvexError, v } from "convex/values";
 import { calculateTradesPL } from "./lib/plCalculation";
 import { assertOwner, requireUser } from "./lib/auth";
+import { paginationOptsValidator } from "convex/server";
+
+function normalizeTicker(ticker: string): string {
+  const normalizedTicker = ticker.trim().toUpperCase();
+  if (!normalizedTicker) {
+    throw new ConvexError("Ticker is required");
+  }
+  return normalizedTicker;
+}
 
 const tradeValidator = v.object({
   _creationTime: v.number(),
@@ -16,6 +24,7 @@ const tradeValidator = v.object({
   notes: v.optional(v.string()),
   orderType: v.optional(v.string()),
   ownerId: v.string(),
+  portfolioId: v.optional(v.id("portfolios")),
   price: v.number(),
   quantity: v.number(),
   side: v.union(v.literal("buy"), v.literal("sell")),
@@ -39,6 +48,7 @@ const tradeWithPLValidator = v.object({
   notes: v.optional(v.string()),
   orderType: v.optional(v.string()),
   ownerId: v.string(),
+  portfolioId: v.optional(v.id("portfolios")),
   price: v.number(),
   quantity: v.number(),
   realizedPL: v.union(v.number(), v.null()),
@@ -57,6 +67,7 @@ export const createTrade = mutation({
     date: v.number(),
     direction: v.union(v.literal("long"), v.literal("short")),
     notes: v.optional(v.string()),
+    portfolioId: v.optional(v.id("portfolios")),
     price: v.number(),
     quantity: v.number(),
     side: v.union(v.literal("buy"), v.literal("sell")),
@@ -72,17 +83,23 @@ export const createTrade = mutation({
       assertOwner(tradePlan, ownerId, "Trade plan not found");
     }
 
+    if (args.portfolioId) {
+      const portfolio = await ctx.db.get(args.portfolioId);
+      assertOwner(portfolio, ownerId, "Portfolio not found");
+    }
+
     return await ctx.db.insert("trades", {
       assetType: args.assetType,
       date: args.date,
       direction: args.direction,
       notes: args.notes,
       ownerId,
+      portfolioId: args.portfolioId,
       price: args.price,
       quantity: args.quantity,
       side: args.side,
       source: "manual",
-      ticker: args.ticker,
+      ticker: normalizeTicker(args.ticker),
       tradePlanId: args.tradePlanId,
     });
   },
@@ -94,6 +111,7 @@ export const updateTrade = mutation({
     date: v.optional(v.number()),
     direction: v.optional(v.union(v.literal("long"), v.literal("short"))),
     notes: v.optional(v.string()),
+    portfolioId: v.optional(v.union(v.id("portfolios"), v.null())),
     price: v.optional(v.number()),
     quantity: v.optional(v.number()),
     side: v.optional(v.union(v.literal("buy"), v.literal("sell"))),
@@ -114,17 +132,28 @@ export const updateTrade = mutation({
       assertOwner(tradePlan, ownerId, "Trade plan not found");
     }
 
+    if (updates.portfolioId !== undefined && updates.portfolioId !== null) {
+      const portfolio = await ctx.db.get(updates.portfolioId);
+      assertOwner(portfolio, ownerId, "Portfolio not found");
+    }
+
     const patch: Record<string, unknown> = {};
     if (updates.assetType !== undefined) patch.assetType = updates.assetType;
     if (updates.date !== undefined) patch.date = updates.date;
     if (updates.direction !== undefined) patch.direction = updates.direction;
     if (updates.notes !== undefined) patch.notes = updates.notes;
+    if (updates.portfolioId !== undefined) {
+      patch.portfolioId =
+        updates.portfolioId === null ? undefined : updates.portfolioId;
+    }
     if (updates.price !== undefined) patch.price = updates.price;
     if (updates.quantity !== undefined) patch.quantity = updates.quantity;
     if (updates.side !== undefined) patch.side = updates.side;
-    if (updates.ticker !== undefined) patch.ticker = updates.ticker;
+    if (updates.ticker !== undefined)
+      patch.ticker = normalizeTicker(updates.ticker);
     if (updates.tradePlanId !== undefined) {
-      patch.tradePlanId = updates.tradePlanId === null ? undefined : updates.tradePlanId;
+      patch.tradePlanId =
+        updates.tradePlanId === null ? undefined : updates.tradePlanId;
     }
     patch.ownerId = ownerId;
 

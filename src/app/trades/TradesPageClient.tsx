@@ -50,12 +50,14 @@ function isQuickFilter(value: string): value is QuickFilter {
 
 export default function TradesPageClient({
   preloadedAccountMappings,
+  preloadedPortfolios,
   preloadedTradesPage,
   preloadedTradePlans,
 }: {
   preloadedAccountMappings: Preloaded<
     typeof api.accountMappings.listAccountMappings
   >;
+  preloadedPortfolios: Preloaded<typeof api.portfolios.listPortfolios>;
   preloadedTradesPage: Preloaded<typeof api.trades.listTradesPage>;
   preloadedTradePlans: Preloaded<typeof api.tradePlans.listTradePlans>;
 }) {
@@ -64,6 +66,7 @@ export default function TradesPageClient({
   const tradesPage = usePreloadedQuery(preloadedTradesPage);
   const tradePlans = usePreloadedQuery(preloadedTradePlans);
   const accountMappings = usePreloadedQuery(preloadedAccountMappings);
+  const portfolios = usePreloadedQuery(preloadedPortfolios);
   const [editingTradeId, setEditingTradeId] = useState<Id<"trades"> | null>(null);
   const [isNavigating, startTransition] = useTransition();
 
@@ -85,6 +88,11 @@ export default function TradesPageClient({
   const tradePlanNameMap = useMemo(
     () => new Map(tradePlans.map((p) => [p._id, p.name])),
     [tradePlans],
+  );
+
+  const portfolioNameMap = useMemo(
+    () => new Map(portfolios.map((p) => [p._id, p.name])),
+    [portfolios],
   );
 
   const accountNameByKey = useMemo(
@@ -169,12 +177,12 @@ export default function TradesPageClient({
 
   const handleCustomDateChange = (type: "startDate" | "endDate", value: string) => {
     updateFilter({
+      cursor: null,
+      cursorHistory: [],
       endDate: type === "endDate" ? value : (endDateParam ?? ""),
       filter: null,
       pageSize,
       startDate: type === "startDate" ? value : (startDateParam ?? ""),
-      cursor: null,
-      cursorHistory: [],
     });
   };
 
@@ -304,6 +312,7 @@ export default function TradesPageClient({
                   <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">Date</th>
                   <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">Ticker</th>
                   <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">Trade Plan</th>
+                  <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">Portfolio</th>
                   <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">Side</th>
                   <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">Direction</th>
                   <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">Price</th>
@@ -340,6 +349,9 @@ export default function TradesPageClient({
                         <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
                           {trade.tradePlanId ? (tradePlanNameMap.get(trade.tradePlanId) ?? "—") : "—"}
                         </td>
+                        <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
+                          {trade.portfolioId ? (portfolioNameMap.get(trade.portfolioId) ?? "—") : "—"}
+                        </td>
                         <td className="whitespace-nowrap px-4 py-3 text-sm">
                           <span
                             className={cn(
@@ -375,7 +387,7 @@ export default function TradesPageClient({
                       </tr>
                       {editingTradeId === trade._id && (
                         <tr>
-                          <td colSpan={10} className="px-4 py-3">
+                          <td colSpan={11} className="px-4 py-3">
                             <EditTradeForm
                               tradeId={trade._id}
                               initialValues={{
@@ -383,12 +395,14 @@ export default function TradesPageClient({
                                 date: formatDateForInput(trade.date),
                                 direction: trade.direction,
                                 notes: trade.notes ?? "",
+                                portfolioId: trade.portfolioId ?? "",
                                 price: String(trade.price),
                                 quantity: String(trade.quantity),
                                 side: trade.side,
                                 ticker: trade.ticker,
                                 tradePlanId: trade.tradePlanId ?? "",
                               }}
+                              portfolios={portfolios}
                               tradePlans={tradePlans}
                               onCancel={() => setEditingTradeId(null)}
                               onSaved={() => setEditingTradeId(null)}
@@ -432,9 +446,7 @@ export default function TradesPageClient({
               >
                 Prev
               </button>
-              <span className="text-slate-11 text-sm">
-                Page {currentPage}
-              </span>
+              <span className="text-slate-11 text-sm">Page {currentPage}</span>
               <button
                 type="button"
                 className="text-slate-12 rounded border border-slate-600 px-3 py-1.5 text-sm disabled:opacity-50"

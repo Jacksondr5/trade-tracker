@@ -20,6 +20,7 @@ const tradeSchema = z.object({
   date: z.string().min(1, "Date is required"),
   direction: z.enum(["long", "short"]),
   notes: z.string().optional(),
+  portfolioId: z.string().optional(),
   price: z
     .string()
     .min(1, "Price is required")
@@ -48,14 +49,17 @@ function getDefaultDateTime(): string {
 
 export default function NewTradePageClient({
   preloadedOpenTradePlans,
+  preloadedPortfolios,
 }: {
   preloadedOpenTradePlans: Preloaded<typeof api.tradePlans.listOpenTradePlans>;
+  preloadedPortfolios: Preloaded<typeof api.portfolios.listPortfolios>;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedTradePlanId = searchParams.get("tradePlanId") || "";
   const createTrade = useMutation(api.trades.createTrade);
   const openTradePlans = usePreloadedQuery(preloadedOpenTradePlans);
+  const portfolios = usePreloadedQuery(preloadedPortfolios);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -66,6 +70,7 @@ export default function NewTradePageClient({
       date: getDefaultDateTime(),
       direction: "long" as "long" | "short",
       notes: "",
+      portfolioId: "",
       price: "",
       quantity: "",
       side: "buy" as "buy" | "sell",
@@ -91,6 +96,9 @@ export default function NewTradePageClient({
           date: new Date(parsed.date).getTime(),
           direction: parsed.direction,
           notes: parsed.notes || undefined,
+          portfolioId: parsed.portfolioId
+            ? (parsed.portfolioId as Id<"portfolios">)
+            : undefined,
           price: parseFloat(parsed.price.trim()),
           quantity: parseFloat(parsed.quantity.trim()),
           side: parsed.side,
@@ -195,6 +203,34 @@ export default function NewTradePageClient({
                     {openTradePlans.map((tradePlan) => (
                       <option key={tradePlan._id} value={tradePlan._id}>
                         {tradePlan.name} ({tradePlan.instrumentSymbol}) [{tradePlan.status}]
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </form.AppField>
+
+            <form.AppField name="portfolioId">
+              {(field) => (
+                <div className="grid w-full items-center gap-1.5">
+                  <label
+                    htmlFor={field.name}
+                    className="text-slate-12 text-sm font-medium"
+                  >
+                    Portfolio (optional)
+                  </label>
+                  <select
+                    id={field.name}
+                    data-testid={`${field.name}-select`}
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    className="text-slate-12 h-9 w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-slate-500"
+                  >
+                    <option value="">No portfolio</option>
+                    {portfolios.map((portfolio) => (
+                      <option key={portfolio._id} value={portfolio._id}>
+                        {portfolio.name}
                       </option>
                     ))}
                   </select>

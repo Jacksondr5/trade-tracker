@@ -17,7 +17,7 @@ const navLinks = [
   { href: "/trade-plans", label: "Trade Plans" },
   { href: "/campaigns", label: "Campaigns" },
   { href: "/positions", label: "Positions" },
-  { href: "/portfolio", label: "Portfolio" },
+  { href: "/portfolio", label: "Portfolios" },
   { href: "/imports", label: "Import" },
   { href: "/accounts", label: "Accounts" },
 ];
