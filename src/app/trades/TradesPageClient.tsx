@@ -4,7 +4,8 @@ import { Preloaded, usePreloadedQuery } from "convex/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useMemo, useState, useTransition } from "react";
-import { Button } from "~/components/ui";
+import { ChevronLeft, ChevronRight, Pencil } from "lucide-react";
+import { Badge, Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { formatCurrency, formatDate } from "~/lib/format";
@@ -353,16 +354,9 @@ export default function TradesPageClient({
                           {trade.portfolioId ? (portfolioNameMap.get(trade.portfolioId) ?? "—") : "—"}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-sm">
-                          <span
-                            className={cn(
-                              "text-slate-12 rounded px-2 py-0.5",
-                              trade.side === "buy"
-                                ? "border border-green-700 bg-green-900/50"
-                                : "border border-red-700 bg-red-900/50",
-                            )}
-                          >
+                          <Badge variant={trade.side === "buy" ? "success" : "danger"}>
                             {trade.side.toUpperCase()}
-                          </span>
+                          </Badge>
                         </td>
                         <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">{trade.direction}</td>
                         <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">{formatCurrency(trade.price)}</td>
@@ -381,7 +375,7 @@ export default function TradesPageClient({
                             aria-label="Edit trade"
                             data-testid={`edit-trade-${trade._id}`}
                           >
-                            ✎
+                            <Pencil className="h-4 w-4" />
                           </button>
                         </td>
                       </tr>
@@ -440,20 +434,24 @@ export default function TradesPageClient({
               </select>
               <button
                 type="button"
-                className="text-slate-12 rounded border border-slate-600 px-3 py-1.5 text-sm disabled:opacity-50"
+                aria-label="Previous page"
+                title="Previous page"
+                className="rounded border border-slate-600 p-1.5 text-slate-12 disabled:opacity-50"
                 onClick={handlePrevPage}
                 disabled={cursorHistory.length === 0 || isNavigating}
               >
-                Prev
+                <ChevronLeft className="h-4 w-4" />
               </button>
               <span className="text-slate-11 text-sm">Page {currentPage}</span>
               <button
                 type="button"
-                className="text-slate-12 rounded border border-slate-600 px-3 py-1.5 text-sm disabled:opacity-50"
+                aria-label="Next page"
+                title="Next page"
+                className="rounded border border-slate-600 p-1.5 text-slate-12 disabled:opacity-50"
                 onClick={handleNextPage}
                 disabled={tradesPage.isDone || isNavigating}
               >
-                Next
+                <ChevronRight className="h-4 w-4" />
               </button>
             </div>
           </div>

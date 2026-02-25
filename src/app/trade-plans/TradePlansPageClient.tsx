@@ -2,7 +2,7 @@
 
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
 import { useState } from "react";
-import { Button } from "~/components/ui";
+import { Alert, Badge, Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 
@@ -74,7 +74,11 @@ export default function TradePlansPageClient({
 
       <section className="mb-8 rounded-lg border border-slate-700 bg-slate-800 p-4">
         <h2 className="mb-4 text-lg font-semibold text-slate-12">Create Standalone Plan</h2>
-        {error && <p className="mb-3 text-sm text-red-300">{error}</p>}
+        {error && (
+          <Alert variant="error" className="mb-3">
+            {error}
+          </Alert>
+        )}
 
         <form className="grid gap-3" onSubmit={handleCreate}>
           <input
@@ -134,9 +138,7 @@ export default function TradePlansPageClient({
                     <p className="text-sm text-slate-11">{plan.instrumentSymbol}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="rounded border border-slate-600 px-2 py-0.5 text-xs text-slate-11">
-                      {plan.status}
-                    </span>
+                    <Badge variant="neutral">{plan.status}</Badge>
                     {plan.status !== "closed" && (
                       <Button
                         dataTestId={`close-plan-${plan._id}`}

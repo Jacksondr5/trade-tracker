@@ -4,7 +4,7 @@ import { ConvexError } from "convex/values";
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
 import Link from "next/link";
 import { useState } from "react";
-import { Button } from "~/components/ui";
+import { Alert, Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 
 export default function PortfolioPageClient({
@@ -82,7 +82,9 @@ export default function PortfolioPageClient({
           </Button>
         </form>
         {errorMessage && (
-          <p className="mt-2 text-sm text-red-300">{errorMessage}</p>
+          <Alert variant="error" className="mt-2">
+            {errorMessage}
+          </Alert>
         )}
       </div>
 

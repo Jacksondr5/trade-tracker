@@ -1,6 +1,7 @@
 "use client";
 
 import { Preloaded, usePreloadedQuery } from "convex/react";
+import { Badge } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import { formatCurrency } from "~/lib/format";
 
@@ -54,15 +55,9 @@ export default function PositionsPageClient({
                     {position.ticker}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-sm">
-                    <span
-                      className={`text-slate-12 rounded px-2 py-0.5 ${
-                        position.direction === "long"
-                          ? "border border-green-700 bg-green-900/50"
-                          : "border border-red-700 bg-red-900/50"
-                      }`}
-                    >
+                    <Badge variant={position.direction === "long" ? "success" : "danger"}>
                       {position.direction.toUpperCase()}
-                    </span>
+                    </Badge>
                   </td>
                   <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">
                     {position.quantity}

@@ -2,11 +2,11 @@
 
 import { ConvexError } from "convex/values";
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { Check, CheckCircle2, Loader2, Pencil, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
-import { useAppForm } from "~/components/ui";
+import { Alert, useAppForm } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Doc, Id } from "~/convex/_generated/dataModel";
 import { formatCurrency, formatDate } from "~/lib/format";
@@ -73,7 +73,8 @@ export default function CampaignDetailPageClient({
   const [thesisError, setThesisError] = useState<string | null>(null);
   const [thesisSaveState, setThesisSaveState] = useState<SaveState>("idle");
 
-  const [noteError, setNoteError] = useState<string | null>(null);
+  const [addNoteError, setAddNoteError] = useState<string | null>(null);
+  const [editNoteError, setEditNoteError] = useState<string | null>(null);
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<Id<"campaignNotes"> | null>(null);
   const [editingNoteContent, setEditingNoteContent] = useState("");
@@ -89,7 +90,9 @@ export default function CampaignDetailPageClient({
   const [planEntryConditions, setPlanEntryConditions] = useState("");
   const [planExitConditions, setPlanExitConditions] = useState("");
   const [planTargetConditions, setPlanTargetConditions] = useState("");
-  const [planError, setPlanError] = useState<string | null>(null);
+  const [tradePlanCreateError, setTradePlanCreateError] = useState<string | null>(null);
+  const [tradePlanEditError, setTradePlanEditError] = useState<string | null>(null);
+  const [tradePlanStatusError, setTradePlanStatusError] = useState<string | null>(null);
   const [isCreatingPlan, setIsCreatingPlan] = useState(false);
   const [showCreateTradePlanForm, setShowCreateTradePlanForm] = useState(false);
 
@@ -198,7 +201,7 @@ export default function CampaignDetailPageClient({
       },
     },
     onSubmit: async ({ value, formApi }) => {
-      setNoteError(null);
+      setAddNoteError(null);
       setIsAddingNote(true);
 
       try {
@@ -206,7 +209,7 @@ export default function CampaignDetailPageClient({
         await handleAddNote(parsed.content.trim());
         formApi.reset();
       } catch (error) {
-        setNoteError(error instanceof Error ? error.message : "Failed to add note");
+        setAddNoteError(error instanceof Error ? error.message : "Failed to add note");
       } finally {
         setIsAddingNote(false);
       }
@@ -216,7 +219,7 @@ export default function CampaignDetailPageClient({
   const startEditingNote = (note: Doc<"campaignNotes">) => {
     setEditingNoteId(note._id);
     setEditingNoteContent(note.content);
-    setNoteError(null);
+    setEditNoteError(null);
   };
 
   const handleSaveNote = async () => {
@@ -224,11 +227,11 @@ export default function CampaignDetailPageClient({
       return;
     }
     if (!editingNoteContent.trim()) {
-      setNoteError("Note content is required");
+      setEditNoteError("Note content is required");
       return;
     }
 
-    setNoteError(null);
+    setEditNoteError(null);
     setIsSavingNote(true);
 
     try {
@@ -236,7 +239,7 @@ export default function CampaignDetailPageClient({
       setEditingNoteId(null);
       setEditingNoteContent("");
     } catch (error) {
-      setNoteError(error instanceof Error ? error.message : "Failed to update note");
+      setEditNoteError(error instanceof Error ? error.message : "Failed to update note");
     } finally {
       setIsSavingNote(false);
     }
@@ -264,11 +267,11 @@ export default function CampaignDetailPageClient({
     e.preventDefault();
 
     if (!planName.trim() || !planInstrumentSymbol.trim()) {
-      setPlanError("Name and instrument symbol are required");
+      setTradePlanCreateError("Name and instrument symbol are required");
       return;
     }
 
-    setPlanError(null);
+    setTradePlanCreateError(null);
     setIsCreatingPlan(true);
 
     try {
@@ -288,7 +291,9 @@ export default function CampaignDetailPageClient({
       setPlanTargetConditions("");
       setShowCreateTradePlanForm(false);
     } catch (error) {
-      setPlanError(error instanceof Error ? error.message : "Failed to create trade plan");
+      setTradePlanCreateError(
+        error instanceof Error ? error.message : "Failed to create trade plan",
+      );
     } finally {
       setIsCreatingPlan(false);
     }
@@ -301,7 +306,7 @@ export default function CampaignDetailPageClient({
     setEditingPlanEntryConditions(plan.entryConditions);
     setEditingPlanExitConditions(plan.exitConditions);
     setEditingPlanTargetConditions(plan.targetConditions);
-    setPlanError(null);
+    setTradePlanEditError(null);
   };
 
   const handleSaveTradePlan = async () => {
@@ -310,11 +315,11 @@ export default function CampaignDetailPageClient({
     }
 
     if (!editingPlanName.trim() || !editingPlanInstrumentSymbol.trim()) {
-      setPlanError("Name and instrument symbol are required");
+      setTradePlanEditError("Name and instrument symbol are required");
       return;
     }
 
-    setPlanError(null);
+    setTradePlanEditError(null);
     setIsSavingPlan(true);
 
     try {
@@ -328,7 +333,9 @@ export default function CampaignDetailPageClient({
       });
       setEditingPlanId(null);
     } catch (error) {
-      setPlanError(error instanceof Error ? error.message : "Failed to update trade plan");
+      setTradePlanEditError(
+        error instanceof Error ? error.message : "Failed to update trade plan",
+      );
     } finally {
       setIsSavingPlan(false);
     }
@@ -338,11 +345,13 @@ export default function CampaignDetailPageClient({
     tradePlanId: Id<"tradePlans">,
     status: TradePlanStatus,
   ) => {
-    setPlanError(null);
+    setTradePlanStatusError(null);
     try {
       await updateTradePlanStatus({ tradePlanId, status });
     } catch (error) {
-      setPlanError(error instanceof Error ? error.message : "Failed to update trade plan status");
+      setTradePlanStatusError(
+        error instanceof Error ? error.message : "Failed to update trade plan status",
+      );
     }
   };
 
@@ -392,7 +401,7 @@ export default function CampaignDetailPageClient({
                 Save Name
               </button>
             </div>
-            {campaignNameError && <p className="mt-2 text-sm text-red-300">{campaignNameError}</p>}
+            {campaignNameError && <Alert variant="error" className="mt-2">{campaignNameError}</Alert>}
             {campaignNameSaveState === "saving" && (
               <span className="mt-2 flex items-center gap-1 text-sm text-slate-11">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -407,7 +416,11 @@ export default function CampaignDetailPageClient({
             )}
           </div>
           <div className="w-44">
+            <label htmlFor="campaign-status" className="mb-1 block text-xs uppercase tracking-wide text-slate-11">
+              Status
+            </label>
             <select
+              id="campaign-status"
               value={campaign.status}
               disabled={isChangingCampaignStatus}
               onChange={(e) => void handleCampaignStatusChange(e.target.value as CampaignStatus)}
@@ -434,12 +447,12 @@ export default function CampaignDetailPageClient({
           </p>
         )}
 
-        {statusChangeError && <p className="mt-3 text-sm text-red-300">{statusChangeError}</p>}
+        {statusChangeError && <Alert variant="error" className="mt-3">{statusChangeError}</Alert>}
       </div>
 
       <section className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
         <h2 className="mb-2 text-lg font-semibold text-slate-12">Thesis</h2>
-        {thesisError && <p className="mb-2 text-sm text-red-300">{thesisError}</p>}
+        {thesisError && <Alert variant="error" className="mb-2">{thesisError}</Alert>}
         <textarea
           className="min-h-28 w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
           value={thesis}
@@ -492,10 +505,12 @@ export default function CampaignDetailPageClient({
                     {!isEditing && (
                       <button
                         type="button"
-                        className="rounded border border-slate-600 px-2 py-0.5 text-xs text-slate-12 hover:bg-slate-700"
+                        aria-label="Edit note"
+                        title="Edit"
+                        className="rounded p-1.5 text-slate-11 hover:text-slate-12 hover:bg-slate-700"
                         onClick={() => startEditingNote(note)}
                       >
-                        Edit
+                        <Pencil className="h-4 w-4" />
                       </button>
                     )}
                   </div>
@@ -510,24 +525,33 @@ export default function CampaignDetailPageClient({
                       <div className="mt-2 flex gap-2">
                         <button
                           type="button"
-                          className="rounded bg-slate-700 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-600"
+                          aria-label="Save note"
+                          title="Save"
+                          className="rounded p-1.5 text-green-400 hover:bg-green-900/50 disabled:opacity-50"
                           onClick={() => void handleSaveNote()}
                           disabled={isSavingNote}
                         >
-                          {isSavingNote ? "Saving..." : "Save"}
+                          {isSavingNote ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                         </button>
                         <button
                           type="button"
-                          className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-700"
+                          aria-label="Cancel editing"
+                          title="Cancel"
+                          className="rounded p-1.5 text-slate-11 hover:text-slate-12 hover:bg-slate-700"
                           onClick={() => {
                             setEditingNoteId(null);
                             setEditingNoteContent("");
-                            setNoteError(null);
+                            setEditNoteError(null);
                           }}
                         >
-                          Cancel
+                          <X className="h-4 w-4" />
                         </button>
                       </div>
+                      {editNoteError && (
+                        <Alert variant="error" className="mt-2">
+                          {editNoteError}
+                        </Alert>
+                      )}
                     </>
                   ) : (
                     <p className="whitespace-pre-wrap text-sm text-slate-11">{note.content}</p>
@@ -538,7 +562,7 @@ export default function CampaignDetailPageClient({
           </div>
         )}
 
-        {noteError && <p className="mb-2 text-sm text-red-300">{noteError}</p>}
+        {addNoteError && <Alert variant="error" className="mb-2">{addNoteError}</Alert>}
 
         <form
           onSubmit={(e) => {
@@ -578,7 +602,9 @@ export default function CampaignDetailPageClient({
           </div>
         </div>
 
-        {planError && <p className="mb-3 text-sm text-red-300">{planError}</p>}
+        {tradePlanStatusError && (
+          <Alert variant="error" className="mb-3">{tradePlanStatusError}</Alert>
+        )}
 
         {tradePlans.length === 0 ? (
           <p className="mb-4 text-sm text-slate-11">No trade plans yet.</p>
@@ -622,31 +648,41 @@ export default function CampaignDetailPageClient({
                         <>
                           <button
                             type="button"
-                            className="rounded bg-slate-700 px-2 py-1 text-xs text-slate-12 hover:bg-slate-600"
+                            aria-label="Save trade plan"
+                            title="Save"
+                            className="rounded p-1.5 text-green-400 hover:bg-green-900/50 disabled:opacity-50"
                             onClick={() => void handleSaveTradePlan()}
                             disabled={isSavingPlan}
                           >
-                            {isSavingPlan ? "Saving..." : "Save"}
+                            {isSavingPlan ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                           </button>
                           <button
                             type="button"
-                            className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-12 hover:bg-slate-700"
-                            onClick={() => { setEditingPlanId(null); setPlanError(null); }}
+                            aria-label="Cancel editing"
+                            title="Cancel"
+                            className="rounded p-1.5 text-slate-11 hover:text-slate-12 hover:bg-slate-700"
+                            onClick={() => { setEditingPlanId(null); setTradePlanEditError(null); }}
                           >
-                            Cancel
+                            <X className="h-4 w-4" />
                           </button>
                         </>
                       ) : (
                         <button
                           type="button"
-                          className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-12 hover:bg-slate-700"
+                          aria-label="Edit trade plan"
+                          title="Edit"
+                          className="rounded p-1.5 text-slate-11 hover:text-slate-12 hover:bg-slate-700"
                           onClick={() => startEditingTradePlan(plan)}
                         >
-                          Edit
+                          <Pencil className="h-4 w-4" />
                         </button>
                       )}
                     </div>
                   </div>
+
+                  {isEditing && tradePlanEditError && (
+                    <Alert variant="error" className="mb-2">{tradePlanEditError}</Alert>
+                  )}
 
                   <div className="grid gap-2">
                     <div>
@@ -708,7 +744,11 @@ export default function CampaignDetailPageClient({
         )}
 
         {showCreateTradePlanForm && (
-          <form className="grid gap-2 rounded border border-slate-700 p-3" onSubmit={handleCreateTradePlan}>
+          <>
+            {tradePlanCreateError && (
+              <Alert variant="error" className="mb-2">{tradePlanCreateError}</Alert>
+            )}
+            <form className="grid gap-2 rounded border border-slate-700 p-3" onSubmit={handleCreateTradePlan}>
             <div className="grid grid-cols-2 gap-2">
               <input
                 className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
@@ -752,12 +792,13 @@ export default function CampaignDetailPageClient({
               <button
                 type="button"
                 className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-700"
-                onClick={() => { setShowCreateTradePlanForm(false); setPlanError(null); }}
+                onClick={() => { setShowCreateTradePlanForm(false); setTradePlanCreateError(null); }}
               >
                 Cancel
               </button>
             </div>
           </form>
+          </>
         )}
       </section>
 
@@ -768,7 +809,7 @@ export default function CampaignDetailPageClient({
           <p className="text-sm text-slate-11">Retrospective is available after the campaign is closed.</p>
         ) : (
           <>
-            {retrospectiveError && <p className="mb-2 text-sm text-red-300">{retrospectiveError}</p>}
+            {retrospectiveError && <Alert variant="error" className="mb-2">{retrospectiveError}</Alert>}
             <textarea
               className="min-h-32 w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
               value={retrospective}

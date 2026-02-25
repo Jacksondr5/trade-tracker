@@ -6,9 +6,10 @@ import { Check, CheckCircle2, Loader2, Save, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Alert, Badge } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
-import { formatCurrency, formatDate } from "~/lib/format";
+import { capitalize, formatCurrency, formatDate } from "~/lib/format";
 
 type SaveState = "idle" | "saving" | "saved";
 
@@ -198,7 +199,9 @@ export default function PortfolioDetailPageClient({
               )}
             </div>
           {nameError && (
-            <p className="mt-2 text-sm text-red-300">{nameError}</p>
+            <Alert variant="error" className="mt-2">
+              {nameError}
+            </Alert>
           )}
         </div>
       </div>
@@ -309,8 +312,17 @@ export default function PortfolioDetailPageClient({
                       </Link>
                     </td>
                     <td className="px-2 py-2 text-slate-11">
-                      {campaign.status.charAt(0).toUpperCase() +
-                        campaign.status.slice(1)}
+                      <Badge
+                        variant={
+                          campaign.status === "active"
+                            ? "success"
+                            : campaign.status === "planning"
+                              ? "info"
+                              : "neutral"
+                        }
+                      >
+                        {capitalize(campaign.status)}
+                      </Badge>
                     </td>
                     <td className="px-2 py-2 text-right text-slate-11">
                       {campaign.tradeCount}

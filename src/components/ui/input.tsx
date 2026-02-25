@@ -44,7 +44,7 @@ const inputCva = cva(inputBaseClasses, {
 });
 
 const iconContainerCva = cva(
-  "text-muted-foreground peer-focus:text-foreground absolute top-1/2 flex -translate-y-1/2 items-center justify-center",
+  "text-olive-11 peer-focus:text-olive-12 absolute top-1/2 flex -translate-y-1/2 items-center justify-center",
   {
     variants: {
       position: {

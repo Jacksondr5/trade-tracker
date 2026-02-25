@@ -4,10 +4,10 @@ import { Preloaded, usePreloadedQuery, useQuery } from "convex/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Button } from "~/components/ui";
+import { Badge, Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import { Id } from "~/convex/_generated/dataModel";
-import { formatCurrency, formatDate } from "~/lib/format";
+import { capitalize, formatCurrency, formatDate } from "~/lib/format";
 
 type CampaignStatus = "planning" | "active" | "closed";
 type StatusFilter = "all" | CampaignStatus;
@@ -33,17 +33,6 @@ function CampaignPL({ campaignId }: { campaignId: Id<"campaigns"> }) {
       {formatCurrency(campaignPL.realizedPL)}
     </span>
   );
-}
-
-function getStatusBadgeClasses(status: CampaignStatus): string {
-  switch (status) {
-    case "planning":
-      return "bg-blue-900/50 border-blue-700 text-blue-200";
-    case "active":
-      return "bg-green-900/50 border-green-700 text-green-200";
-    case "closed":
-      return "bg-slate-700/50 border-slate-600 text-slate-300";
-  }
 }
 
 export default function CampaignsPageClient({
@@ -148,12 +137,17 @@ export default function CampaignsPageClient({
                     {campaign.name}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-sm">
-                    <span
-                      className={`rounded border px-2 py-0.5 text-xs font-medium ${getStatusBadgeClasses(campaign.status)}`}
+                    <Badge
+                      variant={
+                        campaign.status === "active"
+                          ? "success"
+                          : campaign.status === "planning"
+                            ? "info"
+                            : "neutral"
+                      }
                     >
-                      {campaign.status.charAt(0).toUpperCase() +
-                        campaign.status.slice(1)}
-                    </span>
+                      {capitalize(campaign.status)}
+                    </Badge>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-sm text-right">
                     <CampaignPL campaignId={campaign._id} />
