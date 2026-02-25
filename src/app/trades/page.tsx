@@ -10,7 +10,7 @@ import {
   parseDateInputLocal,
 } from "~/lib/trades/dateUtils";
 import {
-  normalizeTradesPage,
+  normalizeTradesCursor,
   normalizeTradesPageSize,
 } from "~/lib/trades/pagination";
 import TradesPageClient from "./TradesPageClient";
@@ -20,7 +20,9 @@ function parseTradesQueryState(searchParams: {
 }) {
   const filterValue = searchParams.filter;
   const filter = typeof filterValue === "string" ? filterValue : undefined;
-  const page = normalizeTradesPage(Number(searchParams.page ?? "1"));
+  const rawCursor =
+    typeof searchParams.cursor === "string" ? searchParams.cursor : null;
+  const cursor = normalizeTradesCursor(rawCursor);
   const pageSize = normalizeTradesPageSize(Number(searchParams.pageSize ?? "25"));
 
   const now = new Date();
@@ -51,7 +53,14 @@ function parseTradesQueryState(searchParams: {
     if (parsedEndDate) endDate = getEndOfDay(parsedEndDate);
   }
 
-  return { endDate, page, pageSize, startDate };
+  return {
+    endDate,
+    paginationOpts: {
+      cursor,
+      numItems: pageSize,
+    },
+    startDate,
+  };
 }
 
 export default async function TradesPage({

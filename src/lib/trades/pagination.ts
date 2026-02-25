@@ -1,10 +1,6 @@
 export const TRADES_PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 export const DEFAULT_TRADES_PAGE_SIZE = 25;
-
-export function normalizeTradesPage(value: number): number {
-  if (!Number.isFinite(value) || value < 1) return 1;
-  return Math.floor(value);
-}
+const ROOT_CURSOR_TOKEN = "$root$";
 
 export function normalizeTradesPageSize(value: number): number {
   if (
@@ -16,4 +12,31 @@ export function normalizeTradesPageSize(value: number): number {
   }
 
   return DEFAULT_TRADES_PAGE_SIZE;
+}
+
+export function normalizeTradesCursor(value: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export function encodeCursorHistory(
+  cursors: ReadonlyArray<string | null>,
+): string | null {
+  if (cursors.length === 0) return null;
+  return cursors
+    .map((cursor) =>
+      cursor === null ? ROOT_CURSOR_TOKEN : encodeURIComponent(cursor),
+    )
+    .join(",");
+}
+
+export function decodeCursorHistory(value: string | null): Array<string | null> {
+  if (!value) return [];
+  return value
+    .split(",")
+    .filter((cursor) => cursor.length > 0)
+    .map((cursor) =>
+      cursor === ROOT_CURSOR_TOKEN ? null : decodeURIComponent(cursor),
+    );
 }

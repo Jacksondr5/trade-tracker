@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { calculateTradesPL } from "./lib/plCalculation";
 import { assertOwner, requireUser } from "./lib/auth";
 
@@ -153,61 +154,56 @@ export const listTrades = query({
   },
 });
 
-const SERVER_TRADES_PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
-const SERVER_DEFAULT_TRADES_PAGE_SIZE = 25;
-
 const paginatedTradesValidator = v.object({
-  currentPage: v.number(),
-  hasNextPage: v.boolean(),
-  hasPrevPage: v.boolean(),
-  items: v.array(tradeValidator),
-  pageSize: v.number(),
-  totalCount: v.number(),
-  totalPages: v.number(),
+  continueCursor: v.string(),
+  isDone: v.boolean(),
+  page: v.array(tradeValidator),
+  pageStatus: v.optional(v.union(v.string(), v.null())),
+  splitCursor: v.optional(v.union(v.string(), v.null())),
 });
 
 export const listTradesPage = query({
   args: {
     endDate: v.optional(v.number()),
-    page: v.number(),
-    pageSize: v.number(),
+    paginationOpts: paginationOptsValidator,
     startDate: v.optional(v.number()),
   },
   returns: paginatedTradesValidator,
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
-    const trades = await ctx.db
-      .query("trades")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect();
+    const { endDate, paginationOpts, startDate } = args;
+    const queryByDate = ctx.db.query("trades");
 
-    const sortedTrades = trades
-      .filter((trade) => {
-        if (args.startDate !== undefined && trade.date < args.startDate) return false;
-        if (args.endDate !== undefined && trade.date > args.endDate) return false;
-        return true;
-      })
-      .sort((a, b) => b.date - a.date);
+    if (startDate !== undefined && endDate !== undefined) {
+      return await queryByDate
+        .withIndex("by_owner_date", (q) =>
+          q.eq("ownerId", ownerId).gte("date", startDate).lte("date", endDate),
+        )
+        .order("desc")
+        .paginate(paginationOpts);
+    }
 
-    const normalizedPageSize = SERVER_TRADES_PAGE_SIZE_OPTIONS.includes(
-      args.pageSize as (typeof SERVER_TRADES_PAGE_SIZE_OPTIONS)[number],
-    )
-      ? args.pageSize
-      : SERVER_DEFAULT_TRADES_PAGE_SIZE;
-    const requestedPage = Math.max(1, Math.floor(args.page));
-    const totalCount = sortedTrades.length;
-    const totalPages = Math.max(1, Math.ceil(totalCount / normalizedPageSize));
-    const currentPage = Math.min(requestedPage, totalPages);
-    const startIndex = (currentPage - 1) * normalizedPageSize;
+    if (startDate !== undefined) {
+      return await queryByDate
+        .withIndex("by_owner_date", (q) =>
+          q.eq("ownerId", ownerId).gte("date", startDate),
+        )
+        .order("desc")
+        .paginate(paginationOpts);
+    }
 
-    return {
-      currentPage,
-      hasNextPage: currentPage < totalPages,
-      hasPrevPage: currentPage > 1,
-      items: sortedTrades.slice(startIndex, startIndex + normalizedPageSize),
-      pageSize: normalizedPageSize,
-      totalCount,
-      totalPages,
-    };
+    if (endDate !== undefined) {
+      return await queryByDate
+        .withIndex("by_owner_date", (q) =>
+          q.eq("ownerId", ownerId).lte("date", endDate),
+        )
+        .order("desc")
+        .paginate(paginationOpts);
+    }
+
+    return await queryByDate
+      .withIndex("by_owner_date", (q) => q.eq("ownerId", ownerId))
+      .order("desc")
+      .paginate(paginationOpts);
   },
 });

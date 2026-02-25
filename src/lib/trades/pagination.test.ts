@@ -1,25 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_TRADES_PAGE_SIZE,
-  normalizeTradesPage,
+  decodeCursorHistory,
+  encodeCursorHistory,
+  normalizeTradesCursor,
   normalizeTradesPageSize,
 } from "./pagination";
-
-describe("normalizeTradesPage", () => {
-  it("defaults to page 1 for invalid values", () => {
-    expect(normalizeTradesPage(0)).toBe(1);
-    expect(normalizeTradesPage(-10)).toBe(1);
-    expect(normalizeTradesPage(Number.NaN)).toBe(1);
-  });
-
-  it("returns valid page values unchanged", () => {
-    expect(normalizeTradesPage(5)).toBe(5);
-  });
-
-  it("floors positive decimal page values", () => {
-    expect(normalizeTradesPage(3.9)).toBe(3);
-  });
-});
 
 describe("normalizeTradesPageSize", () => {
   it("accepts supported page sizes", () => {
@@ -32,5 +18,32 @@ describe("normalizeTradesPageSize", () => {
   it("falls back to default page size for unsupported values", () => {
     expect(normalizeTradesPageSize(20)).toBe(DEFAULT_TRADES_PAGE_SIZE);
     expect(normalizeTradesPageSize(Number.NaN)).toBe(DEFAULT_TRADES_PAGE_SIZE);
+  });
+});
+
+describe("normalizeTradesCursor", () => {
+  it("normalizes empty values to null", () => {
+    expect(normalizeTradesCursor(null)).toBeNull();
+    expect(normalizeTradesCursor("")).toBeNull();
+    expect(normalizeTradesCursor("   ")).toBeNull();
+  });
+
+  it("returns trimmed cursor values", () => {
+    expect(normalizeTradesCursor(" abc ")).toBe("abc");
+  });
+});
+
+describe("cursor history helpers", () => {
+  it("encodes and decodes cursor arrays", () => {
+    const history = [null, "abc123", "a,b/c?d=e", "cursor with spaces"];
+    const encoded = encodeCursorHistory(history);
+    expect(encoded).not.toBeNull();
+    expect(decodeCursorHistory(encoded)).toEqual(history);
+  });
+
+  it("uses empty values for empty history", () => {
+    expect(encodeCursorHistory([])).toBeNull();
+    expect(decodeCursorHistory(null)).toEqual([]);
+    expect(decodeCursorHistory("")).toEqual([]);
   });
 });

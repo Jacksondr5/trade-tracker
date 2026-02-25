@@ -19,6 +19,9 @@ import {
 import {
   DEFAULT_TRADES_PAGE_SIZE,
   TRADES_PAGE_SIZE_OPTIONS,
+  decodeCursorHistory,
+  encodeCursorHistory,
+  normalizeTradesCursor,
   normalizeTradesPageSize,
 } from "~/lib/trades/pagination";
 import { cn } from "~/lib/utils";
@@ -66,11 +69,14 @@ export default function TradesPageClient({
 
   const startDateParam = searchParams.get("startDate");
   const endDateParam = searchParams.get("endDate");
+  const cursorParam = normalizeTradesCursor(searchParams.get("cursor"));
+  const cursorHistory = decodeCursorHistory(searchParams.get("cursorHistory"));
   const rawQuickFilterParam = searchParams.get("filter");
   const quickFilterParam =
     rawQuickFilterParam && isQuickFilter(rawQuickFilterParam)
       ? rawQuickFilterParam
       : null;
+  const currentPage = cursorHistory.length + 1;
 
   const pageSize = normalizeTradesPageSize(
     Number(searchParams.get("pageSize") ?? String(DEFAULT_TRADES_PAGE_SIZE)),
@@ -120,9 +126,10 @@ export default function TradesPageClient({
   }, [endDateParam, quickFilterParam, startDateParam]);
 
   const updateFilter = (params: {
+    cursor?: string | null;
+    cursorHistory?: ReadonlyArray<string | null>;
     endDate?: string | null;
     filter?: QuickFilter | null;
-    page?: number | null;
     pageSize?: number | null;
     startDate?: string | null;
   }) => {
@@ -141,8 +148,13 @@ export default function TradesPageClient({
       newParams.set("pageSize", String(params.pageSize));
     }
 
-    if (params.page && params.page > 1) {
-      newParams.set("page", String(params.page));
+    if (params.cursor) {
+      newParams.set("cursor", params.cursor);
+    }
+
+    const encodedCursorHistory = encodeCursorHistory(params.cursorHistory ?? []);
+    if (encodedCursorHistory) {
+      newParams.set("cursorHistory", encodedCursorHistory);
     }
 
     const queryString = newParams.toString();
@@ -152,24 +164,43 @@ export default function TradesPageClient({
   };
 
   const handleQuickFilter = (filter: QuickFilter) => {
-    updateFilter({ filter, page: 1, pageSize });
+    updateFilter({ cursor: null, cursorHistory: [], filter, pageSize });
   };
 
   const handleCustomDateChange = (type: "startDate" | "endDate", value: string) => {
     updateFilter({
       endDate: type === "endDate" ? value : (endDateParam ?? ""),
       filter: null,
-      page: 1,
       pageSize,
       startDate: type === "startDate" ? value : (startDateParam ?? ""),
+      cursor: null,
+      cursorHistory: [],
     });
   };
 
-  const handlePageChange = (nextPage: number) => {
+  const handlePrevPage = () => {
+    if (cursorHistory.length === 0) return;
+
+    const nextCursorHistory = cursorHistory.slice(0, -1);
+    const previousCursor = cursorHistory[cursorHistory.length - 1];
     updateFilter({
+      cursor: previousCursor,
+      cursorHistory: nextCursorHistory,
       endDate: endDateParam,
       filter: quickFilterParam,
-      page: nextPage,
+      pageSize,
+      startDate: startDateParam,
+    });
+  };
+
+  const handleNextPage = () => {
+    if (tradesPage.isDone) return;
+
+    updateFilter({
+      cursor: tradesPage.continueCursor,
+      cursorHistory: [...cursorHistory, cursorParam],
+      endDate: endDateParam,
+      filter: quickFilterParam,
       pageSize,
       startDate: startDateParam,
     });
@@ -177,9 +208,10 @@ export default function TradesPageClient({
 
   const handlePageSizeChange = (nextPageSize: number) => {
     updateFilter({
+      cursor: null,
+      cursorHistory: [],
       endDate: endDateParam,
       filter: quickFilterParam,
-      page: 1,
       pageSize: nextPageSize,
       startDate: startDateParam,
     });
@@ -192,7 +224,7 @@ export default function TradesPageClient({
     return quickFilterParam === filter;
   };
 
-  const trades = tradesPage.items;
+  const trades = tradesPage.page;
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -250,7 +282,7 @@ export default function TradesPageClient({
         </div>
       </div>
 
-      {tradesPage.totalCount === 0 ? (
+      {trades.length === 0 ? (
         <div className="rounded-lg border border-slate-700 bg-slate-800 p-8 text-center">
           <p className="text-slate-11">
             {startDate !== null || endDate !== null
@@ -373,8 +405,7 @@ export default function TradesPageClient({
 
           <div className="mt-4 flex flex-col gap-3 rounded-lg border border-slate-700 bg-slate-800 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-slate-11 text-sm">
-              Showing {(tradesPage.currentPage - 1) * tradesPage.pageSize + 1}–
-              {Math.min(tradesPage.currentPage * tradesPage.pageSize, tradesPage.totalCount)} of {tradesPage.totalCount}
+              Showing {trades.length} trade{trades.length === 1 ? "" : "s"}
             </div>
             <div className="flex items-center gap-3">
               <label className="text-slate-11 text-sm" htmlFor="page-size-select">
@@ -396,19 +427,19 @@ export default function TradesPageClient({
               <button
                 type="button"
                 className="text-slate-12 rounded border border-slate-600 px-3 py-1.5 text-sm disabled:opacity-50"
-                onClick={() => handlePageChange(tradesPage.currentPage - 1)}
-                disabled={!tradesPage.hasPrevPage || isNavigating}
+                onClick={handlePrevPage}
+                disabled={cursorHistory.length === 0 || isNavigating}
               >
                 Prev
               </button>
               <span className="text-slate-11 text-sm">
-                Page {tradesPage.currentPage} of {tradesPage.totalPages}
+                Page {currentPage}
               </span>
               <button
                 type="button"
                 className="text-slate-12 rounded border border-slate-600 px-3 py-1.5 text-sm disabled:opacity-50"
-                onClick={() => handlePageChange(tradesPage.currentPage + 1)}
-                disabled={!tradesPage.hasNextPage || isNavigating}
+                onClick={handleNextPage}
+                disabled={tradesPage.isDone || isNavigating}
               >
                 Next
               </button>
