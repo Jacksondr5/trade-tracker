@@ -18,12 +18,11 @@ export const getNotes = query({
   handler: async (ctx) => {
     const ownerId = await requireUser(ctx);
 
-    const notes = await ctx.db
+    return await ctx.db
       .query("generalNotes")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .order("asc")
       .collect();
-
-    return notes.sort((a, b) => a._creationTime - b._creationTime);
   },
 });
 

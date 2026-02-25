@@ -49,7 +49,7 @@ export default function NotesPageClient({
 
       try {
         const parsed = noteSchema.parse(value);
-        await addNote({ content: parsed.content.trim() });
+        await addNote({ content: parsed.content });
         formApi.reset();
       } catch (error) {
         setAddNoteError(error instanceof Error ? error.message : "Failed to add note");
