@@ -6,7 +6,7 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
-import { useAppForm } from "~/components/ui";
+import { Alert, useAppForm } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Doc, Id } from "~/convex/_generated/dataModel";
 import { formatCurrency, formatDate } from "~/lib/format";
@@ -392,7 +392,7 @@ export default function CampaignDetailPageClient({
                 Save Name
               </button>
             </div>
-            {campaignNameError && <p className="mt-2 text-sm text-red-300">{campaignNameError}</p>}
+            {campaignNameError && <Alert variant="error" className="mt-2">{campaignNameError}</Alert>}
             {campaignNameSaveState === "saving" && (
               <span className="mt-2 flex items-center gap-1 text-sm text-slate-11">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -434,12 +434,12 @@ export default function CampaignDetailPageClient({
           </p>
         )}
 
-        {statusChangeError && <p className="mt-3 text-sm text-red-300">{statusChangeError}</p>}
+        {statusChangeError && <Alert variant="error" className="mt-3">{statusChangeError}</Alert>}
       </div>
 
       <section className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
         <h2 className="mb-2 text-lg font-semibold text-slate-12">Thesis</h2>
-        {thesisError && <p className="mb-2 text-sm text-red-300">{thesisError}</p>}
+        {thesisError && <Alert variant="error" className="mb-2">{thesisError}</Alert>}
         <textarea
           className="min-h-28 w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
           value={thesis}
@@ -538,7 +538,7 @@ export default function CampaignDetailPageClient({
           </div>
         )}
 
-        {noteError && <p className="mb-2 text-sm text-red-300">{noteError}</p>}
+        {noteError && <Alert variant="error" className="mb-2">{noteError}</Alert>}
 
         <form
           onSubmit={(e) => {
@@ -578,7 +578,7 @@ export default function CampaignDetailPageClient({
           </div>
         </div>
 
-        {planError && <p className="mb-3 text-sm text-red-300">{planError}</p>}
+        {planError && <Alert variant="error" className="mb-3">{planError}</Alert>}
 
         {tradePlans.length === 0 ? (
           <p className="mb-4 text-sm text-slate-11">No trade plans yet.</p>
@@ -768,7 +768,7 @@ export default function CampaignDetailPageClient({
           <p className="text-sm text-slate-11">Retrospective is available after the campaign is closed.</p>
         ) : (
           <>
-            {retrospectiveError && <p className="mb-2 text-sm text-red-300">{retrospectiveError}</p>}
+            {retrospectiveError && <Alert variant="error" className="mb-2">{retrospectiveError}</Alert>}
             <textarea
               className="min-h-32 w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
               value={retrospective}

@@ -6,7 +6,7 @@ import { Check, CheckCircle2, Loader2, Save, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Badge } from "~/components/ui";
+import { Alert, Badge } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { formatCurrency, formatDate } from "~/lib/format";
@@ -199,7 +199,9 @@ export default function PortfolioDetailPageClient({
               )}
             </div>
           {nameError && (
-            <p className="mt-2 text-sm text-red-300">{nameError}</p>
+            <Alert variant="error" className="mt-2">
+              {nameError}
+            </Alert>
           )}
         </div>
       </div>

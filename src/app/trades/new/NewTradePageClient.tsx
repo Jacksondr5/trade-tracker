@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { z } from "zod";
 import {
+  Alert,
   Button,
   Card,
   Label,
@@ -126,23 +127,15 @@ export default function NewTradePageClient({
       <h1 className="text-slate-12 mb-6 text-2xl font-bold">New Trade</h1>
 
       {successMessage && (
-        <div className="text-slate-12 mb-4 rounded-md bg-green-900/50 p-4">
+        <Alert variant="success" className="mb-4">
           {successMessage}
-        </div>
+        </Alert>
       )}
 
       {errorMessage && (
-        <div className="text-slate-12 mb-4 flex items-center justify-between rounded-md bg-red-900/50 p-4">
-          <span>{errorMessage}</span>
-          <button
-            type="button"
-            onClick={() => setErrorMessage(null)}
-            className="text-slate-12 ml-4 hover:text-white"
-            aria-label="Dismiss error"
-          >
-            ✕
-          </button>
-        </div>
+        <Alert variant="error" className="mb-4" onDismiss={() => setErrorMessage(null)}>
+          {errorMessage}
+        </Alert>
       )}
 
       <Card className="bg-slate-800 p-6">

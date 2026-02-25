@@ -2,7 +2,7 @@
 
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
 import { useState } from "react";
-import { Badge, Button } from "~/components/ui";
+import { Alert, Badge, Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 
@@ -74,7 +74,11 @@ export default function TradePlansPageClient({
 
       <section className="mb-8 rounded-lg border border-slate-700 bg-slate-800 p-4">
         <h2 className="mb-4 text-lg font-semibold text-slate-12">Create Standalone Plan</h2>
-        {error && <p className="mb-3 text-sm text-red-300">{error}</p>}
+        {error && (
+          <Alert variant="error" className="mb-3">
+            {error}
+          </Alert>
+        )}
 
         <form className="grid gap-3" onSubmit={handleCreate}>
           <input

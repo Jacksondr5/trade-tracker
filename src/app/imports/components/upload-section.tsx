@@ -1,5 +1,5 @@
 import type { ChangeEvent } from "react";
-import { Card } from "~/components/ui";
+import { Alert, Card } from "~/components/ui";
 import type { BrokerageSource } from "../../../../shared/imports/types";
 
 interface ImportResult {
@@ -67,34 +67,23 @@ export function UploadSection({
         </div>
 
         {importResult && (
-          <div className="text-slate-12 rounded-md bg-green-900/50 p-4 text-sm">
+          <Alert variant="success">
             Imported <span className="font-semibold">{importResult.imported}</span> trade
             {importResult.imported !== 1 ? "s" : ""}.
             {importResult.skippedDuplicates > 0 && (
-              <>
-                {" "}
-                Skipped <span className="font-semibold">{importResult.skippedDuplicates}</span>{" "}
-                duplicate{importResult.skippedDuplicates !== 1 ? "s" : ""}.
-              </>
+              <> Skipped <span className="font-semibold">{importResult.skippedDuplicates}</span> duplicate{importResult.skippedDuplicates !== 1 ? "s" : ""}.</>
             )}
             {importResult.withValidationErrors > 0 && (
-              <>
-                {" "}
-                <span className="font-semibold">{importResult.withValidationErrors}</span> need
-                review.
-              </>
+              <> <span className="font-semibold">{importResult.withValidationErrors}</span> need review.</>
             )}
             {importResult.withWarnings > 0 && (
-              <>
-                {" "}
-                <span className="font-semibold">{importResult.withWarnings}</span> with warnings.
-              </>
+              <> <span className="font-semibold">{importResult.withWarnings}</span> with warnings.</>
             )}
-          </div>
+          </Alert>
         )}
 
         {errorMessage && (
-          <div className="rounded-md bg-red-900/50 p-4 text-sm text-red-300">{errorMessage}</div>
+          <Alert variant="error">{errorMessage}</Alert>
         )}
       </div>
     </Card>

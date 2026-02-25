@@ -3,7 +3,7 @@
 import { useMutation } from "convex/react";
 import { useState } from "react";
 import { z } from "zod";
-import { Button, Card, useAppForm } from "~/components/ui";
+import { Alert, Button, Card, useAppForm } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 
@@ -116,17 +116,9 @@ export function EditTradeForm({
     <Card className="bg-slate-800 p-4">
       <h3 className="text-slate-12 mb-3 text-sm font-semibold">Edit Trade</h3>
       {errorMessage && (
-        <div className="text-slate-12 mb-3 flex items-center justify-between rounded-md bg-red-900/50 p-3 text-sm">
-          <span>{errorMessage}</span>
-          <button
-            type="button"
-            onClick={() => setErrorMessage(null)}
-            className="text-slate-12 ml-4 hover:text-white"
-            aria-label="Dismiss error"
-          >
-            ✕
-          </button>
-        </div>
+        <Alert variant="error" className="mb-3" onDismiss={() => setErrorMessage(null)}>
+          {errorMessage}
+        </Alert>
       )}
       <form
         onSubmit={(event) => {

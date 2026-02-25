@@ -3,6 +3,7 @@
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
 import { useMemo, useState } from "react";
 import {
+  Alert,
   Button,
   Card,
   CardContent,
@@ -123,9 +124,9 @@ export default function AccountsPageClient({
         </CardHeader>
         <CardContent className="space-y-3">
           {errorMessage && (
-            <p className="rounded-md bg-red-900/50 px-3 py-2 text-sm text-red-300">
+            <Alert variant="error" className="mb-3">
               {errorMessage}
-            </p>
+            </Alert>
           )}
           {knownAccounts.length === 0 ? (
             <p className="text-slate-11 text-sm">
