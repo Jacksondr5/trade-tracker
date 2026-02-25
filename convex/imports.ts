@@ -244,6 +244,11 @@ export const importTrades = mutation({
         assertOwner(tradePlan, ownerId, "Trade plan not found");
       }
 
+      if (trade.portfolioId !== undefined) {
+        const portfolio = await ctx.db.get(trade.portfolioId);
+        assertOwner(portfolio, ownerId, "Portfolio not found");
+      }
+
       await ctx.db.insert("inboxTrades", {
         assetType: trade.assetType,
         brokerageAccountId,

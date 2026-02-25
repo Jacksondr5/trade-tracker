@@ -279,6 +279,7 @@ export default function PortfolioDetailPageClient({
                 <tr className="border-b border-slate-700 text-left text-slate-11">
                   <th className="px-2 py-2">Name</th>
                   <th className="px-2 py-2">Status</th>
+                  <th className="px-2 py-2 text-right">Trade Count</th>
                 </tr>
               </thead>
               <tbody>
@@ -294,6 +295,9 @@ export default function PortfolioDetailPageClient({
                     <td className="px-2 py-2 text-slate-11">
                       {campaign.status.charAt(0).toUpperCase() +
                         campaign.status.slice(1)}
+                    </td>
+                    <td className="px-2 py-2 text-right text-slate-11">
+                      {campaign.tradeCount}
                     </td>
                   </tr>
                 ))}

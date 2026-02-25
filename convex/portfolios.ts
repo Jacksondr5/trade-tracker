@@ -167,6 +167,7 @@ const campaignValidator = v.object({
     v.literal("closed"),
     v.literal("planning"),
   ),
+  tradeCount: v.number(),
 });
 
 export const getPortfolioDetail = query({
@@ -210,24 +211,28 @@ export const getPortfolioDetail = query({
         realizedPL: plMap.get(trade._id) ?? null,
       }));
 
-    // Derive campaigns: trades -> tradePlanIds -> tradePlans -> campaignIds -> campaigns
-    const tradePlanIds = new Set<Id<"tradePlans">>();
+    // Derive campaigns: trades -> trade plans -> campaigns, counting trades per campaign.
+    const tradePlanToCampaign = new Map<Id<"tradePlans">, Id<"campaigns"> | null>();
+    const campaignTradeCounts = new Map<Id<"campaigns">, number>();
     for (const trade of portfolioTrades) {
-      if (trade.tradePlanId) {
-        tradePlanIds.add(trade.tradePlanId);
-      }
-    }
+      if (!trade.tradePlanId) continue;
 
-    const campaignIds = new Set<Id<"campaigns">>();
-    for (const tradePlanId of tradePlanIds) {
-      const tradePlan = await ctx.db.get(tradePlanId);
-      if (tradePlan?.campaignId) {
-        campaignIds.add(tradePlan.campaignId);
+      if (!tradePlanToCampaign.has(trade.tradePlanId)) {
+        const tradePlan = await ctx.db.get(trade.tradePlanId);
+        tradePlanToCampaign.set(trade.tradePlanId, tradePlan?.campaignId ?? null);
+      }
+
+      const campaignId = tradePlanToCampaign.get(trade.tradePlanId);
+      if (campaignId) {
+        campaignTradeCounts.set(
+          campaignId,
+          (campaignTradeCounts.get(campaignId) ?? 0) + 1,
+        );
       }
     }
 
     const campaigns = [];
-    for (const campaignId of campaignIds) {
+    for (const [campaignId, tradeCount] of campaignTradeCounts) {
       const campaign = await ctx.db.get(campaignId);
       if (campaign && campaign.ownerId === ownerId) {
         campaigns.push({
@@ -235,6 +240,7 @@ export const getPortfolioDetail = query({
           _id: campaign._id,
           name: campaign.name,
           status: campaign.status,
+          tradeCount,
         });
       }
     }
