@@ -25,7 +25,6 @@ export default function NotesPageClient({
 
   const [addNoteError, setAddNoteError] = useState<string | null>(null);
   const [editNoteError, setEditNoteError] = useState<string | null>(null);
-  const [isAddingNote, setIsAddingNote] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<Id<"generalNotes"> | null>(null);
   const [editingNoteContent, setEditingNoteContent] = useState("");
   const [isSavingNote, setIsSavingNote] = useState(false);
@@ -45,7 +44,6 @@ export default function NotesPageClient({
     },
     onSubmit: async ({ value, formApi }) => {
       setAddNoteError(null);
-      setIsAddingNote(true);
 
       try {
         const parsed = noteSchema.parse(value);
@@ -53,11 +51,10 @@ export default function NotesPageClient({
         formApi.reset();
       } catch (error) {
         setAddNoteError(error instanceof Error ? error.message : "Failed to add note");
-      } finally {
-        setIsAddingNote(false);
       }
     },
   });
+  const isAddingNote = noteForm.useStore((state) => state.isSubmitting);
 
   const startEditingNote = (note: Doc<"generalNotes">) => {
     setEditingNoteId(note._id);
