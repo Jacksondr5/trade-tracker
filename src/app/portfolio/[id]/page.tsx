@@ -1,4 +1,5 @@
 import { preloadQuery } from "convex/nextjs";
+import { notFound } from "next/navigation";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { getConvexTokenOrThrow } from "~/lib/server/convexAuth";
@@ -13,11 +14,16 @@ export default async function PortfolioDetailPage({
   const token = await getConvexTokenOrThrow();
   const portfolioId = id as Id<"portfolios">;
 
-  const preloadedPortfolioDetail = await preloadQuery(
-    api.portfolios.getPortfolioDetail,
-    { portfolioId },
-    { token },
-  );
+  let preloadedPortfolioDetail;
+  try {
+    preloadedPortfolioDetail = await preloadQuery(
+      api.portfolios.getPortfolioDetail,
+      { portfolioId },
+      { token },
+    );
+  } catch {
+    notFound();
+  }
 
   return (
     <PortfolioDetailPageClient

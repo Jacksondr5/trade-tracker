@@ -286,11 +286,15 @@ export default function PortfolioDetailPageClient({
                 {campaigns.map((campaign) => (
                   <tr
                     key={campaign._id}
-                    className="cursor-pointer border-b border-slate-700/60 hover:bg-slate-700/30"
-                    onClick={() => router.push(`/campaigns/${campaign._id}`)}
+                    className="border-b border-slate-700/60 hover:bg-slate-700/30"
                   >
-                    <td className="px-2 py-2 text-blue-400 hover:underline">
-                      {campaign.name}
+                    <td className="px-2 py-2">
+                      <Link
+                        href={`/campaigns/${campaign._id}`}
+                        className="text-blue-400 hover:underline"
+                      >
+                        {campaign.name}
+                      </Link>
                     </td>
                     <td className="px-2 py-2 text-slate-11">
                       {campaign.status.charAt(0).toUpperCase() +

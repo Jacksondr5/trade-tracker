@@ -2,7 +2,7 @@
 
 import { ConvexError } from "convex/values";
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useState } from "react";
 import { Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
@@ -12,7 +12,6 @@ export default function PortfolioPageClient({
 }: {
   preloadedPortfolios: Preloaded<typeof api.portfolios.listPortfolios>;
 }) {
-  const router = useRouter();
   const portfolios = usePreloadedQuery(preloadedPortfolios);
   const createPortfolio = useMutation(api.portfolios.createPortfolio);
 
@@ -106,22 +105,15 @@ export default function PortfolioPageClient({
             </thead>
             <tbody className="divide-y divide-slate-700 bg-slate-900">
               {portfolios.map((portfolio) => (
-                <tr
-                  key={portfolio._id}
-                  className="cursor-pointer hover:bg-slate-800/50"
-                  onClick={() => router.push(`/portfolio/${portfolio._id}`)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      router.push(`/portfolio/${portfolio._id}`);
-                    }
-                  }}
-                  tabIndex={0}
-                  role="button"
-                  aria-label={`View portfolio ${portfolio.name}`}
-                >
-                  <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-sm font-medium">
-                    {portfolio.name}
+                <tr key={portfolio._id} className="hover:bg-slate-800/50">
+                  <td className="whitespace-nowrap px-4 py-3 text-sm font-medium">
+                    <Link
+                      href={`/portfolio/${portfolio._id}`}
+                      className="text-slate-12 hover:underline"
+                      aria-label={`View portfolio ${portfolio.name}`}
+                    >
+                      {portfolio.name}
+                    </Link>
                   </td>
                   <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-right text-sm">
                     {portfolio.tradeCount}

@@ -236,6 +236,7 @@ export function InboxTable({
                 </td>
                 <td className="px-4 py-3 text-sm">
                   <select
+                    aria-label={`Portfolio for ${trade.ticker || "trade"}`}
                     value={inlinePortfolioIds[trade._id] ?? ""}
                     onChange={(e) =>
                       onInlinePortfolioChange(trade._id, e.target.value)

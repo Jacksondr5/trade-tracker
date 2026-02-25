@@ -81,7 +81,7 @@ Replace files in src/app/portfolio/
 
 Step 7: Frontend — Portfolio Detail Page
 
-New files: src/app/portfolio/[id]/page.tsx and CampaignDetailPageClient.tsx → PortfolioDetailPageClient.tsx
+New files: src/app/portfolio/[id]/page.tsx and PortfolioDetailPageClient.tsx (patterned after CampaignDetailPageClient.tsx)
 
 - page.tsx (server): Extract id from params, preload portfolio detail query
 - PortfolioDetailPageClient.tsx:

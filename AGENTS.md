@@ -23,7 +23,6 @@ No test framework is configured yet. CI runs lint, typecheck, and build.
 
 All backend logic lives in Convex. There are no Next.js API routes.
 
-Frontend: Next.js App Router (`src/app/`)
 
 ### Forms: TanStack React Form
 

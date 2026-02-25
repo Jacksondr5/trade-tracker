@@ -215,6 +215,8 @@ export const importTrades = mutation({
     let withValidationErrors = 0;
     let withWarnings = 0;
 
+    const portfolioOwnerCache = new Map<Id<"portfolios">, true>();
+
     for (const trade of args.trades) {
       const brokerageAccountId = normalizeBrokerageAccountId(
         trade.source,
@@ -245,8 +247,11 @@ export const importTrades = mutation({
       }
 
       if (trade.portfolioId !== undefined) {
-        const portfolio = await ctx.db.get(trade.portfolioId);
-        assertOwner(portfolio, ownerId, "Portfolio not found");
+        if (!portfolioOwnerCache.has(trade.portfolioId)) {
+          const portfolio = await ctx.db.get(trade.portfolioId);
+          assertOwner(portfolio, ownerId, "Portfolio not found");
+          portfolioOwnerCache.set(trade.portfolioId, true);
+        }
       }
 
       await ctx.db.insert("inboxTrades", {

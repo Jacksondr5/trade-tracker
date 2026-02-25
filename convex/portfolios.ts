@@ -55,21 +55,24 @@ export const listPortfolios = query({
       .order("desc")
       .collect();
 
-    const results = [];
-    for (const portfolio of portfolios) {
-      const trades = await ctx.db
-        .query("trades")
-        .withIndex("by_owner_portfolioId", (q) =>
-          q.eq("ownerId", ownerId).eq("portfolioId", portfolio._id),
-        )
-        .collect();
-      results.push({
-        ...portfolio,
-        tradeCount: trades.length,
-      });
+    const ownerTrades = await ctx.db
+      .query("trades")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
+
+    const tradeCountByPortfolioId = new Map<Id<"portfolios">, number>();
+    for (const trade of ownerTrades) {
+      if (!trade.portfolioId) continue;
+      tradeCountByPortfolioId.set(
+        trade.portfolioId,
+        (tradeCountByPortfolioId.get(trade.portfolioId) ?? 0) + 1,
+      );
     }
 
-    return results;
+    return portfolios.map((portfolio) => ({
+      ...portfolio,
+      tradeCount: tradeCountByPortfolioId.get(portfolio._id) ?? 0,
+    }));
   },
 });
 
@@ -126,6 +129,19 @@ export const deletePortfolio = mutation({
 
     for (const trade of trades) {
       await ctx.db.patch(trade._id, { portfolioId: undefined });
+    }
+
+    const inboxTrades = await ctx.db
+      .query("inboxTrades")
+      .withIndex("by_owner_status", (q) =>
+        q.eq("ownerId", ownerId).eq("status", "pending_review"),
+      )
+      .collect();
+
+    for (const inboxTrade of inboxTrades) {
+      if (inboxTrade.portfolioId === args.portfolioId) {
+        await ctx.db.patch(inboxTrade._id, { portfolioId: undefined });
+      }
     }
 
     await ctx.db.delete(args.portfolioId);
