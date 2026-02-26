@@ -50,6 +50,9 @@ export default function NotesSection({
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [newChartUrls, setNewChartUrls] = useState<string[]>([]);
 
+  const normalizeUrls = (urls: string[]) =>
+    urls.map((u) => u.trim()).filter(Boolean);
+
   const noteForm = useAppForm({
     defaultValues: {
       content: "",
@@ -82,9 +85,6 @@ export default function NotesSection({
       }
     },
   });
-
-  const normalizeUrls = (urls: string[]) =>
-    urls.map((u) => u.trim()).filter(Boolean);
 
   const startEditingNote = (note: Note) => {
     setEditingNoteId(note._id);
@@ -359,7 +359,7 @@ function ChartLightbox({
           <button
             type="button"
             aria-label="Previous chart"
-            className="absolute left-2 top-1/2 z-20 -translate-y-1/2 rounded-full bg-slate-900/80 p-2 text-slate-11 hover:text-slate-12"
+            className="absolute left-2 top-1/2 z-20 -translate-y-1/2 rounded-full bg-slate-900/80 p-2 text-slate-11 hover:text-slate-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-11 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
             onClick={() => setIndex(index - 1)}
           >
             <ChevronLeft className="h-5 w-5" />
@@ -370,7 +370,7 @@ function ChartLightbox({
           <button
             type="button"
             aria-label="Next chart"
-            className="absolute right-2 top-1/2 z-20 -translate-y-1/2 rounded-full bg-slate-900/80 p-2 text-slate-11 hover:text-slate-12"
+            className="absolute right-2 top-1/2 z-20 -translate-y-1/2 rounded-full bg-slate-900/80 p-2 text-slate-11 hover:text-slate-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-11 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
             onClick={() => setIndex(index + 1)}
           >
             <ChevronRight className="h-5 w-5" />
@@ -391,7 +391,7 @@ function ChartLightbox({
                 key={i}
                 type="button"
                 aria-label={`Go to chart ${i + 1}`}
-                className={`h-2 w-2 rounded-full transition-colors ${
+                className={`h-2 w-2 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-11 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
                   i === index ? "bg-slate-12" : "bg-slate-11/40 hover:bg-slate-11/70"
                 }`}
                 onClick={() => setIndex(i)}
