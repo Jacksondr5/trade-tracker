@@ -14,18 +14,13 @@ const tradePlanValidator = v.object({
   _id: v.id("tradePlans"),
   campaignId: v.optional(v.id("campaigns")),
   closedAt: v.optional(v.number()),
-  entryConditions: v.string(),
-  exitConditions: v.string(),
-  instrumentNotes: v.optional(v.string()),
   instrumentSymbol: v.string(),
   instrumentType: v.optional(v.string()),
   invalidatedAt: v.optional(v.number()),
   name: v.string(),
   ownerId: v.string(),
-  rationale: v.optional(v.string()),
   sortOrder: v.optional(v.number()),
   status: tradePlanStatusValidator,
-  targetConditions: v.string(),
 });
 
 function sortTradePlansByOrderThenNewest(
@@ -70,16 +65,11 @@ function isValidStatusTransition(
 export const createTradePlan = mutation({
   args: {
     campaignId: v.optional(v.id("campaigns")),
-    entryConditions: v.string(),
-    exitConditions: v.string(),
-    instrumentNotes: v.optional(v.string()),
     instrumentSymbol: v.string(),
     instrumentType: v.optional(v.string()),
     name: v.string(),
-    rationale: v.optional(v.string()),
     sortOrder: v.optional(v.number()),
     status: v.optional(tradePlanStatusValidator),
-    targetConditions: v.string(),
   },
   returns: v.id("tradePlans"),
   handler: async (ctx, args) => {
@@ -93,17 +83,12 @@ export const createTradePlan = mutation({
 
     return await ctx.db.insert("tradePlans", {
       campaignId: args.campaignId,
-      entryConditions: args.entryConditions,
-      exitConditions: args.exitConditions,
-      instrumentNotes: args.instrumentNotes,
       instrumentSymbol: args.instrumentSymbol.trim().toUpperCase(),
       instrumentType: args.instrumentType,
       name: args.name,
       ownerId,
-      rationale: args.rationale,
       sortOrder: args.sortOrder,
       status,
-      targetConditions: args.targetConditions,
     });
   },
 });
@@ -111,16 +96,11 @@ export const createTradePlan = mutation({
 export const updateTradePlan = mutation({
   args: {
     campaignId: v.optional(v.union(v.id("campaigns"), v.null())),
-    entryConditions: v.optional(v.string()),
-    exitConditions: v.optional(v.string()),
-    instrumentNotes: v.optional(v.string()),
     instrumentSymbol: v.optional(v.string()),
     instrumentType: v.optional(v.string()),
     invalidatedAt: v.optional(v.union(v.number(), v.null())),
     name: v.optional(v.string()),
-    rationale: v.optional(v.string()),
     sortOrder: v.optional(v.union(v.number(), v.null())),
-    targetConditions: v.optional(v.string()),
     tradePlanId: v.id("tradePlans"),
   },
   returns: v.null(),
@@ -141,11 +121,6 @@ export const updateTradePlan = mutation({
     if (updates.campaignId !== undefined) {
       patch.campaignId = updates.campaignId === null ? undefined : updates.campaignId;
     }
-    if (updates.entryConditions !== undefined)
-      patch.entryConditions = updates.entryConditions;
-    if (updates.exitConditions !== undefined) patch.exitConditions = updates.exitConditions;
-    if (updates.instrumentNotes !== undefined)
-      patch.instrumentNotes = updates.instrumentNotes;
     if (updates.instrumentSymbol !== undefined)
       patch.instrumentSymbol = updates.instrumentSymbol.trim().toUpperCase();
     if (updates.instrumentType !== undefined)
@@ -153,11 +128,8 @@ export const updateTradePlan = mutation({
     if (updates.invalidatedAt !== undefined)
       patch.invalidatedAt = updates.invalidatedAt === null ? undefined : updates.invalidatedAt;
     if (updates.name !== undefined) patch.name = updates.name;
-    if (updates.rationale !== undefined) patch.rationale = updates.rationale;
     if (updates.sortOrder !== undefined)
       patch.sortOrder = updates.sortOrder === null ? undefined : updates.sortOrder;
-    if (updates.targetConditions !== undefined)
-      patch.targetConditions = updates.targetConditions;
     await ctx.db.patch(tradePlanId, patch);
 
     return null;

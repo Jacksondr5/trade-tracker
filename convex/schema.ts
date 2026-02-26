@@ -45,15 +45,11 @@ export default defineSchema({
   tradePlans: defineTable({
     campaignId: v.optional(v.id("campaigns")),
     closedAt: v.optional(v.number()),
-    entryConditions: v.string(),
-    exitConditions: v.string(),
-    instrumentNotes: v.optional(v.string()),
     instrumentSymbol: v.string(),
     instrumentType: v.optional(v.string()),
     invalidatedAt: v.optional(v.number()),
     name: v.string(),
     ownerId: v.string(),
-    rationale: v.optional(v.string()),
     sortOrder: v.optional(v.number()),
     status: v.union(
       v.literal("active"),
@@ -61,7 +57,6 @@ export default defineSchema({
       v.literal("idea"),
       v.literal("watching"),
     ),
-    targetConditions: v.string(),
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_status", ["ownerId", "status"])
