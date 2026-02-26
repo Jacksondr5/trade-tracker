@@ -54,7 +54,6 @@ export default function NotesPageClient({
       }
     },
   });
-  const isAddingNote = noteForm.useStore((state) => state.isSubmitting);
 
   const startEditingNote = (note: Doc<"generalNotes">) => {
     setEditingNoteId(note._id);
@@ -187,7 +186,7 @@ export default function NotesPageClient({
             )}
           </noteForm.AppField>
           <noteForm.AppForm>
-            <noteForm.SubmitButton label={isAddingNote ? "Saving..." : "Add Note"} />
+            <noteForm.SubmitButton label="Add Note" />
           </noteForm.AppForm>
         </form>
       </section>
