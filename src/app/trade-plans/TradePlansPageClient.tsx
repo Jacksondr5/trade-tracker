@@ -1,6 +1,7 @@
 "use client";
 
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
+import Link from "next/link";
 import { useState } from "react";
 import { Alert, Badge, Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
@@ -17,9 +18,6 @@ export default function TradePlansPageClient({
 
   const [name, setName] = useState("");
   const [instrumentSymbol, setInstrumentSymbol] = useState("");
-  const [entryConditions, setEntryConditions] = useState("");
-  const [exitConditions, setExitConditions] = useState("");
-  const [targetConditions, setTargetConditions] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -38,18 +36,12 @@ export default function TradePlansPageClient({
 
     try {
       await createTradePlan({
-        entryConditions: entryConditions.trim() || "Waiting for setup confirmation",
-        exitConditions: exitConditions.trim() || "Invalidation or thesis deterioration",
         instrumentSymbol: instrumentSymbol.trim().toUpperCase(),
         name: name.trim(),
-        targetConditions: targetConditions.trim() || "Take profit on thesis completion",
       });
 
       setName("");
       setInstrumentSymbol("");
-      setEntryConditions("");
-      setExitConditions("");
-      setTargetConditions("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create trade plan");
     } finally {
@@ -93,24 +85,6 @@ export default function TradePlansPageClient({
             value={instrumentSymbol}
             onChange={(e) => setInstrumentSymbol(e.target.value)}
           />
-          <textarea
-            className="min-h-24 rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
-            placeholder="Entry conditions"
-            value={entryConditions}
-            onChange={(e) => setEntryConditions(e.target.value)}
-          />
-          <textarea
-            className="min-h-24 rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
-            placeholder="Exit conditions"
-            value={exitConditions}
-            onChange={(e) => setExitConditions(e.target.value)}
-          />
-          <textarea
-            className="min-h-24 rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
-            placeholder="Target conditions"
-            value={targetConditions}
-            onChange={(e) => setTargetConditions(e.target.value)}
-          />
 
           <div>
             <Button
@@ -132,9 +106,14 @@ export default function TradePlansPageClient({
           <div className="space-y-3">
             {standalonePlans.map((plan) => (
               <div key={plan._id} className="rounded border border-slate-600 p-3">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-slate-12">{plan.name}</p>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      href={`/trade-plans/${plan._id}`}
+                      className="font-semibold text-slate-12 hover:text-blue-400 hover:underline"
+                    >
+                      {plan.name}
+                    </Link>
                     <p className="text-sm text-slate-11">{plan.instrumentSymbol}</p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -150,15 +129,6 @@ export default function TradePlansPageClient({
                     )}
                   </div>
                 </div>
-                <p className="text-sm text-slate-11">
-                  <strong>Entry:</strong> {plan.entryConditions}
-                </p>
-                <p className="text-sm text-slate-11">
-                  <strong>Exit:</strong> {plan.exitConditions}
-                </p>
-                <p className="text-sm text-slate-11">
-                  <strong>Targets:</strong> {plan.targetConditions}
-                </p>
               </div>
             ))}
           </div>
