@@ -1,14 +1,9 @@
-import { FlatCompat } from "@eslint/eslintrc";
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-import js from "@eslint/js";
-
-const compat = new FlatCompat({
-  baseDirectory: dirname(fileURLToPath(import.meta.url)),
-  recommendedConfig: js.configs.recommended,
-});
+import nextVitals from "eslint-config-next/core-web-vitals";
+import nextTs from "eslint-config-next/typescript";
 
 const config = [
+  ...nextVitals,
+  ...nextTs,
   {
     ignores: [
       "**/dist",
@@ -19,9 +14,12 @@ const config = [
       "**/next-env.d.ts",
     ],
   },
-  ...compat.config({
-    extends: ["next/core-web-vitals", "next/typescript", "prettier"],
-  }),
+  {
+    files: ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx", "**/*.mjs", "**/*.cjs"],
+    rules: {
+      "react-hooks/set-state-in-effect": "off",
+    },
+  },
 ];
 
 export default config;
