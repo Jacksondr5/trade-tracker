@@ -7,8 +7,12 @@
     "importHelpers": true,
     "incremental": true,
     "isolatedModules": true,
-    "jsx": "preserve",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "jsx": "react-jsx",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "module": "preserve",
     "moduleDetection": "force",
     "moduleResolution": "bundler",
@@ -19,8 +23,12 @@
     "noUnusedLocals": true,
     "outDir": "dist",
     "paths": {
-      "~/*": ["./src/*"],
-      "~/convex/*": ["./convex/*"]
+      "~/*": [
+        "./src/*"
+      ],
+      "~/convex/*": [
+        "./convex/*"
+      ]
     },
     "plugins": [
       {
@@ -51,6 +59,7 @@
     "convex/**/*.ts",
     "next-env.d.ts",
     "src/**/*.ts",
-    "src/**/*.tsx"
+    "src/**/*.tsx",
+    ".next/dev/types/**/*.ts"
   ]
 }
