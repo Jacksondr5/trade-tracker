@@ -1,9 +1,18 @@
 "use client";
 
-import { Check, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  LineChart,
+  Loader2,
+  Pencil,
+  Trash2,
+  X,
+} from "lucide-react";
+import { useCallback, useRef, useState } from "react";
 import { z } from "zod";
-import { Alert, useAppForm } from "~/components/ui";
+import { Alert, Dialog, DialogContent, useAppForm } from "~/components/ui";
 import { formatDate } from "~/lib/format";
 
 const noteSchema = z.object({
@@ -199,24 +208,7 @@ export default function NotesSection({
                       {note.content}
                     </p>
                     {note.chartUrls && note.chartUrls.length > 0 && (
-                      <div className="mt-2 space-y-2">
-                        {note.chartUrls.map((url, i) => (
-                          <a
-                            key={i}
-                            href={url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block"
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={url}
-                              alt={`Chart ${i + 1}`}
-                              className="max-h-64 rounded border border-slate-600"
-                            />
-                          </a>
-                        ))}
-                      </div>
+                      <ChartCarousel urls={note.chartUrls} />
                     )}
                   </>
                 )}
@@ -257,6 +249,152 @@ export default function NotesSection({
         </noteForm.AppForm>
       </form>
     </section>
+  );
+}
+
+function ChartCarousel({ urls }: { urls: string[] }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  const scroll = (direction: "left" | "right") => {
+    if (!scrollRef.current) return;
+    const amount = scrollRef.current.clientWidth * 0.6;
+    scrollRef.current.scrollBy({
+      left: direction === "left" ? -amount : amount,
+      behavior: "smooth",
+    });
+  };
+
+  return (
+    <>
+      <div className="group/carousel relative mt-2">
+        {urls.length > 1 && (
+          <>
+            <button
+              type="button"
+              aria-label="Scroll charts left"
+              className="absolute left-0 top-1/2 z-10 -translate-y-1/2 rounded-full bg-slate-900/80 p-1 text-slate-11 opacity-0 transition-opacity hover:text-slate-12 group-hover/carousel:opacity-100"
+              onClick={() => scroll("left")}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              aria-label="Scroll charts right"
+              className="absolute right-0 top-1/2 z-10 -translate-y-1/2 rounded-full bg-slate-900/80 p-1 text-slate-11 opacity-0 transition-opacity hover:text-slate-12 group-hover/carousel:opacity-100"
+              onClick={() => scroll("right")}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </>
+        )}
+        <div
+          ref={scrollRef}
+          className="flex gap-2 overflow-x-auto scrollbar-none"
+        >
+          {urls.map((url, i) => (
+            <button
+              key={i}
+              type="button"
+              className="flex-none cursor-pointer"
+              onClick={() => setLightboxIndex(i)}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={url}
+                alt={`Chart ${i + 1}`}
+                className="h-24 rounded border border-slate-600 object-cover transition-opacity hover:opacity-80"
+              />
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {lightboxIndex !== null && (
+        <ChartLightbox
+          urls={urls}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function ChartLightbox({
+  urls,
+  initialIndex,
+  onClose,
+}: {
+  urls: string[];
+  initialIndex: number;
+  onClose: () => void;
+}) {
+  const [index, setIndex] = useState(initialIndex);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "ArrowLeft" && index > 0) {
+        setIndex(index - 1);
+      } else if (e.key === "ArrowRight" && index < urls.length - 1) {
+        setIndex(index + 1);
+      }
+    },
+    [index, urls.length],
+  );
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent
+        className="flex max-h-[95dvh] max-w-[95dvw] items-center justify-center border-none bg-transparent p-0 shadow-none [&>button:last-child]:top-2 [&>button:last-child]:right-2 [&>button:last-child]:rounded-full [&>button:last-child]:bg-slate-900/80 [&>button:last-child]:p-2 [&>button:last-child]:opacity-100"
+        onKeyDown={handleKeyDown}
+      >
+        {urls.length > 1 && index > 0 && (
+          <button
+            type="button"
+            aria-label="Previous chart"
+            className="absolute left-2 top-1/2 z-20 -translate-y-1/2 rounded-full bg-slate-900/80 p-2 text-slate-11 hover:text-slate-12"
+            onClick={() => setIndex(index - 1)}
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+        )}
+
+        {urls.length > 1 && index < urls.length - 1 && (
+          <button
+            type="button"
+            aria-label="Next chart"
+            className="absolute right-2 top-1/2 z-20 -translate-y-1/2 rounded-full bg-slate-900/80 p-2 text-slate-11 hover:text-slate-12"
+            onClick={() => setIndex(index + 1)}
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+        )}
+
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={urls[index]}
+          alt={`Chart ${index + 1} of ${urls.length}`}
+          className="max-h-[90dvh] max-w-[90dvw] rounded-lg object-contain"
+        />
+
+        {urls.length > 1 && (
+          <div className="absolute bottom-4 flex gap-1.5">
+            {urls.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                aria-label={`Go to chart ${i + 1}`}
+                className={`h-2 w-2 rounded-full transition-colors ${
+                  i === index ? "bg-slate-12" : "bg-slate-11/40 hover:bg-slate-11/70"
+                }`}
+                onClick={() => setIndex(i)}
+              />
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -313,11 +451,12 @@ function ChartUrlInputs({
       ))}
       <button
         type="button"
-        className="flex items-center gap-1 text-sm text-slate-11 hover:text-slate-12"
+        aria-label="Add chart image"
+        title="Add chart image"
+        className="rounded p-1.5 text-slate-11 hover:bg-slate-700 hover:text-slate-12"
         onClick={addUrl}
       >
-        <Plus className="h-3.5 w-3.5" />
-        Add chart image
+        <LineChart className="h-4 w-4" />
       </button>
     </div>
   );

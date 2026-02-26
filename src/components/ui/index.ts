@@ -2,6 +2,14 @@ export { Alert, alertVariants, type AlertProps } from "./alert";
 export { Badge, badgeVariants, type BadgeProps } from "./badge";
 export { Button, buttonClassName, buttonVariants, type ButtonProps } from "./button";
 export {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogOverlay,
+  DialogPortal,
+  DialogTrigger,
+} from "./dialog";
+export {
   Card,
   CardAction,
   CardContent,
