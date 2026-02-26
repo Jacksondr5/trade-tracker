@@ -2,21 +2,18 @@
 
 import { ConvexError } from "convex/values";
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
-import { Check, CheckCircle2, Loader2, Pencil, X } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { z } from "zod";
-import { Alert, useAppForm } from "~/components/ui";
+import { Alert, Badge } from "~/components/ui";
+import NotesSection from "~/components/NotesSection";
 import { api } from "~/convex/_generated/api";
-import type { Doc, Id } from "~/convex/_generated/dataModel";
-import { formatCurrency, formatDate } from "~/lib/format";
+import type { Id } from "~/convex/_generated/dataModel";
+import { formatCurrency } from "~/lib/format";
 
 type CampaignStatus = "planning" | "active" | "closed";
 type TradePlanStatus = "idea" | "watching" | "active" | "closed";
 type SaveState = "idle" | "saving" | "saved";
-const noteSchema = z.object({
-  content: z.string().min(1, "Note content is required"),
-});
 
 export default function CampaignDetailPageClient({
   campaignId,
@@ -45,7 +42,6 @@ export default function CampaignDetailPageClient({
   const addNote = useMutation(api.campaignNotes.addNote);
   const updateNote = useMutation(api.campaignNotes.updateNote);
   const createTradePlan = useMutation(api.tradePlans.createTradePlan);
-  const updateTradePlan = useMutation(api.tradePlans.updateTradePlan);
   const updateTradePlanStatus = useMutation(api.tradePlans.updateTradePlanStatus);
   const updateCampaign = useMutation(api.campaigns.updateCampaign);
   const updateCampaignStatus = useMutation(api.campaigns.updateCampaignStatus);
@@ -84,13 +80,6 @@ export default function CampaignDetailPageClient({
   const [thesisError, setThesisError] = useState<string | null>(null);
   const [thesisSaveState, setThesisSaveState] = useState<SaveState>("idle");
 
-  const [addNoteError, setAddNoteError] = useState<string | null>(null);
-  const [editNoteError, setEditNoteError] = useState<string | null>(null);
-  const [isAddingNote, setIsAddingNote] = useState(false);
-  const [editingNoteId, setEditingNoteId] = useState<Id<"campaignNotes"> | null>(null);
-  const [editingNoteContent, setEditingNoteContent] = useState("");
-  const [isSavingNote, setIsSavingNote] = useState(false);
-
   const [retrospective, setRetrospective] = useState("");
   const [retrospectiveInitialized, setRetrospectiveInitialized] = useState(false);
   const [retrospectiveError, setRetrospectiveError] = useState<string | null>(null);
@@ -98,22 +87,10 @@ export default function CampaignDetailPageClient({
 
   const [planName, setPlanName] = useState("");
   const [planInstrumentSymbol, setPlanInstrumentSymbol] = useState("");
-  const [planEntryConditions, setPlanEntryConditions] = useState("");
-  const [planExitConditions, setPlanExitConditions] = useState("");
-  const [planTargetConditions, setPlanTargetConditions] = useState("");
   const [tradePlanCreateError, setTradePlanCreateError] = useState<string | null>(null);
-  const [tradePlanEditError, setTradePlanEditError] = useState<string | null>(null);
   const [tradePlanStatusError, setTradePlanStatusError] = useState<string | null>(null);
   const [isCreatingPlan, setIsCreatingPlan] = useState(false);
   const [showCreateTradePlanForm, setShowCreateTradePlanForm] = useState(false);
-
-  const [editingPlanId, setEditingPlanId] = useState<Id<"tradePlans"> | null>(null);
-  const [editingPlanName, setEditingPlanName] = useState("");
-  const [editingPlanInstrumentSymbol, setEditingPlanInstrumentSymbol] = useState("");
-  const [editingPlanEntryConditions, setEditingPlanEntryConditions] = useState("");
-  const [editingPlanExitConditions, setEditingPlanExitConditions] = useState("");
-  const [editingPlanTargetConditions, setEditingPlanTargetConditions] = useState("");
-  const [isSavingPlan, setIsSavingPlan] = useState(false);
 
   useEffect(() => {
     if (campaign && !campaignNameInitialized) {
@@ -194,68 +171,6 @@ export default function CampaignDetailPageClient({
     }
   };
 
-  const handleAddNote = async (content: string) => {
-    await addNote({ campaignId, content });
-  };
-
-  const noteForm = useAppForm({
-    defaultValues: {
-      content: "",
-    },
-    validators: {
-      onChange: ({ value }) => {
-        const results = noteSchema.safeParse(value);
-        if (!results.success) {
-          return results.error.flatten().fieldErrors;
-        }
-        return undefined;
-      },
-    },
-    onSubmit: async ({ value, formApi }) => {
-      setAddNoteError(null);
-      setIsAddingNote(true);
-
-      try {
-        const parsed = noteSchema.parse(value);
-        await handleAddNote(parsed.content.trim());
-        formApi.reset();
-      } catch (error) {
-        setAddNoteError(error instanceof Error ? error.message : "Failed to add note");
-      } finally {
-        setIsAddingNote(false);
-      }
-    },
-  });
-
-  const startEditingNote = (note: Doc<"campaignNotes">) => {
-    setEditingNoteId(note._id);
-    setEditingNoteContent(note.content);
-    setEditNoteError(null);
-  };
-
-  const handleSaveNote = async () => {
-    if (!editingNoteId) {
-      return;
-    }
-    if (!editingNoteContent.trim()) {
-      setEditNoteError("Note content is required");
-      return;
-    }
-
-    setEditNoteError(null);
-    setIsSavingNote(true);
-
-    try {
-      await updateNote({ noteId: editingNoteId, content: editingNoteContent.trim() });
-      setEditingNoteId(null);
-      setEditingNoteContent("");
-    } catch (error) {
-      setEditNoteError(error instanceof Error ? error.message : "Failed to update note");
-    } finally {
-      setIsSavingNote(false);
-    }
-  };
-
   const handleSaveRetrospective = async () => {
     setRetrospectiveError(null);
     setRetrospectiveSaveState("saving");
@@ -288,18 +203,12 @@ export default function CampaignDetailPageClient({
     try {
       await createTradePlan({
         campaignId,
-        entryConditions: planEntryConditions.trim() || "Awaiting technical confirmation",
-        exitConditions: planExitConditions.trim() || "Invalidation or thesis breakdown",
         instrumentSymbol: planInstrumentSymbol.trim().toUpperCase(),
         name: planName.trim(),
-        targetConditions: planTargetConditions.trim() || "Take profit on thesis completion",
       });
 
       setPlanName("");
       setPlanInstrumentSymbol("");
-      setPlanEntryConditions("");
-      setPlanExitConditions("");
-      setPlanTargetConditions("");
       setShowCreateTradePlanForm(false);
     } catch (error) {
       setTradePlanCreateError(
@@ -307,48 +216,6 @@ export default function CampaignDetailPageClient({
       );
     } finally {
       setIsCreatingPlan(false);
-    }
-  };
-
-  const startEditingTradePlan = (plan: Doc<"tradePlans">) => {
-    setEditingPlanId(plan._id);
-    setEditingPlanName(plan.name);
-    setEditingPlanInstrumentSymbol(plan.instrumentSymbol);
-    setEditingPlanEntryConditions(plan.entryConditions);
-    setEditingPlanExitConditions(plan.exitConditions);
-    setEditingPlanTargetConditions(plan.targetConditions);
-    setTradePlanEditError(null);
-  };
-
-  const handleSaveTradePlan = async () => {
-    if (!editingPlanId) {
-      return;
-    }
-
-    if (!editingPlanName.trim() || !editingPlanInstrumentSymbol.trim()) {
-      setTradePlanEditError("Name and instrument symbol are required");
-      return;
-    }
-
-    setTradePlanEditError(null);
-    setIsSavingPlan(true);
-
-    try {
-      await updateTradePlan({
-        tradePlanId: editingPlanId,
-        name: editingPlanName.trim(),
-        instrumentSymbol: editingPlanInstrumentSymbol.trim().toUpperCase(),
-        entryConditions: editingPlanEntryConditions.trim(),
-        exitConditions: editingPlanExitConditions.trim(),
-        targetConditions: editingPlanTargetConditions.trim(),
-      });
-      setEditingPlanId(null);
-    } catch (error) {
-      setTradePlanEditError(
-        error instanceof Error ? error.message : "Failed to update trade plan",
-      );
-    } finally {
-      setIsSavingPlan(false);
     }
   };
 
@@ -380,7 +247,7 @@ export default function CampaignDetailPageClient({
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8">
       <Link href="/campaigns" className="mb-2 inline-block text-sm text-slate-11 hover:text-slate-12">
-        ← Back to Campaigns
+        &larr; Back to Campaigns
       </Link>
 
       <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
@@ -500,103 +367,15 @@ export default function CampaignDetailPageClient({
         </div>
       </section>
 
-      <section className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
-        <h2 className="mb-3 text-lg font-semibold text-slate-12">Notes</h2>
-
-        {campaignNotes.length === 0 ? (
-          <p className="mb-3 text-sm text-slate-11">No notes yet.</p>
-        ) : (
-          <div className="mb-4 space-y-2">
-            {campaignNotes.map((note) => {
-              const isEditing = editingNoteId === note._id;
-              return (
-                <div key={note._id} className="rounded border border-slate-600 p-3">
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <span className="text-xs text-slate-11">{formatDate(note._creationTime)}</span>
-                    {!isEditing && (
-                      <button
-                        type="button"
-                        aria-label="Edit note"
-                        title="Edit"
-                        className="rounded p-1.5 text-slate-11 hover:text-slate-12 hover:bg-slate-700"
-                        onClick={() => startEditingNote(note)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-
-                  {isEditing ? (
-                    <>
-                      <textarea
-                        className="min-h-24 w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
-                        value={editingNoteContent}
-                        onChange={(e) => setEditingNoteContent(e.target.value)}
-                      />
-                      <div className="mt-2 flex gap-2">
-                        <button
-                          type="button"
-                          aria-label="Save note"
-                          title="Save"
-                          className="rounded p-1.5 text-green-400 hover:bg-green-900/50 disabled:opacity-50"
-                          onClick={() => void handleSaveNote()}
-                          disabled={isSavingNote}
-                        >
-                          {isSavingNote ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                        </button>
-                        <button
-                          type="button"
-                          aria-label="Cancel editing"
-                          title="Cancel"
-                          className="rounded p-1.5 text-slate-11 hover:text-slate-12 hover:bg-slate-700"
-                          onClick={() => {
-                            setEditingNoteId(null);
-                            setEditingNoteContent("");
-                            setEditNoteError(null);
-                          }}
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                      {editNoteError && (
-                        <Alert variant="error" className="mt-2">
-                          {editNoteError}
-                        </Alert>
-                      )}
-                    </>
-                  ) : (
-                    <p className="whitespace-pre-wrap text-sm text-slate-11">{note.content}</p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {addNoteError && <Alert variant="error" className="mb-2">{addNoteError}</Alert>}
-
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            void noteForm.handleSubmit();
-          }}
-          className="space-y-2"
-        >
-          <noteForm.AppField name="content">
-            {(field) => (
-              <field.FieldTextarea
-                label="Add note"
-                placeholder="Add a note"
-                rows={4}
-              />
-            )}
-          </noteForm.AppField>
-          <noteForm.AppForm>
-            <noteForm.SubmitButton label={isAddingNote ? "Saving..." : "Add Note"} />
-          </noteForm.AppForm>
-        </form>
-      </section>
+      <NotesSection
+        notes={campaignNotes}
+        onAddNote={async (content) => {
+          await addNote({ campaignId, content });
+        }}
+        onUpdateNote={async (noteId, content) => {
+          await updateNote({ noteId: noteId as Id<"campaignNotes">, content });
+        }}
+      />
 
       <section className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
         <div className="mb-4 flex items-center justify-between">
@@ -621,136 +400,37 @@ export default function CampaignDetailPageClient({
           <p className="mb-4 text-sm text-slate-11">No trade plans yet.</p>
         ) : (
           <div className="mb-4 space-y-3">
-            {tradePlans.map((plan) => {
-              const isEditing = editingPlanId === plan._id;
-              return (
-                <div key={plan._id} className="rounded border border-slate-600 p-3">
-                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-[220px] flex-1">
-                      {isEditing ? (
-                        <input
-                          className="w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
-                          value={editingPlanName}
-                          onChange={(e) => setEditingPlanName(e.target.value)}
-                        />
-                      ) : (
-                        <p className="font-semibold text-slate-12">{plan.name}</p>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={plan.status}
-                        onChange={(e) =>
-                          void handleTradePlanStatusChange(
-                            plan._id,
-                            e.target.value as TradePlanStatus,
-                          )
-                        }
-                        className="h-8 rounded border border-slate-600 bg-slate-700 px-2 text-xs text-slate-12"
-                      >
-                        <option value="idea">Idea</option>
-                        <option value="watching">Watching</option>
-                        <option value="active">Active</option>
-                        <option value="closed">Closed</option>
-                      </select>
-
-                      {isEditing ? (
-                        <>
-                          <button
-                            type="button"
-                            aria-label="Save trade plan"
-                            title="Save"
-                            className="rounded p-1.5 text-green-400 hover:bg-green-900/50 disabled:opacity-50"
-                            onClick={() => void handleSaveTradePlan()}
-                            disabled={isSavingPlan}
-                          >
-                            {isSavingPlan ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                          </button>
-                          <button
-                            type="button"
-                            aria-label="Cancel editing"
-                            title="Cancel"
-                            className="rounded p-1.5 text-slate-11 hover:text-slate-12 hover:bg-slate-700"
-                            onClick={() => { setEditingPlanId(null); setTradePlanEditError(null); }}
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          type="button"
-                          aria-label="Edit trade plan"
-                          title="Edit"
-                          className="rounded p-1.5 text-slate-11 hover:text-slate-12 hover:bg-slate-700"
-                          onClick={() => startEditingTradePlan(plan)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {isEditing && tradePlanEditError && (
-                    <Alert variant="error" className="mb-2">{tradePlanEditError}</Alert>
-                  )}
-
-                  <div className="grid gap-2">
-                    <div>
-                      <p className="mb-1 text-xs text-slate-11">Instrument</p>
-                      {isEditing ? (
-                        <input
-                          className="w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
-                          value={editingPlanInstrumentSymbol}
-                          onChange={(e) => setEditingPlanInstrumentSymbol(e.target.value)}
-                        />
-                      ) : (
-                        <p className="text-sm text-slate-11">{plan.instrumentSymbol}</p>
-                      )}
-                    </div>
-
-                    <div>
-                      <p className="mb-1 text-xs text-slate-11">Entry conditions</p>
-                      {isEditing ? (
-                        <textarea
-                          className="min-h-20 w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
-                          value={editingPlanEntryConditions}
-                          onChange={(e) => setEditingPlanEntryConditions(e.target.value)}
-                        />
-                      ) : (
-                        <p className="text-sm text-slate-11">{plan.entryConditions}</p>
-                      )}
-                    </div>
-
-                    <div>
-                      <p className="mb-1 text-xs text-slate-11">Exit conditions</p>
-                      {isEditing ? (
-                        <textarea
-                          className="min-h-20 w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
-                          value={editingPlanExitConditions}
-                          onChange={(e) => setEditingPlanExitConditions(e.target.value)}
-                        />
-                      ) : (
-                        <p className="text-sm text-slate-11">{plan.exitConditions}</p>
-                      )}
-                    </div>
-
-                    <div>
-                      <p className="mb-1 text-xs text-slate-11">Target conditions</p>
-                      {isEditing ? (
-                        <textarea
-                          className="min-h-20 w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
-                          value={editingPlanTargetConditions}
-                          onChange={(e) => setEditingPlanTargetConditions(e.target.value)}
-                        />
-                      ) : (
-                        <p className="text-sm text-slate-11">{plan.targetConditions}</p>
-                      )}
-                    </div>
+            {tradePlans.map((plan) => (
+              <div key={plan._id} className="rounded border border-slate-600 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Link
+                    href={`/trade-plans/${plan._id}`}
+                    className="flex-1 hover:underline"
+                  >
+                    <p className="font-semibold text-slate-12">{plan.name}</p>
+                    <p className="text-sm text-slate-11">{plan.instrumentSymbol}</p>
+                  </Link>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={plan.status}
+                      onChange={(e) =>
+                        void handleTradePlanStatusChange(
+                          plan._id,
+                          e.target.value as TradePlanStatus,
+                        )
+                      }
+                      className="h-8 rounded border border-slate-600 bg-slate-700 px-2 text-xs text-slate-12"
+                    >
+                      <option value="idea">Idea</option>
+                      <option value="watching">Watching</option>
+                      <option value="active">Active</option>
+                      <option value="closed">Closed</option>
+                    </select>
+                    <Badge variant="neutral">{plan.status}</Badge>
                   </div>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         )}
 
@@ -760,55 +440,37 @@ export default function CampaignDetailPageClient({
               <Alert variant="error" className="mb-2">{tradePlanCreateError}</Alert>
             )}
             <form className="grid gap-2 rounded border border-slate-700 p-3" onSubmit={handleCreateTradePlan}>
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
-                placeholder="Trade plan name"
-                value={planName}
-                onChange={(e) => setPlanName(e.target.value)}
-              />
-              <input
-                className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
-                placeholder="Instrument symbol"
-                value={planInstrumentSymbol}
-                onChange={(e) => setPlanInstrumentSymbol(e.target.value)}
-              />
-            </div>
-            <textarea
-              className="min-h-20 rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
-              placeholder="Entry conditions"
-              value={planEntryConditions}
-              onChange={(e) => setPlanEntryConditions(e.target.value)}
-            />
-            <textarea
-              className="min-h-20 rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
-              placeholder="Exit conditions"
-              value={planExitConditions}
-              onChange={(e) => setPlanExitConditions(e.target.value)}
-            />
-            <textarea
-              className="min-h-20 rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
-              placeholder="Target conditions"
-              value={planTargetConditions}
-              onChange={(e) => setPlanTargetConditions(e.target.value)}
-            />
-            <div className="flex items-center gap-2">
-              <button
-                className="rounded bg-blue-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-600"
-                type="submit"
-                disabled={isCreatingPlan}
-              >
-                {isCreatingPlan ? "Creating..." : "Save Trade Plan"}
-              </button>
-              <button
-                type="button"
-                className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-700"
-                onClick={() => { setShowCreateTradePlanForm(false); setTradePlanCreateError(null); }}
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
+                  placeholder="Trade plan name"
+                  value={planName}
+                  onChange={(e) => setPlanName(e.target.value)}
+                />
+                <input
+                  className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
+                  placeholder="Instrument symbol"
+                  value={planInstrumentSymbol}
+                  onChange={(e) => setPlanInstrumentSymbol(e.target.value)}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  className="rounded bg-blue-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-600"
+                  type="submit"
+                  disabled={isCreatingPlan}
+                >
+                  {isCreatingPlan ? "Creating..." : "Save Trade Plan"}
+                </button>
+                <button
+                  type="button"
+                  className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-700"
+                  onClick={() => { setShowCreateTradePlanForm(false); setTradePlanCreateError(null); }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </>
         )}
       </section>
@@ -890,17 +552,17 @@ export default function CampaignDetailPageClient({
                     <td className="px-2 py-2 text-slate-11">{new Date(trade.date).toLocaleDateString("en-US")}</td>
                     <td className="px-2 py-2 text-slate-12">{trade.ticker}</td>
                     <td className="px-2 py-2 text-slate-11">
-                      {trade.brokerageAccountId ? accountNameByAccountId.get(trade.brokerageAccountId) ?? trade.brokerageAccountId : "—"}
+                      {trade.brokerageAccountId ? accountNameByAccountId.get(trade.brokerageAccountId) ?? trade.brokerageAccountId : "\u2014"}
                     </td>
                     <td className="px-2 py-2 text-slate-11">
-                      {trade.tradePlanId ? tradePlanNameById.get(trade.tradePlanId) ?? "—" : "—"}
+                      {trade.tradePlanId ? tradePlanNameById.get(trade.tradePlanId) ?? "\u2014" : "\u2014"}
                     </td>
                     <td className="px-2 py-2 text-slate-11">{trade.side}</td>
                     <td className="px-2 py-2 text-slate-11">{trade.quantity}</td>
                     <td className="px-2 py-2 text-slate-11">{formatCurrency(trade.price)}</td>
                     <td className="px-2 py-2">
                       {trade.realizedPL === null ? (
-                        <span className="text-slate-11">—</span>
+                        <span className="text-slate-11">{"\u2014"}</span>
                       ) : (
                         <span className={trade.realizedPL >= 0 ? "text-green-400" : "text-red-400"}>
                           {trade.realizedPL >= 0 ? "+" : ""}
