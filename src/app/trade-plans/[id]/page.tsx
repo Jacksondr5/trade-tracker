@@ -16,7 +16,7 @@ export default async function TradePlanDetailPage({
   const [preloadedTradePlan, preloadedNotes, preloadedAllTrades, preloadedAccountMappings] =
     await Promise.all([
       preloadQuery(api.tradePlans.getTradePlan, { tradePlanId }, { token }),
-      preloadQuery(api.tradePlanNotes.getNotesByTradePlan, { tradePlanId }, { token }),
+      preloadQuery(api.notes.getNotesByTradePlan, { tradePlanId }, { token }),
       preloadQuery(api.trades.listTrades, {}, { token }),
       preloadQuery(api.accountMappings.listAccountMappings, {}, { token }),
     ]);

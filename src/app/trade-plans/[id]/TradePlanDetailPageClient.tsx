@@ -22,7 +22,7 @@ export default function TradePlanDetailPageClient({
 }: {
   tradePlanId: Id<"tradePlans">;
   preloadedTradePlan: Preloaded<typeof api.tradePlans.getTradePlan>;
-  preloadedNotes: Preloaded<typeof api.tradePlanNotes.getNotesByTradePlan>;
+  preloadedNotes: Preloaded<typeof api.notes.getNotesByTradePlan>;
   preloadedAllTrades: Preloaded<typeof api.trades.listTrades>;
   preloadedAccountMappings: Preloaded<typeof api.accountMappings.listAccountMappings>;
 }) {
@@ -31,8 +31,8 @@ export default function TradePlanDetailPageClient({
   const allTrades = usePreloadedQuery(preloadedAllTrades);
   const accountMappings = usePreloadedQuery(preloadedAccountMappings);
 
-  const addNote = useMutation(api.tradePlanNotes.addNote);
-  const updateNoteM = useMutation(api.tradePlanNotes.updateNote);
+  const addNote = useMutation(api.notes.addNote);
+  const updateNoteM = useMutation(api.notes.updateNote);
   const updateTradePlan = useMutation(api.tradePlans.updateTradePlan);
   const updateTradePlanStatus = useMutation(api.tradePlans.updateTradePlanStatus);
 
@@ -264,11 +264,11 @@ export default function TradePlanDetailPageClient({
 
       <NotesSection
         notes={notes}
-        onAddNote={async (content) => {
-          await addNote({ tradePlanId, content });
+        onAddNote={async (content, chartUrls) => {
+          await addNote({ tradePlanId, content, chartUrls });
         }}
-        onUpdateNote={async (noteId, content) => {
-          await updateNoteM({ noteId: noteId as Id<"tradePlanNotes">, content });
+        onUpdateNote={async (noteId, content, chartUrls) => {
+          await updateNoteM({ noteId: noteId as Id<"notes">, content, chartUrls });
         }}
       />
 

@@ -19,6 +19,19 @@ export default defineSchema({
     ownerId: v.string(),
   }).index("by_owner", ["ownerId"]),
 
+  notes: defineTable({
+    campaignId: v.optional(v.id("campaigns")),
+    chartUrls: v.optional(v.array(v.string())),
+    content: v.string(),
+    ownerId: v.string(),
+    tradeId: v.optional(v.id("trades")),
+    tradePlanId: v.optional(v.id("tradePlans")),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_campaignId", ["ownerId", "campaignId"])
+    .index("by_owner_tradePlanId", ["ownerId", "tradePlanId"])
+    .index("by_owner_tradeId", ["ownerId", "tradeId"]),
+
   campaigns: defineTable({
     closedAt: v.optional(v.number()),
     name: v.string(),

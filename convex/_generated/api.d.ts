@@ -17,6 +17,8 @@ import type * as imports from "../imports.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_plCalculation from "../lib/plCalculation.js";
 import type * as migrations_tradePlanNotesMigration from "../migrations/tradePlanNotesMigration.js";
+import type * as migrations_unifiedNotesMigration from "../migrations/unifiedNotesMigration.js";
+import type * as notes from "../notes.js";
 import type * as portfolios from "../portfolios.js";
 import type * as positions from "../positions.js";
 import type * as tradePlanNotes from "../tradePlanNotes.js";
@@ -39,6 +41,8 @@ declare const fullApi: ApiFromModules<{
   "lib/auth": typeof lib_auth;
   "lib/plCalculation": typeof lib_plCalculation;
   "migrations/tradePlanNotesMigration": typeof migrations_tradePlanNotesMigration;
+  "migrations/unifiedNotesMigration": typeof migrations_unifiedNotesMigration;
+  notes: typeof notes;
   portfolios: typeof portfolios;
   positions: typeof positions;
   tradePlanNotes: typeof tradePlanNotes;
