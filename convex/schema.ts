@@ -8,6 +8,12 @@ export default defineSchema({
     ownerId: v.string(),
   }).index("by_owner_campaignId", ["ownerId", "campaignId"]),
 
+  tradePlanNotes: defineTable({
+    content: v.string(),
+    ownerId: v.string(),
+    tradePlanId: v.id("tradePlans"),
+  }).index("by_owner_tradePlanId", ["ownerId", "tradePlanId"]),
+
   generalNotes: defineTable({
     content: v.string(),
     ownerId: v.string(),
@@ -44,8 +50,8 @@ export default defineSchema({
   tradePlans: defineTable({
     campaignId: v.optional(v.id("campaigns")),
     closedAt: v.optional(v.number()),
-    entryConditions: v.string(),
-    exitConditions: v.string(),
+    entryConditions: v.optional(v.string()),
+    exitConditions: v.optional(v.string()),
     instrumentNotes: v.optional(v.string()),
     instrumentSymbol: v.string(),
     instrumentType: v.optional(v.string()),
@@ -60,7 +66,7 @@ export default defineSchema({
       v.literal("idea"),
       v.literal("watching"),
     ),
-    targetConditions: v.string(),
+    targetConditions: v.optional(v.string()),
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_status", ["ownerId", "status"])
