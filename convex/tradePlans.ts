@@ -284,7 +284,7 @@ export const listOpenTradePlans = query({
     ]);
 
     return [...activePlans, ...ideaPlans, ...watchingPlans].sort(
-      (a, b) => b._creationTime - a._creationTime,
+      sortTradePlansByOrderThenNewest,
     );
   },
 });

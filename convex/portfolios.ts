@@ -76,21 +76,6 @@ export const listPortfolios = query({
   },
 });
 
-export const getPortfolio = query({
-  args: {
-    portfolioId: v.id("portfolios"),
-  },
-  returns: v.union(portfolioValidator, v.null()),
-  handler: async (ctx, args) => {
-    const ownerId = await requireUser(ctx);
-    const portfolio = await ctx.db.get(args.portfolioId);
-    if (!portfolio || portfolio.ownerId !== ownerId) {
-      return null;
-    }
-    return portfolio;
-  },
-});
-
 export const updatePortfolio = mutation({
   args: {
     portfolioId: v.id("portfolios"),
