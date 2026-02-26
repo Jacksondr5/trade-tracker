@@ -38,7 +38,6 @@ export const getPositions = query({
       string,
       {
         direction: "long" | "short";
-        entries: Array<{ price: number; quantity: number }>;
         netQuantity: number;
         ticker: string;
         totalEntryCost: number;
@@ -52,7 +51,6 @@ export const getPositions = query({
       if (!positionMap.has(key)) {
         positionMap.set(key, {
           direction: trade.direction,
-          entries: [],
           netQuantity: 0,
           ticker: trade.ticker,
           totalEntryCost: 0,
@@ -74,7 +72,6 @@ export const getPositions = query({
         position.netQuantity += trade.quantity;
         position.totalEntryCost += trade.price * trade.quantity;
         position.totalEntryQuantity += trade.quantity;
-        position.entries.push({ price: trade.price, quantity: trade.quantity });
       } else {
         // Closing trade - reduce position
         position.netQuantity -= trade.quantity;

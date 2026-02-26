@@ -33,14 +33,6 @@ export default defineSchema({
     ownerId: v.string(),
   }).index("by_owner", ["ownerId"]),
 
-  portfolioSnapshots: defineTable({
-    ownerId: v.string(),
-    recordedAt: v.number(),
-    value: v.number(),
-  })
-    .index("by_owner", ["ownerId"])
-    .index("by_owner_recordedAt", ["ownerId", "recordedAt"]),
-
   tradePlans: defineTable({
     campaignId: v.optional(v.id("campaigns")),
     closedAt: v.optional(v.number()),
@@ -99,10 +91,7 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_date", ["ownerId", "date"])
-    .index("by_owner_externalId", ["ownerId", "externalId"])
-    .index("by_owner_portfolioId", ["ownerId", "portfolioId"])
-    .index("by_owner_ticker", ["ownerId", "ticker"])
-    .index("by_owner_tradePlanId", ["ownerId", "tradePlanId"]),
+    .index("by_owner_portfolioId", ["ownerId", "portfolioId"]),
 
   inboxTrades: defineTable({
     assetType: v.optional(v.union(v.literal("crypto"), v.literal("stock"))),
