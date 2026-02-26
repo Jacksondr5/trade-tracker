@@ -13,6 +13,9 @@ const config = [
       "**/out-tsc",
       "**/next-env.d.ts",
     ],
+  },
+  {
+    files: ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx", "**/*.mjs", "**/*.cjs"],
     rules: {
       "react-hooks/set-state-in-effect": "off",
     },
