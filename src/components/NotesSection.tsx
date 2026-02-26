@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { z } from "zod";
-import { Alert, Dialog, DialogContent, useAppForm } from "~/components/ui";
+import { Alert, Dialog, DialogContent, DialogTitle, useAppForm } from "~/components/ui";
 import { formatDate } from "~/lib/format";
 
 const noteSchema = z.object({
@@ -349,6 +349,9 @@ function ChartLightbox({
         className="flex max-h-[95dvh] max-w-[95dvw] items-center justify-center border-none bg-transparent p-0 shadow-none [&>button:last-child]:top-2 [&>button:last-child]:right-2 [&>button:last-child]:rounded-full [&>button:last-child]:bg-slate-900/80 [&>button:last-child]:p-2 [&>button:last-child]:opacity-100"
         onKeyDown={handleKeyDown}
       >
+        <DialogTitle className="sr-only">
+          Chart {index + 1} of {urls.length}
+        </DialogTitle>
         {urls.length > 1 && index > 0 && (
           <button
             type="button"
