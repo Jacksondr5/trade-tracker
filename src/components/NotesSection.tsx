@@ -299,7 +299,7 @@ function ChartCarousel({ urls }: { urls: string[] }) {
             <button
               key={i}
               type="button"
-              className="flex-none cursor-pointer"
+              className="flex-none cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-11 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
               onClick={() => setLightboxIndex(i)}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -443,7 +443,7 @@ function ChartUrlInputs({
           {url.trim() && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={url}
+              src={url.trim()}
               alt={`Chart preview ${i + 1}`}
               className="max-h-48 rounded border border-slate-600"
               onError={(e) => {
