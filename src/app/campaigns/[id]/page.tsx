@@ -16,7 +16,7 @@ export default async function CampaignDetailPage({
   const [preloadedCampaign, preloadedCampaignNotes, preloadedTradePlans, preloadedAllTrades, preloadedCampaignPL, preloadedAccountMappings] =
     await Promise.all([
       preloadQuery(api.campaigns.getCampaign, { campaignId }, { token }),
-      preloadQuery(api.campaignNotes.getNotesByCampaign, { campaignId }, { token }),
+      preloadQuery(api.notes.getNotesByCampaign, { campaignId }, { token }),
       preloadQuery(api.tradePlans.listTradePlansByCampaign, { campaignId }, { token }),
       preloadQuery(api.trades.listTrades, {}, { token }),
       preloadQuery(api.campaigns.getCampaignPL, { campaignId }, { token }),

@@ -28,7 +28,7 @@ export default function CampaignDetailPageClient({
   preloadedAccountMappings: Preloaded<typeof api.accountMappings.listAccountMappings>;
   preloadedAllTrades: Preloaded<typeof api.trades.listTrades>;
   preloadedCampaign: Preloaded<typeof api.campaigns.getCampaign>;
-  preloadedCampaignNotes: Preloaded<typeof api.campaignNotes.getNotesByCampaign>;
+  preloadedCampaignNotes: Preloaded<typeof api.notes.getNotesByCampaign>;
   preloadedCampaignPL: Preloaded<typeof api.campaigns.getCampaignPL>;
   preloadedTradePlans: Preloaded<typeof api.tradePlans.listTradePlansByCampaign>;
 }) {
@@ -39,8 +39,8 @@ export default function CampaignDetailPageClient({
   const allTrades = usePreloadedQuery(preloadedAllTrades);
   const campaignPL = usePreloadedQuery(preloadedCampaignPL);
 
-  const addNote = useMutation(api.campaignNotes.addNote);
-  const updateNote = useMutation(api.campaignNotes.updateNote);
+  const addNote = useMutation(api.notes.addNote);
+  const updateNote = useMutation(api.notes.updateNote);
   const createTradePlan = useMutation(api.tradePlans.createTradePlan);
   const updateTradePlanStatus = useMutation(api.tradePlans.updateTradePlanStatus);
   const updateCampaign = useMutation(api.campaigns.updateCampaign);
@@ -369,11 +369,11 @@ export default function CampaignDetailPageClient({
 
       <NotesSection
         notes={campaignNotes}
-        onAddNote={async (content) => {
-          await addNote({ campaignId, content });
+        onAddNote={async (content, chartUrls) => {
+          await addNote({ campaignId, content, chartUrls });
         }}
-        onUpdateNote={async (noteId, content) => {
-          await updateNote({ noteId: noteId as Id<"campaignNotes">, content });
+        onUpdateNote={async (noteId, content, chartUrls) => {
+          await updateNote({ noteId: noteId as Id<"notes">, content, chartUrls });
         }}
       />
 
