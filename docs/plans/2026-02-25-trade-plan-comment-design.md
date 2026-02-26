@@ -46,6 +46,7 @@ New `convex/migrations/tradePlanNotesMigration.ts` — one-time migration runnab
   Exit Conditions: <value>
   Target Conditions: <value>
   Instrument Notes: <value>   (if present)
+  Rationale: <value>          (if present)
   ```
 
 **Trade plan detail page:**

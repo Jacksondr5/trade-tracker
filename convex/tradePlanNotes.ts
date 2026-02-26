@@ -90,6 +90,7 @@ export const getNotesByTradePlan = query({
       .withIndex("by_owner_tradePlanId", (q) =>
         q.eq("ownerId", ownerId).eq("tradePlanId", args.tradePlanId),
       )
+      .order("asc")
       .collect();
   },
 });
