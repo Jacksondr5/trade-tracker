@@ -1,8 +1,19 @@
+import { v } from "convex/values";
 import { internalMutation } from "../_generated/server";
 
 export const migrate = internalMutation({
   args: {},
+  returns: v.object({
+    migrated: v.number(),
+    skipped: v.boolean(),
+  }),
   handler: async (ctx) => {
+    const existingNotes = await ctx.db.query("notes").take(1);
+    if (existingNotes.length > 0) {
+      console.log("Unified notes migration skipped: notes table already populated");
+      return { migrated: 0, skipped: true };
+    }
+
     let migrated = 0;
 
     // Migrate campaign notes
@@ -61,5 +72,6 @@ export const migrate = internalMutation({
     migrated += tradeCount;
 
     console.log(`Total migrated: ${migrated} notes`);
+    return { migrated, skipped: false };
   },
 });

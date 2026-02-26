@@ -14,6 +14,8 @@
 
 ---
 
+## Tasks
+
 ### Task 1: Add `notes` table to schema
 
 **Files:**

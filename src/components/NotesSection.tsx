@@ -16,7 +16,7 @@ import { Alert, Dialog, DialogContent, DialogTitle, useAppForm } from "~/compone
 import { formatDate } from "~/lib/format";
 
 const noteSchema = z.object({
-  content: z.string().min(1, "Note content is required"),
+  content: z.string().trim().min(1, "Note content is required"),
 });
 
 interface Note {
@@ -69,8 +69,8 @@ export default function NotesSection({
 
       try {
         const parsed = noteSchema.parse(value);
-        const urls = newChartUrls.filter((u) => u.trim());
-        await onAddNote(parsed.content.trim(), urls.length > 0 ? urls : undefined);
+        const urls = normalizeUrls(newChartUrls);
+        await onAddNote(parsed.content, urls.length > 0 ? urls : undefined);
         formApi.reset();
         setNewChartUrls([]);
       } catch (error) {
@@ -82,6 +82,9 @@ export default function NotesSection({
       }
     },
   });
+
+  const normalizeUrls = (urls: string[]) =>
+    urls.map((u) => u.trim()).filter(Boolean);
 
   const startEditingNote = (note: Note) => {
     setEditingNoteId(note._id);
@@ -101,7 +104,7 @@ export default function NotesSection({
     setIsSavingNote(true);
 
     try {
-      const urls = editingChartUrls.filter((u) => u.trim());
+      const urls = normalizeUrls(editingChartUrls);
       await onUpdateNote(
         editingNoteId,
         editingNoteContent.trim(),
@@ -421,6 +424,7 @@ function ChartUrlInputs({
           <div className="flex gap-2">
             <input
               type="url"
+              aria-label={`Chart URL ${i + 1}`}
               className="flex-1 rounded border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm text-slate-12 placeholder:text-slate-11"
               placeholder="Chart image URL"
               value={url}
