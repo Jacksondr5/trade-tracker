@@ -85,14 +85,11 @@ export const getNotesByTradePlan = query({
       return [];
     }
 
-    const notes = await ctx.db
+    return await ctx.db
       .query("tradePlanNotes")
       .withIndex("by_owner_tradePlanId", (q) =>
         q.eq("ownerId", ownerId).eq("tradePlanId", args.tradePlanId),
       )
       .collect();
-
-    // Sort by _creationTime ascending (oldest first) for chronological display
-    return notes.sort((a, b) => a._creationTime - b._creationTime);
   },
 });

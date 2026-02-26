@@ -57,7 +57,7 @@ Layout (matches campaign detail page pattern):
 1. **Header** — Back link to `/trade-plans`, plan name
 2. **Plan Info Card** — Editable name, symbol, status dropdown, campaign link (if linked), closed date (if closed)
 3. **Notes Section** — Chronological list with inline edit, add note form at bottom
-4. **Trades Section** — Table of trades linked to this plan (date, ticker, account, side, qty, price, P&L). "Add Trade" link.
+4. **Trades Section** — Table of trades linked to this plan (date, ticker, account, side, qty, price, P&L). "Add Trade" link. Trades without a `tradePlanId` remain valid (campaigns are strategic, trade plans are tactical) and simply do not appear in this table.
 
 **Shared notes component:**
 
