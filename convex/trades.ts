@@ -236,3 +236,32 @@ export const listTradesPage = query({
       .paginate(paginationOpts);
   },
 });
+
+export const listTradesByTradePlan = query({
+  args: {
+    tradePlanId: v.id("tradePlans"),
+  },
+  returns: v.array(tradeWithPLValidator),
+  handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const tradePlan = await ctx.db.get(args.tradePlanId);
+    if (!tradePlan || tradePlan.ownerId !== ownerId) {
+      return [];
+    }
+
+    const trades = await ctx.db
+      .query("trades")
+      .withIndex("by_owner_tradePlanId", (q) =>
+        q.eq("ownerId", ownerId).eq("tradePlanId", args.tradePlanId),
+      )
+      .collect();
+    const plMap = calculateTradesPL(trades);
+
+    return [...trades]
+      .sort((a, b) => b.date - a.date)
+      .map((trade) => ({
+        ...trade,
+        realizedPL: plMap.get(trade._id) ?? null,
+      }));
+  },
+});

@@ -289,6 +289,21 @@ export const listOpenTradePlans = query({
   },
 });
 
+export const getTradePlan = query({
+  args: {
+    tradePlanId: v.id("tradePlans"),
+  },
+  returns: v.union(tradePlanValidator, v.null()),
+  handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const tradePlan = await ctx.db.get(args.tradePlanId);
+    if (!tradePlan || tradePlan.ownerId !== ownerId) {
+      return null;
+    }
+    return tradePlan;
+  },
+});
+
 export const listTradePlansByCampaign = query({
   args: {
     campaignId: v.id("campaigns"),
