@@ -87,6 +87,7 @@ export const createTradePlan = mutation({
 
     return await ctx.db.insert("tradePlans", {
       campaignId: args.campaignId,
+      closedAt: status === "closed" ? Date.now() : undefined,
       instrumentSymbol: args.instrumentSymbol.trim().toUpperCase(),
       name: args.name,
       ownerId,

@@ -11,6 +11,15 @@ const tradePlanNoteValidator = v.object({
   tradePlanId: v.id("tradePlans"),
 });
 
+function normalizeNoteContent(content: string): string {
+  const normalized = content.trim();
+  if (!normalized) {
+    throw new Error("Note content cannot be empty");
+  }
+
+  return normalized;
+}
+
 /**
  * Add a new note to a trade plan.
  */
@@ -22,7 +31,8 @@ export const addNote = mutation({
   returns: v.id("tradePlanNotes"),
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
-    const { content, tradePlanId } = args;
+    const { tradePlanId } = args;
+    const content = normalizeNoteContent(args.content);
 
     // Verify trade plan exists
     const tradePlan = await ctx.db.get(tradePlanId);
@@ -53,7 +63,7 @@ export const updateNote = mutation({
     assertOwner(note, ownerId, "Note not found");
 
     await ctx.db.patch(args.noteId, {
-      content: args.content,
+      content: normalizeNoteContent(args.content),
     });
 
     return null;
