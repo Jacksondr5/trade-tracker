@@ -7,7 +7,7 @@ import { Alert, useAppForm } from "~/components/ui";
 import { formatDate } from "~/lib/format";
 
 const noteSchema = z.object({
-  content: z.string().min(1, "Note content is required"),
+  content: z.string().trim().min(1, "Note content is required"),
 });
 
 interface NotesSectionProps {
@@ -43,7 +43,7 @@ export default function NotesSection({ notes, onAddNote, onUpdateNote }: NotesSe
 
       try {
         const parsed = noteSchema.parse(value);
-        await onAddNote(parsed.content.trim());
+        await onAddNote(parsed.content);
         formApi.reset();
       } catch (error) {
         setAddNoteError(error instanceof Error ? error.message : "Failed to add note");
@@ -109,7 +109,11 @@ export default function NotesSection({ notes, onAddNote, onUpdateNote }: NotesSe
 
                 {isEditing ? (
                   <>
+                    <label htmlFor={`edit-note-${note._id}`} className="sr-only">
+                      Edit note content
+                    </label>
                     <textarea
+                      id={`edit-note-${note._id}`}
                       className="min-h-24 w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
                       value={editingNoteContent}
                       onChange={(e) => setEditingNoteContent(e.target.value)}
@@ -140,7 +144,7 @@ export default function NotesSection({ notes, onAddNote, onUpdateNote }: NotesSe
                       </button>
                     </div>
                     {editNoteError && (
-                      <Alert variant="error" className="mt-2">
+                      <Alert variant="error" className="mt-2" onDismiss={() => setEditNoteError(null)}>
                         {editNoteError}
                       </Alert>
                     )}
@@ -154,7 +158,11 @@ export default function NotesSection({ notes, onAddNote, onUpdateNote }: NotesSe
         </div>
       )}
 
-      {addNoteError && <Alert variant="error" className="mb-2">{addNoteError}</Alert>}
+      {addNoteError && (
+        <Alert variant="error" className="mb-2" onDismiss={() => setAddNoteError(null)}>
+          {addNoteError}
+        </Alert>
+      )}
 
       <form
         onSubmit={(e) => {

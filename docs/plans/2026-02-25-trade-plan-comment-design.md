@@ -41,7 +41,7 @@ New `convex/migrations/tradePlanNotesMigration.ts` — one-time migration runnab
 
 - Iterates all existing trade plans
 - For each plan with non-empty conditions, creates a `tradePlanNotes` entry combining:
-  ```
+  ```text
   Entry Conditions: <value>
   Exit Conditions: <value>
   Target Conditions: <value>

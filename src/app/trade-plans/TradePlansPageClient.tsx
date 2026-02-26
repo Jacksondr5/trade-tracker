@@ -67,7 +67,7 @@ export default function TradePlansPageClient({
       <section className="mb-8 rounded-lg border border-slate-700 bg-slate-800 p-4">
         <h2 className="mb-4 text-lg font-semibold text-slate-12">Create Standalone Plan</h2>
         {error && (
-          <Alert variant="error" className="mb-3">
+          <Alert variant="error" className="mb-3" onDismiss={() => setError(null)}>
             {error}
           </Alert>
         )}
@@ -105,24 +105,22 @@ export default function TradePlansPageClient({
         ) : (
           <div className="space-y-3">
             {standalonePlans.map((plan) => (
-              <Link
+              <div
                 key={plan._id}
-                href={`/trade-plans/${plan._id}`}
-                className="block rounded border border-slate-600 p-3 hover:border-slate-500"
+                className="rounded border border-slate-600 p-3 hover:border-slate-500"
               >
                 <div className="flex items-center justify-between gap-3">
-                  <div>
+                  <Link href={`/trade-plans/${plan._id}`} className="min-w-0 flex-1 hover:underline">
                     <p className="font-semibold text-slate-12">{plan.name}</p>
                     <p className="text-sm text-slate-11">{plan.instrumentSymbol}</p>
-                  </div>
+                  </Link>
                   <div className="flex items-center gap-2">
                     <Badge variant="neutral">{plan.status}</Badge>
                     {plan.status !== "closed" && (
                       <Button
                         dataTestId={`close-plan-${plan._id}`}
                         variant="secondary"
-                        onClick={(e) => {
-                          e.preventDefault();
+                        onClick={() => {
                           void handleClosePlan(plan._id);
                         }}
                       >
@@ -131,7 +129,7 @@ export default function TradePlansPageClient({
                     )}
                   </div>
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         )}
