@@ -276,7 +276,7 @@ function ChartCarousel({ urls }: { urls: string[] }) {
             <button
               type="button"
               aria-label="Scroll charts left"
-              className="absolute left-0 top-1/2 z-10 -translate-y-1/2 rounded-full bg-slate-900/80 p-1 text-slate-11 opacity-0 transition-opacity hover:text-slate-12 group-hover/carousel:opacity-100"
+              className="absolute left-0 top-1/2 z-10 -translate-y-1/2 rounded-full bg-slate-900/80 p-1 text-slate-11 opacity-0 transition-opacity hover:text-slate-12 group-hover/carousel:opacity-100 focus:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-11 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
               onClick={() => scroll("left")}
             >
               <ChevronLeft className="h-4 w-4" />
@@ -284,7 +284,7 @@ function ChartCarousel({ urls }: { urls: string[] }) {
             <button
               type="button"
               aria-label="Scroll charts right"
-              className="absolute right-0 top-1/2 z-10 -translate-y-1/2 rounded-full bg-slate-900/80 p-1 text-slate-11 opacity-0 transition-opacity hover:text-slate-12 group-hover/carousel:opacity-100"
+              className="absolute right-0 top-1/2 z-10 -translate-y-1/2 rounded-full bg-slate-900/80 p-1 text-slate-11 opacity-0 transition-opacity hover:text-slate-12 group-hover/carousel:opacity-100 focus:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-11 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
               onClick={() => scroll("right")}
             >
               <ChevronRight className="h-4 w-4" />
