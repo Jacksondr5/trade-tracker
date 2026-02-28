@@ -1,4 +1,5 @@
-import { Check, Pencil, Trash2 } from "lucide-react";
+import { Check, Pencil, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import {
   KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME,
@@ -20,6 +21,9 @@ interface PortfolioOption {
 
 interface InboxTableProps {
   accountLabelByKey: Map<string, string>;
+  campaigns:
+    | Array<{ _id: Id<"campaigns">; name: string; status: string }>
+    | undefined;
   editingTradeId: Id<"inboxTrades"> | null;
   inlineNotes: Record<string, string>;
   inlinePortfolioIds: Record<string, string>;
@@ -29,7 +33,10 @@ interface InboxTableProps {
   onDelete: (inboxTradeId: Id<"inboxTrades">) => void;
   onEdit: (trade: InboxTrade) => void;
   onInlineNotesBlur: (inboxTradeId: Id<"inboxTrades">, value: string) => void;
-  onInlineNotesChange: (inboxTradeId: Id<"inboxTrades">, value: string) => void;
+  onInlineNotesChange: (
+    inboxTradeId: Id<"inboxTrades">,
+    value: string,
+  ) => void;
   onInlinePortfolioChange: (
     inboxTradeId: Id<"inboxTrades">,
     value: string,
@@ -38,12 +45,21 @@ interface InboxTableProps {
     inboxTradeId: Id<"inboxTrades">,
     value: string,
   ) => void;
+  onQuickCreateTradePlan: (
+    inboxTradeId: Id<"inboxTrades">,
+    args: {
+      name: string;
+      instrumentSymbol: string;
+      campaignId?: Id<"campaigns">;
+    },
+  ) => Promise<void>;
   openTradePlans: OpenTradePlanOption[] | undefined;
   portfolios: PortfolioOption[] | undefined;
 }
 
 export function InboxTable({
   accountLabelByKey,
+  campaigns,
   editingTradeId,
   inlineNotes,
   inlinePortfolioIds,
@@ -56,9 +72,16 @@ export function InboxTable({
   onInlineNotesChange,
   onInlinePortfolioChange,
   onInlineTradePlanChange,
+  onQuickCreateTradePlan,
   openTradePlans,
   portfolios,
 }: InboxTableProps) {
+  const [quickCreateTradeId, setQuickCreateTradeId] =
+    useState<Id<"inboxTrades"> | null>(null);
+  const [quickCreateName, setQuickCreateName] = useState("");
+  const [quickCreateInstrument, setQuickCreateInstrument] = useState("");
+  const [quickCreateCampaignId, setQuickCreateCampaignId] = useState("");
+
   if (inboxTrades === undefined) {
     return <div className="text-slate-11">Loading...</div>;
   }
@@ -206,56 +229,141 @@ export function InboxTable({
                     : "---"}
                 </td>
                 <td className="px-4 py-3 text-sm">
-                  <select
-                    value={inlineTradePlanIds[trade._id] ?? ""}
-                    onChange={(e) =>
-                      onInlineTradePlanChange(trade._id, e.target.value)
-                    }
-                    className="text-slate-12 h-7 w-full min-w-[120px] rounded border border-slate-600 bg-slate-700 px-1 text-xs"
-                  >
-                    <option value="">None</option>
-                    {(() => {
-                      const ticker = trade.ticker?.toUpperCase();
-                      const matching =
-                        openTradePlans?.filter(
-                          (p) =>
-                            p.instrumentSymbol.toUpperCase() === ticker,
-                        ) ?? [];
-                      const rest =
-                        openTradePlans?.filter(
-                          (p) =>
-                            p.instrumentSymbol.toUpperCase() !== ticker,
-                        ) ?? [];
-                      return (
-                        <>
-                          {matching.length > 0 && (
-                            <optgroup label="Matching plans">
-                              {matching.map((plan) => (
-                                <option key={plan._id} value={plan._id}>
-                                  {plan.name} ({plan.instrumentSymbol})
-                                </option>
-                              ))}
-                            </optgroup>
-                          )}
-                          {rest.length > 0 && (
-                            <optgroup
-                              label={
-                                matching.length > 0
-                                  ? "Other plans"
-                                  : "Trade plans"
-                              }
-                            >
-                              {rest.map((plan) => (
-                                <option key={plan._id} value={plan._id}>
-                                  {plan.name} ({plan.instrumentSymbol})
-                                </option>
-                              ))}
-                            </optgroup>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </select>
+                  <div className="flex items-center gap-1">
+                    <select
+                      value={inlineTradePlanIds[trade._id] ?? ""}
+                      onChange={(e) =>
+                        onInlineTradePlanChange(trade._id, e.target.value)
+                      }
+                      className="text-slate-12 h-7 w-full min-w-[120px] rounded border border-slate-600 bg-slate-700 px-1 text-xs"
+                    >
+                      <option value="">None</option>
+                      {(() => {
+                        const ticker = trade.ticker?.toUpperCase();
+                        const matching =
+                          openTradePlans?.filter(
+                            (p) =>
+                              p.instrumentSymbol.toUpperCase() === ticker,
+                          ) ?? [];
+                        const rest =
+                          openTradePlans?.filter(
+                            (p) =>
+                              p.instrumentSymbol.toUpperCase() !== ticker,
+                          ) ?? [];
+                        return (
+                          <>
+                            {matching.length > 0 && (
+                              <optgroup label="Matching plans">
+                                {matching.map((plan) => (
+                                  <option key={plan._id} value={plan._id}>
+                                    {plan.name} ({plan.instrumentSymbol})
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                            {rest.length > 0 && (
+                              <optgroup
+                                label={
+                                  matching.length > 0
+                                    ? "Other plans"
+                                    : "Trade plans"
+                                }
+                              >
+                                {rest.map((plan) => (
+                                  <option key={plan._id} value={plan._id}>
+                                    {plan.name} ({plan.instrumentSymbol})
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </select>
+                    <button
+                      type="button"
+                      aria-label="Quick create trade plan"
+                      title="Quick create trade plan"
+                      onClick={() => {
+                        if (quickCreateTradeId === trade._id) {
+                          setQuickCreateTradeId(null);
+                        } else {
+                          setQuickCreateTradeId(trade._id);
+                          setQuickCreateName("");
+                          setQuickCreateInstrument(trade.ticker ?? "");
+                          setQuickCreateCampaignId("");
+                        }
+                      }}
+                      className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+                  {quickCreateTradeId === trade._id && (
+                    <div className="mt-1 flex flex-col gap-1">
+                      <input
+                        type="text"
+                        value={quickCreateName}
+                        onChange={(e) => setQuickCreateName(e.target.value)}
+                        placeholder="Plan name"
+                        className="text-slate-12 h-7 w-full rounded border border-slate-600 bg-slate-700 px-1 text-xs"
+                      />
+                      <input
+                        type="text"
+                        value={quickCreateInstrument}
+                        onChange={(e) =>
+                          setQuickCreateInstrument(e.target.value)
+                        }
+                        placeholder="Symbol"
+                        className="text-slate-12 h-7 w-full rounded border border-slate-600 bg-slate-700 px-1 text-xs"
+                      />
+                      <select
+                        value={quickCreateCampaignId}
+                        onChange={(e) =>
+                          setQuickCreateCampaignId(e.target.value)
+                        }
+                        className="text-slate-12 h-7 w-full rounded border border-slate-600 bg-slate-700 px-1 text-xs"
+                      >
+                        <option value="">No campaign</option>
+                        {campaigns?.map((c) => (
+                          <option key={c._id} value={c._id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (
+                              !quickCreateName.trim() ||
+                              !quickCreateInstrument.trim()
+                            )
+                              return;
+                            void onQuickCreateTradePlan(trade._id, {
+                              name: quickCreateName.trim(),
+                              instrumentSymbol: quickCreateInstrument.trim(),
+                              campaignId: quickCreateCampaignId
+                                ? (quickCreateCampaignId as Id<"campaigns">)
+                                : undefined,
+                            }).then(() => {
+                              setQuickCreateTradeId(null);
+                            });
+                          }}
+                          className="h-7 rounded bg-green-700 px-2 text-xs text-white hover:bg-green-600"
+                        >
+                          Create
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setQuickCreateTradeId(null)}
+                          className="h-7 rounded bg-slate-700 px-2 text-xs text-slate-300 hover:bg-slate-600"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-sm">
                   <select
