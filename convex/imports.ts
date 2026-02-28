@@ -344,6 +344,47 @@ export const listInboxTrades = query({
   },
 });
 
+export const listInboxTradesForTradePlan = query({
+  args: {
+    tradePlanId: v.id("tradePlans"),
+  },
+  returns: v.array(
+    v.object({
+      inboxTrade: inboxTradeValidator,
+      matchType: v.union(v.literal("assigned"), v.literal("suggested")),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const tradePlan = await ctx.db.get(args.tradePlanId);
+    assertOwner(tradePlan, ownerId, "Trade plan not found");
+    if (!tradePlan) throw new Error("Trade plan not found");
+
+    const pendingTrades = await ctx.db
+      .query("inboxTrades")
+      .withIndex("by_owner_status", (q) =>
+        q.eq("ownerId", ownerId).eq("status", "pending_review"),
+      )
+      .collect();
+
+    const normalizedSymbol = tradePlan.instrumentSymbol.toUpperCase();
+
+    return pendingTrades
+      .filter((t) => {
+        if (t.tradePlanId === args.tradePlanId) return true;
+        if (!t.tradePlanId && t.ticker?.toUpperCase() === normalizedSymbol)
+          return true;
+        return false;
+      })
+      .map((t) => ({
+        inboxTrade: t,
+        matchType: (t.tradePlanId === args.tradePlanId
+          ? "assigned"
+          : "suggested") as "assigned" | "suggested",
+      }));
+  },
+});
+
 export const acceptTrade = mutation({
   args: {
     inboxTradeId: v.id("inboxTrades"),
