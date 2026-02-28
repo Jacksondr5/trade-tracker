@@ -1,10 +1,10 @@
 "use client";
 
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { Check, CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Alert } from "~/components/ui";
+import { Alert, Badge } from "~/components/ui";
 import NotesSection from "~/components/NotesSection";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
@@ -19,22 +19,31 @@ export default function TradePlanDetailPageClient({
   preloadedNotes,
   preloadedAllTrades,
   preloadedAccountMappings,
+  preloadedInboxTradesForPlan,
+  preloadedPortfolios,
 }: {
   tradePlanId: Id<"tradePlans">;
   preloadedTradePlan: Preloaded<typeof api.tradePlans.getTradePlan>;
   preloadedNotes: Preloaded<typeof api.notes.getNotesByTradePlan>;
   preloadedAllTrades: Preloaded<typeof api.trades.listTrades>;
   preloadedAccountMappings: Preloaded<typeof api.accountMappings.listAccountMappings>;
+  preloadedInboxTradesForPlan: Preloaded<typeof api.imports.listInboxTradesForTradePlan>;
+  preloadedPortfolios: Preloaded<typeof api.portfolios.listPortfolios>;
 }) {
   const tradePlan = usePreloadedQuery(preloadedTradePlan);
   const notes = usePreloadedQuery(preloadedNotes);
   const allTrades = usePreloadedQuery(preloadedAllTrades);
   const accountMappings = usePreloadedQuery(preloadedAccountMappings);
+  const inboxTradesForPlan = usePreloadedQuery(preloadedInboxTradesForPlan);
+  const portfolios = usePreloadedQuery(preloadedPortfolios);
 
   const addNote = useMutation(api.notes.addNote);
   const updateNoteM = useMutation(api.notes.updateNote);
   const updateTradePlan = useMutation(api.tradePlans.updateTradePlan);
   const updateTradePlanStatus = useMutation(api.tradePlans.updateTradePlanStatus);
+  const acceptTrade = useMutation(api.imports.acceptTrade);
+
+  const [pendingPortfolioIds, setPendingPortfolioIds] = useState<Record<string, string>>({});
 
   const trades = useMemo(
     () => allTrades.filter((t) => t.tradePlanId === tradePlanId),
@@ -280,7 +289,7 @@ export default function TradePlanDetailPageClient({
           </Link>
         </div>
 
-        {trades.length === 0 ? (
+        {trades.length === 0 && inboxTradesForPlan.length === 0 ? (
           <p className="text-sm text-slate-11">No trades linked to this plan yet.</p>
         ) : (
           <div className="overflow-x-auto">
@@ -297,6 +306,67 @@ export default function TradePlanDetailPageClient({
                 </tr>
               </thead>
               <tbody>
+                {inboxTradesForPlan.map(({ inboxTrade, matchType }) => {
+                  const portfolioId = pendingPortfolioIds[inboxTrade._id] ?? "";
+                  return (
+                    <tr key={inboxTrade._id} className="border-b border-slate-700 bg-blue-900/20">
+                      <td className="px-2 py-2 text-slate-11">
+                        {inboxTrade.date ? new Date(inboxTrade.date).toLocaleDateString("en-US") : "---"}
+                      </td>
+                      <td className="px-2 py-2 text-slate-12">
+                        {inboxTrade.ticker ?? "---"}{" "}
+                        <Badge variant={matchType === "suggested" ? "info" : "neutral"}>
+                          {matchType === "suggested" ? "Suggested" : "Pending"}
+                        </Badge>
+                      </td>
+                      <td className="px-2 py-2 text-slate-11">
+                        {accountNameByAccountId.get(inboxTrade.brokerageAccountId ?? "") ?? inboxTrade.brokerageAccountId ?? "---"}
+                      </td>
+                      <td className="px-2 py-2 text-slate-11">{inboxTrade.side ?? "---"}</td>
+                      <td className="px-2 py-2 text-slate-11">{inboxTrade.quantity ?? "---"}</td>
+                      <td className="px-2 py-2 text-slate-11">
+                        {inboxTrade.price !== undefined ? formatCurrency(inboxTrade.price) : "---"}
+                      </td>
+                      <td className="px-2 py-2">
+                        <div className="flex items-center gap-1">
+                          <select
+                            aria-label={`Portfolio for ${inboxTrade.ticker || "trade"}`}
+                            value={portfolioId}
+                            onChange={(e) =>
+                              setPendingPortfolioIds((prev) => ({
+                                ...prev,
+                                [inboxTrade._id]: e.target.value,
+                              }))
+                            }
+                            className="text-slate-12 h-7 rounded border border-slate-600 bg-slate-700 px-1 text-xs"
+                          >
+                            <option value="">No portfolio</option>
+                            {portfolios?.map((p) => (
+                              <option key={p._id} value={p._id}>
+                                {p.name}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            aria-label="Accept trade"
+                            onClick={() =>
+                              void acceptTrade({
+                                inboxTradeId: inboxTrade._id,
+                                tradePlanId: tradePlanId,
+                                portfolioId: portfolioId ? (portfolioId as Id<"portfolios">) : undefined,
+                              })
+                            }
+                            className="rounded p-1.5 text-green-400 hover:bg-green-900/50"
+                            title="Accept"
+                          >
+                            <Check className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {trades.map((trade) => (
                   <tr key={trade._id} className="border-b border-slate-700/60">
                     <td className="px-2 py-2 text-slate-11">{new Date(trade.date).toLocaleDateString("en-US")}</td>
