@@ -5,6 +5,7 @@ import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { validateInboxTradeCandidate } from "../shared/imports/validation";
 import { KRAKEN_DEFAULT_ACCOUNT_ID } from "../shared/imports/constants";
+import { findAutoMatchTradePlanId } from "../shared/imports/auto-match";
 
 type CanonicalCandidate = {
   assetType: "stock" | "crypto";
@@ -210,6 +211,32 @@ export const importTrades = mutation({
         .map((t) => dedupKey(t.source, t.externalId)),
     ]);
 
+    const openTradePlans = [
+      ...(await ctx.db
+        .query("tradePlans")
+        .withIndex("by_owner_status", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "active"),
+        )
+        .collect()),
+      ...(await ctx.db
+        .query("tradePlans")
+        .withIndex("by_owner_status", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "idea"),
+        )
+        .collect()),
+      ...(await ctx.db
+        .query("tradePlans")
+        .withIndex("by_owner_status", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "watching"),
+        )
+        .collect()),
+    ];
+
+    const tradePlanMatchList = openTradePlans.map((p) => ({
+      id: p._id as string,
+      instrumentSymbol: p.instrumentSymbol,
+    }));
+
     let imported = 0;
     let skippedDuplicates = 0;
     let withValidationErrors = 0;
@@ -250,6 +277,17 @@ export const importTrades = mutation({
         }
       }
 
+      let resolvedTradePlanId = trade.tradePlanId;
+      if (resolvedTradePlanId === undefined && validation.normalizedTicker) {
+        const autoMatchId = findAutoMatchTradePlanId(
+          validation.normalizedTicker,
+          tradePlanMatchList,
+        );
+        if (autoMatchId) {
+          resolvedTradePlanId = autoMatchId as Id<"tradePlans">;
+        }
+      }
+
       if (trade.portfolioId !== undefined) {
         if (!portfolioOwnerCache.has(trade.portfolioId)) {
           const portfolio = await ctx.db.get(trade.portfolioId);
@@ -276,7 +314,7 @@ export const importTrades = mutation({
         status: "pending_review",
         taxes: trade.taxes,
         ticker: validation.normalizedTicker,
-        tradePlanId: trade.tradePlanId,
+        tradePlanId: resolvedTradePlanId,
         validationErrors,
         validationWarnings,
       });
