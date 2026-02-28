@@ -214,11 +214,47 @@ export function InboxTable({
                     className="text-slate-12 h-7 w-full min-w-[120px] rounded border border-slate-600 bg-slate-700 px-1 text-xs"
                   >
                     <option value="">None</option>
-                    {openTradePlans?.map((plan) => (
-                      <option key={plan._id} value={plan._id}>
-                        {plan.name} ({plan.instrumentSymbol})
-                      </option>
-                    ))}
+                    {(() => {
+                      const ticker = trade.ticker?.toUpperCase();
+                      const matching =
+                        openTradePlans?.filter(
+                          (p) =>
+                            p.instrumentSymbol.toUpperCase() === ticker,
+                        ) ?? [];
+                      const rest =
+                        openTradePlans?.filter(
+                          (p) =>
+                            p.instrumentSymbol.toUpperCase() !== ticker,
+                        ) ?? [];
+                      return (
+                        <>
+                          {matching.length > 0 && (
+                            <optgroup label="Matching plans">
+                              {matching.map((plan) => (
+                                <option key={plan._id} value={plan._id}>
+                                  {plan.name} ({plan.instrumentSymbol})
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {rest.length > 0 && (
+                            <optgroup
+                              label={
+                                matching.length > 0
+                                  ? "Other plans"
+                                  : "Trade plans"
+                              }
+                            >
+                              {rest.map((plan) => (
+                                <option key={plan._id} value={plan._id}>
+                                  {plan.name} ({plan.instrumentSymbol})
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </>
+                      );
+                    })()}
                   </select>
                 </td>
                 <td className="px-4 py-3 text-sm">
