@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Set up ShadCN CLI (`components.json`)
+## Task 1: Set up ShadCN CLI (`components.json`)
 
 **Files:**
 - Create: `components.json`
@@ -57,7 +57,7 @@ git commit -m "chore: add ShadCN CLI config (components.json)"
 
 ---
 
-### Task 2: Normalize focus rings across all components
+## Task 2: Normalize focus rings across all components
 
 The current state is inconsistent:
 - **Button:** `focus-visible:ring-2 focus-visible:ring-blue-8 focus-visible:ring-offset-2 focus-visible:ring-offset-olive-1`
@@ -112,7 +112,7 @@ git commit -m "fix: normalize focus ring styles across UI components"
 
 ---
 
-### Task 3: Fix Dialog to use Radix color tokens
+## Task 3: Fix Dialog to use Radix color tokens
 
 The Dialog component uses Tailwind default colors (`slate-700`, `slate-800`) instead of the project's Radix color tokens. This is inconsistent with every other component.
 
@@ -147,7 +147,7 @@ git commit -m "fix: use Radix color tokens in Dialog component"
 
 ---
 
-### Task 4: Normalize transitions and disabled states
+## Task 4: Normalize transitions and disabled states
 
 **Current inconsistencies:**
 - Button uses `transition-all` (animates everything including layout), others use `transition-colors`
@@ -182,7 +182,7 @@ git commit -m "fix: use transition-colors instead of transition-all on Button"
 
 ---
 
-### Task 5: Run full CI checks and verify
+## Task 5: Run full CI checks and verify
 
 **Step 1: Run lint**
 
@@ -211,7 +211,7 @@ If lint or build produced auto-fixes, commit them.
 
 ---
 
-### Task 6: Update CLAUDE.md with component reuse and ShadCN guidance
+## Task 6: Update CLAUDE.md with component reuse and ShadCN guidance
 
 Agents have been building UI from scratch instead of reusing existing components, and using inconsistent colors/styles. Add guidance to prevent this.
 
@@ -232,7 +232,7 @@ Prefer icon buttons over text.
 
 With this expanded version:
 
-```markdown
+````markdown
 ### UI Components (`src/components/ui/`)
 
 Reusable UI components are exported from `src/components/ui/index.ts`.
@@ -251,7 +251,7 @@ After adding a ShadCN component, you MUST make these modifications before using 
 1. **Replace CSS variable colors** with Radix color tokens (see Style Standards below)
 2. **Add `dataTestId` prop** to any interactive element (all interactive components require this)
 3. **Verify dark-mode appearance** — this app is dark-mode only
-```
+````
 
 **Step 2: Add a "Style Standards" subsection to the Theme section**
 

@@ -71,7 +71,9 @@ export default function TradePlanDetailPageClient({
   const [statusError, setStatusError] = useState<string | null>(null);
   const [isChangingStatus, setIsChangingStatus] = useState(false);
   const [inboxAcceptError, setInboxAcceptError] = useState<string | null>(null);
-  const [isAcceptingInboxTradeId, setIsAcceptingInboxTradeId] = useState<string | null>(null);
+  const [acceptingInboxTradeIds, setAcceptingInboxTradeIds] = useState<Set<string>>(
+    new Set(),
+  );
 
   useEffect(() => {
     if (tradePlan && !planNameInitialized) {
@@ -142,7 +144,11 @@ export default function TradePlanDetailPageClient({
     portfolioId: string,
   ) => {
     setInboxAcceptError(null);
-    setIsAcceptingInboxTradeId(inboxTradeId);
+    setAcceptingInboxTradeIds((prev) => {
+      const next = new Set(prev);
+      next.add(inboxTradeId);
+      return next;
+    });
     try {
       const result = await acceptTrade({
         inboxTradeId,
@@ -157,7 +163,11 @@ export default function TradePlanDetailPageClient({
     } catch (error) {
       setInboxAcceptError(error instanceof Error ? error.message : "Failed to accept trade");
     } finally {
-      setIsAcceptingInboxTradeId(null);
+      setAcceptingInboxTradeIds((prev) => {
+        const next = new Set(prev);
+        next.delete(inboxTradeId);
+        return next;
+      });
     }
   };
 
@@ -381,13 +391,13 @@ export default function TradePlanDetailPageClient({
                           </select>
                           <button
                             type="button"
-                            aria-label="Accept trade"
+                            aria-label={`Accept ${inboxTrade.ticker ?? "trade"} from inbox`}
                             onClick={() => void handleAcceptInboxTrade(inboxTrade._id, portfolioId)}
                             className="rounded p-1.5 text-green-400 hover:bg-green-900/50 disabled:opacity-50"
                             title="Accept"
-                            disabled={isAcceptingInboxTradeId === inboxTrade._id}
+                            disabled={acceptingInboxTradeIds.has(inboxTrade._id)}
                           >
-                            {isAcceptingInboxTradeId === inboxTrade._id ? (
+                            {acceptingInboxTradeIds.has(inboxTrade._id) ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
                               <Check className="h-4 w-4" />

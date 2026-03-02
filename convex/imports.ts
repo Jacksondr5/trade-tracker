@@ -356,9 +356,11 @@ export const listInboxTradesForTradePlan = query({
   ),
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
-    const tradePlan = await ctx.db.get(args.tradePlanId);
-    assertOwner(tradePlan, ownerId, "Trade plan not found");
-    if (!tradePlan) throw new Error("Trade plan not found");
+    const tradePlan = assertOwner(
+      await ctx.db.get(args.tradePlanId),
+      ownerId,
+      "Trade plan not found",
+    );
 
     const pendingTrades = await ctx.db
       .query("inboxTrades")

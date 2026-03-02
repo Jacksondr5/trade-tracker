@@ -11,7 +11,7 @@ The project uses a custom component library built on ShadCN's underlying stack (
 
 Set up ShadCN CLI infrastructure without replacing existing components. Do a consistency normalization pass on existing components.
 
-### What we're NOT doing
+## What we're NOT doing
 
 - Not replacing existing components with ShadCN versions
 - Not adding ShadCN's CSS variable color system
