@@ -230,6 +230,7 @@ export default function CampaignDetailPageClient({
     },
     validators: {
       onChange: ({ value }) => {
+        setTradePlanCreateError(null);
         return validateWithSchema(tradePlanSchema, value);
       },
     },

@@ -8,8 +8,8 @@ import { Alert, Button, Card, useAppForm } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 
 const campaignSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  thesis: z.string().min(1, "Thesis is required"),
+  name: z.string().trim().min(1, "Name is required"),
+  thesis: z.string().trim().min(1, "Thesis is required"),
 });
 
 type CampaignFormData = z.infer<typeof campaignSchema>;
@@ -44,6 +44,10 @@ export default function NewCampaignPage() {
       },
     },
     onSubmit: async ({ value }) => {
+      if (redirectTimeoutRef.current) {
+        return;
+      }
+
       setErrorMessage(null);
       try {
         const parsed = campaignSchema.parse(value);
@@ -52,7 +56,11 @@ export default function NewCampaignPage() {
           thesis: parsed.thesis,
         });
         setSuccessMessage("Campaign created successfully!");
+        if (redirectTimeoutRef.current) {
+          clearTimeout(redirectTimeoutRef.current);
+        }
         redirectTimeoutRef.current = setTimeout(() => {
+          redirectTimeoutRef.current = null;
           router.push(`/campaigns/${campaignId}`);
         }, 1000);
       } catch (error) {
