@@ -1,4 +1,4 @@
-interface TradePlanMatch {
+export interface TradePlanMatch {
   id: string;
   instrumentSymbol: string;
 }

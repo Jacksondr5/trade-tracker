@@ -10,6 +10,8 @@
 
 ---
 
+## Tasks
+
 ### Task 1: Extract auto-match pure function with tests
 
 **Files:**

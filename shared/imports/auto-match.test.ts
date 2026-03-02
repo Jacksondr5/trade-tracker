@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findAutoMatchTradePlanId } from "./auto-match";
-
-interface TradePlanMatch {
-  id: string;
-  instrumentSymbol: string;
-}
+import { findAutoMatchTradePlanId, type TradePlanMatch } from "./auto-match";
 
 describe("findAutoMatchTradePlanId", () => {
   const plans: TradePlanMatch[] = [
