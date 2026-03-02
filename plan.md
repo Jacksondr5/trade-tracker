@@ -1,6 +1,6 @@
 Feature list:
 
-I want to be able to mark things as being on a watch list. This could be campaigns or trade plans. These should feature prominently on the dashboard so that I know I need to pay attention to it. We can also probably highlight them in the other places they show up in the UI. This could be a simple star and border background change. We can make Claude do something.
+I want to be able to mark things as being on a watch list. This could be campaigns or trade plans. These should feature prominently on the dashboard so that I know I need to pay attention to it. We can also probably highlight them in the other places they show up in the UI. This could be a simple star and border background change. Use Claude to generate: (1) short contextual dashboard/tooltip copy for watch-listed items, (2) a small set of consistent watch-list visual styles (star icon, border/background classes, and accessible contrast variants), and (3) optional style variants for list rows, detail badges, and summary widgets so campaigns and trade plans look consistent across the app.
 
 V2 should definitely include trade capabilities - mainly pulling from the brokerages. This will become a lot more valuable and let me keep track of things long term. Some other features that I need to prioritize include:
 
