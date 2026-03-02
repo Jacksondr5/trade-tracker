@@ -16,14 +16,14 @@ export default async function TradePlanDetailPage({
   const [
     preloadedTradePlan,
     preloadedNotes,
-    preloadedAllTrades,
+    preloadedTrades,
     preloadedAccountMappings,
     preloadedInboxTradesForPlan,
     preloadedPortfolios,
   ] = await Promise.all([
     preloadQuery(api.tradePlans.getTradePlan, { tradePlanId }, { token }),
     preloadQuery(api.notes.getNotesByTradePlan, { tradePlanId }, { token }),
-    preloadQuery(api.trades.listTrades, {}, { token }),
+    preloadQuery(api.trades.listTradesByTradePlan, { tradePlanId }, { token }),
     preloadQuery(api.accountMappings.listAccountMappings, {}, { token }),
     preloadQuery(api.imports.listInboxTradesForTradePlan, { tradePlanId }, { token }),
     preloadQuery(api.portfolios.listPortfolios, {}, { token }),
@@ -34,7 +34,7 @@ export default async function TradePlanDetailPage({
       tradePlanId={tradePlanId}
       preloadedTradePlan={preloadedTradePlan}
       preloadedNotes={preloadedNotes}
-      preloadedAllTrades={preloadedAllTrades}
+      preloadedTrades={preloadedTrades}
       preloadedAccountMappings={preloadedAccountMappings}
       preloadedInboxTradesForPlan={preloadedInboxTradesForPlan}
       preloadedPortfolios={preloadedPortfolios}

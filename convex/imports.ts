@@ -1,5 +1,5 @@
 import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { assertOwner, requireUser } from "./lib/auth";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
@@ -211,25 +211,31 @@ export const importTrades = mutation({
         .map((t) => dedupKey(t.source, t.externalId)),
     ]);
 
+    const [activeTradePlans, ideaTradePlans, watchingTradePlans] =
+      await Promise.all([
+        ctx.db
+          .query("tradePlans")
+          .withIndex("by_owner_status", (q) =>
+            q.eq("ownerId", ownerId).eq("status", "active"),
+          )
+          .collect(),
+        ctx.db
+          .query("tradePlans")
+          .withIndex("by_owner_status", (q) =>
+            q.eq("ownerId", ownerId).eq("status", "idea"),
+          )
+          .collect(),
+        ctx.db
+          .query("tradePlans")
+          .withIndex("by_owner_status", (q) =>
+            q.eq("ownerId", ownerId).eq("status", "watching"),
+          )
+          .collect(),
+      ]);
     const openTradePlans = [
-      ...(await ctx.db
-        .query("tradePlans")
-        .withIndex("by_owner_status", (q) =>
-          q.eq("ownerId", ownerId).eq("status", "active"),
-        )
-        .collect()),
-      ...(await ctx.db
-        .query("tradePlans")
-        .withIndex("by_owner_status", (q) =>
-          q.eq("ownerId", ownerId).eq("status", "idea"),
-        )
-        .collect()),
-      ...(await ctx.db
-        .query("tradePlans")
-        .withIndex("by_owner_status", (q) =>
-          q.eq("ownerId", ownerId).eq("status", "watching"),
-        )
-        .collect()),
+      ...activeTradePlans,
+      ...ideaTradePlans,
+      ...watchingTradePlans,
     ];
 
     const tradePlanMatchList = openTradePlans.map((p) => ({
@@ -362,34 +368,45 @@ export const listInboxTradesForTradePlan = query({
       "Trade plan not found",
     );
 
-    const pendingTrades = await ctx.db
-      .query("inboxTrades")
-      .withIndex("by_owner_status", (q) =>
-        q.eq("ownerId", ownerId).eq("status", "pending_review"),
-      )
-      .collect();
-
     const normalizedSymbol = tradePlan.instrumentSymbol.toUpperCase();
+    const [assigned, suggested] = await Promise.all([
+      ctx.db
+        .query("inboxTrades")
+        .withIndex("by_owner_status_tradePlanId", (q) =>
+          q
+            .eq("ownerId", ownerId)
+            .eq("status", "pending_review")
+            .eq("tradePlanId", args.tradePlanId),
+        )
+        .collect(),
+      ctx.db
+        .query("inboxTrades")
+        .withIndex("by_owner_status_ticker", (q) =>
+          q
+            .eq("ownerId", ownerId)
+            .eq("status", "pending_review")
+            .eq("ticker", normalizedSymbol),
+        )
+        .collect(),
+    ]);
 
-    return pendingTrades
-      .filter((t) => {
-        if (t.tradePlanId === args.tradePlanId) return true;
-        if (!t.tradePlanId && t.ticker?.toUpperCase() === normalizedSymbol)
-          return true;
-        return false;
-      })
-      .sort((a, b) => {
-        const aAssigned = a.tradePlanId === args.tradePlanId;
-        const bAssigned = b.tradePlanId === args.tradePlanId;
-        if (aAssigned !== bAssigned) return aAssigned ? -1 : 1;
-        return (b.date ?? b._creationTime) - (a.date ?? a._creationTime);
-      })
-      .map((t) => ({
-        inboxTrade: t,
-        matchType: (t.tradePlanId === args.tradePlanId
-          ? "assigned"
-          : "suggested") as "assigned" | "suggested",
-      }));
+    const sortedAssigned = assigned.sort(
+      (a, b) => (b.date ?? b._creationTime) - (a.date ?? a._creationTime),
+    );
+    const sortedSuggested = suggested
+      .filter((trade) => trade.tradePlanId === undefined)
+      .sort((a, b) => (b.date ?? b._creationTime) - (a.date ?? a._creationTime));
+
+    return [
+      ...sortedAssigned.map((trade) => ({
+        inboxTrade: trade,
+        matchType: "assigned" as const,
+      })),
+      ...sortedSuggested.map((trade) => ({
+        inboxTrade: trade,
+        matchType: "suggested" as const,
+      })),
+    ];
   },
 });
 
@@ -463,7 +480,7 @@ export const deleteInboxTrade = mutation({
     const rawTrade = await ctx.db.get(args.inboxTradeId);
     const trade = assertOwner(rawTrade, ownerId, "Inbox trade not found");
     if (trade.status !== "pending_review") {
-      throw new Error("Can only delete pending review trades from inbox");
+      throw new ConvexError("Can only delete pending review trades from inbox");
     }
 
     await ctx.db.delete(args.inboxTradeId);
@@ -516,7 +533,7 @@ export const updateInboxTrade = mutation({
     const rawTrade = await ctx.db.get(inboxTradeId);
     const trade = assertOwner(rawTrade, ownerId, "Inbox trade not found");
     if (trade.status !== "pending_review") {
-      throw new Error("Can only edit pending review trades");
+      throw new ConvexError("Can only edit pending review trades");
     }
 
     if (updates.tradePlanId !== undefined && updates.tradePlanId !== null) {

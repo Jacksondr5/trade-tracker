@@ -1,5 +1,5 @@
 import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { requireUser } from "./lib/auth";
 import {
   KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME,
@@ -36,7 +36,7 @@ function normalizeFriendlyName(value: string): string {
 
 function normalizeSource(value: string): MappingSource {
   if (value !== "ibkr" && value !== "kraken") {
-    throw new Error("Invalid brokerage source");
+    throw new ConvexError("Invalid brokerage source");
   }
   return value;
 }
@@ -178,11 +178,11 @@ export const upsertAccountMapping = mutation({
         : friendlyNameInput;
 
     if (!accountId) {
-      throw new Error("Account ID is required");
+      throw new ConvexError("Account ID is required");
     }
 
     if (!friendlyName) {
-      throw new Error("Friendly name is required");
+      throw new ConvexError("Friendly name is required");
     }
 
     const existing = await ctx.db

@@ -17,7 +17,7 @@ export default function TradePlanDetailPageClient({
   tradePlanId,
   preloadedTradePlan,
   preloadedNotes,
-  preloadedAllTrades,
+  preloadedTrades,
   preloadedAccountMappings,
   preloadedInboxTradesForPlan,
   preloadedPortfolios,
@@ -25,14 +25,14 @@ export default function TradePlanDetailPageClient({
   tradePlanId: Id<"tradePlans">;
   preloadedTradePlan: Preloaded<typeof api.tradePlans.getTradePlan>;
   preloadedNotes: Preloaded<typeof api.notes.getNotesByTradePlan>;
-  preloadedAllTrades: Preloaded<typeof api.trades.listTrades>;
+  preloadedTrades: Preloaded<typeof api.trades.listTradesByTradePlan>;
   preloadedAccountMappings: Preloaded<typeof api.accountMappings.listAccountMappings>;
   preloadedInboxTradesForPlan: Preloaded<typeof api.imports.listInboxTradesForTradePlan>;
   preloadedPortfolios: Preloaded<typeof api.portfolios.listPortfolios>;
 }) {
   const tradePlan = usePreloadedQuery(preloadedTradePlan);
   const notes = usePreloadedQuery(preloadedNotes);
-  const allTrades = usePreloadedQuery(preloadedAllTrades);
+  const trades = usePreloadedQuery(preloadedTrades);
   const accountMappings = usePreloadedQuery(preloadedAccountMappings);
   const inboxTradesForPlan = usePreloadedQuery(preloadedInboxTradesForPlan);
   const portfolios = usePreloadedQuery(preloadedPortfolios);
@@ -44,11 +44,6 @@ export default function TradePlanDetailPageClient({
   const acceptTrade = useMutation(api.imports.acceptTrade);
 
   const [pendingPortfolioIds, setPendingPortfolioIds] = useState<Record<string, string>>({});
-
-  const trades = useMemo(
-    () => allTrades.filter((t) => t.tradePlanId === tradePlanId),
-    [allTrades, tradePlanId],
-  );
 
   const accountNameByAccountId = useMemo(() => {
     const map = new Map<string, string>();

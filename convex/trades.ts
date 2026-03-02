@@ -128,6 +128,67 @@ export const listTrades = query({
   },
 });
 
+export const listTradesByTradePlan = query({
+  args: {
+    tradePlanId: v.id("tradePlans"),
+  },
+  returns: v.array(tradeValidator),
+  handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const tradePlan = await ctx.db.get(args.tradePlanId);
+    if (!tradePlan || tradePlan.ownerId !== ownerId) {
+      return [];
+    }
+
+    const trades = await ctx.db
+      .query("trades")
+      .withIndex("by_owner_tradePlanId", (q) =>
+        q.eq("ownerId", ownerId).eq("tradePlanId", args.tradePlanId),
+      )
+      .collect();
+
+    return trades.sort((a, b) => b.date - a.date);
+  },
+});
+
+export const listTradesByCampaign = query({
+  args: {
+    campaignId: v.id("campaigns"),
+  },
+  returns: v.array(tradeValidator),
+  handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const campaign = await ctx.db.get(args.campaignId);
+    if (!campaign || campaign.ownerId !== ownerId) {
+      return [];
+    }
+
+    const tradePlans = await ctx.db
+      .query("tradePlans")
+      .withIndex("by_owner_campaignId", (q) =>
+        q.eq("ownerId", ownerId).eq("campaignId", args.campaignId),
+      )
+      .collect();
+
+    if (tradePlans.length === 0) {
+      return [];
+    }
+
+    const tradesByPlan = await Promise.all(
+      tradePlans.map((tradePlan) =>
+        ctx.db
+          .query("trades")
+          .withIndex("by_owner_tradePlanId", (q) =>
+            q.eq("ownerId", ownerId).eq("tradePlanId", tradePlan._id),
+          )
+          .collect(),
+      ),
+    );
+
+    return tradesByPlan.flat().sort((a, b) => b.date - a.date);
+  },
+});
+
 const paginatedTradesValidator = v.object({
   continueCursor: v.string(),
   isDone: v.boolean(),
