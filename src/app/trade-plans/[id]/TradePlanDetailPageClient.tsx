@@ -344,6 +344,7 @@ export default function TradePlanDetailPageClient({
                   <th className="px-2 py-2">Side</th>
                   <th className="px-2 py-2">Qty</th>
                   <th className="px-2 py-2">Price</th>
+                  <th className="px-2 py-2">Portfolio / Action</th>
                   <th className="px-2 py-2">P&amp;L</th>
                 </tr>
               </thead>
@@ -364,7 +365,19 @@ export default function TradePlanDetailPageClient({
                       <td className="px-2 py-2 text-slate-11">
                         {accountNameByAccountId.get(inboxTrade.brokerageAccountId ?? "") ?? inboxTrade.brokerageAccountId ?? "---"}
                       </td>
-                      <td className="px-2 py-2 text-slate-11">{inboxTrade.side ?? "---"}</td>
+                      <td className="px-2 py-2 text-slate-11">
+                        <Badge
+                          variant={
+                            inboxTrade.side === "buy"
+                              ? "success"
+                              : inboxTrade.side === "sell"
+                                ? "danger"
+                                : "neutral"
+                          }
+                        >
+                          {inboxTrade.side ?? "---"}
+                        </Badge>
+                      </td>
                       <td className="px-2 py-2 text-slate-11">{inboxTrade.quantity ?? "---"}</td>
                       <td className="px-2 py-2 text-slate-11">
                         {inboxTrade.price !== undefined ? formatCurrency(inboxTrade.price) : "---"}
@@ -405,6 +418,7 @@ export default function TradePlanDetailPageClient({
                           </button>
                         </div>
                       </td>
+                      <td className="px-2 py-2 text-slate-11">---</td>
                     </tr>
                   );
                 })}
@@ -418,6 +432,7 @@ export default function TradePlanDetailPageClient({
                     <td className="px-2 py-2 text-slate-11">{trade.side}</td>
                     <td className="px-2 py-2 text-slate-11">{trade.quantity}</td>
                     <td className="px-2 py-2 text-slate-11">{formatCurrency(trade.price)}</td>
+                    <td className="px-2 py-2 text-slate-11">—</td>
                     <td className="px-2 py-2">
                       {trade.realizedPL === null ? (
                         <span className="text-slate-11">{"\u2014"}</span>

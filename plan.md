@@ -15,7 +15,7 @@ Acceptance criteria:
 
 Add `npx shadcn@latest add table` to get Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCaption.
 
-Every data page has a hand-rolled `<table>` with manual Tailwind styling. There are 9 tables across 8 files:
+Every data page has a hand-rolled `<table>` with manual Tailwind styling. There are 10 tables across 9 files:
 - `imports/components/inbox-table.tsx` (most complex: 12 columns, inline editing, selects, validation)
 - `trades/TradesPageClient.tsx` (11 columns with inline edit row)
 - `campaigns/CampaignsPageClient.tsx`

@@ -153,7 +153,7 @@ export default function ImportsPageClient({
       instrumentSymbol: string;
       campaignId?: Id<"campaigns">;
     },
-  ) => {
+  ): Promise<boolean> => {
     try {
       const newPlanId = await createTradePlan({
         campaignId: args.campaignId,
@@ -165,12 +165,14 @@ export default function ImportsPageClient({
         [inboxTradeId]: newPlanId,
       }));
       persistTradePlanSelection(inboxTradeId, newPlanId);
+      return true;
     } catch (error) {
       setErrorMessage(
         error instanceof Error
           ? error.message
           : "Failed to create trade plan",
       );
+      return false;
     }
   };
 
