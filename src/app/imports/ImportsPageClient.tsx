@@ -107,18 +107,22 @@ export default function ImportsPageClient({
     setImportResult(null);
   };
 
-  const persistTradePlanSelection = (
+  const persistTradePlanSelection = async (
     inboxTradeId: Id<"inboxTrades">,
     value: string,
-  ) => {
-    void updateInboxTrade({
-      inboxTradeId,
-      tradePlanId: value ? (value as Id<"tradePlans">) : null,
-    }).catch((error) => {
+  ): Promise<boolean> => {
+    try {
+      await updateInboxTrade({
+        inboxTradeId,
+        tradePlanId: value ? (value as Id<"tradePlans">) : null,
+      });
+      return true;
+    } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Failed to update trade plan",
       );
-    });
+      return false;
+    }
   };
 
   const persistNotes = (inboxTradeId: Id<"inboxTrades">, value: string) => {
@@ -164,7 +168,10 @@ export default function ImportsPageClient({
         ...prev,
         [inboxTradeId]: newPlanId,
       }));
-      persistTradePlanSelection(inboxTradeId, newPlanId);
+      const persisted = await persistTradePlanSelection(inboxTradeId, newPlanId);
+      if (!persisted) {
+        return false;
+      }
       return true;
     } catch (error) {
       setErrorMessage(
@@ -399,7 +406,7 @@ export default function ImportsPageClient({
               ...prev,
               [inboxTradeId]: value,
             }));
-            persistTradePlanSelection(inboxTradeId, value);
+            void persistTradePlanSelection(inboxTradeId, value);
           }}
           onQuickCreateTradePlan={handleQuickCreateTradePlan}
           openTradePlans={openTradePlans}
