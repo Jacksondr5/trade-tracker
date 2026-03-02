@@ -15,7 +15,6 @@ import type * as campaigns from "../campaigns.js";
 import type * as generalNotes from "../generalNotes.js";
 import type * as imports from "../imports.js";
 import type * as lib_auth from "../lib/auth.js";
-import type * as lib_plCalculation from "../lib/plCalculation.js";
 import type * as migrations_tradePlanNotesMigration from "../migrations/tradePlanNotesMigration.js";
 import type * as migrations_unifiedNotesMigration from "../migrations/unifiedNotesMigration.js";
 import type * as notes from "../notes.js";
@@ -39,7 +38,6 @@ declare const fullApi: ApiFromModules<{
   generalNotes: typeof generalNotes;
   imports: typeof imports;
   "lib/auth": typeof lib_auth;
-  "lib/plCalculation": typeof lib_plCalculation;
   "migrations/tradePlanNotesMigration": typeof migrations_tradePlanNotesMigration;
   "migrations/unifiedNotesMigration": typeof migrations_unifiedNotesMigration;
   notes: typeof notes;

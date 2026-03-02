@@ -1,6 +1,5 @@
 import { mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
-import { calculateTradesPL } from "./lib/plCalculation";
 import { assertOwner, requireUser } from "./lib/auth";
 
 const campaignValidator = v.object({
@@ -147,77 +146,5 @@ export const getCampaign = query({
       return null;
     }
     return campaign;
-  },
-});
-
-export const getCampaignPL = query({
-  args: {
-    campaignId: v.id("campaigns"),
-  },
-  returns: v.union(
-    v.object({
-      losingTrades: v.number(),
-      realizedPL: v.number(),
-      tradeCount: v.number(),
-      winningTrades: v.number(),
-    }),
-    v.null(),
-  ),
-  handler: async (ctx, args) => {
-    const ownerId = await requireUser(ctx);
-    const campaign = await ctx.db.get(args.campaignId);
-    if (!campaign || campaign.ownerId !== ownerId) {
-      return null;
-    }
-
-    const tradePlans = await ctx.db
-      .query("tradePlans")
-      .withIndex("by_owner_campaignId", (q) =>
-        q.eq("ownerId", ownerId).eq("campaignId", args.campaignId),
-      )
-      .collect();
-    if (tradePlans.length === 0) {
-      return {
-        losingTrades: 0,
-        realizedPL: 0,
-        tradeCount: 0,
-        winningTrades: 0,
-      };
-    }
-
-    const allTrades = (
-      await ctx.db
-        .query("trades")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-        .collect()
-    );
-    const tradePlanIds = new Set(
-      tradePlans.map((tradePlan) => tradePlan._id.toString()),
-    );
-    const campaignTrades = allTrades.filter(
-      (trade) => trade.tradePlanId && tradePlanIds.has(trade.tradePlanId.toString()),
-    );
-
-    const tradesPLMap = calculateTradesPL(allTrades);
-
-    let realizedPL = 0;
-    let winningTrades = 0;
-    let losingTrades = 0;
-
-    for (const trade of campaignTrades) {
-      const pl = tradesPLMap.get(trade._id);
-      if (pl !== null && pl !== undefined) {
-        realizedPL += pl;
-        if (pl > 0) winningTrades++;
-        if (pl < 0) losingTrades++;
-      }
-    }
-
-    return {
-      losingTrades,
-      realizedPL,
-      tradeCount: campaignTrades.length,
-      winningTrades,
-    };
   },
 });

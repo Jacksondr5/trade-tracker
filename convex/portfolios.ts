@@ -1,6 +1,5 @@
 import { mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
-import { calculateTradesPL } from "./lib/plCalculation";
 import { assertOwner, requireUser } from "./lib/auth";
 import type { Id } from "./_generated/dataModel";
 
@@ -132,7 +131,7 @@ export const deletePortfolio = mutation({
   },
 });
 
-const tradeWithPLValidator = v.object({
+const tradeValidator = v.object({
   _creationTime: v.number(),
   _id: v.id("trades"),
   assetType: v.union(v.literal("crypto"), v.literal("stock")),
@@ -147,7 +146,6 @@ const tradeWithPLValidator = v.object({
   portfolioId: v.optional(v.id("portfolios")),
   price: v.number(),
   quantity: v.number(),
-  realizedPL: v.union(v.number(), v.null()),
   side: v.union(v.literal("buy"), v.literal("sell")),
   source: v.optional(
     v.union(v.literal("manual"), v.literal("ibkr"), v.literal("kraken")),
@@ -177,7 +175,7 @@ export const getPortfolioDetail = query({
     v.object({
       campaigns: v.array(campaignValidator),
       portfolio: portfolioValidator,
-      trades: v.array(tradeWithPLValidator),
+      trades: v.array(tradeValidator),
     }),
     v.null(),
   ),
@@ -195,20 +193,7 @@ export const getPortfolioDetail = query({
         q.eq("ownerId", ownerId).eq("portfolioId", args.portfolioId),
       )
       .collect();
-
-    // Calculate P&L — need all owner trades for accurate position tracking
-    const allTrades = await ctx.db
-      .query("trades")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect();
-    const plMap = calculateTradesPL(allTrades);
-
-    const tradesWithPL = [...portfolioTrades]
-      .sort((a, b) => b.date - a.date)
-      .map((trade) => ({
-        ...trade,
-        realizedPL: plMap.get(trade._id) ?? null,
-      }));
+    const sortedTrades = [...portfolioTrades].sort((a, b) => b.date - a.date);
 
     // Derive campaigns: trades -> trade plans -> campaigns, counting trades per campaign.
     const tradePlanToCampaign = new Map<Id<"tradePlans">, Id<"campaigns"> | null>();
@@ -247,7 +232,7 @@ export const getPortfolioDetail = query({
     return {
       campaigns,
       portfolio,
-      trades: tradesWithPL,
+      trades: sortedTrades,
     };
   },
 });
