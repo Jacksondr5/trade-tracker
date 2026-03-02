@@ -136,7 +136,9 @@ export const listTradesByTradePlan = query({
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
     const tradePlan = await ctx.db.get(args.tradePlanId);
-    assertOwner(tradePlan, ownerId, "Trade plan not found");
+    if (!tradePlan || tradePlan.ownerId !== ownerId) {
+      return [];
+    }
 
     const trades = await ctx.db
       .query("trades")
@@ -157,7 +159,9 @@ export const listTradesByCampaign = query({
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
     const campaign = await ctx.db.get(args.campaignId);
-    assertOwner(campaign, ownerId, "Campaign not found");
+    if (!campaign || campaign.ownerId !== ownerId) {
+      return [];
+    }
 
     const tradePlans = await ctx.db
       .query("tradePlans")
