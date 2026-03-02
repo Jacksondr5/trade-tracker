@@ -1,6 +1,6 @@
 Feature list:
 
-I want to be able to mark things as being on a watch list. This could be campaigns or trade plans. These should feature prominently on the dashboard so that I know I need to pay attention to it.
+I want to be able to mark things as being on a watch list. This could be campaigns or trade plans. These should feature prominently on the dashboard so that I know I need to pay attention to it. We can also probably highlight them in the other places they show up in the UI. This could be a simple star and border background change. We can make Claude do something.
 
 V2 should definitely include trade capabilities - mainly pulling from the brokerages. This will become a lot more valuable and let me keep track of things long term. Some other features that I need to prioritize include:
 
