@@ -3,9 +3,15 @@
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
 import Link from "next/link";
 import { useState } from "react";
-import { Alert, Badge, Button } from "~/components/ui";
+import { z } from "zod";
+import { Alert, Badge, Button, useAppForm } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
+
+const createTradePlanSchema = z.object({
+  instrumentSymbol: z.string().trim().min(1, "Instrument symbol is required"),
+  name: z.string().trim().min(1, "Plan name is required"),
+});
 
 export default function TradePlansPageClient({
   preloadedTradePlans,
@@ -16,38 +22,38 @@ export default function TradePlansPageClient({
   const createTradePlan = useMutation(api.tradePlans.createTradePlan);
   const updateTradePlanStatus = useMutation(api.tradePlans.updateTradePlanStatus);
 
-  const [name, setName] = useState("");
-  const [instrumentSymbol, setInstrumentSymbol] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const standalonePlans = tradePlans.filter((plan) => !plan.campaignId);
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!name.trim() || !instrumentSymbol.trim()) {
-      setError("Name and instrument symbol are required");
-      return;
-    }
-
-    setError(null);
-    setIsSubmitting(true);
-
-    try {
-      await createTradePlan({
-        instrumentSymbol: instrumentSymbol.trim().toUpperCase(),
-        name: name.trim(),
-      });
-
-      setName("");
-      setInstrumentSymbol("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create trade plan");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  const form = useAppForm({
+    defaultValues: {
+      instrumentSymbol: "",
+      name: "",
+    },
+    validators: {
+      onChange: ({ value }) => {
+        const result = createTradePlanSchema.safeParse(value);
+        if (!result.success) {
+          return result.error.flatten().fieldErrors;
+        }
+        return undefined;
+      },
+    },
+    onSubmit: async ({ value, formApi }) => {
+      setError(null);
+      try {
+        const parsed = createTradePlanSchema.parse(value);
+        await createTradePlan({
+          instrumentSymbol: parsed.instrumentSymbol.toUpperCase(),
+          name: parsed.name,
+        });
+        formApi.reset();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to create trade plan");
+      }
+    },
+  });
 
   const handleClosePlan = async (tradePlanId: Id<"tradePlans">) => {
     try {
@@ -72,28 +78,38 @@ export default function TradePlansPageClient({
           </Alert>
         )}
 
-        <form className="grid gap-3" onSubmit={handleCreate}>
-          <input
-            className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
-            placeholder="Plan name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <input
-            className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
-            placeholder="Instrument symbol (e.g. CPER)"
-            value={instrumentSymbol}
-            onChange={(e) => setInstrumentSymbol(e.target.value)}
-          />
+        <form
+          className="grid gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void form.handleSubmit();
+          }}
+        >
+          <form.AppField name="name">
+            {(field) => (
+              <field.FieldInput
+                label="Plan name"
+                placeholder="Plan name"
+              />
+            )}
+          </form.AppField>
+          <form.AppField name="instrumentSymbol">
+            {(field) => (
+              <field.FieldInput
+                label="Instrument symbol"
+                placeholder="Instrument symbol (e.g. CPER)"
+              />
+            )}
+          </form.AppField>
 
           <div>
-            <Button
-              dataTestId="create-trade-plan-button"
-              type="submit"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? "Creating..." : "Create Trade Plan"}
-            </Button>
+            <form.AppForm>
+              <form.SubmitButton
+                dataTestId="create-trade-plan-button"
+                label="Create Trade Plan"
+              />
+            </form.AppForm>
           </div>
         </form>
       </section>

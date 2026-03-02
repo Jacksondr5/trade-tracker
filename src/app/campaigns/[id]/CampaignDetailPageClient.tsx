@@ -5,7 +5,8 @@ import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Badge } from "~/components/ui";
+import { z } from "zod";
+import { Alert, Badge, useAppForm } from "~/components/ui";
 import NotesSection from "~/components/NotesSection";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
@@ -14,6 +15,24 @@ import { formatCurrency } from "~/lib/format";
 type CampaignStatus = "planning" | "active" | "closed";
 type TradePlanStatus = "idea" | "watching" | "active" | "closed";
 type SaveState = "idle" | "saving" | "saved";
+
+const tradePlanSchema = z.object({
+  instrumentSymbol: z.string().trim().min(1, "Instrument symbol is required"),
+  name: z.string().trim().min(1, "Trade plan name is required"),
+});
+const campaignNameSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Campaign name is required")
+    .max(120, "Campaign name must be 120 characters or less"),
+});
+const thesisSchema = z.object({
+  thesis: z.string().trim().min(1, "Thesis is required"),
+});
+const retrospectiveSchema = z.object({
+  retrospective: z.string(),
+});
 
 export default function CampaignDetailPageClient({
   campaignId,
@@ -70,48 +89,194 @@ export default function CampaignDetailPageClient({
   const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
   const [isChangingCampaignStatus, setIsChangingCampaignStatus] = useState(false);
 
-  const [campaignName, setCampaignName] = useState("");
   const [campaignNameInitialized, setCampaignNameInitialized] = useState(false);
   const [campaignNameError, setCampaignNameError] = useState<string | null>(null);
   const [campaignNameSaveState, setCampaignNameSaveState] = useState<SaveState>("idle");
 
-  const [thesis, setThesis] = useState("");
   const [thesisInitialized, setThesisInitialized] = useState(false);
   const [thesisError, setThesisError] = useState<string | null>(null);
   const [thesisSaveState, setThesisSaveState] = useState<SaveState>("idle");
 
-  const [retrospective, setRetrospective] = useState("");
   const [retrospectiveInitialized, setRetrospectiveInitialized] = useState(false);
   const [retrospectiveError, setRetrospectiveError] = useState<string | null>(null);
   const [retrospectiveSaveState, setRetrospectiveSaveState] = useState<SaveState>("idle");
 
-  const [planName, setPlanName] = useState("");
-  const [planInstrumentSymbol, setPlanInstrumentSymbol] = useState("");
   const [tradePlanCreateError, setTradePlanCreateError] = useState<string | null>(null);
   const [tradePlanStatusError, setTradePlanStatusError] = useState<string | null>(null);
-  const [isCreatingPlan, setIsCreatingPlan] = useState(false);
   const [showCreateTradePlanForm, setShowCreateTradePlanForm] = useState(false);
+
+  const campaignNameForm = useAppForm({
+    defaultValues: {
+      name: "",
+    },
+    validators: {
+      onChange: ({ value }) => {
+        setCampaignNameError(null);
+        if (campaignNameSaveState === "saved") {
+          setCampaignNameSaveState("idle");
+        }
+        const result = campaignNameSchema.safeParse(value);
+        if (!result.success) {
+          return result.error.flatten().fieldErrors;
+        }
+        return undefined;
+      },
+    },
+    onSubmit: async ({ value }) => {
+      setCampaignNameError(null);
+      setCampaignNameSaveState("saving");
+
+      try {
+        const parsed = campaignNameSchema.parse(value);
+        await updateCampaign({
+          campaignId,
+          name: parsed.name,
+        });
+        campaignNameForm.setFieldValue("name", parsed.name);
+        setCampaignNameSaveState("saved");
+      } catch (error) {
+        setCampaignNameError(
+          error instanceof ConvexError
+            ? typeof error.data === "string"
+              ? error.data
+              : "Failed to save campaign name"
+            : error instanceof Error
+              ? error.message
+              : "Failed to save campaign name",
+        );
+        setCampaignNameSaveState("idle");
+      }
+    },
+  });
+
+  const thesisForm = useAppForm({
+    defaultValues: {
+      thesis: "",
+    },
+    validators: {
+      onChange: ({ value }) => {
+        setThesisError(null);
+        if (thesisSaveState === "saved") {
+          setThesisSaveState("idle");
+        }
+        const result = thesisSchema.safeParse(value);
+        if (!result.success) {
+          return result.error.flatten().fieldErrors;
+        }
+        return undefined;
+      },
+    },
+    onSubmit: async ({ value }) => {
+      setThesisError(null);
+      setThesisSaveState("saving");
+
+      try {
+        const parsed = thesisSchema.parse(value);
+        await updateCampaign({
+          campaignId,
+          thesis: parsed.thesis,
+        });
+        thesisForm.setFieldValue("thesis", parsed.thesis);
+        setThesisSaveState("saved");
+      } catch (error) {
+        setThesisError(error instanceof Error ? error.message : "Failed to save thesis");
+        setThesisSaveState("idle");
+      }
+    },
+  });
+
+  const retrospectiveForm = useAppForm({
+    defaultValues: {
+      retrospective: "",
+    },
+    validators: {
+      onChange: ({ value }) => {
+        if (retrospectiveSaveState === "saved") {
+          setRetrospectiveSaveState("idle");
+        }
+        const result = retrospectiveSchema.safeParse(value);
+        if (!result.success) {
+          return result.error.flatten().fieldErrors;
+        }
+        return undefined;
+      },
+    },
+    onSubmit: async ({ value }) => {
+      setRetrospectiveError(null);
+      setRetrospectiveSaveState("saving");
+
+      try {
+        const parsed = retrospectiveSchema.parse(value);
+        const trimmedRetrospective = parsed.retrospective.trim();
+        await updateCampaign({
+          campaignId,
+          retrospective: trimmedRetrospective || undefined,
+        });
+        retrospectiveForm.setFieldValue("retrospective", trimmedRetrospective);
+        setRetrospectiveSaveState("saved");
+      } catch (error) {
+        setRetrospectiveError(
+          error instanceof Error ? error.message : "Failed to save retrospective",
+        );
+        setRetrospectiveSaveState("idle");
+      }
+    },
+  });
+
+  const tradePlanForm = useAppForm({
+    defaultValues: {
+      instrumentSymbol: "",
+      name: "",
+    },
+    validators: {
+      onChange: ({ value }) => {
+        const result = tradePlanSchema.safeParse(value);
+        if (!result.success) {
+          return result.error.flatten().fieldErrors;
+        }
+        return undefined;
+      },
+    },
+    onSubmit: async ({ value, formApi }) => {
+      setTradePlanCreateError(null);
+      try {
+        const parsed = tradePlanSchema.parse(value);
+        await createTradePlan({
+          campaignId,
+          instrumentSymbol: parsed.instrumentSymbol.toUpperCase(),
+          name: parsed.name,
+        });
+
+        formApi.reset();
+        setShowCreateTradePlanForm(false);
+      } catch (error) {
+        setTradePlanCreateError(
+          error instanceof Error ? error.message : "Failed to create trade plan",
+        );
+      }
+    },
+  });
 
   useEffect(() => {
     if (campaign && !campaignNameInitialized) {
-      setCampaignName(campaign.name);
+      campaignNameForm.setFieldValue("name", campaign.name);
       setCampaignNameInitialized(true);
     }
-  }, [campaign, campaignNameInitialized]);
+  }, [campaign, campaignNameForm, campaignNameInitialized]);
 
   useEffect(() => {
     if (campaign && !thesisInitialized) {
-      setThesis(campaign.thesis);
+      thesisForm.setFieldValue("thesis", campaign.thesis);
       setThesisInitialized(true);
     }
-  }, [campaign, thesisInitialized]);
+  }, [campaign, thesisForm, thesisInitialized]);
 
   useEffect(() => {
     if (campaign && !retrospectiveInitialized) {
-      setRetrospective(campaign.retrospective || "");
+      retrospectiveForm.setFieldValue("retrospective", campaign.retrospective || "");
       setRetrospectiveInitialized(true);
     }
-  }, [campaign, retrospectiveInitialized]);
+  }, [campaign, retrospectiveForm, retrospectiveInitialized]);
 
   const handleCampaignStatusChange = async (status: CampaignStatus) => {
     setStatusChangeError(null);
@@ -125,97 +290,6 @@ export default function CampaignDetailPageClient({
       );
     } finally {
       setIsChangingCampaignStatus(false);
-    }
-  };
-
-  const handleSaveCampaignName = async () => {
-    setCampaignNameError(null);
-    setCampaignNameSaveState("saving");
-
-    const trimmedName = campaignName.trim();
-
-    try {
-      await updateCampaign({
-        campaignId,
-        name: trimmedName,
-      });
-      setCampaignName(trimmedName);
-      setCampaignNameSaveState("saved");
-    } catch (error) {
-      setCampaignNameError(
-        error instanceof ConvexError
-          ? typeof error.data === "string"
-            ? error.data
-            : "Failed to save campaign name"
-          : error instanceof Error
-            ? error.message
-            : "Failed to save campaign name",
-      );
-      setCampaignNameSaveState("idle");
-    }
-  };
-
-  const handleSaveThesis = async () => {
-    setThesisError(null);
-    setThesisSaveState("saving");
-
-    try {
-      await updateCampaign({
-        campaignId,
-        thesis: thesis.trim(),
-      });
-      setThesisSaveState("saved");
-    } catch (error) {
-      setThesisError(error instanceof Error ? error.message : "Failed to save thesis");
-      setThesisSaveState("idle");
-    }
-  };
-
-  const handleSaveRetrospective = async () => {
-    setRetrospectiveError(null);
-    setRetrospectiveSaveState("saving");
-
-    try {
-      await updateCampaign({
-        campaignId,
-        retrospective: retrospective.trim() || undefined,
-      });
-      setRetrospectiveSaveState("saved");
-    } catch (error) {
-      setRetrospectiveError(
-        error instanceof Error ? error.message : "Failed to save retrospective",
-      );
-      setRetrospectiveSaveState("idle");
-    }
-  };
-
-  const handleCreateTradePlan = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!planName.trim() || !planInstrumentSymbol.trim()) {
-      setTradePlanCreateError("Name and instrument symbol are required");
-      return;
-    }
-
-    setTradePlanCreateError(null);
-    setIsCreatingPlan(true);
-
-    try {
-      await createTradePlan({
-        campaignId,
-        instrumentSymbol: planInstrumentSymbol.trim().toUpperCase(),
-        name: planName.trim(),
-      });
-
-      setPlanName("");
-      setPlanInstrumentSymbol("");
-      setShowCreateTradePlanForm(false);
-    } catch (error) {
-      setTradePlanCreateError(
-        error instanceof Error ? error.message : "Failed to create trade plan",
-      );
-    } finally {
-      setIsCreatingPlan(false);
     }
   };
 
@@ -253,32 +327,27 @@ export default function CampaignDetailPageClient({
       <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
         <div className="mb-2 flex items-start justify-between gap-3">
           <div className="flex-1">
-            <label htmlFor="campaign-name" className="mb-1 block text-xs uppercase tracking-wide text-slate-11">
-              Campaign Name
-            </label>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <input
-                id="campaign-name"
-                maxLength={120}
-                className="w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-xl font-bold text-slate-12"
-                value={campaignName}
-                onChange={(e) => {
-                  setCampaignName(e.target.value);
-                  setCampaignNameError(null);
-                  if (campaignNameSaveState === "saved") {
-                    setCampaignNameSaveState("idle");
-                  }
-                }}
-              />
-              <button
-                type="button"
-                className="rounded bg-slate-700 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-600"
-                onClick={() => void handleSaveCampaignName()}
-                disabled={campaignNameSaveState === "saving"}
-              >
-                Save Name
-              </button>
-            </div>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void campaignNameForm.handleSubmit();
+              }}
+              className="space-y-2"
+            >
+              <campaignNameForm.AppField name="name">
+                {(field) => (
+                  <field.FieldInput
+                    label="Campaign Name"
+                    maxLength={120}
+                    className="w-full"
+                  />
+                )}
+              </campaignNameForm.AppField>
+              <campaignNameForm.AppForm>
+                <campaignNameForm.SubmitButton label="Save Name" />
+              </campaignNameForm.AppForm>
+            </form>
             {campaignNameError && <Alert variant="error" className="mt-2">{campaignNameError}</Alert>}
             {campaignNameSaveState === "saving" && (
               <span className="mt-2 flex items-center gap-1 text-sm text-slate-11">
@@ -331,40 +400,41 @@ export default function CampaignDetailPageClient({
       <section className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
         <h2 className="mb-2 text-lg font-semibold text-slate-12">Thesis</h2>
         {thesisError && <Alert variant="error" className="mb-2">{thesisError}</Alert>}
-        <textarea
-          className="min-h-28 w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
-          value={thesis}
-          onChange={(e) => {
-            setThesis(e.target.value);
-            setThesisError(null);
-            if (thesisSaveState === "saved") {
-              setThesisSaveState("idle");
-            }
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void thesisForm.handleSubmit();
           }}
-        />
-        <div className="mt-2 flex items-center gap-3">
-          <button
-            className="rounded bg-slate-700 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-600"
-            onClick={() => void handleSaveThesis()}
-            disabled={thesisSaveState === "saving"}
-          >
-            Save Thesis
-          </button>
+        >
+          <thesisForm.AppField name="thesis">
+            {(field) => (
+              <field.FieldTextarea
+                label="Thesis"
+                rows={6}
+              />
+            )}
+          </thesisForm.AppField>
+          <div className="mt-2 flex items-center gap-3">
+            <thesisForm.AppForm>
+              <thesisForm.SubmitButton label="Save Thesis" />
+            </thesisForm.AppForm>
 
-          {thesisSaveState === "saving" && (
-            <span className="flex items-center gap-1 text-sm text-slate-11">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Saving...
-            </span>
-          )}
+            {thesisSaveState === "saving" && (
+              <span className="flex items-center gap-1 text-sm text-slate-11">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Saving...
+              </span>
+            )}
 
-          {thesisSaveState === "saved" && (
-            <span className="flex items-center gap-1 text-sm text-green-400">
-              <CheckCircle2 className="h-4 w-4" />
-              Saved
-            </span>
-          )}
-        </div>
+            {thesisSaveState === "saved" && (
+              <span className="flex items-center gap-1 text-sm text-green-400">
+                <CheckCircle2 className="h-4 w-4" />
+                Saved
+              </span>
+            )}
+          </div>
+        </form>
       </section>
 
       <NotesSection
@@ -385,7 +455,10 @@ export default function CampaignDetailPageClient({
             <button
               type="button"
               className="rounded bg-blue-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-600"
-              onClick={() => setShowCreateTradePlanForm((current) => !current)}
+              onClick={() => {
+                setShowCreateTradePlanForm((current) => !current);
+                setTradePlanCreateError(null);
+              }}
             >
               {showCreateTradePlanForm ? "Hide Form" : "Add Trade Plan"}
             </button>
@@ -439,36 +512,48 @@ export default function CampaignDetailPageClient({
             {tradePlanCreateError && (
               <Alert variant="error" className="mb-2">{tradePlanCreateError}</Alert>
             )}
-            <form className="grid gap-2 rounded border border-slate-700 p-3" onSubmit={handleCreateTradePlan}>
+            <form
+              className="grid gap-2 rounded border border-slate-700 p-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void tradePlanForm.handleSubmit();
+              }}
+            >
               <div className="grid grid-cols-2 gap-2">
-                <input
-                  className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
-                  placeholder="Trade plan name"
-                  value={planName}
-                  onChange={(e) => setPlanName(e.target.value)}
-                />
-                <input
-                  className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
-                  placeholder="Instrument symbol"
-                  value={planInstrumentSymbol}
-                  onChange={(e) => setPlanInstrumentSymbol(e.target.value)}
-                />
+                <tradePlanForm.AppField name="name">
+                  {(field) => (
+                    <field.FieldInput
+                      label="Trade plan name"
+                      placeholder="Trade plan name"
+                    />
+                  )}
+                </tradePlanForm.AppField>
+                <tradePlanForm.AppField name="instrumentSymbol">
+                  {(field) => (
+                    <field.FieldInput
+                      label="Instrument symbol"
+                      placeholder="Instrument symbol"
+                    />
+                  )}
+                </tradePlanForm.AppField>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  className="rounded bg-blue-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-600"
-                  type="submit"
-                  disabled={isCreatingPlan}
-                >
-                  {isCreatingPlan ? "Creating..." : "Save Trade Plan"}
-                </button>
-                <button
-                  type="button"
-                  className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-700"
-                  onClick={() => { setShowCreateTradePlanForm(false); setTradePlanCreateError(null); }}
-                >
-                  Cancel
-                </button>
+                <tradePlanForm.AppForm>
+                  <tradePlanForm.SubmitButton label="Save Trade Plan" />
+                </tradePlanForm.AppForm>
+                <tradePlanForm.Subscribe selector={(state) => state.isSubmitting}>
+                  {(isSubmitting) => (
+                    <button
+                      type="button"
+                      className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-700"
+                      onClick={() => { setShowCreateTradePlanForm(false); setTradePlanCreateError(null); }}
+                      disabled={isSubmitting}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </tradePlanForm.Subscribe>
               </div>
             </form>
           </>
@@ -483,40 +568,42 @@ export default function CampaignDetailPageClient({
         ) : (
           <>
             {retrospectiveError && <Alert variant="error" className="mb-2">{retrospectiveError}</Alert>}
-            <textarea
-              className="min-h-32 w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
-              value={retrospective}
-              onChange={(e) => {
-                setRetrospective(e.target.value);
-                if (retrospectiveSaveState === "saved") {
-                  setRetrospectiveSaveState("idle");
-                }
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void retrospectiveForm.handleSubmit();
               }}
-              placeholder="What worked, what failed, and what changed your view?"
-            />
-            <div className="mt-2 flex items-center gap-3">
-              <button
-                className="rounded bg-slate-700 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-600"
-                onClick={() => void handleSaveRetrospective()}
-                disabled={retrospectiveSaveState === "saving"}
-              >
-                Save Retrospective
-              </button>
+            >
+              <retrospectiveForm.AppField name="retrospective">
+                {(field) => (
+                  <field.FieldTextarea
+                    label="Retrospective"
+                    rows={8}
+                    placeholder="What worked, what failed, and what changed your view?"
+                  />
+                )}
+              </retrospectiveForm.AppField>
+              <div className="mt-2 flex items-center gap-3">
+                <retrospectiveForm.AppForm>
+                  <retrospectiveForm.SubmitButton label="Save Retrospective" />
+                </retrospectiveForm.AppForm>
 
-              {retrospectiveSaveState === "saving" && (
-                <span className="flex items-center gap-1 text-sm text-slate-11">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Saving...
-                </span>
-              )}
+                {retrospectiveSaveState === "saving" && (
+                  <span className="flex items-center gap-1 text-sm text-slate-11">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </span>
+                )}
 
-              {retrospectiveSaveState === "saved" && (
-                <span className="flex items-center gap-1 text-sm text-green-400">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Saved
-                </span>
-              )}
-            </div>
+                {retrospectiveSaveState === "saved" && (
+                  <span className="flex items-center gap-1 text-sm text-green-400">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Saved
+                  </span>
+                )}
+              </div>
+            </form>
           </>
         )}
       </section>

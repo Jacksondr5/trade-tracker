@@ -4,8 +4,17 @@ import { ConvexError } from "convex/values";
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
 import Link from "next/link";
 import { useState } from "react";
-import { Alert, Button } from "~/components/ui";
+import { z } from "zod";
+import { Alert, useAppForm } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
+
+const createPortfolioSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Portfolio name is required")
+    .max(120, "Portfolio name must be 120 characters or less"),
+});
 
 export default function PortfolioPageClient({
   preloadedPortfolios,
@@ -15,74 +24,77 @@ export default function PortfolioPageClient({
   const portfolios = usePreloadedQuery(preloadedPortfolios);
   const createPortfolio = useMutation(api.portfolios.createPortfolio);
 
-  const [newName, setNewName] = useState("");
-  const [isCreating, setIsCreating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newName.trim()) return;
-
-    setIsCreating(true);
-    setErrorMessage(null);
-
-    try {
-      await createPortfolio({ name: newName.trim() });
-      setNewName("");
-    } catch (error) {
-      setErrorMessage(
-        error instanceof ConvexError
-          ? typeof error.data === "string"
-            ? error.data
-            : "Failed to create portfolio"
-          : error instanceof Error
-            ? error.message
-            : "Failed to create portfolio",
-      );
-    } finally {
-      setIsCreating(false);
-    }
-  };
+  const form = useAppForm({
+    defaultValues: {
+      name: "",
+    },
+    validators: {
+      onChange: ({ value }) => {
+        const result = createPortfolioSchema.safeParse(value);
+        if (!result.success) {
+          return result.error.flatten().fieldErrors;
+        }
+        return undefined;
+      },
+    },
+    onSubmit: async ({ value, formApi }) => {
+      setErrorMessage(null);
+      try {
+        const parsed = createPortfolioSchema.parse(value);
+        await createPortfolio({ name: parsed.name });
+        formApi.reset();
+      } catch (error) {
+        setErrorMessage(
+          error instanceof ConvexError
+            ? typeof error.data === "string"
+              ? error.data
+              : "Failed to create portfolio"
+            : error instanceof Error
+              ? error.message
+              : "Failed to create portfolio",
+        );
+      }
+    },
+  });
 
   return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-slate-12 text-2xl font-bold">Portfolios</h1>
-        </div>
+    <div className="container mx-auto px-4 py-8">
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-slate-12 text-2xl font-bold">Portfolios</h1>
+      </div>
 
       {/* Inline create form */}
       <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
-        <form onSubmit={handleCreate} className="flex items-end gap-3">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void form.handleSubmit();
+          }}
+          className="flex items-end gap-3"
+        >
           <div className="flex-1">
-            <label
-              htmlFor="new-portfolio-name"
-              className="mb-1 block text-sm text-slate-11"
-            >
-              New Portfolio
-            </label>
-            <input
-              id="new-portfolio-name"
-              type="text"
-              maxLength={120}
-              value={newName}
-              onChange={(e) => {
-                setNewName(e.target.value);
-                setErrorMessage(null);
-              }}
-              placeholder="Portfolio name"
-              className="text-slate-12 h-9 w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-1 focus:outline-none focus:ring-1 focus:ring-slate-500"
-            />
+            <form.AppField name="name">
+              {(field) => (
+                <field.FieldInput
+                  label="New Portfolio"
+                  maxLength={120}
+                  placeholder="Portfolio name"
+                />
+              )}
+            </form.AppField>
           </div>
-          <Button
-            type="submit"
-            disabled={isCreating || !newName.trim()}
-            dataTestId="create-portfolio-button"
-          >
-            {isCreating ? "Creating..." : "Create"}
-          </Button>
+          <form.AppForm>
+            <form.SubmitButton
+              dataTestId="create-portfolio-button"
+              label="Create"
+            />
+          </form.AppForm>
         </form>
         {errorMessage && (
-          <Alert variant="error" className="mt-2">
+          <Alert variant="error" className="mt-2" onDismiss={() => setErrorMessage(null)}>
             {errorMessage}
           </Alert>
         )}
