@@ -408,16 +408,22 @@ export default function ImportsPageClient({
           }}
           onInlineTradePlanChange={(inboxTradeId, value) => {
             const previousTradePlanId = inlineTradePlanIds[inboxTradeId] ?? "";
+            const attemptedTradePlanId = value;
             setInlineTradePlanIds((prev) => ({
               ...prev,
-              [inboxTradeId]: value,
+              [inboxTradeId]: attemptedTradePlanId,
             }));
-            void persistTradePlanSelection(inboxTradeId, value).then((persisted) => {
+            void persistTradePlanSelection(inboxTradeId, attemptedTradePlanId).then((persisted) => {
               if (!persisted) {
-                setInlineTradePlanIds((prev) => ({
-                  ...prev,
-                  [inboxTradeId]: previousTradePlanId,
-                }));
+                setInlineTradePlanIds((prev) => {
+                  if ((prev[inboxTradeId] ?? "") !== attemptedTradePlanId) {
+                    return prev;
+                  }
+                  return {
+                    ...prev,
+                    [inboxTradeId]: previousTradePlanId,
+                  };
+                });
               }
             });
           }}
