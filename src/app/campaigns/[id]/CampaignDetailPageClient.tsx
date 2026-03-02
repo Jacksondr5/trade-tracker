@@ -194,6 +194,7 @@ export default function CampaignDetailPageClient({
     },
     validators: {
       onChange: ({ value }) => {
+        setRetrospectiveError(null);
         if (retrospectiveSaveState === "saved") {
           setRetrospectiveSaveState("idle");
         }
@@ -343,7 +344,11 @@ export default function CampaignDetailPageClient({
                 <campaignNameForm.SubmitButton label="Save Name" />
               </campaignNameForm.AppForm>
             </form>
-            {campaignNameError && <Alert variant="error" className="mt-2">{campaignNameError}</Alert>}
+            {campaignNameError && (
+              <Alert variant="error" className="mt-2" onDismiss={() => setCampaignNameError(null)}>
+                {campaignNameError}
+              </Alert>
+            )}
             {campaignNameSaveState === "saving" && (
               <span className="mt-2 flex items-center gap-1 text-sm text-slate-11">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -389,12 +394,20 @@ export default function CampaignDetailPageClient({
           </p>
         )}
 
-        {statusChangeError && <Alert variant="error" className="mt-3">{statusChangeError}</Alert>}
+        {statusChangeError && (
+          <Alert variant="error" className="mt-3" onDismiss={() => setStatusChangeError(null)}>
+            {statusChangeError}
+          </Alert>
+        )}
       </div>
 
       <section className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
         <h2 className="mb-2 text-lg font-semibold text-slate-12">Thesis</h2>
-        {thesisError && <Alert variant="error" className="mb-2">{thesisError}</Alert>}
+        {thesisError && (
+          <Alert variant="error" className="mb-2" onDismiss={() => setThesisError(null)}>
+            {thesisError}
+          </Alert>
+        )}
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -461,7 +474,13 @@ export default function CampaignDetailPageClient({
         </div>
 
         {tradePlanStatusError && (
-          <Alert variant="error" className="mb-3">{tradePlanStatusError}</Alert>
+          <Alert
+            variant="error"
+            className="mb-3"
+            onDismiss={() => setTradePlanStatusError(null)}
+          >
+            {tradePlanStatusError}
+          </Alert>
         )}
 
         {tradePlans.length === 0 ? (
@@ -505,7 +524,13 @@ export default function CampaignDetailPageClient({
         {showCreateTradePlanForm && (
           <>
             {tradePlanCreateError && (
-              <Alert variant="error" className="mb-2">{tradePlanCreateError}</Alert>
+              <Alert
+                variant="error"
+                className="mb-2"
+                onDismiss={() => setTradePlanCreateError(null)}
+              >
+                {tradePlanCreateError}
+              </Alert>
             )}
             <form
               className="grid gap-2 rounded border border-slate-700 p-3"
@@ -562,7 +587,15 @@ export default function CampaignDetailPageClient({
           <p className="text-sm text-slate-11">Retrospective is available after the campaign is closed.</p>
         ) : (
           <>
-            {retrospectiveError && <Alert variant="error" className="mb-2">{retrospectiveError}</Alert>}
+            {retrospectiveError && (
+              <Alert
+                variant="error"
+                className="mb-2"
+                onDismiss={() => setRetrospectiveError(null)}
+              >
+                {retrospectiveError}
+              </Alert>
+            )}
             <form
               onSubmit={(event) => {
                 event.preventDefault();

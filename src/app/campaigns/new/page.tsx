@@ -2,7 +2,7 @@
 
 import { useMutation } from "convex/react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { Alert, Button, Card, useAppForm } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
@@ -19,6 +19,15 @@ export default function NewCampaignPage() {
   const createCampaign = useMutation(api.campaigns.createCampaign);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const redirectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const form = useAppForm({
     defaultValues: {
@@ -43,7 +52,7 @@ export default function NewCampaignPage() {
           thesis: parsed.thesis,
         });
         setSuccessMessage("Campaign created successfully!");
-        setTimeout(() => {
+        redirectTimeoutRef.current = setTimeout(() => {
           router.push(`/campaigns/${campaignId}`);
         }, 1000);
       } catch (error) {
@@ -105,8 +114,13 @@ export default function NewCampaignPage() {
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={isSubmitting}
-                      onClick={() => router.push("/campaigns")}
+                      disabled={isSubmitting || successMessage !== null}
+                      onClick={() => {
+                        if (redirectTimeoutRef.current) {
+                          clearTimeout(redirectTimeoutRef.current);
+                        }
+                        router.push("/campaigns");
+                      }}
                       dataTestId="cancel-button"
                     >
                       Cancel
