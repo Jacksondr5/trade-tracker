@@ -1,12 +1,13 @@
 Feature list:
 
-- The ability to create campaigns to capture bigger picture ideas
-  - Things like precious metal bull run, pick up and manufacturing, US currency devaluation All of these are big picture items that I can get exposure to through multiple trade ideas. For example, a pick up on industrials is related to base metals, industrial stocks, transportation stocks.
-  - The goal here is to give me a place to put scratch that the goal here is to give me a place to capture thoughts and updates on larger macroeconomic or larger market trends. It will also let me group together trades that are related so I can better manage my exposure to certain themes.
-- Trade plans should capture my plans for a specific instrument like an individual stock or ETF. I want to be able to capture an overall mini thesis for the trade link it to a campaign set entry and exit conditions and then take notes as it develops.
-  - The main thing here is being able to keep track of my thoughts prior to entering a trade. Secondarily I want to be able to make sure that I maintain my plan throughout the execution of the trade. The trade plan will have multiple trades in it - entries, profit-taking, risk reduction, exits, increase exposure.
+I want to be able to mark campaigns or trade plans as watch-listed.
 
-I think I want the trade itself to be data that just comes from my brokerages. I don't want to manually enter in trades. The primary point of this app is to take notes on my thoughts and to keep me honest and give me room to breathe when I don't have to remember all these things. It puts time pressure on me or I will forget key details about why I'm looking at a particular instrument. So the MVP really needs to capture the campaigns and the trade plans. It will be useful to me even if I cannot track trades at all because I can do a decent job of seeing the trades via charts.
+Acceptance criteria:
+1) Watch-listed items are visually prominent on dashboard and list/detail views (star icon + consistent border/background treatment).
+2) Provide short contextual dashboard/tooltip copy for watch-listed items (1–2 sentences, <=120 characters).
+3) Define a reusable watch-list style set (icon, border/background classes, accessible contrast variants meeting WCAG AA).
+4) Optional style variants are available for list rows, detail badges, and summary widgets, with consistent appearance across campaigns and trade plans.
+5) Verification: render examples on dashboard/list/detail/summary surfaces and confirm contrast/copy requirements.
 
 V2 should definitely include trade capabilities - mainly pulling from the brokerages. This will become a lot more valuable and let me keep track of things long term. Some other features that I need to prioritize include:
 

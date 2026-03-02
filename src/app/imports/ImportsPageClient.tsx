@@ -29,6 +29,7 @@ const DEFAULT_EDIT_VALUES: EditTradeFormValues = {
 
 export default function ImportsPageClient({
   preloadedAccountMappings,
+  preloadedCampaigns,
   preloadedInboxTrades,
   preloadedOpenTradePlans,
   preloadedPortfolios,
@@ -36,6 +37,7 @@ export default function ImportsPageClient({
   preloadedAccountMappings: Preloaded<
     typeof api.accountMappings.listAccountMappings
   >;
+  preloadedCampaigns: Preloaded<typeof api.campaigns.listCampaigns>;
   preloadedInboxTrades: Preloaded<typeof api.imports.listInboxTrades>;
   preloadedOpenTradePlans: Preloaded<typeof api.tradePlans.listOpenTradePlans>;
   preloadedPortfolios: Preloaded<typeof api.portfolios.listPortfolios>;
@@ -52,9 +54,20 @@ export default function ImportsPageClient({
   const openTradePlansRaw = usePreloadedQuery(preloadedOpenTradePlans);
   const accountMappings = usePreloadedQuery(preloadedAccountMappings);
   const portfolios = usePreloadedQuery(preloadedPortfolios);
+  const allCampaigns = usePreloadedQuery(preloadedCampaigns);
   const openTradePlans = (openTradePlansRaw ?? undefined) as
     | OpenTradePlanOption[]
     | undefined;
+  const campaigns = useMemo(
+    () =>
+      allCampaigns?.filter(
+        (c) => c.status === "active" || c.status === "planning",
+      ),
+    [allCampaigns],
+  );
+
+  const createTradePlan = useMutation(api.tradePlans.createTradePlan);
+
   const accountLabelByKey = useMemo(
     () =>
       new Map(
@@ -131,6 +144,34 @@ export default function ImportsPageClient({
         error instanceof Error ? error.message : "Failed to update portfolio",
       );
     });
+  };
+
+  const handleQuickCreateTradePlan = async (
+    inboxTradeId: Id<"inboxTrades">,
+    args: {
+      name: string;
+      instrumentSymbol: string;
+      campaignId?: Id<"campaigns">;
+    },
+  ) => {
+    try {
+      const newPlanId = await createTradePlan({
+        campaignId: args.campaignId,
+        instrumentSymbol: args.instrumentSymbol,
+        name: args.name,
+      });
+      setInlineTradePlanIds((prev) => ({
+        ...prev,
+        [inboxTradeId]: newPlanId,
+      }));
+      persistTradePlanSelection(inboxTradeId, newPlanId);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to create trade plan",
+      );
+    }
   };
 
   const handleEdit = (trade: InboxTrade) => {
@@ -320,6 +361,7 @@ export default function ImportsPageClient({
 
         <InboxTable
           accountLabelByKey={accountLabelByKey}
+          campaigns={campaigns}
           editingTradeId={editingTradeId}
           inlineNotes={inlineNotes}
           inlinePortfolioIds={inlinePortfolioIds}
@@ -357,6 +399,7 @@ export default function ImportsPageClient({
             }));
             persistTradePlanSelection(inboxTradeId, value);
           }}
+          onQuickCreateTradePlan={handleQuickCreateTradePlan}
           openTradePlans={openTradePlans}
           portfolios={portfolios}
         />

@@ -5,6 +5,7 @@ import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { validateInboxTradeCandidate } from "../shared/imports/validation";
 import { KRAKEN_DEFAULT_ACCOUNT_ID } from "../shared/imports/constants";
+import { findAutoMatchTradePlanId } from "../shared/imports/auto-match";
 
 type CanonicalCandidate = {
   assetType: "stock" | "crypto";
@@ -210,6 +211,32 @@ export const importTrades = mutation({
         .map((t) => dedupKey(t.source, t.externalId)),
     ]);
 
+    const openTradePlans = [
+      ...(await ctx.db
+        .query("tradePlans")
+        .withIndex("by_owner_status", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "active"),
+        )
+        .collect()),
+      ...(await ctx.db
+        .query("tradePlans")
+        .withIndex("by_owner_status", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "idea"),
+        )
+        .collect()),
+      ...(await ctx.db
+        .query("tradePlans")
+        .withIndex("by_owner_status", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "watching"),
+        )
+        .collect()),
+    ];
+
+    const tradePlanMatchList = openTradePlans.map((p) => ({
+      id: p._id as string,
+      instrumentSymbol: p.instrumentSymbol,
+    }));
+
     let imported = 0;
     let skippedDuplicates = 0;
     let withValidationErrors = 0;
@@ -250,6 +277,17 @@ export const importTrades = mutation({
         }
       }
 
+      let resolvedTradePlanId = trade.tradePlanId;
+      if (resolvedTradePlanId === undefined && validation.normalizedTicker) {
+        const autoMatchId = findAutoMatchTradePlanId(
+          validation.normalizedTicker,
+          tradePlanMatchList,
+        );
+        if (autoMatchId) {
+          resolvedTradePlanId = autoMatchId as Id<"tradePlans">;
+        }
+      }
+
       if (trade.portfolioId !== undefined) {
         if (!portfolioOwnerCache.has(trade.portfolioId)) {
           const portfolio = await ctx.db.get(trade.portfolioId);
@@ -276,7 +314,7 @@ export const importTrades = mutation({
         status: "pending_review",
         taxes: trade.taxes,
         ticker: validation.normalizedTicker,
-        tradePlanId: trade.tradePlanId,
+        tradePlanId: resolvedTradePlanId,
         validationErrors,
         validationWarnings,
       });
@@ -303,6 +341,55 @@ export const listInboxTrades = query({
     return trades.sort(
       (a, b) => (b.date ?? b._creationTime) - (a.date ?? a._creationTime),
     );
+  },
+});
+
+export const listInboxTradesForTradePlan = query({
+  args: {
+    tradePlanId: v.id("tradePlans"),
+  },
+  returns: v.array(
+    v.object({
+      inboxTrade: inboxTradeValidator,
+      matchType: v.union(v.literal("assigned"), v.literal("suggested")),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const tradePlan = assertOwner(
+      await ctx.db.get(args.tradePlanId),
+      ownerId,
+      "Trade plan not found",
+    );
+
+    const pendingTrades = await ctx.db
+      .query("inboxTrades")
+      .withIndex("by_owner_status", (q) =>
+        q.eq("ownerId", ownerId).eq("status", "pending_review"),
+      )
+      .collect();
+
+    const normalizedSymbol = tradePlan.instrumentSymbol.toUpperCase();
+
+    return pendingTrades
+      .filter((t) => {
+        if (t.tradePlanId === args.tradePlanId) return true;
+        if (!t.tradePlanId && t.ticker?.toUpperCase() === normalizedSymbol)
+          return true;
+        return false;
+      })
+      .sort((a, b) => {
+        const aAssigned = a.tradePlanId === args.tradePlanId;
+        const bAssigned = b.tradePlanId === args.tradePlanId;
+        if (aAssigned !== bAssigned) return aAssigned ? -1 : 1;
+        return (b.date ?? b._creationTime) - (a.date ?? a._creationTime);
+      })
+      .map((t) => ({
+        inboxTrade: t,
+        matchType: (t.tradePlanId === args.tradePlanId
+          ? "assigned"
+          : "suggested") as "assigned" | "suggested",
+      }));
   },
 });
 

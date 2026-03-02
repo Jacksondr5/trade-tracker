@@ -13,13 +13,21 @@ export default async function TradePlanDetailPage({
   const tradePlanId = id as Id<"tradePlans">;
 
   const token = await getConvexTokenOrThrow();
-  const [preloadedTradePlan, preloadedNotes, preloadedAllTrades, preloadedAccountMappings] =
-    await Promise.all([
-      preloadQuery(api.tradePlans.getTradePlan, { tradePlanId }, { token }),
-      preloadQuery(api.notes.getNotesByTradePlan, { tradePlanId }, { token }),
-      preloadQuery(api.trades.listTrades, {}, { token }),
-      preloadQuery(api.accountMappings.listAccountMappings, {}, { token }),
-    ]);
+  const [
+    preloadedTradePlan,
+    preloadedNotes,
+    preloadedAllTrades,
+    preloadedAccountMappings,
+    preloadedInboxTradesForPlan,
+    preloadedPortfolios,
+  ] = await Promise.all([
+    preloadQuery(api.tradePlans.getTradePlan, { tradePlanId }, { token }),
+    preloadQuery(api.notes.getNotesByTradePlan, { tradePlanId }, { token }),
+    preloadQuery(api.trades.listTrades, {}, { token }),
+    preloadQuery(api.accountMappings.listAccountMappings, {}, { token }),
+    preloadQuery(api.imports.listInboxTradesForTradePlan, { tradePlanId }, { token }),
+    preloadQuery(api.portfolios.listPortfolios, {}, { token }),
+  ]);
 
   return (
     <TradePlanDetailPageClient
@@ -28,6 +36,8 @@ export default async function TradePlanDetailPage({
       preloadedNotes={preloadedNotes}
       preloadedAllTrades={preloadedAllTrades}
       preloadedAccountMappings={preloadedAccountMappings}
+      preloadedInboxTradesForPlan={preloadedInboxTradesForPlan}
+      preloadedPortfolios={preloadedPortfolios}
     />
   );
 }

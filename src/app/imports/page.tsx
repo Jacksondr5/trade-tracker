@@ -10,16 +10,19 @@ export default async function ImportsPage() {
     preloadedOpenTradePlans,
     preloadedAccountMappings,
     preloadedPortfolios,
+    preloadedCampaigns,
   ] = await Promise.all([
     preloadQuery(api.imports.listInboxTrades, {}, { token }),
     preloadQuery(api.tradePlans.listOpenTradePlans, {}, { token }),
     preloadQuery(api.accountMappings.listAccountMappings, {}, { token }),
     preloadQuery(api.portfolios.listPortfolios, {}, { token }),
+    preloadQuery(api.campaigns.listCampaigns, {}, { token }),
   ]);
 
   return (
     <ImportsPageClient
       preloadedAccountMappings={preloadedAccountMappings}
+      preloadedCampaigns={preloadedCampaigns}
       preloadedInboxTrades={preloadedInboxTrades}
       preloadedOpenTradePlans={preloadedOpenTradePlans}
       preloadedPortfolios={preloadedPortfolios}
