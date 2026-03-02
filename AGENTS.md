@@ -42,6 +42,19 @@ Reusable UI components are exported from `src/components/ui/index.ts`.
 
 Prefer icon buttons over text.
 
+**IMPORTANT — Reuse existing components.** Before building any UI element, check `src/components/ui/index.ts` for an existing component that does what you need. If an existing component is close but not quite right, extend it with a new variant or prop rather than creating a new component. Do not build custom buttons, inputs, cards, dialogs, labels, textareas, alerts, badges, or radio groups — these already exist.
+
+**Adding new components:** Use the ShadCN CLI to add new components:
+
+```bash
+npx shadcn@latest add <component-name>
+```
+
+After adding a ShadCN component, you MUST make these modifications before using it:
+1. **Replace CSS variable colors** with Radix color tokens (see Style Standards below)
+2. **Add `dataTestId` prop** to any interactive element (all interactive components require this)
+3. **Verify dark-mode appearance** — this app is dark-mode only
+
 ### Path Aliases
 
 - `~/*` → `./src/*`
@@ -85,3 +98,22 @@ Feedback messages (success, error, warning, info). Use `onDismiss` prop for user
 ### Theme
 
 Dark-mode only. No light-mode CSS variables. Color scales: grass, olive, slate, green, red, amber, blue (Radix-based).
+
+#### Style Standards
+
+All components must follow these conventions for consistency:
+
+| Property | Standard |
+|----------|----------|
+| Surface backgrounds | `bg-olive-2` (cards, dialogs, dropdowns) |
+| Surface borders | `border-olive-6` (resting), `border-olive-7` (inputs) |
+| Primary text | `text-olive-12` or `text-slate-12` |
+| Secondary text | `text-olive-11` or `text-slate-11` |
+| Focus ring | `focus-visible:ring-2 focus-visible:ring-blue-8 focus-visible:ring-offset-2 focus-visible:ring-offset-olive-1` |
+| Primary action | `bg-grass-9 hover:bg-grass-10 text-grass-1` |
+| Destructive action | `bg-red-9 hover:bg-red-10 text-red-1` |
+| Disabled (buttons) | `disabled:pointer-events-none disabled:opacity-50` |
+| Disabled (inputs) | `disabled:cursor-not-allowed disabled:opacity-50` |
+| Transitions | `transition-colors` (not `transition-all`) |
+
+Do NOT use Tailwind's default color scales (e.g., `slate-700`, `slate-800`, `gray-200`). Always use the Radix 12-step tokens defined in `src/styles/global.css`.
