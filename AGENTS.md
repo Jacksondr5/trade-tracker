@@ -78,22 +78,16 @@ Convex auth config: `convex/auth.config.ts`.
 
 Status/label badges with semantic color variants:
 
-| Variant    | Use for                                      |
-|------------|----------------------------------------------|
-| `success`  | Active campaigns, buy side, long direction (positions) |
-| `danger`   | Sell side, short direction                    |
-| `info`     | Planning status, long direction (import inbox) |
-| `warning`  | (reserved for future use)                     |
-| `neutral`  | Closed campaigns, trade plan statuses         |
+| Variant   | Use for                                                |
+| --------- | ------------------------------------------------------ |
+| `success` | Active campaigns, buy side, long direction (positions) |
+| `danger`  | Sell side, short direction                             |
+| `info`    | Planning status, long direction (import inbox)         |
+| `neutral` | Closed campaigns, trade plan statuses                  |
 
 ### Alert (`Alert` from `~/components/ui`)
 
 Feedback messages (success, error, warning, info). Use `onDismiss` prop for user-dismissible alerts. Prefer `Alert` over inline `<p>` or `<div>` error patterns.
-
-### P&L Colors
-
-- Profit: `text-green-400`, always prefix with `+`
-- Loss: `text-red-400`
 
 ### Theme
 

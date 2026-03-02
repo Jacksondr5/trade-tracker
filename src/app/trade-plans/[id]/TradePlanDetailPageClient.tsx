@@ -345,7 +345,6 @@ export default function TradePlanDetailPageClient({
                   <th className="px-2 py-2">Qty</th>
                   <th className="px-2 py-2">Price</th>
                   <th className="px-2 py-2">Portfolio / Action</th>
-                  <th className="px-2 py-2">P&amp;L</th>
                 </tr>
               </thead>
               <tbody>
@@ -418,7 +417,6 @@ export default function TradePlanDetailPageClient({
                           </button>
                         </div>
                       </td>
-                      <td className="px-2 py-2 text-slate-11">---</td>
                     </tr>
                   );
                 })}
@@ -433,16 +431,6 @@ export default function TradePlanDetailPageClient({
                     <td className="px-2 py-2 text-slate-11">{trade.quantity}</td>
                     <td className="px-2 py-2 text-slate-11">{formatCurrency(trade.price)}</td>
                     <td className="px-2 py-2 text-slate-11">—</td>
-                    <td className="px-2 py-2">
-                      {trade.realizedPL === null ? (
-                        <span className="text-slate-11">{"\u2014"}</span>
-                      ) : (
-                        <span className={trade.realizedPL >= 0 ? "text-green-400" : "text-red-400"}>
-                          {trade.realizedPL >= 0 ? "+" : ""}
-                          {formatCurrency(trade.realizedPL)}
-                        </span>
-                      )}
-                    </td>
                   </tr>
                 ))}
               </tbody>
