@@ -232,7 +232,7 @@ Prefer icon buttons over text.
 
 With this expanded version:
 
-```markdown
+````markdown
 ### UI Components (`src/components/ui/`)
 
 Reusable UI components are exported from `src/components/ui/index.ts`.
@@ -251,7 +251,7 @@ After adding a ShadCN component, you MUST make these modifications before using 
 1. **Replace CSS variable colors** with Radix color tokens (see Style Standards below)
 2. **Add `dataTestId` prop** to any interactive element (all interactive components require this)
 3. **Verify dark-mode appearance** — this app is dark-mode only
-```
+````
 
 **Step 2: Add a "Style Standards" subsection to the Theme section**
 
