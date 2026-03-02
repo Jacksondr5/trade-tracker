@@ -8,9 +8,6 @@ import {
   Alert,
   Button,
   Card,
-  Label,
-  RadioGroup,
-  RadioGroupItem,
   useAppForm,
 } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
@@ -61,7 +58,6 @@ export default function NewTradePageClient({
   const createTrade = useMutation(api.trades.createTrade);
   const openTradePlans = usePreloadedQuery(preloadedOpenTradePlans);
   const portfolios = usePreloadedQuery(preloadedPortfolios);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -88,7 +84,6 @@ export default function NewTradePageClient({
       },
     },
     onSubmit: async ({ value }) => {
-      setIsSubmitting(true);
       setErrorMessage(null);
       try {
         const parsed = tradeSchema.parse(value);
@@ -116,8 +111,6 @@ export default function NewTradePageClient({
         const message =
           error instanceof Error ? error.message : "Failed to create trade";
         setErrorMessage(message);
-      } finally {
-        setIsSubmitting(false);
       }
     },
   });
@@ -149,23 +142,7 @@ export default function NewTradePageClient({
           <div className="flex flex-col gap-6">
             <form.AppField name="date">
               {(field) => (
-                <div className="grid w-full items-center gap-1.5">
-                  <label
-                    htmlFor={field.name}
-                    className="text-slate-12 text-sm font-medium"
-                  >
-                    Date & Time
-                  </label>
-                  <input
-                    type="datetime-local"
-                    id={field.name}
-                    data-testid={`${field.name}-input`}
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    onBlur={field.handleBlur}
-                    className="text-slate-12 h-9 w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-1 focus:outline-none focus:ring-1 focus:ring-slate-500"
-                  />
-                </div>
+                <field.FieldInput label="Date & Time" type="datetime-local" />
               )}
             </form.AppField>
 
@@ -177,169 +154,64 @@ export default function NewTradePageClient({
 
             <form.AppField name="tradePlanId">
               {(field) => (
-                <div className="grid w-full items-center gap-1.5">
-                  <label
-                    htmlFor={field.name}
-                    className="text-slate-12 text-sm font-medium"
-                  >
-                    Trade Plan (optional)
-                  </label>
-                  <select
-                    id={field.name}
-                    data-testid={`${field.name}-select`}
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    onBlur={field.handleBlur}
-                    className="text-slate-12 h-9 w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-slate-500"
-                  >
-                    <option value="">No trade plan</option>
-                    {openTradePlans.map((tradePlan) => (
-                      <option key={tradePlan._id} value={tradePlan._id}>
-                        {tradePlan.name} ({tradePlan.instrumentSymbol}) [{tradePlan.status}]
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <field.FieldSelect
+                  label="Trade Plan (optional)"
+                  placeholder="No trade plan"
+                  options={openTradePlans.map((tradePlan) => ({
+                    label: `${tradePlan.name} (${tradePlan.instrumentSymbol}) [${tradePlan.status}]`,
+                    value: tradePlan._id,
+                  }))}
+                />
               )}
             </form.AppField>
 
             <form.AppField name="portfolioId">
               {(field) => (
-                <div className="grid w-full items-center gap-1.5">
-                  <label
-                    htmlFor={field.name}
-                    className="text-slate-12 text-sm font-medium"
-                  >
-                    Portfolio (optional)
-                  </label>
-                  <select
-                    id={field.name}
-                    data-testid={`${field.name}-select`}
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    onBlur={field.handleBlur}
-                    className="text-slate-12 h-9 w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-slate-500"
-                  >
-                    <option value="">No portfolio</option>
-                    {portfolios.map((portfolio) => (
-                      <option key={portfolio._id} value={portfolio._id}>
-                        {portfolio.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <field.FieldSelect
+                  label="Portfolio (optional)"
+                  placeholder="No portfolio"
+                  options={portfolios.map((portfolio) => ({
+                    label: portfolio.name,
+                    value: portfolio._id,
+                  }))}
+                />
               )}
             </form.AppField>
 
             <div className="grid grid-cols-3 gap-6">
               <form.AppField name="assetType">
                 {(field) => (
-                  <div className="space-y-2">
-                    <Label
-                      className="text-slate-12 text-sm font-medium"
-                      dataTestId={`${field.name}-label`}
-                    >
-                      Asset Type
-                    </Label>
-                    <RadioGroup
-                      dataTestId={`${field.name}-radio`}
-                      value={field.state.value}
-                      onValueChange={(value) =>
-                        field.handleChange(value as "stock" | "crypto")
-                      }
-                    >
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="stock" id="asset-stock" />
-                        <Label
-                          htmlFor="asset-stock"
-                          dataTestId="asset-stock-label"
-                        >
-                          Stock
-                        </Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="crypto" id="asset-crypto" />
-                        <Label
-                          htmlFor="asset-crypto"
-                          dataTestId="asset-crypto-label"
-                        >
-                          Crypto
-                        </Label>
-                      </div>
-                    </RadioGroup>
-                  </div>
+                  <field.FieldSelect
+                    label="Asset Type"
+                    options={[
+                      { label: "Stock", value: "stock" },
+                      { label: "Crypto", value: "crypto" },
+                    ]}
+                  />
                 )}
               </form.AppField>
 
               <form.AppField name="side">
                 {(field) => (
-                  <div className="space-y-2">
-                    <Label
-                      className="text-slate-12 text-sm font-medium"
-                      dataTestId={`${field.name}-label`}
-                    >
-                      Side
-                    </Label>
-                    <RadioGroup
-                      dataTestId={`${field.name}-radio`}
-                      value={field.state.value}
-                      onValueChange={(value) =>
-                        field.handleChange(value as "buy" | "sell")
-                      }
-                    >
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="buy" id="side-buy" />
-                        <Label htmlFor="side-buy" dataTestId="side-buy-label">
-                          Buy
-                        </Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="sell" id="side-sell" />
-                        <Label htmlFor="side-sell" dataTestId="side-sell-label">
-                          Sell
-                        </Label>
-                      </div>
-                    </RadioGroup>
-                  </div>
+                  <field.FieldSelect
+                    label="Side"
+                    options={[
+                      { label: "Buy", value: "buy" },
+                      { label: "Sell", value: "sell" },
+                    ]}
+                  />
                 )}
               </form.AppField>
 
               <form.AppField name="direction">
                 {(field) => (
-                  <div className="space-y-2">
-                    <Label
-                      className="text-slate-12 text-sm font-medium"
-                      dataTestId={`${field.name}-label`}
-                    >
-                      Direction
-                    </Label>
-                    <RadioGroup
-                      dataTestId={`${field.name}-radio`}
-                      value={field.state.value}
-                      onValueChange={(value) =>
-                        field.handleChange(value as "long" | "short")
-                      }
-                    >
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="long" id="direction-long" />
-                        <Label
-                          htmlFor="direction-long"
-                          dataTestId="direction-long-label"
-                        >
-                          Long
-                        </Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="short" id="direction-short" />
-                        <Label
-                          htmlFor="direction-short"
-                          dataTestId="direction-short-label"
-                        >
-                          Short
-                        </Label>
-                      </div>
-                    </RadioGroup>
-                  </div>
+                  <field.FieldSelect
+                    label="Direction"
+                    options={[
+                      { label: "Long", value: "long" },
+                      { label: "Short", value: "short" },
+                    ]}
+                  />
                 )}
               </form.AppField>
             </div>
@@ -378,18 +250,20 @@ export default function NewTradePageClient({
 
             <div className="flex justify-end gap-3 pt-4">
               <form.AppForm>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={isSubmitting}
-                  onClick={() => router.push("/trades")}
-                  dataTestId="cancel-button"
-                >
-                  Cancel
-                </Button>
-                <form.SubmitButton
-                  label={isSubmitting ? "Saving..." : "Save Trade"}
-                />
+                <form.Subscribe selector={(state) => state.isSubmitting}>
+                  {(isSubmitting) => (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={isSubmitting}
+                      onClick={() => router.push("/trades")}
+                      dataTestId="cancel-button"
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                </form.Subscribe>
+                <form.SubmitButton label="Save Trade" />
               </form.AppForm>
             </div>
           </div>

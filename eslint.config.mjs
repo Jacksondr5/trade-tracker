@@ -8,6 +8,7 @@ const config = [
     ignores: [
       "**/dist",
       "**/node_modules",
+      "**/.worktrees/**",
       "**/convex/_generated",
       "**/.next/**",
       "**/out-tsc",

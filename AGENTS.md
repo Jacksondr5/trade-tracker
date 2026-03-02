@@ -31,10 +31,19 @@ The UI uses Next.js App Router with server/client components under `src/app/`, f
 
 Forms use `useAppForm` (`src/components/ui/use-app-form.ts`) with pre-registered:
 
-- field components: `FieldInput`, `FieldTextarea`
+- field components: `FieldInput`, `FieldSelect`, `FieldTextarea`
 - form component: `SubmitButton`
 
 Validation uses Zod.
+
+Required form conventions:
+
+- Use `useAppForm` for all user-editable form flows. Do not build ad hoc local-state `<form>` handlers for new work.
+- Define a Zod schema per form and wire it through `validators.onChange`.
+- Use `form.AppField` with shared field components (`FieldInput`, `FieldSelect`, `FieldTextarea`) instead of raw `<input>`, `<select>`, or `<textarea>` when a shared component exists.
+- Wrap submit actions in `form.AppForm` and use `form.SubmitButton` for submit UX and loading/disabled state.
+- Use `Alert` for form-level success/error feedback; avoid custom inline error containers.
+- If a screen needs a custom control not covered by existing field components, add/extend a reusable field component in `src/components/ui/` and register it in `use-app-form.ts` instead of inlining one-off form markup.
 
 ### UI Components (`src/components/ui/`)
 
