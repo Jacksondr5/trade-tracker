@@ -55,7 +55,7 @@ function RadioGroupItem({ className, ...props }: RadioGroupItemProps) {
       data-testid={`${dataTestId}-item-${itemValue}`}
       className={cn(
         "border-olive-7 bg-olive-3 aspect-square size-4 shrink-0 rounded-full border",
-        "focus-visible:ring-blue-8/50 focus-visible:outline-none focus-visible:ring-2",
+        "focus-visible:ring-2 focus-visible:ring-blue-8 focus-visible:ring-offset-2 focus-visible:ring-offset-olive-1 focus-visible:outline-none",
         "aria-checked:border-grass-9 aria-checked:bg-grass-9",
         "disabled:cursor-not-allowed disabled:opacity-50",
         "aria-invalid:border-red-7",

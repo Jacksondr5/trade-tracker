@@ -107,18 +107,22 @@ export default function ImportsPageClient({
     setImportResult(null);
   };
 
-  const persistTradePlanSelection = (
+  const persistTradePlanSelection = async (
     inboxTradeId: Id<"inboxTrades">,
     value: string,
-  ) => {
-    void updateInboxTrade({
-      inboxTradeId,
-      tradePlanId: value ? (value as Id<"tradePlans">) : null,
-    }).catch((error) => {
+  ): Promise<boolean> => {
+    try {
+      await updateInboxTrade({
+        inboxTradeId,
+        tradePlanId: value ? (value as Id<"tradePlans">) : null,
+      });
+      return true;
+    } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Failed to update trade plan",
       );
-    });
+      return false;
+    }
   };
 
   const persistNotes = (inboxTradeId: Id<"inboxTrades">, value: string) => {
@@ -153,24 +157,34 @@ export default function ImportsPageClient({
       instrumentSymbol: string;
       campaignId?: Id<"campaigns">;
     },
-  ) => {
+  ): Promise<boolean> => {
     try {
       const newPlanId = await createTradePlan({
         campaignId: args.campaignId,
         instrumentSymbol: args.instrumentSymbol,
         name: args.name,
       });
+      const previousTradePlanId = inlineTradePlanIds[inboxTradeId] ?? "";
       setInlineTradePlanIds((prev) => ({
         ...prev,
         [inboxTradeId]: newPlanId,
       }));
-      persistTradePlanSelection(inboxTradeId, newPlanId);
+      const persisted = await persistTradePlanSelection(inboxTradeId, newPlanId);
+      if (!persisted) {
+        setInlineTradePlanIds((prev) => ({
+          ...prev,
+          [inboxTradeId]: previousTradePlanId,
+        }));
+        return false;
+      }
+      return true;
     } catch (error) {
       setErrorMessage(
         error instanceof Error
           ? error.message
           : "Failed to create trade plan",
       );
+      return false;
     }
   };
 
@@ -393,11 +407,25 @@ export default function ImportsPageClient({
             persistPortfolioSelection(inboxTradeId, value);
           }}
           onInlineTradePlanChange={(inboxTradeId, value) => {
+            const previousTradePlanId = inlineTradePlanIds[inboxTradeId] ?? "";
+            const attemptedTradePlanId = value;
             setInlineTradePlanIds((prev) => ({
               ...prev,
-              [inboxTradeId]: value,
+              [inboxTradeId]: attemptedTradePlanId,
             }));
-            persistTradePlanSelection(inboxTradeId, value);
+            void persistTradePlanSelection(inboxTradeId, attemptedTradePlanId).then((persisted) => {
+              if (!persisted) {
+                setInlineTradePlanIds((prev) => {
+                  if ((prev[inboxTradeId] ?? "") !== attemptedTradePlanId) {
+                    return prev;
+                  }
+                  return {
+                    ...prev,
+                    [inboxTradeId]: previousTradePlanId,
+                  };
+                });
+              }
+            });
           }}
           onQuickCreateTradePlan={handleQuickCreateTradePlan}
           openTradePlans={openTradePlans}

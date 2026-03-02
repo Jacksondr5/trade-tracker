@@ -52,7 +52,7 @@ interface InboxTableProps {
       instrumentSymbol: string;
       campaignId?: Id<"campaigns">;
     },
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   openTradePlans: OpenTradePlanOption[] | undefined;
   portfolios: PortfolioOption[] | undefined;
 }
@@ -81,6 +81,9 @@ export function InboxTable({
   const [quickCreateName, setQuickCreateName] = useState("");
   const [quickCreateInstrument, setQuickCreateInstrument] = useState("");
   const [quickCreateCampaignId, setQuickCreateCampaignId] = useState("");
+  const [quickCreateLoadingByTradeId, setQuickCreateLoadingByTradeId] = useState<
+    Record<string, boolean>
+  >({});
 
   if (inboxTrades === undefined) {
     return <div className="text-slate-11">Loading...</div>;
@@ -334,25 +337,42 @@ export function InboxTable({
                       <div className="flex gap-1">
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={async () => {
                             if (
                               !quickCreateName.trim() ||
                               !quickCreateInstrument.trim()
                             )
                               return;
-                            void onQuickCreateTradePlan(trade._id, {
-                              name: quickCreateName.trim(),
-                              instrumentSymbol: quickCreateInstrument.trim(),
-                              campaignId: quickCreateCampaignId
-                                ? (quickCreateCampaignId as Id<"campaigns">)
-                                : undefined,
-                            }).then(() => {
-                              setQuickCreateTradeId(null);
-                            });
+                            if (quickCreateLoadingByTradeId[trade._id]) return;
+
+                            setQuickCreateLoadingByTradeId((prev) => ({
+                              ...prev,
+                              [trade._id]: true,
+                            }));
+                            try {
+                              const created = await onQuickCreateTradePlan(trade._id, {
+                                name: quickCreateName.trim(),
+                                instrumentSymbol: quickCreateInstrument.trim(),
+                                campaignId: quickCreateCampaignId
+                                  ? (quickCreateCampaignId as Id<"campaigns">)
+                                  : undefined,
+                              });
+                              if (created) {
+                                setQuickCreateTradeId(null);
+                              }
+                            } finally {
+                              setQuickCreateLoadingByTradeId((prev) => ({
+                                ...prev,
+                                [trade._id]: false,
+                              }));
+                            }
                           }}
-                          className="h-7 rounded bg-green-700 px-2 text-xs text-white hover:bg-green-600"
+                          className="h-7 rounded bg-green-700 px-2 text-xs text-white hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
+                          disabled={Boolean(quickCreateLoadingByTradeId[trade._id])}
                         >
-                          Create
+                          {quickCreateLoadingByTradeId[trade._id]
+                            ? "Creating..."
+                            : "Create"}
                         </button>
                         <button
                           type="button"

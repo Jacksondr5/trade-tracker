@@ -19,7 +19,7 @@ export const textareaVariants = {
 };
 
 const textareaClassName = cva(
-  "border-olive-7 shadow-xs placeholder:text-slate-11 text-slate-12 focus-visible:ring-olive-7 focus-visible:outline-hidden flex w-full resize-none rounded-md border bg-transparent transition-colors focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-50",
+  "border-olive-7 shadow-xs placeholder:text-slate-11 text-slate-12 focus-visible:ring-blue-8 focus-visible:ring-offset-2 focus-visible:ring-offset-olive-1 focus-visible:outline-hidden flex w-full resize-none rounded-md border bg-transparent transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50",
   {
     variants: textareaVariants,
     defaultVariants: {

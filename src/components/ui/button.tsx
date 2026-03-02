@@ -27,7 +27,7 @@ export const buttonVariants = {
 };
 
 export const buttonClassName = cva(
-  "focus-visible:ring-offset-olive-1 focus-visible:ring-blue-8 aria-invalid:ring-red-7/40 aria-invalid:border-red-7 inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap font-sans font-medium outline-none transition-all focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "focus-visible:ring-offset-olive-1 focus-visible:ring-blue-8 aria-invalid:ring-red-7/40 aria-invalid:border-red-7 inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap font-sans font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: buttonVariants,
     defaultVariants: {

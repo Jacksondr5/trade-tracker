@@ -37,8 +37,8 @@ Normalize these properties across Button, Input, Textarea, Card, Dialog, RadioGr
 
 | Property | Target standard |
 |----------|----------------|
-| Focus ring | `focus-visible:ring-2 focus-visible:ring-grass-9 focus-visible:ring-offset-2 focus-visible:ring-offset-olive-1` |
-| Border color | `border-olive-6` (resting), `border-olive-8` (hover) |
+| Focus ring | `focus-visible:ring-2 focus-visible:ring-blue-8 focus-visible:ring-offset-2 focus-visible:ring-offset-olive-1` |
+| Border color | `border-olive-6` (surfaces), `border-olive-7` (inputs) |
 | Border radius | `rounded-md` (default), `rounded-lg` (cards/dialogs) |
 | Disabled state | `disabled:opacity-50 disabled:pointer-events-none` |
 | Transition | `transition-colors` on interactive elements |

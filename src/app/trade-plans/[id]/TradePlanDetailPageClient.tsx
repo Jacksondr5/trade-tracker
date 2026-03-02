@@ -364,7 +364,19 @@ export default function TradePlanDetailPageClient({
                       <td className="px-2 py-2 text-slate-11">
                         {accountNameByAccountId.get(inboxTrade.brokerageAccountId ?? "") ?? inboxTrade.brokerageAccountId ?? "---"}
                       </td>
-                      <td className="px-2 py-2 text-slate-11">{inboxTrade.side ?? "---"}</td>
+                      <td className="px-2 py-2 text-slate-11">
+                        <Badge
+                          variant={
+                            inboxTrade.side === "buy"
+                              ? "success"
+                              : inboxTrade.side === "sell"
+                                ? "danger"
+                                : "neutral"
+                          }
+                        >
+                          {inboxTrade.side ?? "---"}
+                        </Badge>
+                      </td>
                       <td className="px-2 py-2 text-slate-11">{inboxTrade.quantity ?? "---"}</td>
                       <td className="px-2 py-2 text-slate-11">
                         {inboxTrade.price !== undefined ? formatCurrency(inboxTrade.price) : "---"}
