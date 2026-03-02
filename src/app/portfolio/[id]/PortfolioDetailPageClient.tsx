@@ -230,7 +230,6 @@ export default function PortfolioDetailPageClient({
                   <th className="px-2 py-2">Direction</th>
                   <th className="px-2 py-2 text-right">Price</th>
                   <th className="px-2 py-2 text-right">Qty</th>
-                  <th className="px-2 py-2 text-right">P&amp;L</th>
                 </tr>
               </thead>
               <tbody>
@@ -252,22 +251,6 @@ export default function PortfolioDetailPageClient({
                     </td>
                     <td className="px-2 py-2 text-right text-slate-11">
                       {trade.quantity}
-                    </td>
-                    <td className="px-2 py-2 text-right">
-                      {trade.realizedPL === null ? (
-                        <span className="text-slate-11">&mdash;</span>
-                      ) : (
-                        <span
-                          className={
-                            trade.realizedPL >= 0
-                              ? "text-green-400"
-                              : "text-red-400"
-                          }
-                        >
-                          {trade.realizedPL >= 0 ? "+" : ""}
-                          {formatCurrency(trade.realizedPL)}
-                        </span>
-                      )}
                     </td>
                   </tr>
                 ))}
