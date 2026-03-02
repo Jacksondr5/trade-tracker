@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { z } from "zod";
 import { Alert, Button, Card, useAppForm } from "~/components/ui";
-import { api } from "../../../../convex/_generated/api";
+import { api } from "~/convex/_generated/api";
 
 const campaignSchema = z.object({
   name: z.string().min(1, "Name is required"),

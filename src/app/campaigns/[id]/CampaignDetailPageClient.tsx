@@ -34,6 +34,17 @@ const retrospectiveSchema = z.object({
   retrospective: z.string(),
 });
 
+const validateWithSchema = <TSchema extends z.ZodTypeAny>(
+  schema: TSchema,
+  value: unknown,
+) => {
+  const result = schema.safeParse(value);
+  if (!result.success) {
+    return result.error.flatten().fieldErrors;
+  }
+  return undefined;
+};
+
 export default function CampaignDetailPageClient({
   campaignId,
   preloadedAccountMappings,
@@ -115,11 +126,7 @@ export default function CampaignDetailPageClient({
         if (campaignNameSaveState === "saved") {
           setCampaignNameSaveState("idle");
         }
-        const result = campaignNameSchema.safeParse(value);
-        if (!result.success) {
-          return result.error.flatten().fieldErrors;
-        }
-        return undefined;
+        return validateWithSchema(campaignNameSchema, value);
       },
     },
     onSubmit: async ({ value }) => {
@@ -159,11 +166,7 @@ export default function CampaignDetailPageClient({
         if (thesisSaveState === "saved") {
           setThesisSaveState("idle");
         }
-        const result = thesisSchema.safeParse(value);
-        if (!result.success) {
-          return result.error.flatten().fieldErrors;
-        }
-        return undefined;
+        return validateWithSchema(thesisSchema, value);
       },
     },
     onSubmit: async ({ value }) => {
@@ -194,11 +197,7 @@ export default function CampaignDetailPageClient({
         if (retrospectiveSaveState === "saved") {
           setRetrospectiveSaveState("idle");
         }
-        const result = retrospectiveSchema.safeParse(value);
-        if (!result.success) {
-          return result.error.flatten().fieldErrors;
-        }
-        return undefined;
+        return validateWithSchema(retrospectiveSchema, value);
       },
     },
     onSubmit: async ({ value }) => {
@@ -230,11 +229,7 @@ export default function CampaignDetailPageClient({
     },
     validators: {
       onChange: ({ value }) => {
-        const result = tradePlanSchema.safeParse(value);
-        if (!result.success) {
-          return result.error.flatten().fieldErrors;
-        }
-        return undefined;
+        return validateWithSchema(tradePlanSchema, value);
       },
     },
     onSubmit: async ({ value, formApi }) => {
