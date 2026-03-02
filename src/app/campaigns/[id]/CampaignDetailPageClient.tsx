@@ -6,7 +6,7 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
-import { Alert, Badge, useAppForm } from "~/components/ui";
+import { Alert, Badge, Button, useAppForm } from "~/components/ui";
 import NotesSection from "~/components/NotesSection";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
@@ -207,7 +207,7 @@ export default function CampaignDetailPageClient({
         const trimmedRetrospective = parsed.retrospective.trim();
         await updateCampaign({
           campaignId,
-          retrospective: trimmedRetrospective || undefined,
+          retrospective: trimmedRetrospective,
         });
         retrospectiveForm.setFieldValue("retrospective", trimmedRetrospective);
         setRetrospectiveSaveState("saved");
@@ -551,14 +551,14 @@ export default function CampaignDetailPageClient({
                 </tradePlanForm.AppForm>
                 <tradePlanForm.Subscribe selector={(state) => state.isSubmitting}>
                   {(isSubmitting) => (
-                    <button
+                    <Button
                       type="button"
-                      className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-700"
+                      variant="outline"
                       onClick={() => { setShowCreateTradePlanForm(false); setTradePlanCreateError(null); }}
                       disabled={isSubmitting}
                     >
                       Cancel
-                    </button>
+                    </Button>
                   )}
                 </tradePlanForm.Subscribe>
               </div>

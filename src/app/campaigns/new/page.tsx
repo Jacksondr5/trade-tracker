@@ -8,7 +8,11 @@ import { Alert, Button, Card, useAppForm } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 
 const campaignSchema = z.object({
-  name: z.string().trim().min(1, "Name is required"),
+  name: z
+    .string()
+    .trim()
+    .min(1, "Name is required")
+    .max(120, "Campaign name must be 120 characters or less"),
   thesis: z.string().trim().min(1, "Thesis is required"),
 });
 
@@ -100,6 +104,7 @@ export default function NewCampaignPage() {
               {(field) => (
                 <field.FieldInput
                   label="Campaign Name"
+                  maxLength={120}
                   placeholder="e.g. Gold Bull Run Q1 2026"
                 />
               )}
