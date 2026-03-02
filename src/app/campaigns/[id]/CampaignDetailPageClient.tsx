@@ -552,6 +552,7 @@ export default function CampaignDetailPageClient({
                 <tradePlanForm.Subscribe selector={(state) => state.isSubmitting}>
                   {(isSubmitting) => (
                     <Button
+                      dataTestId="cancel-trade-plan-form-button"
                       type="button"
                       variant="outline"
                       onClick={() => { setShowCreateTradePlanForm(false); setTradePlanCreateError(null); }}
