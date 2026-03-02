@@ -70,7 +70,6 @@ Status/label badges with semantic color variants:
 | `success` | Active campaigns, buy side, long direction (positions) |
 | `danger`  | Sell side, short direction                             |
 | `info`    | Planning status, long direction (import inbox)         |
-| `warning` | (reserved for future use)                              |
 | `neutral` | Closed campaigns, trade plan statuses                  |
 
 ### Alert (`Alert` from `~/components/ui`)

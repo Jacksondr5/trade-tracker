@@ -344,7 +344,7 @@ export default function TradePlanDetailPageClient({
                   <th className="px-2 py-2">Side</th>
                   <th className="px-2 py-2">Qty</th>
                   <th className="px-2 py-2">Price</th>
-                  <th className="px-2 py-2">Actions</th>
+                  <th className="px-2 py-2">Portfolio / Action</th>
                 </tr>
               </thead>
               <tbody>
