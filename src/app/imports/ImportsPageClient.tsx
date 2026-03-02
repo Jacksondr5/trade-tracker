@@ -164,12 +164,17 @@ export default function ImportsPageClient({
         instrumentSymbol: args.instrumentSymbol,
         name: args.name,
       });
+      const previousTradePlanId = inlineTradePlanIds[inboxTradeId] ?? "";
       setInlineTradePlanIds((prev) => ({
         ...prev,
         [inboxTradeId]: newPlanId,
       }));
       const persisted = await persistTradePlanSelection(inboxTradeId, newPlanId);
       if (!persisted) {
+        setInlineTradePlanIds((prev) => ({
+          ...prev,
+          [inboxTradeId]: previousTradePlanId,
+        }));
         return false;
       }
       return true;
@@ -402,11 +407,19 @@ export default function ImportsPageClient({
             persistPortfolioSelection(inboxTradeId, value);
           }}
           onInlineTradePlanChange={(inboxTradeId, value) => {
+            const previousTradePlanId = inlineTradePlanIds[inboxTradeId] ?? "";
             setInlineTradePlanIds((prev) => ({
               ...prev,
               [inboxTradeId]: value,
             }));
-            void persistTradePlanSelection(inboxTradeId, value);
+            void persistTradePlanSelection(inboxTradeId, value).then((persisted) => {
+              if (!persisted) {
+                setInlineTradePlanIds((prev) => ({
+                  ...prev,
+                  [inboxTradeId]: previousTradePlanId,
+                }));
+              }
+            });
           }}
           onQuickCreateTradePlan={handleQuickCreateTradePlan}
           openTradePlans={openTradePlans}
