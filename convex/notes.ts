@@ -1,5 +1,5 @@
 import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { assertOwner, requireUser } from "./lib/auth";
 
 const noteValidator = v.object({
@@ -16,7 +16,7 @@ const noteValidator = v.object({
 function trimNoteContent(content: string): string {
   const trimmed = content.trim();
   if (!trimmed) {
-    throw new Error("Note content is required");
+    throw new ConvexError("Note content is required");
   }
   return trimmed;
 }
@@ -30,7 +30,7 @@ function validateSingleParent(args: {
     Boolean,
   ).length;
   if (parentCount > 1) {
-    throw new Error("A note can only belong to one parent");
+    throw new ConvexError("A note can only belong to one parent");
   }
 }
 
@@ -107,14 +107,13 @@ export const getNotesByCampaign = query({
     const campaign = await ctx.db.get(args.campaignId);
     if (!campaign || campaign.ownerId !== ownerId) return [];
 
-    const notes = await ctx.db
+    return await ctx.db
       .query("notes")
       .withIndex("by_owner_campaignId", (q) =>
         q.eq("ownerId", ownerId).eq("campaignId", args.campaignId),
       )
+      .order("asc")
       .collect();
-
-    return notes.sort((a, b) => a._creationTime - b._creationTime);
   },
 });
 
@@ -128,14 +127,13 @@ export const getNotesByTradePlan = query({
     const tradePlan = await ctx.db.get(args.tradePlanId);
     if (!tradePlan || tradePlan.ownerId !== ownerId) return [];
 
-    const notes = await ctx.db
+    return await ctx.db
       .query("notes")
       .withIndex("by_owner_tradePlanId", (q) =>
         q.eq("ownerId", ownerId).eq("tradePlanId", args.tradePlanId),
       )
+      .order("asc")
       .collect();
-
-    return notes.sort((a, b) => a._creationTime - b._creationTime);
   },
 });
 
@@ -149,14 +147,13 @@ export const getNotesByTrade = query({
     const trade = await ctx.db.get(args.tradeId);
     if (!trade || trade.ownerId !== ownerId) return [];
 
-    const notes = await ctx.db
+    return await ctx.db
       .query("notes")
       .withIndex("by_owner_tradeId", (q) =>
         q.eq("ownerId", ownerId).eq("tradeId", args.tradeId),
       )
+      .order("asc")
       .collect();
-
-    return notes.sort((a, b) => a._creationTime - b._creationTime);
   },
 });
 

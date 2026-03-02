@@ -18,14 +18,14 @@ type SaveState = "idle" | "saving" | "saved";
 export default function CampaignDetailPageClient({
   campaignId,
   preloadedAccountMappings,
-  preloadedAllTrades,
+  preloadedCampaignTrades,
   preloadedCampaign,
   preloadedCampaignNotes,
   preloadedTradePlans,
 }: {
   campaignId: Id<"campaigns">;
   preloadedAccountMappings: Preloaded<typeof api.accountMappings.listAccountMappings>;
-  preloadedAllTrades: Preloaded<typeof api.trades.listTrades>;
+  preloadedCampaignTrades: Preloaded<typeof api.trades.listTradesByCampaign>;
   preloadedCampaign: Preloaded<typeof api.campaigns.getCampaign>;
   preloadedCampaignNotes: Preloaded<typeof api.notes.getNotesByCampaign>;
   preloadedTradePlans: Preloaded<typeof api.tradePlans.listTradePlansByCampaign>;
@@ -34,7 +34,7 @@ export default function CampaignDetailPageClient({
   const campaign = usePreloadedQuery(preloadedCampaign);
   const campaignNotes = usePreloadedQuery(preloadedCampaignNotes);
   const tradePlans = usePreloadedQuery(preloadedTradePlans);
-  const allTrades = usePreloadedQuery(preloadedAllTrades);
+  const trades = usePreloadedQuery(preloadedCampaignTrades);
 
   const addNote = useMutation(api.notes.addNote);
   const updateNote = useMutation(api.notes.updateNote);
@@ -42,11 +42,6 @@ export default function CampaignDetailPageClient({
   const updateTradePlanStatus = useMutation(api.tradePlans.updateTradePlanStatus);
   const updateCampaign = useMutation(api.campaigns.updateCampaign);
   const updateCampaignStatus = useMutation(api.campaigns.updateCampaignStatus);
-
-  const trades = useMemo(() => {
-    const tradePlanIds = new Set(tradePlans.map((plan) => plan._id));
-    return allTrades.filter((trade) => trade.tradePlanId && tradePlanIds.has(trade.tradePlanId));
-  }, [allTrades, tradePlans]);
 
   const tradePlanNameById = useMemo(() => {
     const map = new Map<Id<"tradePlans">, string>();

@@ -1,5 +1,5 @@
 import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { assertOwner, requireUser } from "./lib/auth";
 
 const tradePlanStatusValidator = v.union(
@@ -152,7 +152,9 @@ export const updateTradePlanStatus = mutation({
     );
 
     if (!isValidStatusTransition(tradePlan.status, args.status)) {
-      throw new Error(`Invalid trade plan status transition: ${tradePlan.status} -> ${args.status}`);
+      throw new ConvexError(
+        `Invalid trade plan status transition: ${tradePlan.status} -> ${args.status}`,
+      );
     }
 
     if (tradePlan.campaignId && args.status !== "closed") {
@@ -163,7 +165,9 @@ export const updateTradePlanStatus = mutation({
       );
 
       if (campaign.status === "closed") {
-        throw new Error("Cannot reopen or activate a trade plan linked to a closed campaign");
+        throw new ConvexError(
+          "Cannot reopen or activate a trade plan linked to a closed campaign",
+        );
       }
     }
 

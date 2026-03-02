@@ -128,9 +128,9 @@ export const listCampaignsByStatus = query({
       .withIndex("by_owner_status", (q) =>
         q.eq("ownerId", ownerId).eq("status", args.status),
       )
+      .order("desc")
       .collect();
-
-    return campaigns.sort((a, b) => b._creationTime - a._creationTime);
+    return campaigns;
   },
 });
 

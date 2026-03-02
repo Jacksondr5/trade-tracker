@@ -13,12 +13,18 @@ export default async function CampaignDetailPage({
   const campaignId = id as Id<"campaigns">;
 
   const token = await getConvexTokenOrThrow();
-  const [preloadedCampaign, preloadedCampaignNotes, preloadedTradePlans, preloadedAllTrades, preloadedAccountMappings] =
+  const [
+    preloadedCampaign,
+    preloadedCampaignNotes,
+    preloadedTradePlans,
+    preloadedCampaignTrades,
+    preloadedAccountMappings,
+  ] =
     await Promise.all([
       preloadQuery(api.campaigns.getCampaign, { campaignId }, { token }),
       preloadQuery(api.notes.getNotesByCampaign, { campaignId }, { token }),
       preloadQuery(api.tradePlans.listTradePlansByCampaign, { campaignId }, { token }),
-      preloadQuery(api.trades.listTrades, {}, { token }),
+      preloadQuery(api.trades.listTradesByCampaign, { campaignId }, { token }),
       preloadQuery(api.accountMappings.listAccountMappings, {}, { token }),
     ]);
 
@@ -26,7 +32,7 @@ export default async function CampaignDetailPage({
     <CampaignDetailPageClient
       campaignId={campaignId}
       preloadedAccountMappings={preloadedAccountMappings}
-      preloadedAllTrades={preloadedAllTrades}
+      preloadedCampaignTrades={preloadedCampaignTrades}
       preloadedCampaign={preloadedCampaign}
       preloadedCampaignNotes={preloadedCampaignNotes}
       preloadedTradePlans={preloadedTradePlans}

@@ -2,23 +2,6 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
-  campaignNotes: defineTable({
-    campaignId: v.id("campaigns"),
-    content: v.string(),
-    ownerId: v.string(),
-  }).index("by_owner_campaignId", ["ownerId", "campaignId"]),
-
-  tradePlanNotes: defineTable({
-    content: v.string(),
-    ownerId: v.string(),
-    tradePlanId: v.id("tradePlans"),
-  }).index("by_owner_tradePlanId", ["ownerId", "tradePlanId"]),
-
-  generalNotes: defineTable({
-    content: v.string(),
-    ownerId: v.string(),
-  }).index("by_owner", ["ownerId"]),
-
   notes: defineTable({
     campaignId: v.optional(v.id("campaigns")),
     chartUrls: v.optional(v.array(v.string())),
@@ -110,7 +93,8 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_date", ["ownerId", "date"])
-    .index("by_owner_portfolioId", ["ownerId", "portfolioId"]),
+    .index("by_owner_portfolioId", ["ownerId", "portfolioId"])
+    .index("by_owner_tradePlanId", ["ownerId", "tradePlanId"]),
 
   inboxTrades: defineTable({
     assetType: v.optional(v.union(v.literal("crypto"), v.literal("stock"))),
@@ -137,5 +121,7 @@ export default defineSchema({
     .index("by_owner_status", ["ownerId", "status"])
     .index("by_owner_source_externalId", ["ownerId", "source", "externalId"])
     .index("by_owner_portfolioId", ["ownerId", "portfolioId"])
-    .index("by_owner_date", ["ownerId", "date"]),
+    .index("by_owner_date", ["ownerId", "date"])
+    .index("by_owner_status_tradePlanId", ["ownerId", "status", "tradePlanId"])
+    .index("by_owner_status_ticker", ["ownerId", "status", "ticker"]),
 });
