@@ -120,12 +120,11 @@ export const listTrades = query({
   returns: v.array(tradeValidator),
   handler: async (ctx) => {
     const ownerId = await requireUser(ctx);
-    const trades = await ctx.db
+    return await ctx.db
       .query("trades")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .withIndex("by_owner_date", (q) => q.eq("ownerId", ownerId))
+      .order("desc")
       .collect();
-
-    return [...trades].sort((a, b) => b.date - a.date);
   },
 });
 
