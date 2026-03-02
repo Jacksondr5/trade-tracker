@@ -1,7 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
-import { calculateTradesPL } from "./lib/plCalculation";
 import { assertOwner, requireUser } from "./lib/auth";
+import { tradeValidator } from "./lib/tradeValidator";
 import { paginationOptsValidator } from "convex/server";
 
 function normalizeTicker(ticker: string): string {
@@ -12,54 +12,6 @@ function normalizeTicker(ticker: string): string {
   return normalizedTicker;
 }
 
-const tradeValidator = v.object({
-  _creationTime: v.number(),
-  _id: v.id("trades"),
-  assetType: v.union(v.literal("crypto"), v.literal("stock")),
-  brokerageAccountId: v.optional(v.string()),
-  date: v.number(),
-  direction: v.union(v.literal("long"), v.literal("short")),
-  externalId: v.optional(v.string()),
-  fees: v.optional(v.number()),
-  notes: v.optional(v.string()),
-  orderType: v.optional(v.string()),
-  ownerId: v.string(),
-  portfolioId: v.optional(v.id("portfolios")),
-  price: v.number(),
-  quantity: v.number(),
-  side: v.union(v.literal("buy"), v.literal("sell")),
-  source: v.optional(
-    v.union(v.literal("manual"), v.literal("ibkr"), v.literal("kraken")),
-  ),
-  taxes: v.optional(v.number()),
-  ticker: v.string(),
-  tradePlanId: v.optional(v.id("tradePlans")),
-});
-
-const tradeWithPLValidator = v.object({
-  _creationTime: v.number(),
-  _id: v.id("trades"),
-  assetType: v.union(v.literal("crypto"), v.literal("stock")),
-  brokerageAccountId: v.optional(v.string()),
-  date: v.number(),
-  direction: v.union(v.literal("long"), v.literal("short")),
-  externalId: v.optional(v.string()),
-  fees: v.optional(v.number()),
-  notes: v.optional(v.string()),
-  orderType: v.optional(v.string()),
-  ownerId: v.string(),
-  portfolioId: v.optional(v.id("portfolios")),
-  price: v.number(),
-  quantity: v.number(),
-  realizedPL: v.union(v.number(), v.null()),
-  side: v.union(v.literal("buy"), v.literal("sell")),
-  source: v.optional(
-    v.union(v.literal("manual"), v.literal("ibkr"), v.literal("kraken")),
-  ),
-  taxes: v.optional(v.number()),
-  ticker: v.string(),
-  tradePlanId: v.optional(v.id("tradePlans")),
-});
 
 export const createTrade = mutation({
   args: {
@@ -165,21 +117,14 @@ export const updateTrade = mutation({
 
 export const listTrades = query({
   args: {},
-  returns: v.array(tradeWithPLValidator),
+  returns: v.array(tradeValidator),
   handler: async (ctx) => {
     const ownerId = await requireUser(ctx);
-    const trades = await ctx.db
+    return await ctx.db
       .query("trades")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .withIndex("by_owner_date", (q) => q.eq("ownerId", ownerId))
+      .order("desc")
       .collect();
-    const plMap = calculateTradesPL(trades);
-
-    return [...trades]
-      .sort((a, b) => b.date - a.date)
-      .map((trade) => ({
-        ...trade,
-        realizedPL: plMap.get(trade._id) ?? null,
-      }));
   },
 });
 

@@ -51,7 +51,6 @@ export default function CampaignDetailPageClient({
   preloadedAllTrades,
   preloadedCampaign,
   preloadedCampaignNotes,
-  preloadedCampaignPL,
   preloadedTradePlans,
 }: {
   campaignId: Id<"campaigns">;
@@ -59,7 +58,6 @@ export default function CampaignDetailPageClient({
   preloadedAllTrades: Preloaded<typeof api.trades.listTrades>;
   preloadedCampaign: Preloaded<typeof api.campaigns.getCampaign>;
   preloadedCampaignNotes: Preloaded<typeof api.notes.getNotesByCampaign>;
-  preloadedCampaignPL: Preloaded<typeof api.campaigns.getCampaignPL>;
   preloadedTradePlans: Preloaded<typeof api.tradePlans.listTradePlansByCampaign>;
 }) {
   const accountMappings = usePreloadedQuery(preloadedAccountMappings);
@@ -67,7 +65,6 @@ export default function CampaignDetailPageClient({
   const campaignNotes = usePreloadedQuery(preloadedCampaignNotes);
   const tradePlans = usePreloadedQuery(preloadedTradePlans);
   const allTrades = usePreloadedQuery(preloadedAllTrades);
-  const campaignPL = usePreloadedQuery(preloadedCampaignPL);
 
   const addNote = useMutation(api.notes.addNote);
   const updateNote = useMutation(api.notes.updateNote);
@@ -385,22 +382,11 @@ export default function CampaignDetailPageClient({
           <p className="text-xs text-slate-11">Closed {new Date(campaign.closedAt).toLocaleDateString("en-US")}</p>
         )}
 
-        {campaignPL !== null && campaignPL.tradeCount > 0 && (
-          <p className="mt-2 text-sm text-slate-11">
-            Realized P&amp;L:{" "}
-            <span className={campaignPL.realizedPL >= 0 ? "text-green-400" : "text-red-400"}>
-              {campaignPL.realizedPL >= 0 ? "+" : ""}
-              {formatCurrency(campaignPL.realizedPL)}
-            </span>
-          </p>
-        )}
-
         {statusChangeError && (
           <Alert variant="error" className="mt-3" onDismiss={() => setStatusChangeError(null)}>
             {statusChangeError}
           </Alert>
-        )}
-      </div>
+        )}      </div>
 
       <section className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
         <h2 className="mb-2 text-lg font-semibold text-slate-12">Thesis</h2>
@@ -659,7 +645,6 @@ export default function CampaignDetailPageClient({
                   <th className="px-2 py-2">Side</th>
                   <th className="px-2 py-2">Qty</th>
                   <th className="px-2 py-2">Price</th>
-                  <th className="px-2 py-2">P&amp;L</th>
                 </tr>
               </thead>
               <tbody>
@@ -676,16 +661,6 @@ export default function CampaignDetailPageClient({
                     <td className="px-2 py-2 text-slate-11">{trade.side}</td>
                     <td className="px-2 py-2 text-slate-11">{trade.quantity}</td>
                     <td className="px-2 py-2 text-slate-11">{formatCurrency(trade.price)}</td>
-                    <td className="px-2 py-2">
-                      {trade.realizedPL === null ? (
-                        <span className="text-slate-11">{"\u2014"}</span>
-                      ) : (
-                        <span className={trade.realizedPL >= 0 ? "text-green-400" : "text-red-400"}>
-                          {trade.realizedPL >= 0 ? "+" : ""}
-                          {formatCurrency(trade.realizedPL)}
-                        </span>
-                      )}
-                    </td>
                   </tr>
                 ))}
               </tbody>
