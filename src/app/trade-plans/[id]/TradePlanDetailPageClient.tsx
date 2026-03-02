@@ -391,7 +391,7 @@ export default function TradePlanDetailPageClient({
                           </select>
                           <button
                             type="button"
-                            aria-label="Accept trade"
+                            aria-label={`Accept ${inboxTrade.ticker ?? "trade"} from inbox`}
                             onClick={() => void handleAcceptInboxTrade(inboxTrade._id, portfolioId)}
                             className="rounded p-1.5 text-green-400 hover:bg-green-900/50 disabled:opacity-50"
                             title="Accept"
