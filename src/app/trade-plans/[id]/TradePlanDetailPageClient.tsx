@@ -70,6 +70,8 @@ export default function TradePlanDetailPageClient({
 
   const [statusError, setStatusError] = useState<string | null>(null);
   const [isChangingStatus, setIsChangingStatus] = useState(false);
+  const [inboxAcceptError, setInboxAcceptError] = useState<string | null>(null);
+  const [isAcceptingInboxTradeId, setIsAcceptingInboxTradeId] = useState<string | null>(null);
 
   useEffect(() => {
     if (tradePlan && !planNameInitialized) {
@@ -132,6 +134,30 @@ export default function TradePlanDetailPageClient({
       setStatusError(error instanceof Error ? error.message : "Failed to update status");
     } finally {
       setIsChangingStatus(false);
+    }
+  };
+
+  const handleAcceptInboxTrade = async (
+    inboxTradeId: Id<"inboxTrades">,
+    portfolioId: string,
+  ) => {
+    setInboxAcceptError(null);
+    setIsAcceptingInboxTradeId(inboxTradeId);
+    try {
+      const result = await acceptTrade({
+        inboxTradeId,
+        tradePlanId,
+        portfolioId: portfolioId ? (portfolioId as Id<"portfolios">) : undefined,
+      });
+      if (result.error) {
+        setInboxAcceptError(result.error);
+      } else if (!result.accepted) {
+        setInboxAcceptError("Failed to accept trade");
+      }
+    } catch (error) {
+      setInboxAcceptError(error instanceof Error ? error.message : "Failed to accept trade");
+    } finally {
+      setIsAcceptingInboxTradeId(null);
     }
   };
 
@@ -289,6 +315,12 @@ export default function TradePlanDetailPageClient({
           </Link>
         </div>
 
+        {inboxAcceptError && (
+          <Alert variant="error" className="mb-3" onDismiss={() => setInboxAcceptError(null)}>
+            {inboxAcceptError}
+          </Alert>
+        )}
+
         {trades.length === 0 && inboxTradesForPlan.length === 0 ? (
           <p className="text-sm text-slate-11">No trades linked to this plan yet.</p>
         ) : (
@@ -350,17 +382,16 @@ export default function TradePlanDetailPageClient({
                           <button
                             type="button"
                             aria-label="Accept trade"
-                            onClick={() =>
-                              void acceptTrade({
-                                inboxTradeId: inboxTrade._id,
-                                tradePlanId: tradePlanId,
-                                portfolioId: portfolioId ? (portfolioId as Id<"portfolios">) : undefined,
-                              })
-                            }
-                            className="rounded p-1.5 text-green-400 hover:bg-green-900/50"
+                            onClick={() => void handleAcceptInboxTrade(inboxTrade._id, portfolioId)}
+                            className="rounded p-1.5 text-green-400 hover:bg-green-900/50 disabled:opacity-50"
                             title="Accept"
+                            disabled={isAcceptingInboxTradeId === inboxTrade._id}
                           >
-                            <Check className="h-4 w-4" />
+                            {isAcceptingInboxTradeId === inboxTrade._id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Check className="h-4 w-4" />
+                            )}
                           </button>
                         </div>
                       </td>

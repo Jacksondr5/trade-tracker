@@ -376,6 +376,12 @@ export const listInboxTradesForTradePlan = query({
           return true;
         return false;
       })
+      .sort((a, b) => {
+        const aAssigned = a.tradePlanId === args.tradePlanId;
+        const bAssigned = b.tradePlanId === args.tradePlanId;
+        if (aAssigned !== bAssigned) return aAssigned ? -1 : 1;
+        return (b.date ?? b._creationTime) - (a.date ?? a._creationTime);
+      })
       .map((t) => ({
         inboxTrade: t,
         matchType: (t.tradePlanId === args.tradePlanId
