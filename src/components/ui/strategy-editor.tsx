@@ -92,6 +92,8 @@ export function StrategyEditor({
       Markdown,
       MarkdownShortcuts,
     ],
+    content: initialContent,
+    contentType: "markdown",
     editorProps: {
       attributes: {
         class: "prose-strategy outline-none min-h-[60vh] px-6 py-4",
@@ -102,24 +104,6 @@ export function StrategyEditor({
       onUpdateRef.current(markdown);
     },
   });
-
-  // Parse and set initial markdown content after editor is ready.
-  // We can't use the `content` option because Tiptap parses it as HTML.
-  // Instead, use tiptap-markdown's parser to convert markdown -> ProseMirror doc.
-  const hasInitialized = useRef(false);
-  useEffect(() => {
-    if (editor && !hasInitialized.current) {
-      hasInitialized.current = true;
-      if (initialContent) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const parser = (editor.storage as any).markdown?.parser;
-        if (parser) {
-          const doc = parser.parse(initialContent);
-          editor.commands.setContent(doc, { emitUpdate: false });
-        }
-      }
-    }
-  }, [editor, initialContent]);
 
   return (
     <div className="rounded-lg border border-olive-7 bg-olive-2 focus-within:ring-2 focus-within:ring-blue-8 focus-within:ring-offset-2 focus-within:ring-offset-olive-1">
