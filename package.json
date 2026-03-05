@@ -20,6 +20,7 @@
     "@radix-ui/react-slot": "1.2.4",
     "@t3-oss/env-nextjs": "0.13.10",
     "@tanstack/react-form": "1.28.3",
+    "@tiptap/core": "^3.20.0",
     "@tiptap/extension-image": "^3.20.0",
     "@tiptap/extension-link": "^3.20.0",
     "@tiptap/extension-placeholder": "^3.20.0",

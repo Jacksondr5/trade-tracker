@@ -1,5 +1,6 @@
 "use client";
 
+import { Extension, InputRule } from "@tiptap/core";
 import Link from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -11,6 +12,45 @@ import StarterKit from "@tiptap/starter-kit";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { Markdown } from "tiptap-markdown";
 import { useEffect, useRef } from "react";
+
+// Input rules for markdown-style links and images
+const MarkdownShortcuts = Extension.create({
+  name: "markdownShortcuts",
+
+  addInputRules() {
+    return [
+      // ![alt](url) -> image node (must be before link rule)
+      new InputRule({
+        find: /!\[([^\]]*)\]\(([^)]+)\)$/,
+        handler: ({ state, range, match }) => {
+          const [, alt, src] = match;
+          if (!src) return;
+          const { tr, schema } = state;
+          const imageNode = schema.nodes.image.create({
+            src,
+            alt: alt || "",
+          });
+          tr.replaceWith(range.from, range.to, imageNode);
+        },
+      }),
+      // [text](url) -> linked text (negative lookbehind avoids matching images)
+      new InputRule({
+        find: /(?<!!)\[([^\]]+)\]\(([^)]+)\)$/,
+        handler: ({ state, range, match }) => {
+          const [, text, url] = match;
+          if (!text || !url) return;
+          const { tr, schema } = state;
+          const linkMark = schema.marks.link.create({ href: url });
+          tr.replaceWith(
+            range.from,
+            range.to,
+            schema.text(text, [linkMark]),
+          );
+        },
+      }),
+    ];
+  },
+});
 
 interface StrategyEditorProps {
   initialContent: string;
@@ -50,6 +90,7 @@ export function StrategyEditor({
       TableCell,
       TableHeader,
       Markdown,
+      MarkdownShortcuts,
     ],
     content: initialContent,
     editorProps: {
