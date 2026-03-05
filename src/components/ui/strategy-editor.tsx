@@ -9,8 +9,8 @@ import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
 import TableRow from "@tiptap/extension-table-row";
 import StarterKit from "@tiptap/starter-kit";
+import { Markdown } from "@tiptap/markdown";
 import { EditorContent, useEditor } from "@tiptap/react";
-import { Markdown } from "tiptap-markdown";
 import { useEffect, useRef } from "react";
 
 // Input rules for markdown-style links and images
@@ -99,8 +99,7 @@ export function StrategyEditor({
       },
     },
     onUpdate: ({ editor }) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const markdown = (editor.storage as any).markdown.getMarkdown() as string;
+      const markdown = editor.getMarkdown();
       onUpdateRef.current(markdown);
     },
   });

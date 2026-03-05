@@ -67,7 +67,7 @@ One row per user. Created on first visit with empty content.
 ### Route: `/strategy`
 
 Added to header nav between "Notes" and "Positions":
-```
+```text
 Dashboard | Trades | Trade Plans | Campaigns | Notes | Strategy | Positions | Portfolios | Import | Accounts
 ```
 
@@ -91,7 +91,7 @@ The page is minimal:
 ## Editor Behavior
 
 1. **Load**: Server component preloads query → client receives markdown string → Tiptap initializes with content via `tiptap-markdown`
-2. **Edit**: User types → markdown shortcuts auto-format (e.g., `## ` → heading, `**text**` → bold)
+2. **Edit**: User types → markdown shortcuts auto-format (e.g., `##` → heading, `**text**` → bold)
 3. **Auto-save**: `onUpdate` fires on every change → debounced (1 second) Convex mutation saves markdown string
 4. **Save indicator**: `"idle" | "saving" | "saved"` state machine (same pattern as `CampaignDetailPageClient.tsx`)
    - `idle`: no indicator shown
@@ -118,7 +118,7 @@ Editor content area scoped under `.tiptap` class:
 
 ## Dependencies to Add
 
-```
+```text
 @tiptap/react
 @tiptap/starter-kit
 @tiptap/extension-link

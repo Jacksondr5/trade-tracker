@@ -4,6 +4,7 @@ import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StrategyEditor } from "~/components/ui/strategy-editor";
+import { Alert } from "~/components/ui/alert";
 import { api } from "~/convex/_generated/api";
 
 type SaveState = "idle" | "saving" | "saved";
@@ -20,54 +21,75 @@ export default function StrategyPageClient({
   const [error, setError] = useState<string | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingMarkdownRef = useRef<string | null>(null);
 
-  // Cleanup timers on unmount
+  const flushPendingSave = useCallback(
+    async (updateState = true) => {
+      const pendingMarkdown = pendingMarkdownRef.current;
+      if (pendingMarkdown === null) {
+        return;
+      }
+
+      pendingMarkdownRef.current = null;
+      if (updateState) {
+        setSaveState("saving");
+      }
+
+      try {
+        await saveDoc({ content: pendingMarkdown });
+        if (updateState) {
+          setSaveState("saved");
+          savedTimerRef.current = setTimeout(() => {
+            setSaveState("idle");
+          }, 2000);
+        }
+      } catch (err) {
+        if (updateState) {
+          setError(err instanceof Error ? err.message : "Failed to save");
+          setSaveState("idle");
+        }
+      }
+    },
+    [saveDoc],
+  );
+
   useEffect(() => {
     return () => {
-      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      void flushPendingSave(false);
+      if (savedTimerRef.current) {
+        clearTimeout(savedTimerRef.current);
+      }
     };
-  }, []);
+  }, [flushPendingSave]);
 
   const handleUpdate = useCallback(
     (markdown: string) => {
       setError(null);
+      pendingMarkdownRef.current = markdown;
 
-      // Clear any existing debounce timer
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
 
-      // Clear any "saved" timer so we don't flash "Saved" while typing
       if (savedTimerRef.current) {
         clearTimeout(savedTimerRef.current);
       }
 
       setSaveState("idle");
 
-      // Debounce: save 1 second after last keystroke
-      debounceTimerRef.current = setTimeout(async () => {
-        setSaveState("saving");
-        try {
-          await saveDoc({ content: markdown });
-          setSaveState("saved");
-          savedTimerRef.current = setTimeout(() => {
-            setSaveState("idle");
-          }, 2000);
-        } catch (err) {
-          setError(
-            err instanceof Error ? err.message : "Failed to save",
-          );
-          setSaveState("idle");
-        }
+      debounceTimerRef.current = setTimeout(() => {
+        void flushPendingSave();
       }, 1000);
     },
-    [saveDoc],
+    [flushPendingSave],
   );
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-8">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-slate-12">Strategy</h1>
         <div className="flex items-center gap-2 text-sm">
           {saveState === "saving" && (
@@ -82,16 +104,16 @@ export default function StrategyPageClient({
               Saved
             </span>
           )}
-          {error && (
-            <span className="text-red-9">{error}</span>
-          )}
         </div>
       </div>
 
-      <StrategyEditor
-        initialContent={doc?.content ?? ""}
-        onUpdate={handleUpdate}
-      />
+      {error && (
+        <Alert variant="error" className="mb-4" onDismiss={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
+      <StrategyEditor initialContent={doc?.content ?? ""} onUpdate={handleUpdate} />
     </div>
   );
 }

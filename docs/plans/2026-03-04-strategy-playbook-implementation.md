@@ -1,6 +1,6 @@
 # Strategy Playbook Implementation Plan
 
-**Goal:** Add a `/strategy` page with an inline WYSIWYG markdown editor (Tiptap) for capturing and iterating on a personal trading playbook, with auto-save to Convex.
+**Goal:** Add a `/strategy` page with an inline WYSIWYG Markdown editor (Tiptap) for capturing and iterating on a personal trading playbook, with auto-save to Convex.
 
 **Architecture:** New Convex table (`strategyDoc`) stores a single markdown document per user. A new Next.js page at `/strategy` renders a Tiptap editor that loads the document, auto-formats markdown syntax inline, and debounce-saves changes back to Convex. No toolbar — markdown shortcuts only.
 
@@ -8,7 +8,7 @@
 
 ---
 
-### Task 1: Install Tiptap Dependencies
+## Task 1: Install Tiptap Dependencies
 
 **Files:**
 
@@ -606,7 +606,7 @@ Type and verify each formats inline:
 - [ ] Type some content, wait 1 second
 - [ ] "Saving..." appears briefly, then "Saved"
 - [ ] Refresh the page — content persists
-- [ ] Edit content again — auto-saves again
+- [ ] Edit content — auto-saves again
 
 **Step 5: Test error display**
 
