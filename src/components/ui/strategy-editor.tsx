@@ -22,7 +22,9 @@ export function StrategyEditor({
   onUpdate,
 }: StrategyEditorProps) {
   const onUpdateRef = useRef(onUpdate);
-  onUpdateRef.current = onUpdate;
+  useEffect(() => {
+    onUpdateRef.current = onUpdate;
+  }, [onUpdate]);
 
   const editor = useEditor({
     extensions: [
