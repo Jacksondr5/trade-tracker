@@ -67,6 +67,7 @@ export function StrategyEditor({
   }, [onUpdate]);
 
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: [
       StarterKit,
       Link.configure({
@@ -104,6 +105,14 @@ export function StrategyEditor({
       onUpdateRef.current(markdown);
     },
   });
+
+  if (!editor) {
+    return (
+      <div className="rounded-lg border border-olive-7 bg-olive-2 p-6 text-sm text-slate-11">
+        Loading editor...
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-lg border border-olive-7 bg-olive-2 focus-within:ring-2 focus-within:ring-blue-8 focus-within:ring-offset-2 focus-within:ring-offset-olive-1">

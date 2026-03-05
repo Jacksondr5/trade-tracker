@@ -191,13 +191,14 @@ export function StrategyEditor({
       Markdown,
     ],
     content: initialContent,
+    contentType: "markdown",
     editorProps: {
       attributes: {
         class: "prose-strategy outline-none min-h-[60vh] px-6 py-4",
       },
     },
     onUpdate: ({ editor }) => {
-      const markdown = editor.storage.markdown.getMarkdown();
+      const markdown = editor.getMarkdown();
       onUpdateRef.current(markdown);
     },
   });
