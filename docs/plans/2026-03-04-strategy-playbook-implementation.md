@@ -4,7 +4,7 @@
 
 **Architecture:** New Convex table (`strategyDoc`) stores a single markdown document per user. A new Next.js page at `/strategy` renders a Tiptap editor that loads the document, auto-formats markdown syntax inline, and debounce-saves changes back to Convex. No toolbar — markdown shortcuts only.
 
-**Tech Stack:** Tiptap v3 (editor), tiptap-markdown (serialization), Convex (backend), Next.js App Router (page routing)
+**Tech Stack:** Tiptap v3 (editor), `@tiptap/markdown` (serialization), Convex (backend), Next.js App Router (page routing)
 
 ---
 
@@ -19,7 +19,7 @@
 Run:
 
 ```bash
-pnpm add @tiptap/react @tiptap/starter-kit @tiptap/pm @tiptap/extension-link @tiptap/extension-image @tiptap/extension-table @tiptap/extension-table-row @tiptap/extension-table-cell @tiptap/extension-table-header @tiptap/extension-placeholder tiptap-markdown
+pnpm add @tiptap/react @tiptap/starter-kit @tiptap/pm @tiptap/extension-link @tiptap/extension-image @tiptap/extension-table @tiptap/extension-table-row @tiptap/extension-table-cell @tiptap/extension-table-header @tiptap/extension-placeholder @tiptap/markdown
 ```
 
 **Step 2: Verify installation**
@@ -150,7 +150,7 @@ import TableHeader from "@tiptap/extension-table-header";
 import TableRow from "@tiptap/extension-table-row";
 import StarterKit from "@tiptap/starter-kit";
 import { EditorContent, useEditor } from "@tiptap/react";
-import { Markdown } from "tiptap-markdown";
+import { Markdown } from "@tiptap/markdown";
 import { useCallback, useEffect, useRef } from "react";
 
 interface StrategyEditorProps {
