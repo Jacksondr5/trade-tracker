@@ -2,7 +2,7 @@
 
 **Goal:** Add a `/strategy` page with an inline WYSIWYG Markdown editor (Tiptap) for capturing and iterating on a personal trading playbook, with auto-save to Convex.
 
-**Architecture:** New Convex table (`strategyDoc`) stores a single markdown document per user. A new Next.js page at `/strategy` renders a Tiptap editor that loads the document, auto-formats markdown syntax inline, and debounce-saves changes back to Convex. No toolbar — markdown shortcuts only.
+**Architecture:** New Convex table (`strategyDoc`) stores a single Markdown document per user. A new Next.js page at `/strategy` renders a Tiptap editor that loads the document, auto-formats Markdown syntax inline, and debounce-saves changes back to Convex. No toolbar — Markdown shortcuts only.
 
 **Tech Stack:** Tiptap v3 (editor), `@tiptap/markdown` (serialization), Convex (backend), Next.js App Router (page routing)
 
@@ -36,7 +36,7 @@ git commit -m "feat(strategy): add Tiptap editor dependencies"
 
 ---
 
-### Task 2: Add Convex `strategyDoc` Table and Functions
+## Task 2: Add Convex `strategyDoc` Table and Functions
 
 **Files:**
 
@@ -128,7 +128,7 @@ git commit -m "feat(strategy): add strategyDoc Convex table and functions"
 
 ---
 
-### Task 3: Create the Tiptap Editor Component
+## Task 3: Create the Tiptap Editor Component
 
 **Files:**
 
@@ -201,15 +201,6 @@ export function StrategyEditor({
       onUpdateRef.current(markdown);
     },
   });
-
-  // Update content if initialContent changes externally (shouldn't normally happen,
-  // but handles edge cases like hot reload)
-  const hasInitialized = useRef(false);
-  useEffect(() => {
-    if (editor && !hasInitialized.current) {
-      hasInitialized.current = true;
-    }
-  }, [editor]);
 
   return (
     <div className="rounded-lg border border-olive-7 bg-olive-2 focus-within:ring-2 focus-within:ring-blue-8 focus-within:ring-offset-2 focus-within:ring-offset-olive-1">
@@ -367,7 +358,7 @@ git commit -m "feat(strategy): create Tiptap editor component with prose styles"
 
 ---
 
-### Task 4: Create the Strategy Page (Server + Client Components)
+## Task 4: Create the Strategy Page (Server + Client Components)
 
 **Files:**
 
@@ -514,7 +505,7 @@ git commit -m "feat(strategy): add strategy page with auto-save editor"
 
 ---
 
-### Task 5: Add Navigation Link
+## Task 5: Add Navigation Link
 
 **Files:**
 
@@ -553,7 +544,7 @@ git commit -m "feat(strategy): add Strategy link to navigation header"
 
 ---
 
-### Task 6: Verify Full Build
+## Task 6: Verify Full Build
 
 **Step 1: Run lint**
 
@@ -574,7 +565,7 @@ Expected: PASS (successful production build)
 
 ---
 
-### Task 7: Manual Smoke Test
+## Task 7: Manual Smoke Test
 
 **Step 1: Start the dev server**
 
