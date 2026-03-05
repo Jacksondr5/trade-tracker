@@ -144,3 +144,131 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 }
+
+/* Strategy Editor - Tiptap prose styles */
+.prose-strategy {
+  color: var(--olive-12);
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+.prose-strategy h1 {
+  color: var(--slate-12);
+  font-size: 1.875rem;
+  font-weight: 700;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  line-height: 1.2;
+}
+
+.prose-strategy h2 {
+  color: var(--slate-12);
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.3;
+}
+
+.prose-strategy h3 {
+  color: var(--slate-12);
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.4;
+}
+
+.prose-strategy p {
+  margin-bottom: 0.75rem;
+}
+
+.prose-strategy strong {
+  color: var(--slate-12);
+  font-weight: 600;
+}
+
+.prose-strategy em {
+  font-style: italic;
+}
+
+.prose-strategy blockquote {
+  border-left: 4px solid var(--olive-6);
+  padding-left: 1rem;
+  color: var(--olive-11);
+  font-style: italic;
+  margin: 0.75rem 0;
+}
+
+.prose-strategy hr {
+  border-color: var(--olive-6);
+  margin: 1.5rem 0;
+}
+
+.prose-strategy ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.prose-strategy ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.prose-strategy li {
+  margin-bottom: 0.25rem;
+}
+
+.prose-strategy li p {
+  margin-bottom: 0.25rem;
+}
+
+.prose-strategy img {
+  max-width: 100%;
+  border-radius: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.prose-strategy table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.75rem 0;
+}
+
+.prose-strategy th,
+.prose-strategy td {
+  border: 1px solid var(--olive-6);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.prose-strategy th {
+  background-color: var(--olive-3);
+  font-weight: 600;
+  color: var(--slate-12);
+}
+
+.prose-strategy a {
+  color: var(--blue-9);
+  text-decoration: underline;
+}
+
+.prose-strategy a:hover {
+  color: var(--blue-10);
+}
+
+/* Placeholder styling */
+.prose-strategy p.is-editor-empty:first-child::before {
+  color: var(--olive-8);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* First heading has no top margin */
+.prose-strategy > :first-child {
+  margin-top: 0;
+}
