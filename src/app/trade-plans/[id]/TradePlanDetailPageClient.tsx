@@ -4,7 +4,7 @@ import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
 import { Check, CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Badge } from "~/components/ui";
+import { Alert, Badge, PageBackButton } from "~/components/ui";
 import NotesSection from "~/components/NotesSection";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
@@ -170,18 +170,24 @@ export default function TradePlanDetailPageClient({
     return (
       <div className="container mx-auto px-4 py-8">
         <p className="text-slate-11">Trade plan not found.</p>
-        <Link href="/trade-plans" className="mt-4 inline-block text-blue-400 hover:underline">
-          Back to trade plans
-        </Link>
+        <div className="mt-4">
+          <PageBackButton
+            dataTestId="trade-plan-not-found-back-button"
+            fallbackHref="/trade-plans"
+            label="Back to Trade Plans"
+          />
+        </div>
       </div>
     );
   }
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8">
-      <Link href="/trade-plans" className="mb-2 inline-block text-sm text-slate-11 hover:text-slate-12">
-        &larr; Back to Trade Plans
-      </Link>
+      <PageBackButton
+        dataTestId="trade-plan-detail-back-button"
+        fallbackHref="/trade-plans"
+        label="Back to Trade Plans"
+      />
 
       <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
         <div className="mb-2 flex items-start justify-between gap-3">

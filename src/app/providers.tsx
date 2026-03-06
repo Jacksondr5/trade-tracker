@@ -5,6 +5,7 @@ import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { ConvexReactClient } from "convex/react";
 import { env } from "~/env";
 import { useMemo } from "react";
+import { NavigationHistoryTracker } from "~/components/NavigationHistoryTracker";
 
 const client = new ConvexReactClient(env.NEXT_PUBLIC_CONVEX_URL);
 
@@ -25,6 +26,7 @@ export const Providers = ({
   return (
     <ClerkProvider>
       <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+        <NavigationHistoryTracker />
         {children}
       </ConvexProviderWithClerk>
     </ClerkProvider>

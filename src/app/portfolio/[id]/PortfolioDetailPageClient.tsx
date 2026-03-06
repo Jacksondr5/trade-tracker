@@ -6,7 +6,7 @@ import { Check, CheckCircle2, Loader2, Save, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Alert, Badge } from "~/components/ui";
+import { Alert, Badge, PageBackButton } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { capitalize, formatCurrency, formatDate } from "~/lib/format";
@@ -100,12 +100,13 @@ export default function PortfolioDetailPageClient({
     return (
       <div className="container mx-auto px-4 py-8">
         <p className="text-slate-11">Portfolio not found.</p>
-        <Link
-          href="/portfolio"
-          className="mt-4 inline-block text-blue-400 hover:underline"
-        >
-          Back to portfolios
-        </Link>
+        <div className="mt-4">
+          <PageBackButton
+            dataTestId="portfolio-not-found-back-button"
+            fallbackHref="/portfolio"
+            label="Back to Portfolios"
+          />
+        </div>
       </div>
     );
   }
@@ -114,12 +115,11 @@ export default function PortfolioDetailPageClient({
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8">
-      <Link
-        href="/portfolio"
-        className="mb-2 inline-block text-sm text-slate-11 hover:text-slate-12"
-      >
-        &larr; Back to Portfolios
-      </Link>
+      <PageBackButton
+        dataTestId="portfolio-detail-back-button"
+        fallbackHref="/portfolio"
+        label="Back to Portfolios"
+      />
 
       {/* Header section */}
       <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">

@@ -27,6 +27,7 @@ export { fieldContext, formContext, useFieldContext, useFormContext } from "./fo
 export { FormErrorMessage, type FormErrorMessageProps } from "./form-error-message";
 export { Input, inputVariants, type InputProps } from "./input";
 export { Label } from "./label";
+export { PageBackButton } from "./page-back-button";
 export { RadioGroup, RadioGroupItem } from "./radio-group";
 export { SubmitButton } from "./submit-button";
 export { Textarea, textareaVariants, type TextareaProps } from "./textarea";

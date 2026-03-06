@@ -6,7 +6,7 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
-import { Alert, Badge, Button, useAppForm } from "~/components/ui";
+import { Alert, Badge, Button, PageBackButton, useAppForm } from "~/components/ui";
 import NotesSection from "~/components/NotesSection";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
@@ -300,18 +300,24 @@ export default function CampaignDetailPageClient({
     return (
       <div className="container mx-auto px-4 py-8">
         <p className="text-slate-11">Campaign not found.</p>
-        <Link href="/campaigns" className="mt-4 inline-block text-blue-400 hover:underline">
-          Back to campaigns
-        </Link>
+        <div className="mt-4">
+          <PageBackButton
+            dataTestId="campaign-not-found-back-button"
+            fallbackHref="/campaigns"
+            label="Back to Campaigns"
+          />
+        </div>
       </div>
     );
   }
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8">
-      <Link href="/campaigns" className="mb-2 inline-block text-sm text-slate-11 hover:text-slate-12">
-        &larr; Back to Campaigns
-      </Link>
+      <PageBackButton
+        dataTestId="campaign-detail-back-button"
+        fallbackHref="/campaigns"
+        label="Back to Campaigns"
+      />
 
       <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
         <div className="mb-2 flex items-start justify-between gap-3">
