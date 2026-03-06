@@ -10,17 +10,14 @@
 
 import type * as accountMappings from "../accountMappings.js";
 import type * as analytics from "../analytics.js";
-import type * as campaignNotes from "../campaignNotes.js";
 import type * as campaigns from "../campaigns.js";
-import type * as generalNotes from "../generalNotes.js";
 import type * as imports from "../imports.js";
 import type * as lib_auth from "../lib/auth.js";
-import type * as migrations_tradePlanNotesMigration from "../migrations/tradePlanNotesMigration.js";
-import type * as migrations_unifiedNotesMigration from "../migrations/unifiedNotesMigration.js";
+import type * as lib_tradeValidator from "../lib/tradeValidator.js";
 import type * as notes from "../notes.js";
 import type * as portfolios from "../portfolios.js";
 import type * as positions from "../positions.js";
-import type * as tradePlanNotes from "../tradePlanNotes.js";
+import type * as strategyDoc from "../strategyDoc.js";
 import type * as tradePlans from "../tradePlans.js";
 import type * as trades from "../trades.js";
 
@@ -33,17 +30,14 @@ import type {
 declare const fullApi: ApiFromModules<{
   accountMappings: typeof accountMappings;
   analytics: typeof analytics;
-  campaignNotes: typeof campaignNotes;
   campaigns: typeof campaigns;
-  generalNotes: typeof generalNotes;
   imports: typeof imports;
   "lib/auth": typeof lib_auth;
-  "migrations/tradePlanNotesMigration": typeof migrations_tradePlanNotesMigration;
-  "migrations/unifiedNotesMigration": typeof migrations_unifiedNotesMigration;
+  "lib/tradeValidator": typeof lib_tradeValidator;
   notes: typeof notes;
   portfolios: typeof portfolios;
   positions: typeof positions;
-  tradePlanNotes: typeof tradePlanNotes;
+  strategyDoc: typeof strategyDoc;
   tradePlans: typeof tradePlans;
   trades: typeof trades;
 }>;
