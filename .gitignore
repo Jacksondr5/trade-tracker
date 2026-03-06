@@ -42,3 +42,4 @@ coverage/
 
 # Local data
 data/
+.playwright-cli/
