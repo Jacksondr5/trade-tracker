@@ -124,4 +124,10 @@ export default defineSchema({
     .index("by_owner_date", ["ownerId", "date"])
     .index("by_owner_status_tradePlanId", ["ownerId", "status", "tradePlanId"])
     .index("by_owner_status_ticker", ["ownerId", "status", "ticker"]),
+
+  strategyDoc: defineTable({
+    content: v.string(),
+    ownerId: v.string(),
+    updatedAt: v.number(),
+  }).index("by_owner", ["ownerId"]),
 });
