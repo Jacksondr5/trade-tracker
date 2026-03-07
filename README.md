@@ -1,81 +1,165 @@
 # Trade Tracker
 
-A trading journal application for tracking and managing your trades across stocks and crypto.
+Trade Tracker is a trading journal for stocks and crypto built around the full decision cycle, not just fills. It lets you capture campaign-level thesis, define trade plans, import or enter executions, review open positions, organize trades into portfolios, and keep notes tied to the work.
 
-## Features
+The app is built with Next.js on the frontend, Convex for the backend and real-time data layer, and Clerk for authentication.
 
-- Record buy/sell trades with price, quantity, and notes
-- Track trade direction (long/short)
-- Support for stocks and crypto assets
-- Real-time data sync with Convex backend
-- Secure authentication with Clerk
+## What the app does
 
-## Tech Stack
+- Journal manual trades across stocks and crypto
+- Import broker/exchange CSVs from Interactive Brokers and Kraken into a review inbox
+- Link trades to trade plans and trade plans to campaigns
+- Track campaign status from planning to active to closed, including retrospectives
+- Maintain freeform notes and a per-user strategy document
+- Group trades into portfolios and derive open positions from executions
+- Keep all data scoped to the signed-in Clerk user
 
-- **Framework:** Next.js 15 (App Router)
-- **Backend:** Convex (serverless with real-time sync)
-- **Auth:** Clerk
-- **Styling:** Tailwind CSS 4
-- **Language:** TypeScript
+## Core concepts
 
-## Getting Started
+- `Campaigns`: the higher-level thesis or idea you are working on
+- `Trade Plans`: the tactical setup for a symbol, optionally linked to a campaign
+- `Trades`: the actual executions, entered manually or accepted from imports
+- `Import Inbox`: pending imported trades that can be validated, edited, linked, and accepted
+- `Portfolios`: optional buckets for grouping trades
+- `Notes` and `Strategy`: supporting written context for trades, plans, campaigns, and your overall process
+
+## Tech stack
+
+- Next.js 16 App Router
+- React 19
+- Convex for database, queries, mutations, and realtime sync
+- Clerk for auth
+- TypeScript
+- Tailwind CSS 4
+- TanStack React Form + Zod for form handling and validation
+- Vitest for test execution
+- Playwright for end-to-end browser testing
+
+## Getting started
 
 ### Prerequisites
 
-- Node.js 22.19.0 (see `.nvmrc`)
-- pnpm 10.x
-- Convex account (for backend)
-- Clerk account (for authentication)
+- Node.js `24.14.0` (see `.nvmrc`)
+- `pnpm` `10.x`
+- A Convex account/project
+- A Clerk application
 
-### Environment Variables
-
-Create a `.env.local` file with:
+### 1. Install dependencies
 
 ```bash
-# Convex
-CONVEX_DEPLOYMENT=dev:your-deployment-name
-NEXT_PUBLIC_CONVEX_URL=https://your-deployment-name.convex.cloud
-
-# Clerk
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
-CLERK_SECRET_KEY=sk_test_...
-```
-
-### Development
-
-```bash
-# Install dependencies
 pnpm install
+```
 
-# Start development server
+### 2. Set up Convex
+
+Start the Convex dev workflow in a separate terminal:
+
+```bash
+pnpm convex dev
+```
+
+If this is your first time running it, the CLI will prompt you to create or select a deployment and will provide your Convex URL.
+
+### 3. Set up Clerk
+
+Create a Clerk app, then make sure you have:
+
+- a publishable key
+- a secret key
+- the Clerk frontend API URL
+- a JWT template named `convex`
+
+That JWT template is required because server components request a Clerk token with `template: "convex"` before preloading Convex queries.
+
+### 4. Create `.env.local`
+
+Start from the checked-in example:
+
+```bash
+cp .env.example .env.local
+```
+
+Then fill in the values:
+
+```bash
+CLERK_SECRET_KEY=sk_test_...
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+NEXT_PUBLIC_CLERK_FRONTEND_API_URL=your-clerk-frontend-api-url
+NEXT_PUBLIC_CONVEX_URL=https://your-deployment.convex.cloud
+PLAYWRIGHT_USERNAME=your-playwright-test-user@example.com
+PLAYWRIGHT_PASSWORD=your-playwright-test-password
+```
+
+Notes:
+
+- `NEXT_PUBLIC_CONVEX_URL` is used by the React client in `src/app/providers.tsx`.
+- `NEXT_PUBLIC_CLERK_FRONTEND_API_URL` is required by `convex/auth.config.ts` and is now also validated in `src/env.ts`.
+- `PLAYWRIGHT_USERNAME` and `PLAYWRIGHT_PASSWORD` are for local Playwright/Codex UI automation and are documented in `AGENTS.md`.
+- `.env.example` is intended as the source of truth for local setup.
+
+### 5. Start the app
+
+In another terminal, run:
+
+```bash
 pnpm dev
-
-# In another terminal, start Convex dev server
-npx convex dev
 ```
 
-### Scripts
+Open `http://localhost:3000`.
 
-- `pnpm dev` - Start development server
-- `pnpm build` - Build for production
-- `pnpm start` - Start production server
-- `pnpm lint` - Run ESLint
-- `pnpm typecheck` - Run TypeScript type checking
+The dashboard at `/` is visible without auth, but the rest of the product flow expects you to sign in.
 
-## Project Structure
+## Scripts
 
-```
-├── convex/           # Convex backend (schema, functions)
-├── public/           # Static assets
-├── src/
-│   ├── app/          # Next.js App Router pages
-│   ├── components/   # React components
-│   │   └── ui/       # UI component library
-│   ├── lib/          # Utility functions
-│   └── styles/       # Global CSS
-└── .github/          # GitHub Actions workflows
+```bash
+pnpm dev         # start Next.js locally
+pnpm build       # production build
+pnpm start       # run the production server
+pnpm lint        # ESLint
+pnpm typecheck   # TypeScript checks
+pnpm test        # Vitest run
+pnpm test:watch  # Vitest watch mode
+pnpm test:e2e    # Playwright end-to-end tests
+pnpm test:e2e:ui # Playwright UI runner
 ```
 
-## License
+## Project structure
 
-MIT
+```text
+.
+├── convex/                 # Convex schema and backend functions
+├── shared/imports/         # shared import types, constants, matching, validation
+├── src/app/                # Next.js routes and page clients
+├── src/components/         # app and UI components
+├── src/lib/                # formatting, auth helpers, import parsers, utilities
+└── src/styles/             # global styles
+```
+
+## Architecture notes
+
+- There are no Next.js API routes in this app. Server-side data access lives in `convex/`.
+- Most authenticated pages preload Convex data in a server component, then hand it to a client page via `preloadQuery`.
+- The Convex schema currently includes `campaigns`, `tradePlans`, `trades`, `inboxTrades`, `portfolios`, `notes`, `strategyDoc`, and `accountMappings`.
+- Imported trades land in `inboxTrades` first so they can be reviewed before becoming permanent `trades`.
+- Open positions are derived from trades rather than stored as a separate source of truth.
+
+## Testing
+
+- Unit-style tests run through Vitest via `pnpm test`.
+- Browser tests run through Playwright via `pnpm test:e2e`.
+- For app-focused Playwright work, start both `pnpm dev` and `pnpm convex dev` first.
+- Playwright reuses `output/playwright/auth.json` when present; only fall back to manual Clerk login and `.env.local` credentials if that auth state is missing or stale.
+
+## Useful routes
+
+- `/` dashboard
+- `/trades` trade journal and filters
+- `/trades/new` manual trade entry
+- `/trade-plans` trade plan management
+- `/campaigns` campaign tracking
+- `/imports` CSV import and inbox review
+- `/positions` derived open positions
+- `/portfolio` portfolio management
+- `/notes` note management
+- `/strategy` long-form strategy document
+- `/accounts` brokerage account ID mapping

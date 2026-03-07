@@ -17,6 +17,7 @@ export const env = createEnv({
    * Prefix with `NEXT_PUBLIC_` to expose to the client.
    */
   client: {
+    NEXT_PUBLIC_CLERK_FRONTEND_API_URL: z.string().trim().min(1),
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string(),
     NEXT_PUBLIC_CONVEX_URL: z.string().min(1),
   },
@@ -26,6 +27,8 @@ export const env = createEnv({
    */
   runtimeEnv: {
     CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
+    NEXT_PUBLIC_CLERK_FRONTEND_API_URL:
+      process.env.NEXT_PUBLIC_CLERK_FRONTEND_API_URL,
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:
       process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
     NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL,
