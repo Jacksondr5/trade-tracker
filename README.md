@@ -55,7 +55,7 @@ pnpm install
 Start the Convex dev workflow in a separate terminal:
 
 ```bash
-npx convex dev
+pnpm convex dev
 ```
 
 If this is your first time running it, the CLI will prompt you to create or select a deployment and will provide your Convex URL.
@@ -147,8 +147,8 @@ pnpm test:e2e:ui # Playwright UI runner
 
 - Unit-style tests run through Vitest via `pnpm test`.
 - Browser tests run through Playwright via `pnpm test:e2e`.
-- For app-focused Playwright work, start both `pnpm dev` and `npx convex dev` first.
-- The repository now includes a Playwright config and example spec, but the shared Playwright login credentials still need to be supplied through `.env.local`.
+- For app-focused Playwright work, start both `pnpm dev` and `pnpm convex dev` first.
+- Playwright reuses `output/playwright/auth.json` when present; only fall back to manual Clerk login and `.env.local` credentials if that auth state is missing or stale.
 
 ## Useful routes
 
