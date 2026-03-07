@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Trade Tracker icon</title>
+  <desc id="desc">An abstract candlestick stack with a gentle upward trend line.</desc>
+  <path d="M26 220l204-24" stroke="#697177" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M44 112v76" stroke="#ff6369" stroke-width="16" stroke-linecap="round" />
+  <rect x="20" y="130" width="48" height="38" rx="12" fill="#e5484d" />
+  <path d="M128 42v174" stroke="#71d083" stroke-width="16" stroke-linecap="round" />
+  <rect x="102" y="84" width="52" height="96" rx="14" fill="#46a758" />
+  <path d="M212 24v146" stroke="#71d083" stroke-width="16" stroke-linecap="round" />
+  <rect x="188" y="66" width="48" height="68" rx="12" fill="#53b365" />
+</svg>

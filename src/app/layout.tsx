@@ -10,6 +10,14 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   description: "Track your trades and manage your trading campaigns",
+  icons: {
+    apple: "/apple-icon.png",
+    icon: [
+      { type: "image/svg+xml", url: "/icon.svg" },
+      { sizes: "16x16 32x32 48x48", url: "/favicon.ico" },
+    ],
+    shortcut: "/favicon.ico",
+  },
   title: "Trade Tracker",
 };
 
