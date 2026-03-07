@@ -147,6 +147,7 @@ pnpm test:e2e:ui # Playwright UI runner
 
 - Unit-style tests run through Vitest via `pnpm test`.
 - Browser tests run through Playwright via `pnpm test:e2e`.
+- This repo intentionally keeps both `@playwright/test` and `playwright` installed. Playwright generally recommends using only one top-level package, but the current Codex `playwright-interactive` workflow expects a direct `playwright` import while this repo's end-to-end tests run through `@playwright/test`.
 - For app-focused Playwright work, start both `pnpm dev` and `pnpm convex dev` first.
 - Playwright reuses `output/playwright/auth.json` when present; only fall back to manual Clerk login and `.env.local` credentials if that auth state is missing or stale.
 

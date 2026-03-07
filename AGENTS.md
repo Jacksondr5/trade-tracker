@@ -12,10 +12,12 @@ Trade Tracker is a trading journal app for recording and analyzing trades across
 pnpm dev          # Start Next.js dev server (Convex dev server should run separately: npx convex dev)
 pnpm build        # Production build
 pnpm lint         # ESLint
+pnpm test         # Vitest
+pnpm test:e2e     # Playwright end-to-end tests
 pnpm typecheck    # TypeScript type checking (tsc --noEmit)
 ```
 
-No test framework is configured yet. CI runs lint, typecheck, and build.
+This repo uses Vitest for unit-style tests and Playwright for end-to-end browser tests. CI runs lint, typecheck, test, and build.
 
 ## Worktree Bootstrap
 
