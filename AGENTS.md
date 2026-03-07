@@ -17,6 +17,86 @@ pnpm typecheck    # TypeScript type checking (tsc --noEmit)
 
 No test framework is configured yet. CI runs lint, typecheck, and build.
 
+## Playwright Testing
+
+Use `playwright-interactive` first for UI work in this repo. It is the default because it keeps a persistent browser session alive through `js_repl`, which is better for iterative frontend development and repeated post-edit verification. Only fall back to `playwright` CLI if the interactive workflow fails, the `js_repl` session becomes unhealthy, or the task is intentionally a one-off CLI-style check.  If you fallback, flag this to the user as an issue that needs to be fixed.
+
+Shared rules:
+
+- Start the app first: `pnpm dev` and `pnpm convex dev`
+- If the agent starts Next.js itself, read the `pnpm dev` output and capture the actual local URL/port that Next assigned
+- If the server is already running, verify the active local URL/port before opening Playwright; do not assume `3000`
+- For Playwright-based work, prefer `127.0.0.1` over `localhost` when both are available
+- Playwright credentials live in `.env.local` as `PLAYWRIGHT_USERNAME` and `PLAYWRIGHT_PASSWORD`
+- Standard shared auth state file: `output/playwright/auth.json`
+- Try loading saved auth state before doing a manual Clerk login, but if the app is not running on the same origin the saved auth may not restore cleanly
+
+Clerk sign-in currently uses a two-step flow for the Playwright account when auth state is missing or expired:
+
+1. Enter `PLAYWRIGHT_USERNAME` on `/sign-in`
+2. Submit, then enter `PLAYWRIGHT_PASSWORD` on `/sign-in/factor-one`
+
+### `playwright-interactive` Default
+
+Use this first for UI tasks, especially when the agent expects to make code edits and re-check the UI multiple times in the same task.
+
+- Start each new interactive workflow from a clean `js_repl` state so stale `browser`, `context`, or `page` handles do not leak across tasks
+- After resetting `js_repl`, rerun the Playwright bootstrap/setup cells before interacting with the app
+- Reuse the same live `browser`, `context`, and `page` handles across checks instead of reopening the browser repeatedly
+- Set the interactive target URL from the actual running Next.js port before calling `page.goto(...)`
+- Load `output/playwright/auth.json` into the browser context before falling back to manual Clerk login
+- Save refreshed auth state back to `output/playwright/auth.json` after a manual login succeeds
+
+```js
+var TARGET_URL = "http://127.0.0.1:3000"; // Replace with the actual detected local URL.
+
+await context.storageState({ path: "output/playwright/auth.json" });
+
+context = await browser.newContext({
+  viewport: { width: 1600, height: 900 },
+  storageState: "output/playwright/auth.json",
+});
+page = await context.newPage();
+await page.goto(TARGET_URL, { waitUntil: "domcontentloaded" });
+```
+
+### `playwright` CLI Fallback
+
+Use this only if `playwright-interactive` fails, the `js_repl` session is unavailable, or the interactive browser state becomes unhealthy.
+
+- Invoke the skill wrapper directly: `"$HOME/.codex/skills/playwright/scripts/playwright_cli.sh"`
+- The wrapper must be executable; if direct execution fails, fix the file permissions before continuing
+- Use the actual detected local URL in every CLI command; do not hardcode `3000` if Next started on another port
+- Prefer headed mode for local debugging
+- Always take a fresh `snapshot` before using element refs like `e47`
+- Save screenshots with `--filename`; do not pass the output path as the positional argument:
+  `"$PWCLI" -s=default screenshot --filename output/playwright/example.png`
+- Load `output/playwright/auth.json` before doing a manual login if the file exists
+
+```bash
+export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+export PWCLI="$CODEX_HOME/skills/playwright/scripts/playwright_cli.sh"
+export APP_URL="http://127.0.0.1:3000" # Replace with the actual detected local URL.
+source .env.local
+
+"$PWCLI" open "$APP_URL" --headed
+"$PWCLI" state-load output/playwright/auth.json
+"$PWCLI" goto "$APP_URL"
+"$PWCLI" snapshot
+```
+
+If the saved auth file is missing or no longer valid, complete the manual Clerk login once and then refresh the shared state:
+
+```bash
+"$PWCLI" state-save output/playwright/auth.json
+```
+
+Notes:
+
+- `playwright` CLI and `playwright-interactive` can share the same `output/playwright/auth.json` file
+- The saved auth state is sensitive; keep it local and do not commit it
+- If auth restoration behaves unexpectedly, confirm the agent is using the correct detected origin because cookies are origin-specific
+
 ## Architecture
 
 ### Backend: Convex (`convex/`)
