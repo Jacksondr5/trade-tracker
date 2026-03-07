@@ -17,6 +17,24 @@ pnpm typecheck    # TypeScript type checking (tsc --noEmit)
 
 No test framework is configured yet. CI runs lint, typecheck, and build.
 
+## Worktree Bootstrap
+
+New Git worktrees in this repo may be missing `.env.local` and `node_modules/` when they are first created. Before running the app, Playwright, or project scripts, agents must verify that both exist and bootstrap the worktree if needed.
+
+Bootstrap rules:
+
+- If `.env.local` is missing, copy it from the primary checkout. Find that path with `git worktree list` and copy the file from the main checkout.
+- If `node_modules/` is missing, run `pnpm install` from the worktree root.
+- Do not overwrite an existing `.env.local` unless the user explicitly asks for that.
+
+Suggested commands:
+
+```bash
+git worktree list
+cp [path/to/main/checkout] .env.local
+pnpm install
+```
+
 ## Playwright Testing
 
 Use `playwright-interactive` first for UI work in this repo. It is the default because it keeps a persistent browser session alive through `js_repl`, which is better for iterative frontend development and repeated post-edit verification. Only fall back to `playwright` CLI if the interactive workflow fails, the `js_repl` session becomes unhealthy, or the task is intentionally a one-off CLI-style check.  If you fallback, flag this to the user as an issue that needs to be fixed.
