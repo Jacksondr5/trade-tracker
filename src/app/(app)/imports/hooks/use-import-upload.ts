@@ -4,7 +4,10 @@ import type { ChangeEvent } from "react";
 import { useState } from "react";
 import { parseIBKRCSV } from "~/lib/imports/ibkr-parser";
 import { parseKrakenCSV } from "~/lib/imports/kraken-parser";
-import type { BrokerageSource, InboxTradeCandidate } from "../../../../shared/imports/types";
+import type {
+  BrokerageSource,
+  InboxTradeCandidate,
+} from "../../../../../shared/imports/types";
 
 interface ImportResult {
   imported: number;

@@ -80,7 +80,7 @@ export default function PortfolioDetailPageClient({
     setIsDeleting(true);
     try {
       await deletePortfolio({ portfolioId });
-      router.push("/portfolio");
+      router.push("/portfolios");
     } catch (error) {
       setNameError(
         error instanceof ConvexError
@@ -101,7 +101,7 @@ export default function PortfolioDetailPageClient({
       <div className="container mx-auto px-4 py-8">
         <p className="text-slate-11">Portfolio not found.</p>
         <Link
-          href="/portfolio"
+          href="/portfolios"
           className="mt-4 inline-block text-blue-400 hover:underline"
         >
           Back to portfolios
@@ -115,7 +115,7 @@ export default function PortfolioDetailPageClient({
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8">
       <Link
-        href="/portfolio"
+        href="/portfolios"
         className="mb-2 inline-block text-sm text-slate-11 hover:text-slate-12"
       >
         &larr; Back to Portfolios

@@ -1,6 +1,6 @@
 import type { ChangeEvent } from "react";
 import { Alert, Card } from "~/components/ui";
-import type { BrokerageSource } from "../../../../shared/imports/types";
+import type { BrokerageSource } from "../../../../../shared/imports/types";
 
 interface ImportResult {
   imported: number;

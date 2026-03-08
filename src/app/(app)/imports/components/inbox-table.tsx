@@ -1,10 +1,10 @@
 import { Check, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
-import type { Id } from "../../../../convex/_generated/dataModel";
+import type { Id } from "~/convex/_generated/dataModel";
 import {
   KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME,
   isKrakenDefaultAccountId,
-} from "../../../../shared/imports/constants";
+} from "../../../../../shared/imports/constants";
 import type { InboxTrade, OpenTradePlanOption } from "../types";
 import {
   formatCurrency,
