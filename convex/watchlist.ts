@@ -110,7 +110,6 @@ export const unwatchItem = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
-    await assertTargetExists(ctx, ownerId, args.item);
 
     const existingWatch = await getExistingWatch(ctx, ownerId, args.item);
     if (existingWatch) {
