@@ -250,6 +250,7 @@ export const getCampaignTradePlanHierarchy = query({
       Array<TradePlanNavigationItem>
     >();
     const standaloneTradePlans: Array<TradePlanNavigationItem> = [];
+    const watchlistTradePlans: Array<TradePlanNavigationItem> = [];
 
     for (const tradePlan of tradePlans) {
       const tradePlanItem = buildTradePlanNavigationItem(
@@ -257,6 +258,10 @@ export const getCampaignTradePlanHierarchy = query({
         watchedTradePlanIds,
         campaignById,
       );
+
+      if (tradePlanItem.isWatched) {
+        watchlistTradePlans.push(tradePlanItem);
+      }
 
       if (tradePlanItem.parentCampaign === null) {
         standaloneTradePlans.push(tradePlanItem);
@@ -269,9 +274,14 @@ export const getCampaignTradePlanHierarchy = query({
       childTradePlansByCampaign.set(tradePlanItem.parentCampaign.id, siblingTradePlans);
     }
 
+    const watchlistCampaigns: Array<CampaignNavigationItem> = [];
     const campaignRows = campaigns
       .map((campaign) => {
         const campaignItem = buildCampaignNavigationItem(campaign, watchedCampaignIds);
+        if (campaignItem.isWatched) {
+          watchlistCampaigns.push(campaignItem);
+        }
+
         const childTradePlans =
           childTradePlansByCampaign.get(campaign._id)?.sort(compareTradePlanItems) ?? [];
 
@@ -283,16 +293,9 @@ export const getCampaignTradePlanHierarchy = query({
       })
       .sort(compareCampaignItems);
 
-    const watchlist = [
-      ...campaigns
-        .filter((campaign) => watchedCampaignIds.has(campaign._id))
-        .map((campaign) => buildCampaignNavigationItem(campaign, watchedCampaignIds)),
-      ...tradePlans
-        .filter((tradePlan) => watchedTradePlanIds.has(tradePlan._id))
-        .map((tradePlan) =>
-          buildTradePlanNavigationItem(tradePlan, watchedTradePlanIds, campaignById),
-        ),
-    ].sort(compareWatchlistItems);
+    const watchlist = [...watchlistCampaigns, ...watchlistTradePlans].sort(
+      compareWatchlistItems,
+    );
 
     return {
       campaigns: campaignRows,
