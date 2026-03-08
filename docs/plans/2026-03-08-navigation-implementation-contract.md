@@ -71,7 +71,7 @@ Rules:
 
 - This grouping is shared across desktop and mobile.
 - `Campaigns` and `Trade Plans` remain separate global entries even though they share local hierarchy rules.
-- The desktop shell replaces the current flat top navigation as the primary authenticated navigation.
+- The desktop shell replaces the current flat top-bar navigation as the primary authenticated navigation.
 - User/account utilities may stay in top chrome, but they are not a substitute for the sidebar.
 
 ### Mobile shell
@@ -277,6 +277,8 @@ For this phase, treat these as open:
 
 - campaign: `Planning`, `Active`
 - trade plan: `Idea`, `Watching`, `Active`
+
+`Watching` here is a lifecycle status token for ordering logic, not user-facing Watchlist copy. A trade plan can be both `Watching` and on `Watchlist`; when that happens, the `watched items` bucket takes precedence.
 
 Treat `Closed` as the lowest-priority lifecycle bucket unless an item is watched.
 
