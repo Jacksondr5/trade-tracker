@@ -91,36 +91,46 @@ describe("watchlist", () => {
   });
 
   it("supports watched state independently from lifecycle status", async () => {
-    const closedCampaignId = await insertCampaign(ownerA, "closed");
-    const closedTradePlanId = await insertTradePlan({
-      ownerId: ownerA,
-      status: "closed",
-    });
-    const user = asUser(ownerA);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-08T10:00:00.000Z"));
 
-    await user.mutation(api.watchlist.watchItem, {
-      item: {
-        campaignId: closedCampaignId,
-        itemType: "campaign",
-      },
-    });
-    await user.mutation(api.watchlist.watchItem, {
-      item: {
-        itemType: "tradePlan",
-        tradePlanId: closedTradePlanId,
-      },
-    });
+    try {
+      const closedCampaignId = await insertCampaign(ownerA, "closed");
+      const closedTradePlanId = await insertTradePlan({
+        ownerId: ownerA,
+        status: "closed",
+      });
+      const user = asUser(ownerA);
 
-    await expect(user.query(api.watchlist.listWatchedItems)).resolves.toMatchObject([
-      {
-        itemType: "tradePlan",
-        tradePlanId: closedTradePlanId,
-      },
-      {
-        campaignId: closedCampaignId,
-        itemType: "campaign",
-      },
-    ]);
+      await user.mutation(api.watchlist.watchItem, {
+        item: {
+          campaignId: closedCampaignId,
+          itemType: "campaign",
+        },
+      });
+
+      vi.setSystemTime(new Date("2026-03-08T10:00:00.001Z"));
+
+      await user.mutation(api.watchlist.watchItem, {
+        item: {
+          itemType: "tradePlan",
+          tradePlanId: closedTradePlanId,
+        },
+      });
+
+      await expect(user.query(api.watchlist.listWatchedItems)).resolves.toMatchObject([
+        {
+          itemType: "tradePlan",
+          tradePlanId: closedTradePlanId,
+        },
+        {
+          campaignId: closedCampaignId,
+          itemType: "campaign",
+        },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("deduplicates repeated watches and scopes list results by owner", async () => {
@@ -211,6 +221,15 @@ describe("watchlist", () => {
         },
       }),
     ).rejects.toThrow("Campaign not found");
+
+    await expect(
+      user.mutation(api.watchlist.watchItem, {
+        item: {
+          itemType: "tradePlan",
+          tradePlanId: deletedTradePlanId,
+        },
+      }),
+    ).rejects.toThrow("Trade plan not found");
 
     await expect(
       user.mutation(api.watchlist.unwatchItem, {
