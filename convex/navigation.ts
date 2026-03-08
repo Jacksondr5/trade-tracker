@@ -96,8 +96,12 @@ function buildTradePlanHref(tradePlanId: Id<"tradePlans">): string {
   return `/trade-plans/${tradePlanId}`;
 }
 
+const navigationTextCollator = new Intl.Collator("en", {
+  sensitivity: "base",
+});
+
 function compareText(a: string, b: string): number {
-  return a.localeCompare(b, undefined, { sensitivity: "base" });
+  return navigationTextCollator.compare(a, b);
 }
 
 function getCampaignBucket(item: Pick<CampaignNavigationItem, "isWatched" | "status">): number {

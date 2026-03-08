@@ -154,6 +154,7 @@ describe("navigation hierarchy", () => {
 
     expect(hierarchy.watchlist).toMatchObject([
       {
+        href: `/campaigns/${watchedCampaignId}`,
         id: watchedCampaignId,
         isWatched: true,
         itemType: "campaign",
@@ -161,6 +162,7 @@ describe("navigation hierarchy", () => {
         status: "active",
       },
       {
+        href: `/trade-plans/${watchedChildId}`,
         id: watchedChildId,
         instrumentSymbol: "ZWC",
         isWatched: true,
@@ -173,6 +175,7 @@ describe("navigation hierarchy", () => {
         status: "active",
       },
       {
+        href: `/trade-plans/${watchedStandaloneId}`,
         id: watchedStandaloneId,
         instrumentSymbol: "CWS",
         isWatched: true,
@@ -292,6 +295,7 @@ describe("navigation hierarchy", () => {
     expect(hierarchy.campaigns).toEqual([]);
     expect(hierarchy.watchlist).toMatchObject([
       {
+        href: `/trade-plans/${orphanedTradePlanId}`,
         id: orphanedTradePlanId,
         instrumentSymbol: "ORPH",
         isWatched: true,
@@ -303,6 +307,7 @@ describe("navigation hierarchy", () => {
     ]);
     expect(hierarchy.standaloneTradePlans).toMatchObject([
       {
+        href: `/trade-plans/${orphanedTradePlanId}`,
         id: orphanedTradePlanId,
         instrumentSymbol: "ORPH",
         isWatched: true,
