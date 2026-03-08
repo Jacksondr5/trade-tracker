@@ -219,6 +219,6 @@ describe("watchlist", () => {
           tradePlanId: deletedTradePlanId,
         },
       }),
-    ).rejects.toThrow("Trade plan not found");
+    ).resolves.toBeNull();
   });
 });
