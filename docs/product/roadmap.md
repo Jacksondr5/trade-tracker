@@ -87,8 +87,8 @@ Includes:
 2. Standardize page templates, empty states, and recurring page-level patterns
 3. Fill the remaining shared UI gaps such as standalone selects, icon-button patterns, and other reused controls discovered in earlier phases
 4. Migrate remaining touched routes off route-local UI patterns and onto the shared UI layer
-5. Write the technical architecture overview
-6. Write the glossary
+5. Maintain and update `technical-architecture-overview.md`
+6. Maintain and expand `glossary.md`
 7. Start and maintain a decision log
 8. Maintain this roadmap as priorities change
 

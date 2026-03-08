@@ -56,7 +56,7 @@ Bad:
 - Avoid filler adjectives like `powerful`, `robust`, `flexible`, `seamless`.
 - Avoid `we` and minimize `you`.
 - Use title case for page titles and major section titles.
-- Use sentence case for body copy, helper text, alerts, and most buttons.
+- Use sentence case for body copy, helper text, alerts, and button labels.
 - Do not use ellipses unless the action opens another step.
 
 ## Canonical Product Vocabulary
@@ -128,12 +128,12 @@ Use `verb + object`.
 
 Good:
 
-- `New Campaign`
-- `New Trade Plan`
-- `Add Note`
-- `Import Trades`
-- `Attach Chart`
-- `Accept Trades`
+- `New campaign`
+- `New trade plan`
+- `Add note`
+- `Import trades`
+- `Attach chart`
+- `Accept trades`
 
 Avoid vague actions:
 
@@ -144,13 +144,13 @@ Avoid vague actions:
 
 ### Create actions
 
-- Use `New` for first-class objects: `New Campaign`, `New Trade Plan`, `New Portfolio`
-- Use `Add` for smaller contextual actions: `Add Note`, `Add Trade`
+- Use `New` for first-class objects: `New campaign`, `New trade plan`, `New portfolio`
+- Use `Add` for smaller contextual actions: `Add note`, `Add trade`
 
 ### Save actions
 
 - Prefer autosave where it fits the workflow.
-- If a label is needed, name the object: `Save Strategy`, `Update Campaign`, `Update Trade Plan`.
+- If a label is needed, name the object: `Save strategy`, `Update campaign`, `Update trade plan`.
 - Avoid generic `Save` for large forms when a clearer label fits.
 
 ### Relationship actions

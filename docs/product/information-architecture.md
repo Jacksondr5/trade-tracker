@@ -155,8 +155,9 @@ A note belongs to exactly one of:
 
 Preferred interpretation:
 
-- campaign notes, trade-plan notes, and general notes are the primary note types
-- trade-level notes remain secondary to trade-plan-linked commentary
+- campaign notes, trade-plan notes, general notes, and trade-level notes all live in one unified notes table
+- note types are distinguished by parent IDs (campaignId, tradePlanId, or tradeId; none means general notes)
+- trade-level notes are supported but intentionally secondary to trade-plan notes when both are viable
 
 ### Strategy
 

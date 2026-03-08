@@ -86,7 +86,7 @@ The desktop shell should use a left sidebar as the primary global navigation.
 
 Grouping:
 
-- `Journal`
+- `Activity`
   - Dashboard
   - Trades
   - Campaigns
