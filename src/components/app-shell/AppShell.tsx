@@ -27,7 +27,7 @@ function NavigationSections({
   pathname: string;
 }) {
   return (
-    <div className="space-y-6">
+    <nav aria-label="Primary" className="space-y-6">
       {appNavigationSections.map((section) => (
         <section key={section.title} className="space-y-2">
           <h2 className="px-3 text-xs font-medium uppercase tracking-[0.18em] text-olive-10">
@@ -43,6 +43,7 @@ function NavigationSections({
                   key={item.href}
                   href={item.href}
                   onClick={onNavigate}
+                  aria-current={isActive ? "page" : undefined}
                   className={cn(
                     "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                     isActive
@@ -58,7 +59,7 @@ function NavigationSections({
           </div>
         </section>
       ))}
-    </div>
+    </nav>
   );
 }
 
@@ -188,7 +189,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   if (!isSignedIn) {
-    return null;
+    return <>{children}</>;
   }
 
   const activeItem = getActiveAppNavigationItem(pathname);
