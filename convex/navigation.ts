@@ -2,19 +2,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireUser } from "./lib/auth";
-
-const campaignStatusValidator = v.union(
-  v.literal("active"),
-  v.literal("closed"),
-  v.literal("planning"),
-);
-
-const tradePlanStatusValidator = v.union(
-  v.literal("active"),
-  v.literal("closed"),
-  v.literal("idea"),
-  v.literal("watching"),
-);
+import { campaignStatusValidator, tradePlanStatusValidator } from "./lib/statuses";
 
 const parentCampaignContextValidator = v.object({
   href: v.string(),
@@ -268,7 +256,11 @@ export const getCampaignTradePlanHierarchy = query({
         continue;
       }
 
-      if (watchedItem.tradePlanId !== undefined && tradePlanById.has(watchedItem.tradePlanId)) {
+      if (
+        watchedItem.itemType === "tradePlan" &&
+        watchedItem.tradePlanId !== undefined &&
+        tradePlanById.has(watchedItem.tradePlanId)
+      ) {
         watchedTradePlanIds.add(watchedItem.tradePlanId);
       }
     }
