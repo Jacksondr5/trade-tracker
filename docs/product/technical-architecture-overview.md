@@ -84,6 +84,12 @@ Contributors should use the product docs for product-wide guidance instead of in
 - Do not add Next.js API routes as a parallel backend surface.
 - Keep backend logic in the domain module that owns the behavior, or in `convex/lib/` if it is genuinely shared.
 
+### Authentication wiring
+
+- Route protection is enforced in `src/middleware.ts` (public auth entrypoints remain `/sign-in` and `/sign-up`).
+- Convex auth configuration is defined in `convex/auth.config.ts`.
+- Changes to auth behavior should be updated in these files first, then reflected in product docs if user-facing behavior changes.
+
 ### Forms
 
 - All user-editable forms should use `useAppForm`.
@@ -96,6 +102,13 @@ Contributors should use the product docs for product-wide guidance instead of in
 - Reuse existing components from `src/components/ui/` before creating new ones.
 - If an existing component is close, extend it instead of forking the pattern.
 - New primitives should be added through the shared UI layer, not embedded ad hoc inside feature code.
+- Interactive elements must expose a stable `dataTestId` prop for test selectors.
+
+When adding new primitives via ShadCN CLI (`npx shadcn@latest add <component>`), complete this checklist before use:
+
+1. Replace CSS-variable color defaults with the app’s Radix token classes.
+2. Add `dataTestId` support to interactive surfaces.
+3. Verify dark-mode rendering, since the app is dark-mode only.
 
 ### Styling
 
