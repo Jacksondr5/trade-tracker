@@ -372,7 +372,7 @@ The project can build shell structure without watchlist persistence, but the hie
 **Blocks**
 
 - Issue 6
-- Issue 7 if mobile local browsing uses the same hierarchy payload
+- Issue 7
 - Issue 10
 
 **Why**
