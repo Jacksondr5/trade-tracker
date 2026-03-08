@@ -221,4 +221,24 @@ describe("watchlist", () => {
       }),
     ).resolves.toBeNull();
   });
+
+  it("filters out stale watchlist entries when targets are deleted", async () => {
+    const campaignId = await insertCampaign(ownerA, "active");
+    const tradePlanId = await insertTradePlan({ ownerId: ownerA, status: "active" });
+    const user = asUser(ownerA);
+
+    await user.mutation(api.watchlist.watchItem, {
+      item: { campaignId, itemType: "campaign" },
+    });
+    await user.mutation(api.watchlist.watchItem, {
+      item: { itemType: "tradePlan", tradePlanId },
+    });
+
+    await t.run(async (ctx) => {
+      await ctx.db.delete(campaignId);
+      await ctx.db.delete(tradePlanId);
+    });
+
+    await expect(user.query(api.watchlist.listWatchedItems)).resolves.toEqual([]);
+  });
 });

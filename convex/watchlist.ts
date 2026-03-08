@@ -125,10 +125,26 @@ export const listWatchedItems = query({
   returns: v.array(watchlistItemValidator),
   handler: async (ctx) => {
     const ownerId = await requireUser(ctx);
-    return await ctx.db
+    const items = await ctx.db
       .query("watchlist")
       .withIndex("by_owner_watchedAt", (q) => q.eq("ownerId", ownerId))
       .order("desc")
       .collect();
+
+    const resolved = await Promise.all(
+      items.map(async (item) => {
+        if (item.itemType === "campaign") {
+          if (!item.campaignId) return null;
+          const campaign = await ctx.db.get(item.campaignId);
+          return campaign && campaign.ownerId === ownerId ? item : null;
+        }
+
+        if (!item.tradePlanId) return null;
+        const tradePlan = await ctx.db.get(item.tradePlanId);
+        return tradePlan && tradePlan.ownerId === ownerId ? item : null;
+      }),
+    );
+
+    return resolved.filter((item): item is (typeof items)[number] => item !== null);
   },
 });
