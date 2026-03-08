@@ -14,6 +14,7 @@ import type * as campaigns from "../campaigns.js";
 import type * as imports from "../imports.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_tradeValidator from "../lib/tradeValidator.js";
+import type * as navigation from "../navigation.js";
 import type * as notes from "../notes.js";
 import type * as portfolios from "../portfolios.js";
 import type * as positions from "../positions.js";
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   imports: typeof imports;
   "lib/auth": typeof lib_auth;
   "lib/tradeValidator": typeof lib_tradeValidator;
+  navigation: typeof navigation;
   notes: typeof notes;
   portfolios: typeof portfolios;
   positions: typeof positions;
