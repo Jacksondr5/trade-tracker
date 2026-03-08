@@ -5,7 +5,7 @@ import { Menu } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   Dialog,
   DialogContent,
@@ -184,6 +184,23 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 768px)");
+
+    const closeDrawerOnDesktop = () => {
+      if (mediaQuery.matches) {
+        setIsDrawerOpen(false);
+      }
+    };
+
+    closeDrawerOnDesktop();
+    mediaQuery.addEventListener("change", closeDrawerOnDesktop);
+
+    return () => {
+      mediaQuery.removeEventListener("change", closeDrawerOnDesktop);
+    };
+  }, []);
+
   if (!isLoaded) {
     return <>{children}</>;
   }
@@ -208,7 +225,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           pathname={pathname}
           onOpenChange={setIsDrawerOpen}
         />
-        <main className="min-h-screen pb-8">{children}</main>
+        <main className="md:min-h-screen pb-8">{children}</main>
       </div>
     </div>
   );
