@@ -6,6 +6,12 @@ This file provides guidance to AI agents when working with code in this reposito
 
 Trade Tracker is a trading journal app for recording and analyzing trades across stocks and crypto. It supports thesis-driven campaigns, campaign notes, and optional trade-plan linkage for execution tracking. Built with Next.js 15 (App Router), Convex (serverless backend/database), and Clerk (authentication).
 
+## Product Documentation
+
+Evergreen product docs live in `docs/product/`. Use these for current product-wide guidance such as vision, principles, information architecture, UX principles, roadmap, and related foundation documents.
+
+Use `docs/plans/` for dated feature plans, implementation plans, redesign proposals, and historical context about how the product has evolved over time.
+
 ## Commands
 
 ```bash
