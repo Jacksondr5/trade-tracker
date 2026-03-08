@@ -55,8 +55,9 @@ These preserve reasoning and review context.
 ### 3. Workflow objects
 
 - `Inbox Trades`
+- `Account Mappings`
 
-These exist to support operational flow rather than long-term meaning.
+These exist to support operational flow rather than long-term meaning (routing/account normalization rather than core thesis structure).
 
 ### 4. Overlay objects
 

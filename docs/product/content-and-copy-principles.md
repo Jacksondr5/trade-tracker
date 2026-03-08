@@ -157,10 +157,10 @@ Avoid vague actions:
 
 Use the product model's language:
 
-- `Link Trade Plan`
-- `Assign Portfolio`
-- `Add to Watchlist`
-- `Remove from Watchlist`
+- `Link trade plan`
+- `Assign portfolio`
+- `Add to watchlist`
+- `Remove from watchlist`
 
 Avoid generic verbs like:
 
@@ -172,9 +172,9 @@ Avoid generic verbs like:
 
 Say exactly what will happen:
 
-- `Delete Note`
-- `Delete Campaign`
-- `Remove from Watchlist`
+- `Delete note`
+- `Delete campaign`
+- `Remove from watchlist`
 
 Do not use vague confirmations like `Confirm` or `Yes, remove`.
 
@@ -192,7 +192,7 @@ Good:
 
 - `No trade plans yet`
 - `Trade plans turn ideas into executable setups. Create one when an idea is specific enough to trade.`
-- CTA: `New Trade Plan`
+- CTA: `New trade plan`
 
 Imports empty states should be operational:
 

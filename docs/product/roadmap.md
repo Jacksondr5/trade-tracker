@@ -127,8 +127,8 @@ Includes:
 3. Dashboard redesign once analytics are mature enough to justify it
 4. Keep portfolios as trade-linked overlays unless analytics prove a stronger model is needed
 5. Clarify the long-term role of trades without trade plans
-6. Make a deliberate trade detail decision:
-   either fully support trade-level notes, or remove and de-emphasize them
+6. Make a deliberate trade-detail visibility decision:
+   decide how prominent trade-level notes should be relative to trade-plan notes
 
 Why this phase comes last:
 
@@ -140,7 +140,7 @@ Why this phase comes last:
 - `Dashboard` remains strategically important but is not an early design priority.
 - `Portfolios` matter, but they should remain an overlay until analytics prove they need a stronger structural role.
 - `Watchlist` should remain separate from lifecycle status throughout this roadmap.
-- Trade-level notes are intentionally unresolved and should stay that way until the product has a clearer trade-review workflow.
+- Trade-level notes are supported, but their prominence should remain secondary to trade-plan notes until the product has a clearer trade-review workflow.
 - A possible future trade-detail workflow may emerge from phases 2 and 6, but it should not distract from the campaign and trade-plan hierarchy work that comes first.
 - Shared UI and shared form migration is not isolated to phase 4; each earlier phase should improve the system on the surfaces it touches.
 
