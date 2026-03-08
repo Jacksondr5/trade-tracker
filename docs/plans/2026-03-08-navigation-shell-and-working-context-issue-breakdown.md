@@ -496,8 +496,8 @@ Repetition intentional for readability and scanability.
 
 - Issue 1 should be completed before 2, 6, 7, and 10.
 - Issue 4 should be completed before 5 and 6.
-- Issue 5 should be completed before 6 and should inform 7 and 10.
-- Issue 8 can begin once 2 is underway, but it will land better after 6.
+- Issue 5 should be completed before 6, 7, and 10.
+- Issue 8 should start after Issue 2 and lands best after Issue 6.
 - Issue 11 should be the final issue in the project or be split across implementation if preferred.
 
 ## Items To Decide Before Linear Entry
