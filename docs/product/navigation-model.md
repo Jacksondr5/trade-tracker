@@ -6,13 +6,16 @@ This document defines how navigation in Trade Tracker should be structured.
 
 It answers:
 
-- how the user moves between major product areas
+- how the target user moves between major product areas
 - how local hierarchy navigation should work
 - how desktop and mobile navigation should differ
 - where `Watchlist` belongs
 - what role a command palette should play
 
 This is the evergreen product-level navigation model. Detailed explorations or redesign iterations can still live in `docs/plans/`.
+
+Use [glossary.md](glossary.md) for the meaning of shared terms such as `Watchlist`, `Watched`, and `Standalone Trade Plan`.
+Use [target-user.md](target-user.md) for the audience assumptions behind this navigation model.
 
 ## Navigation Goals
 
@@ -21,10 +24,10 @@ Trade Tracker navigation should:
 - make the core hierarchy legible
 - keep important context close at hand
 - reduce repeated multi-step navigation
-- support power use for a known user
+- support power use for the target user
 - distinguish broad app navigation from local object navigation
 
-The navigation model should help the user answer two different questions quickly:
+The navigation model should help the target user answer two different questions quickly:
 
 - where am I in the product?
 - where do I need to go next?
@@ -69,7 +72,7 @@ This is the command palette / quick switcher layer.
 
 It is for:
 
-- fast access when the user already knows what they want
+- fast access when the target user already knows what they want
 - jumping to important or frequently revisited items
 - reducing friction once the data set grows
 
@@ -79,9 +82,9 @@ Each layer serves a different job. They should complement each other, not compet
 
 ### Desktop
 
-The long-term desktop shell should use a left sidebar as the primary global navigation.
+The desktop shell should use a left sidebar as the primary global navigation.
 
-Recommended grouping:
+Grouping:
 
 - `Journal`
   - Dashboard
@@ -97,12 +100,6 @@ Recommended grouping:
   - Strategy
 - `Settings`
   - Accounts
-
-Why:
-
-- the current top-nav model is too flat for the number of destinations
-- a sidebar scales better as the product grows
-- it leaves more room in the page header for local context and page-level actions
 
 ### Mobile
 
@@ -225,7 +222,7 @@ Breadcrumbs should:
 
 ### Drawer behavior
 
-The mobile drawer should include the same local groups as desktop when the user is inside the campaign/trade-plan domain:
+The mobile drawer should include the same local groups as desktop when the target user is inside the campaign/trade-plan domain:
 
 - Watchlist
 - Campaigns
@@ -261,7 +258,7 @@ Use the command palette for:
 
 ### Scope
 
-The first version should stay narrow.
+The command palette should stay narrow.
 
 Include:
 
@@ -294,9 +291,7 @@ Do not use it as a replacement for:
 
 ## Watchlist Placement
 
-`Watchlist` is a focus layer, not a lifecycle layer.
-
-It should appear in navigation as a persistent cross-cutting priority surface.
+`Watchlist` should appear in navigation as a persistent cross-cutting priority surface.
 
 ### Navigation roles for Watchlist
 
@@ -322,11 +317,8 @@ Watchlist should prioritize visibility, not hide the rest of the system by defau
 Navigation role:
 
 - global orientation
-- future summary return point
-
-Current note:
-
-- not yet the main navigation hub for object-level movement
+- summary return point
+- not the primary hub for object-level movement
 
 ### Campaign index
 
@@ -383,8 +375,6 @@ Navigation role:
 - execution history view
 - broad scan/review surface
 
-Current note:
-
 - if trade detail becomes a first-class workflow later, navigation should preserve cheap access back to trade-plan and campaign context
 
 ### Notes
@@ -392,8 +382,6 @@ Current note:
 Navigation role:
 
 - broad writing/review surface
-
-Current note:
 
 - notes navigation is primarily collection-based, not hierarchical
 
@@ -403,8 +391,6 @@ Navigation role:
 
 - singleton document access
 
-Current note:
-
 - strategy should be easy to reach globally, but does not need local hierarchy controls
 
 ### Imports
@@ -413,8 +399,6 @@ Navigation role:
 
 - operational workflow surface
 
-Current note:
-
 - navigation should reduce interruption and avoid unnecessary context switching away from the import task
 
 ### Portfolios
@@ -422,8 +406,6 @@ Current note:
 Navigation role:
 
 - overlay and review surface
-
-Current note:
 
 - portfolios are not part of the core campaign/trade-plan hierarchy and should not be navigated as if they are parents in that tree
 
@@ -435,20 +417,8 @@ When navigation tradeoffs arise, prefer the pattern that:
 - preserves parent-child context
 - keeps standalone trade plans legible
 - separates focus from lifecycle
-- supports efficient use by a known user
+- supports efficient use by the target user
 - makes the hierarchy easier to browse, not just easier to describe
-
-## Current Direction
-
-The product is currently moving from:
-
-- a flat top-nav plus page-to-page movement model
-
-toward:
-
-- a layered model with global nav, local hierarchy nav, and direct-jump navigation
-
-That direction is intentional and should guide future navigation work.
 
 ## Summary
 

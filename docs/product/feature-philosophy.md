@@ -13,20 +13,8 @@ It is meant to answer:
 
 This helps keep feature work aligned with the product vision instead of drifting into adjacent ideas just because they are possible.
 
-## Overall Product Framing
-
-Trade Tracker is a personal trading process system.
-
-Its major feature areas should work together to support:
-
-- thesis development
-- tactical planning
-- execution context
-- evidence capture
-- honest review
-- performance improvement over time
-
-Not every feature should try to do all of those jobs. Each feature should have a clear role in that larger loop.
+Use [glossary.md](glossary.md) for the meaning of shared object names and status terms.
+Use [target-user.md](target-user.md) for the audience assumptions behind these feature roles.
 
 ## Feature Areas
 
@@ -56,11 +44,6 @@ What campaigns are not for:
 - being required for every trade plan
 - replacing the detailed tactical logic of trade plans
 
-Design implication:
-
-- campaigns should feel strategic, not operational
-- they need stronger narrative density than a plain status table
-
 ### Trade Plans
 
 Primary job:
@@ -80,11 +63,6 @@ What trade plans are for:
 - linking thesis to execution
 - holding the plan that live trade decisions should refer back to
 - supporting both campaign-linked and standalone workflows
-
-Design implication:
-
-- trade plans should be one of the main working surfaces in the app
-- navigation between trade plans should be cheap and obvious
 
 ### Trades
 
@@ -110,11 +88,6 @@ What trades are not for:
 - being the main place where thesis is developed
 - replacing trade plans as the place for ongoing tactical reasoning
 
-Design implication:
-
-- trades should remain legible and link outward to context
-- they are evidence first, not the main strategic workspace
-
 ### Notes
 
 Primary job:
@@ -139,16 +112,11 @@ What notes are not for:
 - replacing the formal strategy document
 - becoming a generic long-form knowledge base
 
-Design implication:
-
-- notes should feel like a lightweight field journal
-- they should privilege capture and rereading over polished document structure
-
 ### Strategy
 
 Primary job:
 
-- serve as the formal operating document for the user's trading practice
+- serve as the formal operating document for the target user's trading practice
 
 What strategy should optimize for:
 
@@ -168,11 +136,6 @@ What strategy is not for:
 - quick note capture
 - operational workflow management
 - per-trade commentary
-
-Design implication:
-
-- strategy should feel like a formal document workspace
-- it should be optimized for structured writing, not fast fragment capture
 
 ### Imports
 
@@ -199,41 +162,28 @@ What imports are not for:
 - extended browsing
 - polished but slow editorial interactions
 
-Design implication:
-
-- imports should be judged by how quickly and reliably a weekly batch can be processed
-- this is an operational admin workflow, not a prestige surface
-
 ### Dashboard
 
 Primary job:
 
-- eventually provide orientation and summary
+- provide orientation and summary
 
-Current reality:
-
-- the dashboard is intentionally underdeveloped because the analytics layer is not yet mature
-
-What dashboard should optimize for later:
+What dashboard should optimize for:
 
 - showing where attention is needed
 - summarizing performance and activity
 - surfacing important watched or active work
 
-What dashboard is not for right now:
+What dashboard is not for:
 
-- driving current design priorities
-- pretending the analytics layer already exists
-
-Design implication:
-
-- the dashboard should remain strategically important, but not dominate current product design work
+- becoming a generic stat wall
+- replacing direct movement to the underlying working surfaces
 
 ### Positions
 
 Primary job:
 
-- show current open exposure derived from trade history
+- show open exposure derived from trade history
 
 What positions should optimize for:
 
@@ -243,7 +193,7 @@ What positions should optimize for:
 
 What positions are for:
 
-- answering what is currently open
+- answering what is open now
 - showing how much exposure exists by ticker and direction
 
 What positions are not for:
@@ -274,10 +224,6 @@ What portfolios are not for:
 - becoming the main thesis hierarchy
 - replacing campaigns or trade plans as the primary planning structure
 
-Design implication:
-
-- portfolios matter, but they should remain an overlay unless future analytics clearly require stronger structural promotion
-
 ### Accounts
 
 Primary job:
@@ -292,7 +238,7 @@ What accounts should optimize for:
 
 What accounts are for:
 
-- mapping raw account identifiers to names the user understands
+- mapping raw account identifiers to names the target user understands
 
 What accounts are not for:
 
@@ -321,38 +267,8 @@ What this area is not for:
 - adding complexity without real movement savings
 - conflating tactical readiness with general importance
 
-## Anti-Drift Rules
-
-When considering new work, ask:
-
-- does this help develop better thesis, planning, review, or analytics?
-- does this remove real friction from an existing workflow?
-- does this preserve or improve evidence quality?
-- does this help the user become more independent and process-driven over time?
-
-If the answer is no, the feature is likely drift.
-
-In particular, features should face a high bar if they start drifting toward:
-
-- broker-like execution
-- live monitoring
-- alerting systems
-- charting replacement
-- social or mass-market trading features
-
 ## Summary
 
-Each feature in Trade Tracker should have a clear role inside the larger trading-process loop.
+Each feature area should have a clear job and a clear boundary.
 
-The product works best when:
-
-- campaigns hold strategic ideas
-- trade plans hold tactical setups
-- trades preserve execution evidence
-- notes preserve reasoning
-- strategy preserves the operating framework
-- imports reduce admin burden
-- portfolios organize capital
-- navigation keeps important context and priorities easy to reach
-
-Feature work should deepen those roles, not blur them.
+Use this document as the source of truth for what each surface is for. Use [product-principles.md](product-principles.md) for cross-product decision rules, [information-architecture.md](information-architecture.md) for object semantics, and [navigation-model.md](navigation-model.md) for movement patterns.

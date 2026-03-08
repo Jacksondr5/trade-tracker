@@ -6,9 +6,11 @@ These principles define how Trade Tracker should feel to use.
 
 They are not generic usability rules. They are specific to this product's role as a personal trading process system focused on clarity, evidence, and improvement over time.
 
+Use [target-user.md](target-user.md) for the audience assumptions behind these UX decisions.
+
 ## 1. Preserve Context At The Point Of Action
 
-The user should not have to leave a page or reconstruct memory just to understand what something means.
+The target user should not have to leave a page or reconstruct memory just to understand what something means.
 
 In practice:
 
@@ -37,6 +39,8 @@ This means:
 - standalone trade plans should remain first-class and clearly distinguished
 
 When the hierarchy is hidden, the product becomes harder to think inside.
+
+Use [glossary.md](glossary.md) for term meanings, [information-architecture.md](information-architecture.md) for the object model, and [navigation-model.md](navigation-model.md) for the navigation patterns that expose it.
 
 ## 3. Keep Important Information Visible
 
@@ -95,9 +99,11 @@ Consistency matters, but sameness is not the goal.
 
 The right interaction style depends on the job being done.
 
+Use [feature-philosophy.md](feature-philosophy.md) for feature roles and [visual-design-system.md](visual-design-system.md) for concrete presentation rules.
+
 ## 7. Support Power Use Without Overexplaining
 
-This product is being built for a known user who already understands the domain and the workflow.
+The product can assume domain fluency and repeated use.
 
 That means the UX can lean into:
 
@@ -107,7 +113,7 @@ That means the UX can lean into:
 - minimal hand-holding
 - reduced instructional copy where the workflow is already familiar
 
-The goal is not mainstream onboarding. The goal is efficient use by the actual user.
+The goal is not mainstream onboarding. The goal is efficient use by the target user.
 
 ## 8. Separate Focus From Lifecycle
 
@@ -126,6 +132,8 @@ Examples:
 
 UX should surface both without conflating them.
 
+Use [glossary.md](glossary.md) for the underlying semantics, [navigation-model.md](navigation-model.md) for placement, and [content-and-copy-principles.md](content-and-copy-principles.md) for wording.
+
 ## 9. Favor Calm Clarity Over Dashboard Noise
 
 The app should feel serious and readable, not flashy or hyperactive.
@@ -138,7 +146,7 @@ That means:
 - stable layouts
 - emphasis where it matters
 
-The product should help the user think clearly, not stimulate constant reaction.
+The product should help the target user think clearly, not stimulate constant reaction.
 
 This is especially important because the broader trading ecosystem often pushes the opposite feel.
 
@@ -174,13 +182,15 @@ This is why navigation should favor:
 
 Repeated multi-step navigation to familiar objects is a UX smell in this product.
 
+See [navigation-model.md](navigation-model.md) for the source-of-truth navigation patterns.
+
 ## 12. Prefer Legible Automation
 
 Helpful automation is good. Opaque automation is not.
 
-When the UI auto-matches, suggests, or pre-associates data, it should remain understandable enough that the user can trust it.
+When the UI auto-matches, suggests, or pre-associates data, it should remain understandable enough that the target user can trust it.
 
-The user should be able to tell:
+The target user should be able to tell:
 
 - what the system did
 - why it likely did it
@@ -198,4 +208,4 @@ When tradeoffs appear, prefer the experience that:
 - makes review easier later
 - exposes important context sooner
 - removes unnecessary maintenance work
-- helps the user think more clearly under real trading conditions
+- helps the target user think more clearly under real trading conditions

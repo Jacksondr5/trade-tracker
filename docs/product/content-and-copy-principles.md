@@ -6,6 +6,8 @@ This document defines how Trade Tracker should sound in product copy.
 
 It should be short enough to scan and specific enough to keep future screens from drifting into different voices.
 
+Use [target-user.md](target-user.md) for the audience assumptions this copy should speak to.
+
 ## Voice
 
 Trade Tracker copy should be:
@@ -59,17 +61,7 @@ Bad:
 
 ## Canonical Product Vocabulary
 
-Use these names consistently:
-
-- `Campaign`
-- `Trade Plan`
-- `Trade`
-- `Note`
-- `Strategy`
-- `Import`
-- `Portfolio`
-- `Account`
-- `Watchlist`
+Use the terms in [glossary.md](glossary.md) consistently.
 
 Do not invent synonyms in the UI.
 
@@ -83,22 +75,11 @@ Avoid:
 
 Keep lifecycle and focus separate.
 
-Use:
-
-- `Planning`
-- `Active`
-- `Closed`
-- `Idea`
-- `Watching`
-- `Pending review`
-- `Watched`
-
 Rules:
 
-- `Watching` is a trade-plan lifecycle state.
-- `Watched` means the item is on `Watchlist`.
-- Do not use `watching` to mean `on Watchlist`.
-- Do not use `priority`, `pinned`, `starred`, and `watched` interchangeably.
+- Use the lifecycle and focus terms defined in [glossary.md](glossary.md).
+- Do not invent alternate labels for the same state unless the UI has a deliberate display-label rule.
+- Use [navigation-model.md](navigation-model.md) for placement in the UI.
 
 ## Naming Rules
 
@@ -197,39 +178,15 @@ Say exactly what will happen:
 
 Do not use vague confirmations like `Confirm` or `Yes, remove`.
 
-## Buttons And Iconography
-
-- Primary buttons should name the outcome clearly.
-- Secondary buttons may be shorter: `Cancel`, `Edit`, `Close`, `Retry`.
-- Icon-only buttons still need canonical tooltip and `aria-label` text.
-- Use the same wording everywhere for the same action.
-
-Examples:
-
-- `Save note`
-- `Edit trade plan`
-- `Delete campaign`
-- `Add to Watchlist`
-
 ## Empty States
-
-An empty state should do three things:
-
-1. say what is missing
-2. explain why the page matters
-3. give the next sensible action
-
-Default structure:
-
-- title
-- one short sentence
-- one primary action
 
 Rules:
 
 - Keep empty states calm and useful.
 - Do not use jokes, filler, or celebration language.
 - Do not use `No data available`.
+
+Use [visual-design-system.md](visual-design-system.md) for empty-state structure and presentation.
 
 Good:
 
@@ -320,37 +277,7 @@ Warnings should describe the real risk:
 
 - Avoid generic `Loading...` where possible.
 - Use contextual labels if text is necessary: `Loading trade plans`, `Importing trades`.
-- Prefer skeletons or structural placeholders for short waits.
-
-## Screen-Specific Rules
-
-### Strategy
-
-- Sound formal and durable.
-- Use explicit section headings and stable terminology.
-- Avoid casual journaling tone.
-
-### Notes
-
-- Sound quick and observational.
-- Support fast capture and later rereading.
-- Good prompts: `Add note`, `Attach chart`, `What changed?`
-
-### Campaigns
-
-- Emphasize thesis and strategic framing.
-- Avoid project-management language.
-
-### Trade Plans
-
-- Emphasize setup, entry, exit, invalidation, and price action.
-- Avoid language that makes the plan sound like a completed trade.
-
-### Imports
-
-- Keep copy short and operational.
-- Good terms: `Auto-matched`, `Needs review`, `Create trade plan`, `Assign portfolio`, `Accept`
-- Avoid tutorial-style paragraphs.
+- Let [visual-design-system.md](visual-design-system.md) own skeletons and other structural loading behavior.
 
 ## Things To Avoid
 
@@ -374,7 +301,7 @@ Avoid words like:
 
 ## Summary
 
-Trade Tracker copy should feel like a serious working tool for a known trader.
+Trade Tracker copy should feel like a serious working tool for the target user described in [target-user.md](target-user.md).
 
 When in doubt:
 

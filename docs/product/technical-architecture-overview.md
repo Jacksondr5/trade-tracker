@@ -28,7 +28,7 @@ Other stable assumptions:
 
 `src/app/` contains route entry points, layouts, and route-local client components.
 
-The current pattern is:
+Typical structure:
 
 - route entry files stay in `src/app/**/page.tsx`
 - page-specific client components sit near the route, usually as `*PageClient.tsx`
@@ -50,7 +50,7 @@ This is the default place for:
 - shared field components
 - the shared form hook
 
-Exports are centralized through [index.ts](/Users/jackson/.t3/worktrees/trade-tracker/t3code-0d31f8c4/src/components/ui/index.ts).
+Exports are centralized through `src/components/ui/index.ts`.
 
 `src/components/` holds higher-level shared app components that are not low-level UI primitives, such as the app header, auth gate, and reusable page sections.
 
@@ -74,7 +74,7 @@ Evergreen product docs live in `docs/product/`.
 
 Dated design and implementation documents live in `docs/plans/`.
 
-Contributors should use the product docs for current product-wide guidance instead of inferring product intent from old plan documents.
+Contributors should use the product docs for product-wide guidance instead of inferring product intent from old plan documents.
 
 ## Mandatory Implementation Conventions
 
@@ -119,29 +119,7 @@ The codebase uses:
 
 Use those aliases consistently instead of deep relative import chains when crossing major folders.
 
-## Testing And Development Workflow
-
-### Worktree bootstrap
-
-New worktrees may be missing:
-
-- `.env.local`
-- `node_modules/`
-
-Before running the app or Playwright:
-
-- copy `.env.local` from the main checkout if needed
-- run `pnpm install` if dependencies are missing
-
-### UI testing
-
-- `playwright-interactive` is the default workflow for UI checks in this repo
-- the app should be running before browser automation begins
-- prefer `127.0.0.1` over `localhost`
-- shared auth state lives in `output/playwright/auth.json`
-- use Playwright CLI only as a fallback when the interactive flow is unhealthy or unsuitable
-
-### CI expectations
+## Validation Expectations
 
 Work should be considered incomplete if it breaks the repository's standard validation and build checks.
 

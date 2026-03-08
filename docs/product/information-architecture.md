@@ -2,15 +2,17 @@
 
 ## Purpose
 
-This document describes the current information architecture of Trade Tracker:
+This document describes the information architecture of Trade Tracker:
 
 - the major objects in the system
 - how they relate to each other
 - which relationships are foundational versus derived
-- where the current product is intentionally flexible
+- where the product is intentionally flexible
 - which parts of the model are provisional or likely to evolve
 
 This document is primarily about object structure and product meaning. It is not a detailed navigation spec.
+
+Use [glossary.md](glossary.md) for the canonical meaning of shared object names, lifecycle states, and focus terms.
 
 ## Architectural Summary
 
@@ -59,7 +61,7 @@ These exist to support operational flow rather than long-term meaning.
 ### 4. Overlay objects
 
 - `Portfolios`
-- future `Watchlist` focus flag
+- `Watchlist`
 
 These organize or prioritize the core objects without becoming the core hierarchy themselves.
 
@@ -68,17 +70,13 @@ These organize or prioritize the core objects without becoming the core hierarch
 - `Strategy`
 - `Positions`
 - `Dashboard Stats`
-- future analytics surfaces
+- analytics surfaces
 
 These provide global guidance or computed interpretation.
 
-## Core Object Definitions
+## Core Object Roles
 
 ### Campaign
-
-Meaning:
-
-- A campaign is a strategic container for a higher-level market idea.
 
 Typical contents:
 
@@ -90,17 +88,13 @@ Typical contents:
 
 Role:
 
-- Campaigns are where self-developed ideas are organized at the macro or thematic level.
+- campaigns organize self-developed ideas at the macro or thematic level
 
 Important constraint:
 
 - Not every trade plan must belong to a campaign.
 
 ### Trade Plan
-
-Meaning:
-
-- A trade plan is a tactical setup for a specific instrument or expression of an idea.
 
 Typical contents:
 
@@ -116,7 +110,7 @@ Typical contents:
 
 Role:
 
-- Trade plans are the main tactical bridge between thesis and execution.
+- trade plans are the main tactical bridge between thesis and execution
 
 Trade plans may be:
 
@@ -126,10 +120,6 @@ Trade plans may be:
 That flexibility is intentional and reflects real trading workflows.
 
 ### Trade
-
-Meaning:
-
-- A trade is a recorded execution event.
 
 Typical contents:
 
@@ -145,43 +135,30 @@ Typical contents:
 
 Role:
 
-- Trades are the execution record used for history, review, and analytics.
+- trades are the execution record used for history, review, and analytics
 
 Important constraint:
 
-- Trades do not currently link directly to campaigns.
+- Trades do not link directly to campaigns.
 - Campaign relationships are derived through trade plans.
 
-## Supporting Object Definitions
+## Supporting Object Roles
 
 ### Notes
 
-Meaning:
-
-- Notes are time-stamped reasoning records with optional chart screenshots.
-
-A note can currently belong to exactly one of:
+A note belongs to exactly one of:
 
 - a campaign
 - a trade plan
 - a trade
 - no parent at all
 
-Current product reality:
+Preferred interpretation:
 
-- Campaign notes and trade-plan notes are active workflows
-- general notes are active workflows
-- trade-level notes are technically supported by the data model but are not a primary product workflow today
-
-Current product preference:
-
-- if a trade is important enough to warrant ongoing commentary, that usually suggests it should have a trade plan
+- campaign notes, trade-plan notes, and general notes are the primary note types
+- trade-level notes remain secondary to trade-plan-linked commentary
 
 ### Strategy
-
-Meaning:
-
-- Strategy is the formal, long-lived operating document for the user.
 
 Architecture:
 
@@ -189,17 +166,13 @@ Architecture:
 
 Role:
 
-- Defines the durable framework the rest of the trading process should follow.
+- defines the durable framework the rest of the trading process should follow
 
 ### Inbox Trades
 
-Meaning:
-
-- Inbox trades are imported executions awaiting review and acceptance.
-
 Role:
 
-- They are a staging area between external brokerage data and accepted trade history.
+- they are a staging area between external brokerage data and accepted trade history
 
 Lifecycle:
 
@@ -212,10 +185,6 @@ This is an operational workflow object, not a long-term strategic object.
 
 ### Portfolios
 
-Meaning:
-
-- Portfolios are capital-allocation buckets used to group trades.
-
 Current primary attachment point:
 
 - trades
@@ -224,7 +193,7 @@ Current primary attachment point:
 Role:
 
 - Portfolios help organize capital and exposure
-- they are important for grouping, review, and future analytics
+- they are important for grouping, review, and analytics
 - they are not the primary thesis hierarchy
 
 Important nuance:
@@ -233,17 +202,13 @@ Important nuance:
 - the same or similar trade plans may exist within the same campaign but across different portfolios
 - the same external or internal idea may be represented differently depending on the capital bucket
 
-So portfolios are meaningful, but their relationship to campaigns and trade plans is currently best understood as derived through trades, not as the core parent-child structure.
+So portfolios are meaningful, but their relationship to campaigns and trade plans is best understood as derived through trades, not as the core parent-child structure.
 
 ### Account Mappings
 
-Meaning:
-
-- Account mappings translate raw brokerage account identifiers into user-friendly names.
-
 Role:
 
-- They improve readability across trades and imports.
+- they improve readability across trades and imports
 
 ## Relationship Model
 
@@ -271,7 +236,7 @@ More precisely:
 
 - a portfolio can have many trades
 - a portfolio can have many inbox trades
-- a portfolio's relationship to campaigns is currently derived through `trades -> tradePlans -> campaigns`
+- a portfolio's relationship to campaigns is derived through `trades -> tradePlans -> campaigns`
 
 ## Ideal Workflow Versus Tolerated Workflow
 
@@ -297,13 +262,13 @@ The product should support that flexibility without treating it as the preferred
 
 ## Status Model
 
+Use [glossary.md](glossary.md) for the canonical definitions of these terms.
+
 ### Campaign statuses
 
 - `planning`
 - `active`
 - `closed`
-
-Campaign status reflects lifecycle stage.
 
 ### Trade plan statuses
 
@@ -312,64 +277,13 @@ Campaign status reflects lifecycle stage.
 - `active`
 - `closed`
 
-Trade-plan status also reflects lifecycle stage.
-
-Important nuance:
-
-- `watching` is not the same as a future `Watchlist` flag
-- `watching` means the trade plan is developed enough to monitor, but is waiting for price action or conditions to trigger execution
-- `Watchlist` should instead mean "important until explicitly unwatched"
-
-So:
-
-- `watching` is a tactical readiness state
-- `Watchlist` is a cross-cutting attention signal
-
 A trade plan could reasonably be:
 
 - `watching` and watched
 - `active` and watched
 - `idea` and not watched
 
-These concepts should remain separate in the architecture even if current UX still blends some of them.
-
-## Navigation Implications
-
-The object model is hierarchical enough that navigation should reflect that hierarchy clearly.
-
-High-level implications:
-
-- campaigns and trade plans should be navigable as a tree, not just as isolated pages
-- standalone trade plans should be surfaced as first-class items, not hidden edge cases
-- notes and strategy should be treated as distinct surfaces, not forced into the same interaction model
-- portfolios should be discoverable as overlays on execution and analytics, not mistaken for strategic parents
-
-Detailed interaction patterns for this belong in the navigation model documentation.
-
-## Current Architectural Tensions
-
-### 1. Trade-level notes exist in the model but not in the primary workflow
-
-This is currently acceptable, but should remain explicit.
-
-Interpretation:
-
-- the model is more permissive than the current product behavior
-- this may remain fine, or it may eventually be tightened
-
-
-### 2. Portfolios matter increasingly for exposure and analytics
-
-Today portfolios are mainly trade-level grouping constructs.
-
-That is coherent, but future analytics may require a clearer architectural stance on whether portfolios should remain:
-
-- purely trade-linked
-
-or evolve toward stronger associations with:
-
-- trade plans
-- campaign summaries
+These concepts should remain separate in the architecture. Navigation and presentation patterns for them belong in [navigation-model.md](navigation-model.md) and [content-and-copy-principles.md](content-and-copy-principles.md).
 
 ## Summary
 
@@ -381,8 +295,4 @@ Trade Tracker's information architecture is centered on a flexible strategic hie
 
 That core structure is supported by evidence objects, workflow staging objects, overlay groupings, and singleton/global documents.
 
-The architecture is already sound in its fundamentals. The main work ahead is to:
-
-- document the distinctions more clearly
-- surface the hierarchy better in navigation
-- preserve flexibility without losing clarity about the ideal workflow
+The architecture depends on keeping those distinctions clear while preserving tolerated flexibility around standalone trade plans, unlinked trades, and operational import staging.

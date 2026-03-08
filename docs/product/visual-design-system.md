@@ -543,6 +543,8 @@ Preferred structure:
 - left-aligned content
 - visible CTA
 
+Use [content-and-copy-principles.md](content-and-copy-principles.md) for the wording of the title, explanation, and CTA.
+
 Do not use:
 
 - giant empty dark boxes with centered text only
@@ -556,6 +558,8 @@ Use:
 - skeleton rows for tables
 - skeleton blocks that match the eventual layout
 - stable wrappers with preserved dimensions
+
+Use [content-and-copy-principles.md](content-and-copy-principles.md) for any loading labels that appear alongside these states.
 
 Do not use:
 
@@ -586,6 +590,8 @@ Iconography should be used heavily enough to support information density, but no
 
 Use icons to reduce clutter, not to hide meaning.
 
+Use [content-and-copy-principles.md](content-and-copy-principles.md) for action naming and tooltip wording.
+
 ### Icon-only actions
 
 Prefer icon-only actions when all of the following are true:
@@ -615,7 +621,7 @@ Prefer text plus icon when:
 - the action is a major CTA
 - the action is destructive and consequential
 - the action may be ambiguous as an icon alone
-- the user should clearly understand the result before clicking
+- the target user should clearly understand the result before clicking
 
 Good text-plus-icon candidates:
 

@@ -12,6 +12,8 @@ It is not a release plan. It is a strategic ordering of major product efforts ba
 - Fix movement and context before polishing isolated screens.
 - Strengthen evidence capture and review before building deep analytics.
 - Roll the new visual design system out incrementally as major surfaces are touched.
+- Build missing shared UI primitives as soon as a phase needs them rather than deferring them to a later cleanup pass.
+- Every phase should leave touched surfaces more compliant with the shared UI and shared form system than before.
 - Keep the roadmap flexible where the product is still exploratory.
 
 ## Phase 1: Navigation And Working Context
@@ -24,7 +26,11 @@ Includes:
 2. Watchlist as a cross-cutting focus layer
 3. Better linkage and visibility across `campaign -> trade plan -> trade`
 4. Cleaner handling of standalone trade plans vs campaign-linked trade plans
-5. Apply the new visual design system to all navigation and hierarchy surfaces touched in this phase
+5. Global shell redesign from flat top-nav to the grouped desktop sidebar and mobile drawer model
+6. Local hierarchy rail for campaigns and trade plans, plus breadcrumb behavior on mobile
+7. Command palette / quick-switcher groundwork for direct jumps to known campaigns and trade plans
+8. Apply canonical navigation language such as `Imports` instead of route-local variants
+9. Apply the new visual design system to all navigation and hierarchy surfaces touched in this phase
 
 Why this phase comes first:
 
@@ -41,8 +47,11 @@ Includes:
 1. Strategy editor redesign
 2. Notes workflow redesign, including chart and image support
 3. Campaign detail and Trade Plan detail information design refresh
-4. Retrospective workflow design
-5. Apply the new visual design system to all strategy, notes, campaign, and trade-plan surfaces touched in this phase
+4. Make trade plans a true first-class tactical working surface rather than splitting the experience between standalone lists and campaign detail embeds
+5. Expose the richer trade-plan structure needed for tactical planning, such as rationale, entry, target, exit, and instrument notes
+6. Keep campaign, trade plan, trade, and note context visible together on the main thinking surfaces
+7. Retrospective workflow design
+8. Apply the new visual design system to all strategy, notes, campaign, and trade-plan surfaces touched in this phase
 
 Why this phase comes next:
 
@@ -58,9 +67,10 @@ Includes:
 
 1. Import flow UX refinement for weekly throughput
 2. Standardize status language vs watch and focus language
-3. Improve loading and skeleton states across data-heavy routes
-4. Apply the copy principles across major surfaces touched in this phase
-5. Apply the new visual design system to all operational and data-heavy surfaces touched in this phase
+3. Refactor dense operational controls onto shared primitives instead of maintaining route-local inputs, selects, and action buttons
+4. Improve loading and skeleton states across data-heavy routes
+5. Apply the copy principles across major surfaces touched in this phase
+6. Apply the new visual design system to all operational and data-heavy surfaces touched in this phase
 
 Why this phase follows the core thinking surfaces:
 
@@ -74,17 +84,20 @@ Goal: consolidate the design and product system before moving into larger analyt
 Includes:
 
 1. Apply the new visual design system across the authenticated shell
-2. Standardize page templates and empty states
-3. Write the technical architecture overview
-4. Write the glossary
-5. Start and maintain a decision log
-6. Maintain this roadmap as priorities change
+2. Standardize page templates, empty states, and recurring page-level patterns
+3. Fill the remaining shared UI gaps such as standalone selects, icon-button patterns, and other reused controls discovered in earlier phases
+4. Migrate remaining touched routes off route-local UI patterns and onto the shared UI layer
+5. Write the technical architecture overview
+6. Write the glossary
+7. Start and maintain a decision log
+8. Maintain this roadmap as priorities change
 
 Why this phase sits here:
 
 - phases 1 through 3 will change a meaningful portion of the app
 - the product should be tightened and documented before larger new feature areas are introduced
 - some of this work should happen in parallel with earlier phases, but it should be considered a formal checkpoint before major analytics expansion
+- this phase is for consolidation and long-tail cleanup, not for deferring obvious shared-component adoption on high-priority surfaces
 
 ## Phase 5: Analytics Foundation
 
@@ -128,6 +141,8 @@ Why this phase comes last:
 - `Portfolios` matter, but they should remain an overlay until analytics prove they need a stronger structural role.
 - `Watchlist` should remain separate from lifecycle status throughout this roadmap.
 - Trade-level notes are intentionally unresolved and should stay that way until the product has a clearer trade-review workflow.
+- A possible future trade-detail workflow may emerge from phases 2 and 6, but it should not distract from the campaign and trade-plan hierarchy work that comes first.
+- Shared UI and shared form migration is not isolated to phase 4; each earlier phase should improve the system on the surfaces it touches.
 
 ## Summary
 

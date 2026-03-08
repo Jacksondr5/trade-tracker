@@ -4,6 +4,8 @@
 
 These principles define how Trade Tracker should make product decisions.
 
+Use [target-user.md](target-user.md) for the audience assumptions these principles are optimizing for.
+
 They are meant to be durable rules for deciding:
 
 - what to build
@@ -43,7 +45,7 @@ Trade Tracker should reduce that burden by giving durable structure to:
 - live trade notes
 - retrospective evidence
 
-A user should not have to keep an idea front of mind just to avoid losing it.
+The target user should not have to keep an idea front of mind just to avoid losing it.
 
 When choosing between a design that depends on memory and one that externalizes context clearly, prefer the one that reduces memory pressure.
 
@@ -63,7 +65,7 @@ Whenever possible, features should strengthen the evidence trail rather than sum
 
 ## 4. Make Review Honest And Actionable
 
-Retrospectives are not mainly about storytelling. They are about identifying whether the user followed a sound process and where that process needs to improve.
+Retrospectives are not mainly about storytelling. They are about identifying whether the target user followed a sound process and where that process needs to improve.
 
 Trade Tracker should support review of:
 
@@ -82,16 +84,16 @@ The product should support both without collapsing them into the same thing.
 
 ## 5. Favor Prepared Conviction Over Live Improvisation
 
-The app should help the user trade from prepared plans rather than gut feel.
+The app should help the target user trade from prepared plans rather than gut feel.
 
-This is especially important during volatile periods, when the user is most vulnerable to:
+This is especially important during volatile periods, when the target user is most vulnerable to:
 
 - reacting emotionally
 - forgetting the original thesis
 - confusing normal price action with invalidation
 - changing course without a clear reason
 
-Trade Tracker should help the user lean on defined plans, explicit monitoring conditions, and preserved context instead of improvising under pressure.
+Trade Tracker should help the target user lean on defined plans, explicit monitoring conditions, and preserved context instead of improvising under pressure.
 
 ## 6. Use Structure To Clarify, Not To Punish
 
@@ -108,6 +110,8 @@ But that structure must remain flexible enough to support real workflows:
 The product should make hierarchy visible and useful, but it should not make optional structure feel like unresolved or broken data.
 
 Structure is there to reduce friction and improve clarity, not to enforce purity for its own sake.
+
+See [glossary.md](glossary.md) for canonical term meanings and [information-architecture.md](information-architecture.md) for the object model.
 
 ## 7. Minimize Administrative Work
 
@@ -162,7 +166,7 @@ The product should let each workflow feel appropriate to its job:
 
 ## 10. Use Personal Optimization As A Feature
 
-Because Trade Tracker is currently built for a single known user, it can take advantage of interaction patterns that might be too specialized for a general-market product.
+Trade Tracker can take advantage of interaction patterns that would be too specialized for a broad-market product if they meaningfully improve the intended workflow.
 
 That means the product can reasonably use:
 
@@ -171,7 +175,7 @@ That means the product can reasonably use:
 - dense contextual layouts
 - minimal onboarding and instruction
 
-If an interaction is unusually efficient for the actual user, it may be the right choice even if it would be too specialized for a mass-market app.
+If an interaction is unusually efficient for the target user, it may be the right choice even if it would be too specialized for a mass-market app.
 
 The constraint is not mass-market convention. The constraint is whether it reliably improves the real workflow.
 
@@ -197,7 +201,7 @@ If a proposed feature drifts toward brokerage execution, live alerting, real-tim
 
 ## 12. Prioritize Focus Over Breadth
 
-This product is still pre-MVP and should not try to become a complete trading platform all at once.
+Trade Tracker should not try to become a complete trading platform all at once.
 
 The right bias is:
 
@@ -215,9 +219,11 @@ The app should help answer:
 
 - what deserves attention now
 - what is linked to what
-- where the user should return next
+- where the target user should return next
 
 This is especially important in navigation and review workflows.
+
+Use [glossary.md](glossary.md) for the term meanings, [navigation-model.md](navigation-model.md) for placement and behavior, and [content-and-copy-principles.md](content-and-copy-principles.md) for wording.
 
 ## Summary
 
@@ -225,4 +231,4 @@ Trade Tracker should be a focused personal system for trading process developmen
 
 It should reduce cognitive load, preserve evidence, minimize busy work, expose important context, and make review honest enough to improve performance over time.
 
-When in doubt, choose the direction that helps the user think more clearly, follow plans more reliably, and learn more from the full record of their trading behavior.
+When in doubt, choose the direction that helps the target user think more clearly, follow plans more reliably, and learn more from the full record of their trading behavior.
