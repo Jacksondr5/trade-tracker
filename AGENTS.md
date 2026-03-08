@@ -1,6 +1,7 @@
 # AGENTS.md
 
 This file provides guidance to AI agents when working in this repository.
+It is the canonical source for agent workflows, responsibilities, and repo-specific operating procedures; use `docs/product/README.md` for evergreen product and architecture guidance.
 
 ## Source Of Truth
 
