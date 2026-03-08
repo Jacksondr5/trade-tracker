@@ -62,10 +62,11 @@ function NavigationSections({
   );
 }
 
-function ShellBrand() {
+function ShellBrand({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <Link
       href="/"
+      onClick={onNavigate}
       className="flex items-center gap-2.5 text-lg font-semibold tracking-tight text-olive-12"
     >
       <Image
@@ -147,14 +148,14 @@ function MobileNavigationDrawer({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="inset-y-0 left-0 top-0 h-full w-[min(18rem,calc(100vw-1.5rem))] translate-x-0 translate-y-0 rounded-none border-r border-olive-6 bg-olive-2 p-0 shadow-2xl">
+      <DialogContent className="inset-y-0 left-0 top-0 h-full w-[min(18rem,calc(100vw-1.5rem))] translate-x-0 translate-y-0 rounded-none border-r border-olive-6 bg-olive-2 p-0 shadow-2xl data-[state=open]:zoom-in-100 data-[state=closed]:zoom-out-100">
         <DialogTitle className="sr-only">Navigation</DialogTitle>
         <DialogDescription className="sr-only">
           Global navigation for authenticated routes.
         </DialogDescription>
         <div className="flex h-full flex-col">
           <div className="border-b border-olive-6 px-4 py-5">
-            <ShellBrand />
+            <ShellBrand onNavigate={() => onOpenChange(false)} />
           </div>
           <div className="flex-1 overflow-y-auto px-3 py-5">
             <NavigationSections
@@ -182,8 +183,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
-  if (!isLoaded || !isSignedIn) {
+  if (!isLoaded) {
     return <>{children}</>;
+  }
+
+  if (!isSignedIn) {
+    return null;
   }
 
   const activeItem = getActiveAppNavigationItem(pathname);
