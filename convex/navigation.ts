@@ -1,6 +1,6 @@
 import type { Doc, Id } from "./_generated/dataModel";
 import { query } from "./_generated/server";
-import { v } from "convex/values";
+import { Infer, v } from "convex/values";
 import { requireUser } from "./lib/auth";
 import { campaignStatusValidator, tradePlanStatusValidator } from "./lib/statuses";
 
@@ -52,29 +52,9 @@ const navigationHierarchyValidator = v.object({
 type CampaignDoc = Doc<"campaigns">;
 type TradePlanDoc = Doc<"tradePlans">;
 
-type CampaignNavigationItem = {
-  href: string;
-  id: Id<"campaigns">;
-  isWatched: boolean;
-  itemType: "campaign";
-  name: string;
-  status: CampaignDoc["status"];
-};
+type CampaignNavigationItem = Infer<typeof campaignNavigationItemValidator>;
 
-type TradePlanNavigationItem = {
-  href: string;
-  id: Id<"tradePlans">;
-  instrumentSymbol: string;
-  isWatched: boolean;
-  itemType: "tradePlan";
-  name: string;
-  parentCampaign: {
-    href: string;
-    id: Id<"campaigns">;
-    name: string;
-  } | null;
-  status: TradePlanDoc["status"];
-};
+type TradePlanNavigationItem = Infer<typeof tradePlanNavigationItemValidator>;
 
 function buildCampaignHref(campaignId: Id<"campaigns">): string {
   return `/campaigns/${campaignId}`;
