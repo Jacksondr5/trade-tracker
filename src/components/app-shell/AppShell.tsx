@@ -149,7 +149,10 @@ function MobileNavigationDrawer({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="inset-y-0 left-0 top-0 h-full w-[min(18rem,calc(100vw-1.5rem))] translate-x-0 translate-y-0 rounded-none border-r border-olive-6 bg-olive-2 p-0 shadow-2xl data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100">
+      <DialogContent
+        hideCloseButton
+        className="inset-y-0 left-0 top-0 h-full w-[min(18rem,calc(100vw-1.5rem))] translate-x-0 translate-y-0 rounded-none border-r border-olive-6 bg-olive-2 p-0 shadow-2xl data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100"
+      >
         <DialogTitle className="sr-only">Navigation</DialogTitle>
         <DialogDescription className="sr-only">
           Global navigation for authenticated routes.
