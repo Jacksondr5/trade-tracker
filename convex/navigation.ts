@@ -104,16 +104,8 @@ function compareText(a: string, b: string): number {
   return navigationTextCollator.compare(a, b);
 }
 
-function getCampaignBucket(item: Pick<CampaignNavigationItem, "isWatched" | "status">): number {
-  if (item.isWatched) {
-    return 0;
-  }
-
-  return item.status === "closed" ? 2 : 1;
-}
-
-function getTradePlanBucket(
-  item: Pick<TradePlanNavigationItem, "isWatched" | "status">,
+function getNavigationBucket(
+  item: Pick<CampaignNavigationItem | TradePlanNavigationItem, "isWatched" | "status">,
 ): number {
   if (item.isWatched) {
     return 0;
@@ -126,7 +118,7 @@ function compareCampaignItems(
   a: CampaignNavigationItem,
   b: CampaignNavigationItem,
 ): number {
-  const bucketDiff = getCampaignBucket(a) - getCampaignBucket(b);
+  const bucketDiff = getNavigationBucket(a) - getNavigationBucket(b);
   if (bucketDiff !== 0) {
     return bucketDiff;
   }
@@ -143,7 +135,7 @@ function compareTradePlanItems(
   a: TradePlanNavigationItem,
   b: TradePlanNavigationItem,
 ): number {
-  const bucketDiff = getTradePlanBucket(a) - getTradePlanBucket(b);
+  const bucketDiff = getNavigationBucket(a) - getNavigationBucket(b);
   if (bucketDiff !== 0) {
     return bucketDiff;
   }
