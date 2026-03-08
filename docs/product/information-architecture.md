@@ -132,7 +132,7 @@ Typical contents:
 - brokerage account
 - optional portfolio
 - optional trade plan
-- optional notes field
+- optional linked trade-level notes (stored in the unified `notes` table via parent IDs, see `convex/notes.ts`)
 
 Role:
 

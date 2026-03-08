@@ -89,7 +89,7 @@ Includes:
 4. Migrate remaining touched routes off route-local UI patterns and onto the shared UI layer
 5. Maintain and update `technical-architecture-overview.md`
 6. Maintain and expand `glossary.md`
-7. Start and maintain a decision log
+7. Start and maintain a decision log (`docs/product/decision-log.md`)
 8. Maintain this roadmap as priorities change
 
 Why this phase sits here:
