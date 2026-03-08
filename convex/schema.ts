@@ -30,6 +30,18 @@ export default defineSchema({
     .index("by_owner", ["ownerId"])
     .index("by_owner_status", ["ownerId", "status"]),
 
+  watchlist: defineTable({
+    campaignId: v.optional(v.id("campaigns")),
+    itemType: v.union(v.literal("campaign"), v.literal("tradePlan")),
+    ownerId: v.string(),
+    tradePlanId: v.optional(v.id("tradePlans")),
+    watchedAt: v.number(),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_watchedAt", ["ownerId", "watchedAt"])
+    .index("by_owner_campaignId", ["ownerId", "campaignId"])
+    .index("by_owner_tradePlanId", ["ownerId", "tradePlanId"]),
+
   portfolios: defineTable({
     name: v.string(),
     ownerId: v.string(),

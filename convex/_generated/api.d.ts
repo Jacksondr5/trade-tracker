@@ -20,6 +20,7 @@ import type * as positions from "../positions.js";
 import type * as strategyDoc from "../strategyDoc.js";
 import type * as tradePlans from "../tradePlans.js";
 import type * as trades from "../trades.js";
+import type * as watchlist from "../watchlist.js";
 
 import type {
   ApiFromModules,
@@ -40,6 +41,7 @@ declare const fullApi: ApiFromModules<{
   strategyDoc: typeof strategyDoc;
   tradePlans: typeof tradePlans;
   trades: typeof trades;
+  watchlist: typeof watchlist;
 }>;
 
 /**

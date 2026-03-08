@@ -11,6 +11,15 @@ Read `docs/product/README.md` in full first, then use your judgment to open only
 
 Use `docs/plans/` for dated feature plans, redesign proposals, implementation plans, and historical context.
 
+## Linear Workflow
+
+When an agent starts work on a Linear ticket in this repo:
+
+- Move the ticket to `In Progress` when the work is picked up.
+- Do not manually move the ticket to `In Review` or `Done`.
+- Open the pull request and let the GitHub integration move the ticket to `In Review` when appropriate.
+- Let the GitHub integration move the ticket to `Done` after the PR is merged or otherwise completes the configured workflow.
+
 ## Commands
 
 ```bash
