@@ -492,6 +492,8 @@ This is the final consolidation pass for touched navigation surfaces. It should 
 
 ## Dependency Notes
 
+Repetition intentional for readability and scanability.
+
 - Issue 1 should be completed before 2, 6, 7, and 10.
 - Issue 4 should be completed before 5 and 6.
 - Issue 5 should be completed before 6 and should inform 7 and 10.
