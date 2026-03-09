@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Add shared trades filter parsing
+## Task 1: Add shared trades filter parsing
 
 **Files:**
 - Create: `src/lib/trades/filters.ts`
@@ -44,7 +44,7 @@ Add a helper module that:
 Run: `pnpm test src/lib/trades/filters.test.ts`
 Expected: PASS
 
-### Task 2: Extend the trades query
+## Task 2: Extend the trades query
 
 **Files:**
 - Modify: `convex/trades.ts`
@@ -79,7 +79,7 @@ Update `api.trades.listTradesPage` to:
 Run: `pnpm test convex/trades.test.ts`
 Expected: PASS
 
-### Task 3: Update the trades page route and client
+## Task 3: Update the trades page route and client
 
 **Files:**
 - Modify: `src/app/(app)/trades/page.tsx`
@@ -107,7 +107,7 @@ Update the server route to preload known brokerage accounts and parse the shared
 Run: `pnpm test src/lib/trades/filters.test.ts convex/trades.test.ts`
 Expected: PASS
 
-### Task 4: Validate end-to-end
+## Task 4: Validate end-to-end
 
 **Files:**
 - No repository file changes required unless Playwright finds a bug

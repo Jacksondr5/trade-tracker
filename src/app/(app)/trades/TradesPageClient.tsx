@@ -19,6 +19,7 @@ import {
   buildTradesPageQueryArgs,
   normalizeTradesTickerParam,
 } from "~/lib/trades/filters";
+import type { BrokerageSource } from "~/lib/trades/filters";
 import {
   KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME,
   isKrakenDefaultAccountId,
@@ -34,8 +35,6 @@ function formatDateForInput(epochMs: number): string {
   const minutes = String(d.getMinutes()).padStart(2, "0");
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
-
-type BrokerageSource = "ibkr" | "kraken";
 
 const SOURCE_LABELS: Record<BrokerageSource, string> = {
   ibkr: "IBKR",
@@ -257,6 +256,8 @@ export default function TradesPageClient({
   };
 
   const trades = displayedTradesPage.page;
+  const isTickerPending =
+    normalizeTradesTickerParam(tickerInput) !== appliedTicker;
   const hasActiveFilters = Boolean(
     startDateValue || endDateValue || appliedTicker || portfolioValue || accountValue,
   );
@@ -304,6 +305,9 @@ export default function TradesPageClient({
               value={tickerInput}
               onChange={(event) => setTickerInput(event.target.value)}
             />
+            {isTickerPending ? (
+              <span className="text-slate-11 text-xs">Updating filter…</span>
+            ) : null}
           </label>
           <label className="flex flex-col gap-2">
             <span className="text-slate-11 text-sm">Portfolio</span>
