@@ -193,12 +193,13 @@ export function MobileHierarchyBreadcrumbs({
 
           return (
             <Fragment key={`${segment.label}-${index}`}>
-              {index > 0 ? (
-                <li aria-hidden="true">
-                  <ChevronRight className="h-3.5 w-3.5 text-olive-8" />
-                </li>
-              ) : null}
-              <li>
+              <li className="flex items-center gap-1.5">
+                {index > 0 ? (
+                  <ChevronRight
+                    aria-hidden="true"
+                    className="h-3.5 w-3.5 text-olive-8"
+                  />
+                ) : null}
                 {segment.href && !isCurrentPage ? (
                   <Link
                     href={segment.href}
@@ -207,7 +208,10 @@ export function MobileHierarchyBreadcrumbs({
                     {segment.label}
                   </Link>
                 ) : (
-                  <span className={isCurrentPage ? "text-olive-12" : undefined}>
+                  <span
+                    aria-current={isCurrentPage ? "page" : undefined}
+                    className={isCurrentPage ? "text-olive-12" : undefined}
+                  >
                     {segment.label}
                   </span>
                 )}

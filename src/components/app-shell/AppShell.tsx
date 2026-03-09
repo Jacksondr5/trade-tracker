@@ -214,9 +214,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const hasLocalHierarchy = isCampaignTradePlanPathname(pathname);
+  const shouldLoadLocalHierarchy = hasLocalHierarchy && isDrawerOpen;
   const localHierarchy = useQuery(
     api.navigation.getCampaignTradePlanHierarchy,
-    hasLocalHierarchy ? {} : "skip",
+    shouldLoadLocalHierarchy ? {} : "skip",
   );
 
   useEffect(() => {

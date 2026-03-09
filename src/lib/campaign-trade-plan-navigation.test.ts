@@ -53,8 +53,14 @@ describe("campaign trade plan navigation helpers", () => {
   it("detects campaign and trade-plan domain routes", () => {
     expect(isCampaignTradePlanPathname("/campaigns")).toBe(true);
     expect(isCampaignTradePlanPathname("/campaigns/campaign-1")).toBe(true);
+    expect(isCampaignTradePlanPathname("/campaigns/campaign-1/subpage")).toBe(true);
     expect(isCampaignTradePlanPathname("/trade-plans/trade-plan-1")).toBe(true);
     expect(isCampaignTradePlanPathname("/notes")).toBe(false);
+  });
+
+  it("does not parse nested in-domain routes as detail pages", () => {
+    expect(getCampaignTradePlanDetailRouteContext("/campaigns/campaign-1/subpage")).toBeNull();
+    expect(getCampaignTradePlanDetailRouteContext("/trade-plans/trade-plan-1/subpage")).toBeNull();
   });
 
   it("parses detail route context from the pathname", () => {
@@ -107,5 +113,21 @@ describe("campaign trade plan navigation helpers", () => {
       { label: "Standalone" },
       { label: "Short ARKK" },
     ]);
+  });
+
+  it("returns null breadcrumbs when the campaign or trade plan does not exist", () => {
+    expect(
+      buildHierarchyBreadcrumbs(hierarchy, {
+        campaignId: "missing-campaign",
+        kind: "campaign",
+      }),
+    ).toBeNull();
+
+    expect(
+      buildHierarchyBreadcrumbs(hierarchy, {
+        kind: "tradePlan",
+        tradePlanId: "missing-trade-plan",
+      }),
+    ).toBeNull();
   });
 });
