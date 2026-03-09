@@ -1,6 +1,22 @@
 export { Alert, alertVariants, type AlertProps } from "./alert";
 export { Badge, badgeVariants, type BadgeProps } from "./badge";
-export { Button, buttonClassName, buttonVariants, type ButtonProps } from "./button";
+export {
+  Button,
+  buttonClassName,
+  buttonVariants,
+  type ButtonProps,
+} from "./button";
+export {
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+  CommandShortcut,
+} from "./command";
 export {
   Dialog,
   DialogClose,
@@ -23,8 +39,16 @@ export {
 export { FieldInput } from "./field-input";
 export { FieldSelect, type FieldSelectOption } from "./field-select";
 export { FieldTextarea } from "./field-textarea";
-export { fieldContext, formContext, useFieldContext, useFormContext } from "./form-contexts";
-export { FormErrorMessage, type FormErrorMessageProps } from "./form-error-message";
+export {
+  fieldContext,
+  formContext,
+  useFieldContext,
+  useFormContext,
+} from "./form-contexts";
+export {
+  FormErrorMessage,
+  type FormErrorMessageProps,
+} from "./form-error-message";
 export { Input, inputVariants, type InputProps } from "./input";
 export { Label } from "./label";
 export { RadioGroup, RadioGroupItem } from "./radio-group";
