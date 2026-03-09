@@ -1,6 +1,7 @@
 "use client";
 
 import { UserButton, useAuth } from "@clerk/nextjs";
+import { useQuery } from "convex/react";
 import { Menu } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -12,7 +13,13 @@ import {
   DialogDescription,
   DialogTitle,
 } from "~/components/ui";
+import { api } from "~/convex/_generated/api";
+import {
+  type CampaignTradePlanHierarchy,
+  isCampaignTradePlanPathname,
+} from "~/lib/campaign-trade-plan-navigation";
 import { cn } from "~/lib/utils";
+import { CampaignTradePlanHierarchyNavigation } from "./campaign-trade-plan-hierarchy";
 import {
   appNavigationSections,
   getActiveAppNavigationItem,
@@ -139,10 +146,14 @@ function MobileTopBar({
 }
 
 function MobileNavigationDrawer({
+  hasLocalHierarchy,
+  localHierarchy,
   onOpenChange,
   open,
   pathname,
 }: {
+  hasLocalHierarchy: boolean;
+  localHierarchy: CampaignTradePlanHierarchy | undefined;
   onOpenChange: (open: boolean) => void;
   open: boolean;
   pathname: string;
@@ -166,6 +177,24 @@ function MobileNavigationDrawer({
               pathname={pathname}
               onNavigate={() => onOpenChange(false)}
             />
+            {hasLocalHierarchy ? (
+              localHierarchy === undefined ? (
+                <div className="mt-5 space-y-2 border-t border-olive-6 px-3 pt-5">
+                  <p className="text-xs font-medium uppercase tracking-[0.18em] text-olive-10">
+                    Local hierarchy
+                  </p>
+                  <p className="text-sm text-olive-10">Loading hierarchy...</p>
+                </div>
+              ) : (
+                <div className="mt-5">
+                  <CampaignTradePlanHierarchyNavigation
+                    hierarchy={localHierarchy}
+                    pathname={pathname}
+                    onNavigate={() => onOpenChange(false)}
+                  />
+                </div>
+              )
+            ) : null}
           </div>
           <div className="flex justify-end border-t border-olive-6 px-4 py-4">
             <UserButton
@@ -186,6 +215,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { isLoaded, isSignedIn } = useAuth();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const hasLocalHierarchy = isCampaignTradePlanPathname(pathname);
+  const shouldLoadLocalHierarchy = hasLocalHierarchy && isDrawerOpen;
+  const localHierarchy = useQuery(
+    api.navigation.getCampaignTradePlanHierarchy,
+    shouldLoadLocalHierarchy ? {} : "skip",
+  );
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 768px)");
@@ -224,6 +259,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           onOpenDrawer={() => setIsDrawerOpen(true)}
         />
         <MobileNavigationDrawer
+          hasLocalHierarchy={hasLocalHierarchy}
+          localHierarchy={localHierarchy}
           open={isDrawerOpen}
           pathname={pathname}
           onOpenChange={setIsDrawerOpen}
