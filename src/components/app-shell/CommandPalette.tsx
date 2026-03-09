@@ -126,7 +126,7 @@ export function CommandPalette({
               <CommandItem
                 key={`${item.itemType}:${item.id}`}
                 dataTestId={`command-palette-watchlist-${item.itemType}-${item.id}`}
-                value={item.searchText}
+                value={`${item.searchText} ${item.itemType}:${item.id}`}
                 onSelect={() => handleSelect(item.href)}
               >
                 {item.itemType === "campaign" ? (
@@ -151,7 +151,7 @@ export function CommandPalette({
               <CommandItem
                 key={`${item.itemType}:${item.id}`}
                 dataTestId={`command-palette-campaign-${item.id}`}
-                value={item.searchText}
+                value={`${item.searchText} ${item.itemType}:${item.id}`}
                 onSelect={() => handleSelect(item.href)}
               >
                 <Map className="text-olive-11" />
@@ -172,7 +172,7 @@ export function CommandPalette({
               <CommandItem
                 key={`${item.itemType}:${item.id}`}
                 dataTestId={`command-palette-trade-plan-${item.id}`}
-                value={item.searchText}
+                value={`${item.searchText} ${item.itemType}:${item.id}`}
                 onSelect={() => handleSelect(item.href)}
               >
                 <SquareChartGantt className="text-olive-11" />

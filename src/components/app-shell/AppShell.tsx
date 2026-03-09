@@ -279,6 +279,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { isLoaded, isSignedIn } = useAuth();
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [hasOpenedCommandPalette, setHasOpenedCommandPalette] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const hasLocalHierarchy = isCampaignTradePlanPathname(pathname);
   const shouldLoadLocalHierarchy = hasLocalHierarchy && isDrawerOpen;
@@ -289,6 +290,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const openCommandPalette = useCallback(() => {
     setIsDrawerOpen(false);
+    setHasOpenedCommandPalette(true);
     setIsCommandPaletteOpen(true);
   }, []);
 
@@ -357,10 +359,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           pathname={pathname}
           onOpenChange={setIsDrawerOpen}
         />
-        <CommandPalette
-          open={isCommandPaletteOpen}
-          onOpenChange={setIsCommandPaletteOpen}
-        />
+        {hasOpenedCommandPalette ? (
+          <CommandPalette
+            open={isCommandPaletteOpen}
+            onOpenChange={setIsCommandPaletteOpen}
+          />
+        ) : null}
         <main className="pb-8 md:min-h-screen">{children}</main>
       </div>
     </div>
