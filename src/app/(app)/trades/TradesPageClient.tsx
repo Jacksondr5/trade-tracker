@@ -22,6 +22,7 @@ import {
 import type { BrokerageSource } from "~/lib/trades/filters";
 import {
   KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME,
+  KRAKEN_DEFAULT_ACCOUNT_ID,
   isKrakenDefaultAccountId,
 } from "../../../../shared/imports/constants";
 import { EditTradeForm } from "./components/edit-trade-form";
@@ -399,12 +400,12 @@ export default function TradesPageClient({
                   } else if (trade.source === "kraken") {
                     const accountName = accountNameByKey.get(
                       buildTradeAccountKey({
-                        accountId: "default",
+                        accountId: KRAKEN_DEFAULT_ACCOUNT_ID,
                         source: "kraken",
                       }),
                     );
                     accountDisplay = getAccountBaseLabel({
-                      accountId: "default",
+                      accountId: KRAKEN_DEFAULT_ACCOUNT_ID,
                       mappedName: accountName,
                       source: "kraken",
                     });
