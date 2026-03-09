@@ -186,11 +186,13 @@ function MobileNavigationDrawer({
                   <p className="text-sm text-olive-10">Loading hierarchy...</p>
                 </div>
               ) : (
-                <CampaignTradePlanHierarchyNavigation
-                  hierarchy={localHierarchy}
-                  pathname={pathname}
-                  onNavigate={() => onOpenChange(false)}
-                />
+                <div className="mt-5">
+                  <CampaignTradePlanHierarchyNavigation
+                    hierarchy={localHierarchy}
+                    pathname={pathname}
+                    onNavigate={() => onOpenChange(false)}
+                  />
+                </div>
               )
             ) : null}
           </div>
