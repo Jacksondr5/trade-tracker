@@ -129,9 +129,14 @@ Expected: `.env.local` and `node_modules/` exist in the current worktree.
 Run:
 
 ```bash
+# Terminal 1
 pnpm dev
+
+# Terminal 2
 npx convex dev
 ```
+
+If `pnpm dev` already starts Convex in your setup, the second command is redundant.
 
 Expected: both servers start successfully and expose a usable local URL.
 

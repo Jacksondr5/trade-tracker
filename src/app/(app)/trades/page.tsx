@@ -1,7 +1,18 @@
 import { preloadQuery } from "convex/nextjs";
 import { api } from "~/convex/_generated/api";
 import { getConvexTokenOrThrow } from "~/lib/server/convexAuth";
-import { parseTradesQueryState } from "~/lib/trades/filters";
+import {
+  normalizeTradesAccountParam,
+  normalizeTradesDateParam,
+  normalizeTradesPortfolioParam,
+  normalizeTradesTickerParam,
+  parseTradesQueryState,
+} from "~/lib/trades/filters";
+import {
+  DEFAULT_TRADES_PAGE_SIZE,
+  normalizeTradesCursor,
+  normalizeTradesPageSize,
+} from "~/lib/trades/pagination";
 import TradesPageClient from "./TradesPageClient";
 
 export default async function TradesPage({
@@ -11,6 +22,49 @@ export default async function TradesPage({
 }) {
   const token = await getConvexTokenOrThrow();
   const resolvedSearchParams = await searchParams;
+
+
+  const initialFilterState = {
+    account: normalizeTradesAccountParam(
+      typeof resolvedSearchParams.account === "string"
+        ? resolvedSearchParams.account
+        : null,
+    ) ?? "",
+    cursor: normalizeTradesCursor(
+      typeof resolvedSearchParams.cursor === "string"
+        ? resolvedSearchParams.cursor
+        : null,
+    ),
+    endDate:
+      normalizeTradesDateParam(
+        typeof resolvedSearchParams.endDate === "string"
+          ? resolvedSearchParams.endDate
+          : null,
+      ) ?? "",
+    pageSize: normalizeTradesPageSize(
+      Number(
+        typeof resolvedSearchParams.pageSize === "string"
+          ? resolvedSearchParams.pageSize
+          : String(DEFAULT_TRADES_PAGE_SIZE),
+      ),
+    ),
+    portfolio: normalizeTradesPortfolioParam(
+      typeof resolvedSearchParams.portfolio === "string"
+        ? resolvedSearchParams.portfolio
+        : null,
+    ) ?? "",
+    startDate:
+      normalizeTradesDateParam(
+        typeof resolvedSearchParams.startDate === "string"
+          ? resolvedSearchParams.startDate
+          : null,
+      ) ?? "",
+    ticker: normalizeTradesTickerParam(
+      typeof resolvedSearchParams.ticker === "string"
+        ? resolvedSearchParams.ticker
+        : null,
+    ),
+  };
 
   const [
     preloadedTradesPage,
@@ -38,6 +92,7 @@ export default async function TradesPage({
       preloadedKnownAccounts={preloadedKnownAccounts}
       preloadedPortfolios={preloadedPortfolios}
       preloadedTradesPage={preloadedTradesPage}
+      initialFilterState={initialFilterState}
       preloadedTradePlans={preloadedTradePlans}
     />
   );

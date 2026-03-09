@@ -9,7 +9,6 @@ import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { formatCurrency, formatDate } from "~/lib/format";
 import {
-  DEFAULT_TRADES_PAGE_SIZE,
   TRADES_PAGE_SIZE_OPTIONS,
   normalizeTradesPageSize,
 } from "~/lib/trades/pagination";
@@ -61,12 +60,22 @@ function getAccountBaseLabel(args: {
 }
 
 export default function TradesPageClient({
+  initialFilterState,
   preloadedAccountMappings,
   preloadedKnownAccounts,
   preloadedPortfolios,
   preloadedTradesPage,
   preloadedTradePlans,
 }: {
+  initialFilterState: {
+    account: string;
+    cursor: string | null;
+    endDate: string;
+    pageSize: number;
+    portfolio: string;
+    startDate: string;
+    ticker: string | null;
+  };
   preloadedAccountMappings: Preloaded<
     typeof api.accountMappings.listAccountMappings
   >;
@@ -86,15 +95,17 @@ export default function TradesPageClient({
   const [lastResolvedTradesPage, setLastResolvedTradesPage] = useState(
     initialTradesPage,
   );
-  const [startDateValue, setStartDateValue] = useState("");
-  const [endDateValue, setEndDateValue] = useState("");
-  const [tickerInput, setTickerInput] = useState("");
-  const [appliedTicker, setAppliedTicker] = useState<string | null>(null);
-  const [portfolioValue, setPortfolioValue] = useState("");
-  const [accountValue, setAccountValue] = useState("");
-  const [cursor, setCursor] = useState<string | null>(null);
+  const [startDateValue, setStartDateValue] = useState(initialFilterState.startDate);
+  const [endDateValue, setEndDateValue] = useState(initialFilterState.endDate);
+  const [tickerInput, setTickerInput] = useState(initialFilterState.ticker ?? "");
+  const [appliedTicker, setAppliedTicker] = useState<string | null>(
+    initialFilterState.ticker,
+  );
+  const [portfolioValue, setPortfolioValue] = useState(initialFilterState.portfolio);
+  const [accountValue, setAccountValue] = useState(initialFilterState.account);
+  const [cursor, setCursor] = useState<string | null>(initialFilterState.cursor);
   const [cursorHistory, setCursorHistory] = useState<Array<string | null>>([]);
-  const [pageSize, setPageSize] = useState(DEFAULT_TRADES_PAGE_SIZE);
+  const [pageSize, setPageSize] = useState(initialFilterState.pageSize);
   const currentPage = cursorHistory.length + 1;
 
   const tradePlanNameMap = useMemo(
@@ -152,6 +163,7 @@ export default function TradesPageClient({
     }
 
     const timeoutId = window.setTimeout(() => {
+      setEditingTradeId(null);
       setAppliedTicker(normalizedTickerInput);
       setCursor(null);
       setCursorHistory([]);
@@ -183,13 +195,13 @@ export default function TradesPageClient({
   );
 
   const isUsingInitialTradesPage =
-    !startDateValue &&
-    !endDateValue &&
-    !appliedTicker &&
-    !portfolioValue &&
-    !accountValue &&
-    cursor === null &&
-    pageSize === DEFAULT_TRADES_PAGE_SIZE;
+    startDateValue === initialFilterState.startDate &&
+    endDateValue === initialFilterState.endDate &&
+    appliedTicker === initialFilterState.ticker &&
+    portfolioValue === initialFilterState.portfolio &&
+    accountValue === initialFilterState.account &&
+    cursor === initialFilterState.cursor &&
+    pageSize === initialFilterState.pageSize;
 
   const queriedTradesPage = useQuery(
     api.trades.listTradesPage,
