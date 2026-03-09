@@ -9,7 +9,12 @@ import { Alert, Badge } from "~/components/ui";
 import NotesSection from "~/components/NotesSection";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
-import { buildHierarchyBreadcrumbs } from "~/lib/campaign-trade-plan-navigation";
+import {
+  buildHierarchyBreadcrumbs,
+  findTradePlanNavigationItem,
+  LINKED_TRADE_PLAN_LABEL,
+  STANDALONE_TRADE_PLAN_LABEL,
+} from "~/lib/campaign-trade-plan-navigation";
 import { formatCurrency } from "~/lib/format";
 
 type TradePlanStatus = "idea" | "watching" | "active" | "closed";
@@ -79,6 +84,16 @@ export default function TradePlanDetailPageClient({
           kind: "tradePlan",
           tradePlanId,
         });
+  const navigationTradePlan = useMemo(
+    () =>
+      hierarchy === undefined ? null : findTradePlanNavigationItem(hierarchy, tradePlanId),
+    [hierarchy, tradePlanId],
+  );
+  const linkedCampaign = navigationTradePlan?.parentCampaign ?? null;
+  const relationshipLabel =
+    linkedCampaign !== null || tradePlan?.campaignId
+      ? LINKED_TRADE_PLAN_LABEL
+      : STANDALONE_TRADE_PLAN_LABEL;
 
   useEffect(() => {
     if (tradePlan && !planNameInitialized) {
@@ -208,6 +223,23 @@ export default function TradePlanDetailPageClient({
       </Link>
 
       <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
+        <div className="mb-4 space-y-1">
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-11">
+            {relationshipLabel}
+          </p>
+          {tradePlan.campaignId ? (
+            <p className="text-sm text-slate-11">
+              Campaign:{" "}
+              <Link
+                href={linkedCampaign?.href ?? `/campaigns/${tradePlan.campaignId}`}
+                className="text-blue-400 hover:underline"
+              >
+                {linkedCampaign?.name ?? "View Campaign"}
+              </Link>
+            </p>
+          ) : null}
+        </div>
+
         <div className="mb-2 flex items-start justify-between gap-3">
           <div className="flex-1 space-y-3">
             <div>
@@ -312,15 +344,6 @@ export default function TradePlanDetailPageClient({
 
         {tradePlan.status === "closed" && tradePlan.closedAt && (
           <p className="text-xs text-slate-11">Closed {new Date(tradePlan.closedAt).toLocaleDateString("en-US")}</p>
-        )}
-
-        {tradePlan.campaignId && (
-          <p className="mt-2 text-sm text-slate-11">
-            Campaign:{" "}
-            <Link href={`/campaigns/${tradePlan.campaignId}`} className="text-blue-400 hover:underline">
-              View Campaign
-            </Link>
-          </p>
         )}
 
         {statusError && <Alert variant="error" className="mt-3">{statusError}</Alert>}

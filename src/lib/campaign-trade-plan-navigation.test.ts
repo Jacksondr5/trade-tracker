@@ -113,7 +113,7 @@ describe("campaign trade plan navigation helpers", () => {
       }),
     ).toEqual([
       { href: "/trade-plans", label: "Trade Plans" },
-      { label: "Standalone" },
+      { label: "Standalone Trade Plan" },
       { label: "Short ARKK" },
     ]);
   });

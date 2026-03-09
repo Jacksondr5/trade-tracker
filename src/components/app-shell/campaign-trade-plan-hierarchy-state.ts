@@ -195,11 +195,12 @@ export function isCampaignRowExpanded(
 
 export function isStandaloneGroupExpanded(
   persistedState: PersistedLocalHierarchyState,
+  isStandaloneTradePlanActive = false,
 ): boolean {
   const persistedValue = persistedState.groups.standaloneTradePlans;
   if (persistedValue !== null) {
     return persistedValue;
   }
 
-  return false;
+  return isStandaloneTradePlanActive;
 }

@@ -136,7 +136,13 @@ describe("campaign trade plan hierarchy helpers", () => {
     ).toBe(true);
   });
 
-  it("keeps the standalone group closed by default even on active standalone routes", () => {
+  it("opens the standalone group by default for active standalone routes", () => {
+    expect(
+      isStandaloneGroupExpanded(defaultPersistedLocalHierarchyState, true),
+    ).toBe(true);
+  });
+
+  it("keeps the standalone group closed by default away from standalone routes", () => {
     expect(isStandaloneGroupExpanded(defaultPersistedLocalHierarchyState)).toBe(false);
   });
 

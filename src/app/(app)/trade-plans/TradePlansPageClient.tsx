@@ -7,6 +7,7 @@ import { z } from "zod";
 import { Alert, Badge, Button, useAppForm } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
+import { STANDALONE_TRADE_PLANS_LABEL } from "~/lib/campaign-trade-plan-navigation";
 
 const createTradePlanSchema = z.object({
   instrumentSymbol: z.string().trim().min(1, "Instrument symbol is required"),
@@ -25,6 +26,7 @@ export default function TradePlansPageClient({
   const [error, setError] = useState<string | null>(null);
 
   const standalonePlans = tradePlans.filter((plan) => !plan.campaignId);
+  const linkedPlanCount = tradePlans.length - standalonePlans.length;
 
   const form = useAppForm({
     defaultValues: {
@@ -71,7 +73,10 @@ export default function TradePlansPageClient({
       <h1 className="mb-6 text-2xl font-bold text-slate-12">Trade Plans</h1>
 
       <section className="mb-8 rounded-lg border border-slate-700 bg-slate-800 p-4">
-        <h2 className="mb-4 text-lg font-semibold text-slate-12">Create Standalone Plan</h2>
+        <h2 className="text-lg font-semibold text-slate-12">Create Trade Plan</h2>
+        <p className="mb-4 mt-1 text-sm text-slate-11">
+          New trade plans created here start as standalone trade plans.
+        </p>
         {error && (
           <Alert variant="error" className="mb-3" onDismiss={() => setError(null)}>
             {error}
@@ -115,9 +120,21 @@ export default function TradePlansPageClient({
       </section>
 
       <section className="rounded-lg border border-slate-700 bg-slate-800 p-4">
-        <h2 className="mb-4 text-lg font-semibold text-slate-12">Standalone Plans</h2>
+        <h2 className="text-lg font-semibold text-slate-12">
+          {STANDALONE_TRADE_PLANS_LABEL}
+        </h2>
+        <p className="mb-4 mt-1 text-sm text-slate-11">
+          {linkedPlanCount === 0
+            ? "Linked trade plans appear within campaigns and the hierarchy."
+            : linkedPlanCount === 1
+              ? "1 linked trade plan currently appears within its campaign and the hierarchy."
+              : `${linkedPlanCount} linked trade plans currently appear within their campaigns and the hierarchy.`}
+        </p>
         {standalonePlans.length === 0 ? (
-          <p className="text-slate-11">No standalone trade plans yet.</p>
+          <p className="text-slate-11">
+            No standalone trade plans yet. Create one here or add a linked trade
+            plan from a campaign.
+          </p>
         ) : (
           <div className="space-y-3">
             {standalonePlans.map((plan) => (

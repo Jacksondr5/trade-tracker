@@ -4,9 +4,11 @@ import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { capitalize } from "~/lib/format";
 import {
+  getTradePlanRelationshipContextLabel,
   type BreadcrumbSegment,
   type CampaignNavigationItem,
   type CampaignTradePlanHierarchy,
+  STANDALONE_TRADE_PLANS_LABEL,
   type TradePlanNavigationItem,
 } from "~/lib/campaign-trade-plan-navigation";
 import { cn } from "~/lib/utils";
@@ -30,8 +32,7 @@ function getWatchlistMeta(
     return getCampaignMeta(item);
   }
 
-  const parentLabel = item.parentCampaign?.name ?? "Standalone";
-  return `${parentLabel} • ${getTradePlanMeta(item)}`;
+  return `${getTradePlanRelationshipContextLabel(item)} • ${getTradePlanMeta(item)}`;
 }
 
 function HierarchyLink({
@@ -150,7 +151,7 @@ export function CampaignTradePlanHierarchyNavigation({
         </section>
 
         <section className="space-y-2">
-          <SectionHeading title="Standalone Trade Plans" />
+          <SectionHeading title={STANDALONE_TRADE_PLANS_LABEL} />
           <div className="space-y-1">
             {hierarchy.standaloneTradePlans.length === 0 ? (
               <p className="px-3 text-sm text-olive-10">
