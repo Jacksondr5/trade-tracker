@@ -1,31 +1,24 @@
 "use client";
 
-import { Preloaded, usePreloadedQuery } from "convex/react";
+import { Preloaded, usePreloadedQuery, useQuery } from "convex/react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import React, { useMemo, useState, useTransition } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Pencil } from "lucide-react";
-import { Badge, Button } from "~/components/ui";
+import { Badge, Button, Input } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { formatCurrency, formatDate } from "~/lib/format";
 import {
-  getEndOfDay,
-  getStartOfDay,
-  getStartOfMonth,
-  getStartOfWeek,
-  getStartOfYear,
-  parseDateInputLocal,
-} from "~/lib/trades/dateUtils";
-import {
   DEFAULT_TRADES_PAGE_SIZE,
   TRADES_PAGE_SIZE_OPTIONS,
-  decodeCursorHistory,
-  encodeCursorHistory,
-  normalizeTradesCursor,
   normalizeTradesPageSize,
 } from "~/lib/trades/pagination";
-import { cn } from "~/lib/utils";
+import {
+  NO_PORTFOLIO_FILTER_VALUE,
+  buildTradeAccountKey,
+  buildTradesPageQueryArgs,
+  normalizeTradesTickerParam,
+} from "~/lib/trades/filters";
 import {
   KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME,
   isKrakenDefaultAccountId,
@@ -42,15 +35,34 @@ function formatDateForInput(epochMs: number): string {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
-type QuickFilter = "today" | "week" | "month" | "year" | "all";
-const QUICK_FILTER_VALUES = ["today", "week", "month", "year", "all"] as const;
+type BrokerageSource = "ibkr" | "kraken";
 
-function isQuickFilter(value: string): value is QuickFilter {
-  return QUICK_FILTER_VALUES.includes(value as QuickFilter);
+const SOURCE_LABELS: Record<BrokerageSource, string> = {
+  ibkr: "IBKR",
+  kraken: "Kraken",
+};
+
+function getAccountBaseLabel(args: {
+  accountId: string;
+  mappedName?: string;
+  source: BrokerageSource;
+}): string {
+  if (args.mappedName) {
+    return isKrakenDefaultAccountId(args.accountId)
+      ? args.mappedName
+      : `${args.mappedName} (${args.accountId})`;
+  }
+
+  if (args.source === "kraken" && isKrakenDefaultAccountId(args.accountId)) {
+    return KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME;
+  }
+
+  return args.accountId;
 }
 
 export default function TradesPageClient({
   preloadedAccountMappings,
+  preloadedKnownAccounts,
   preloadedPortfolios,
   preloadedTradesPage,
   preloadedTradePlans,
@@ -58,33 +70,32 @@ export default function TradesPageClient({
   preloadedAccountMappings: Preloaded<
     typeof api.accountMappings.listAccountMappings
   >;
+  preloadedKnownAccounts: Preloaded<
+    typeof api.accountMappings.listKnownBrokerageAccounts
+  >;
   preloadedPortfolios: Preloaded<typeof api.portfolios.listPortfolios>;
   preloadedTradesPage: Preloaded<typeof api.trades.listTradesPage>;
   preloadedTradePlans: Preloaded<typeof api.tradePlans.listTradePlans>;
 }) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const tradesPage = usePreloadedQuery(preloadedTradesPage);
+  const initialTradesPage = usePreloadedQuery(preloadedTradesPage);
   const tradePlans = usePreloadedQuery(preloadedTradePlans);
   const accountMappings = usePreloadedQuery(preloadedAccountMappings);
+  const knownAccounts = usePreloadedQuery(preloadedKnownAccounts);
   const portfolios = usePreloadedQuery(preloadedPortfolios);
   const [editingTradeId, setEditingTradeId] = useState<Id<"trades"> | null>(null);
-  const [isNavigating, startTransition] = useTransition();
-
-  const startDateParam = searchParams.get("startDate");
-  const endDateParam = searchParams.get("endDate");
-  const cursorParam = normalizeTradesCursor(searchParams.get("cursor"));
-  const cursorHistory = decodeCursorHistory(searchParams.get("cursorHistory"));
-  const rawQuickFilterParam = searchParams.get("filter");
-  const quickFilterParam =
-    rawQuickFilterParam && isQuickFilter(rawQuickFilterParam)
-      ? rawQuickFilterParam
-      : null;
-  const currentPage = cursorHistory.length + 1;
-
-  const pageSize = normalizeTradesPageSize(
-    Number(searchParams.get("pageSize") ?? String(DEFAULT_TRADES_PAGE_SIZE)),
+  const [lastResolvedTradesPage, setLastResolvedTradesPage] = useState(
+    initialTradesPage,
   );
+  const [startDateValue, setStartDateValue] = useState("");
+  const [endDateValue, setEndDateValue] = useState("");
+  const [tickerInput, setTickerInput] = useState("");
+  const [appliedTicker, setAppliedTicker] = useState<string | null>(null);
+  const [portfolioValue, setPortfolioValue] = useState("");
+  const [accountValue, setAccountValue] = useState("");
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [cursorHistory, setCursorHistory] = useState<Array<string | null>>([]);
+  const [pageSize, setPageSize] = useState(DEFAULT_TRADES_PAGE_SIZE);
+  const currentPage = cursorHistory.length + 1;
 
   const tradePlanNameMap = useMemo(
     () => new Map(tradePlans.map((p) => [p._id, p.name])),
@@ -103,88 +114,118 @@ export default function TradesPageClient({
           `${mapping.source}|${mapping.accountId}`,
           mapping.friendlyName,
         ]),
-      ),
+    ),
     [accountMappings],
   );
 
-  const { startDate, endDate } = useMemo(() => {
-    const now = new Date();
+  const accountOptions = useMemo(() => {
+    return knownAccounts
+      .map((account) => {
+        const mappedName = accountNameByKey.get(
+          buildTradeAccountKey({
+            accountId: account.accountId,
+            source: account.source,
+          }),
+        );
 
-    if (quickFilterParam) {
-      if (quickFilterParam === "today") {
-        return { endDate: getEndOfDay(now), startDate: getStartOfDay(now) };
-      }
-      if (quickFilterParam === "week") {
-        return { endDate: getEndOfDay(now), startDate: getStartOfWeek(now) };
-      }
-      if (quickFilterParam === "month") {
-        return { endDate: getEndOfDay(now), startDate: getStartOfMonth(now) };
-      }
-      if (quickFilterParam === "year") {
-        return { endDate: getEndOfDay(now), startDate: getStartOfYear(now) };
-      }
-      return { endDate: null, startDate: null };
+        return {
+          label: `${getAccountBaseLabel({
+            accountId: account.accountId,
+            mappedName,
+            source: account.source,
+          })} · ${SOURCE_LABELS[account.source]}`,
+          value: buildTradeAccountKey({
+            accountId: account.accountId,
+            source: account.source,
+          }),
+        };
+      })
+      .sort(
+        (a, b) => a.label.localeCompare(b.label) || a.value.localeCompare(b.value),
+      );
+  }, [accountNameByKey, knownAccounts]);
+
+  useEffect(() => {
+    const normalizedTickerInput = normalizeTradesTickerParam(tickerInput);
+    if (normalizedTickerInput === appliedTicker) {
+      return;
     }
 
-    const parsedStartDate = startDateParam ? parseDateInputLocal(startDateParam) : null;
-    const parsedEndDate = endDateParam ? parseDateInputLocal(endDateParam) : null;
-    return {
-      endDate: parsedEndDate ? getEndOfDay(parsedEndDate) : null,
-      startDate: parsedStartDate ? getStartOfDay(parsedStartDate) : null,
-    };
-  }, [endDateParam, quickFilterParam, startDateParam]);
+    const timeoutId = window.setTimeout(() => {
+      setAppliedTicker(normalizedTickerInput);
+      setCursor(null);
+      setCursorHistory([]);
+    }, 250);
 
-  const updateFilter = (params: {
-    cursor?: string | null;
-    cursorHistory?: ReadonlyArray<string | null>;
-    endDate?: string | null;
-    filter?: QuickFilter | null;
-    pageSize?: number | null;
-    startDate?: string | null;
-  }) => {
-    const newParams = new URLSearchParams();
+    return () => window.clearTimeout(timeoutId);
+  }, [appliedTicker, tickerInput]);
 
-    if (params.filter === "all") {
-      // "All Time" intentionally clears filter/startDate/endDate from the URL.
-    } else if (params.filter) {
-      newParams.set("filter", params.filter);
-    } else {
-      if (params.startDate) newParams.set("startDate", params.startDate);
-      if (params.endDate) newParams.set("endDate", params.endDate);
-    }
-
-    if (params.pageSize && params.pageSize !== DEFAULT_TRADES_PAGE_SIZE) {
-      newParams.set("pageSize", String(params.pageSize));
-    }
-
-    if (params.cursor) {
-      newParams.set("cursor", params.cursor);
-    }
-
-    const encodedCursorHistory = encodeCursorHistory(params.cursorHistory ?? []);
-    if (encodedCursorHistory) {
-      newParams.set("cursorHistory", encodedCursorHistory);
-    }
-
-    const queryString = newParams.toString();
-    startTransition(() => {
-      router.push(queryString ? `/trades?${queryString}` : "/trades");
-    });
-  };
-
-  const handleQuickFilter = (filter: QuickFilter) => {
-    updateFilter({ cursor: null, cursorHistory: [], filter, pageSize });
-  };
-
-  const handleCustomDateChange = (type: "startDate" | "endDate", value: string) => {
-    updateFilter({
-      cursor: null,
-      cursorHistory: [],
-      endDate: type === "endDate" ? value : (endDateParam ?? ""),
-      filter: null,
+  const queryArgs = useMemo(
+    () =>
+      buildTradesPageQueryArgs({
+        account: accountValue,
+        cursor,
+        endDate: endDateValue,
+        pageSize,
+        portfolio: portfolioValue,
+        startDate: startDateValue,
+        ticker: appliedTicker,
+      }),
+    [
+      accountValue,
+      appliedTicker,
+      cursor,
+      endDateValue,
       pageSize,
-      startDate: type === "startDate" ? value : (startDateParam ?? ""),
-    });
+      portfolioValue,
+      startDateValue,
+    ],
+  );
+
+  const isUsingInitialTradesPage =
+    !startDateValue &&
+    !endDateValue &&
+    !appliedTicker &&
+    !portfolioValue &&
+    !accountValue &&
+    cursor === null &&
+    pageSize === DEFAULT_TRADES_PAGE_SIZE;
+
+  const queriedTradesPage = useQuery(
+    api.trades.listTradesPage,
+    isUsingInitialTradesPage ? "skip" : queryArgs,
+  );
+  const tradesPage = isUsingInitialTradesPage ? initialTradesPage : queriedTradesPage;
+
+  useEffect(() => {
+    if (tradesPage) {
+      setLastResolvedTradesPage(tradesPage);
+    }
+  }, [tradesPage]);
+
+  const displayedTradesPage = tradesPage ?? lastResolvedTradesPage;
+  const isLoadingTradesPage = !tradesPage;
+
+  const handleDateChange = (type: "startDate" | "endDate", value: string) => {
+    if (type === "startDate") {
+      setStartDateValue(value);
+    } else {
+      setEndDateValue(value);
+    }
+    setCursor(null);
+    setCursorHistory([]);
+  };
+
+  const handlePortfolioChange = (value: string) => {
+    setPortfolioValue(value);
+    setCursor(null);
+    setCursorHistory([]);
+  };
+
+  const handleAccountChange = (value: string) => {
+    setAccountValue(value);
+    setCursor(null);
+    setCursorHistory([]);
   };
 
   const handlePrevPage = () => {
@@ -192,48 +233,27 @@ export default function TradesPageClient({
 
     const nextCursorHistory = cursorHistory.slice(0, -1);
     const previousCursor = cursorHistory[cursorHistory.length - 1];
-    updateFilter({
-      cursor: previousCursor,
-      cursorHistory: nextCursorHistory,
-      endDate: endDateParam,
-      filter: quickFilterParam,
-      pageSize,
-      startDate: startDateParam,
-    });
+    setCursor(previousCursor);
+    setCursorHistory(nextCursorHistory);
   };
 
   const handleNextPage = () => {
-    if (tradesPage.isDone) return;
+    if (!tradesPage || tradesPage.isDone) return;
 
-    updateFilter({
-      cursor: tradesPage.continueCursor,
-      cursorHistory: [...cursorHistory, cursorParam],
-      endDate: endDateParam,
-      filter: quickFilterParam,
-      pageSize,
-      startDate: startDateParam,
-    });
+    setCursorHistory([...cursorHistory, cursor]);
+    setCursor(tradesPage.continueCursor);
   };
 
   const handlePageSizeChange = (nextPageSize: number) => {
-    updateFilter({
-      cursor: null,
-      cursorHistory: [],
-      endDate: endDateParam,
-      filter: quickFilterParam,
-      pageSize: nextPageSize,
-      startDate: startDateParam,
-    });
+    setPageSize(normalizeTradesPageSize(nextPageSize));
+    setCursor(null);
+    setCursorHistory([]);
   };
 
-  const isQuickFilterActive = (filter: QuickFilter): boolean => {
-    if (filter === "all") {
-      return !quickFilterParam && startDate === null && endDate === null;
-    }
-    return quickFilterParam === filter;
-  };
-
-  const trades = tradesPage.page;
+  const trades = displayedTradesPage.page;
+  const hasActiveFilters = Boolean(
+    startDateValue || endDateValue || appliedTicker || portfolioValue || accountValue,
+  );
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -245,60 +265,85 @@ export default function TradesPageClient({
       </div>
 
       <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex flex-wrap gap-2">
-            {(
-              [
-                { label: "Today", value: "today" },
-                { label: "This Week", value: "week" },
-                { label: "This Month", value: "month" },
-                { label: "This Year", value: "year" },
-                { label: "All Time", value: "all" },
-              ] as const
-            ).map(({ label, value }) => (
-              <button
-                key={value}
-                onClick={() => handleQuickFilter(value)}
-                className={cn("rounded px-3 py-1.5 text-sm font-medium transition-colors", {
-                  "bg-blue-600 text-white": isQuickFilterActive(value),
-                  "bg-slate-700 text-slate-300 hover:bg-slate-600":
-                    !isQuickFilterActive(value),
-                })}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-slate-11 text-sm">or</span>
-            <input
-              type="date"
-              value={startDateParam || ""}
-              onChange={(e) => handleCustomDateChange("startDate", e.target.value)}
-              className="text-slate-12 rounded border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <label className="flex flex-col gap-2">
+            <span className="text-slate-11 text-sm">Start date</span>
+            <Input
               aria-label="Start date"
-            />
-            <span className="text-slate-11 text-sm">to</span>
-            <input
+              className="dark-date-input"
+              dataTestId="trades-filter-start-date"
               type="date"
-              value={endDateParam || ""}
-              onChange={(e) => handleCustomDateChange("endDate", e.target.value)}
-              className="text-slate-12 rounded border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
-              aria-label="End date"
+              value={startDateValue}
+              onChange={(event) => handleDateChange("startDate", event.target.value)}
             />
-          </div>
+          </label>
+          <label className="flex flex-col gap-2">
+            <span className="text-slate-11 text-sm">End date</span>
+            <Input
+              aria-label="End date"
+              className="dark-date-input"
+              dataTestId="trades-filter-end-date"
+              type="date"
+              value={endDateValue}
+              onChange={(event) => handleDateChange("endDate", event.target.value)}
+            />
+          </label>
+          <label className="flex flex-col gap-2">
+            <span className="text-slate-11 text-sm">Ticker</span>
+            <Input
+              aria-label="Ticker"
+              dataTestId="trades-filter-ticker"
+              type="search"
+              placeholder="Search symbols"
+              value={tickerInput}
+              onChange={(event) => setTickerInput(event.target.value)}
+            />
+          </label>
+          <label className="flex flex-col gap-2">
+            <span className="text-slate-11 text-sm">Portfolio</span>
+            <select
+              aria-label="Portfolio"
+              data-testid="trades-filter-portfolio"
+              className="text-slate-12 block h-9 w-full rounded-md border border-olive-7 bg-transparent px-3 text-sm shadow-xs focus:border-blue-500 focus:outline-none"
+              value={portfolioValue}
+              onChange={(event) => handlePortfolioChange(event.target.value)}
+            >
+              <option value="">Any portfolio</option>
+              <option value={NO_PORTFOLIO_FILTER_VALUE}>No portfolio</option>
+              {portfolios.map((portfolio) => (
+                <option key={portfolio._id} value={portfolio._id}>
+                  {portfolio.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-2">
+            <span className="text-slate-11 text-sm">Account</span>
+            <select
+              aria-label="Account"
+              data-testid="trades-filter-account"
+              className="text-slate-12 block h-9 w-full rounded-md border border-olive-7 bg-transparent px-3 text-sm shadow-xs focus:border-blue-500 focus:outline-none"
+              value={accountValue}
+              onChange={(event) => handleAccountChange(event.target.value)}
+            >
+              <option value="">Any account</option>
+              {accountOptions.map((account) => (
+                <option key={account.value} value={account.value}>
+                  {account.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </div>
-
       {trades.length === 0 ? (
         <div className="rounded-lg border border-slate-700 bg-slate-800 p-8 text-center">
           <p className="text-slate-11">
-            {startDate !== null || endDate !== null
-              ? "No trades found for the selected date range."
+            {hasActiveFilters
+              ? "No trades found for the selected filters."
               : "No trades yet."}
           </p>
-          {startDate === null && endDate === null && (
+          {!hasActiveFilters && (
             <p className="text-slate-11 mt-2 text-sm">
               Click &quot;New Trade&quot; to record your first trade.
             </p>
@@ -331,15 +376,28 @@ export default function TradesPageClient({
                     (trade.source === "ibkr" || trade.source === "kraken")
                   ) {
                     const accountName = accountNameByKey.get(
-                      `${trade.source}|${trade.brokerageAccountId}`,
+                      buildTradeAccountKey({
+                        accountId: trade.brokerageAccountId,
+                        source: trade.source,
+                      }),
                     );
-                    accountDisplay = accountName
-                      ? isKrakenDefaultAccountId(trade.brokerageAccountId)
-                        ? accountName
-                        : `${accountName} (${trade.brokerageAccountId})`
-                      : isKrakenDefaultAccountId(trade.brokerageAccountId)
-                        ? KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME
-                        : trade.brokerageAccountId;
+                    accountDisplay = getAccountBaseLabel({
+                      accountId: trade.brokerageAccountId,
+                      mappedName: accountName,
+                      source: trade.source,
+                    });
+                  } else if (trade.source === "kraken") {
+                    const accountName = accountNameByKey.get(
+                      buildTradeAccountKey({
+                        accountId: "default",
+                        source: "kraken",
+                      }),
+                    );
+                    accountDisplay = getAccountBaseLabel({
+                      accountId: "default",
+                      mappedName: accountName,
+                      source: "kraken",
+                    });
                   }
 
                   return (
@@ -424,7 +482,7 @@ export default function TradesPageClient({
                 className="text-slate-12 rounded border border-slate-600 bg-slate-700 px-2 py-1 text-sm"
                 value={pageSize}
                 onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-                disabled={isNavigating}
+                disabled={isLoadingTradesPage}
               >
                 {TRADES_PAGE_SIZE_OPTIONS.map((option) => (
                   <option key={option} value={option}>
@@ -438,7 +496,7 @@ export default function TradesPageClient({
                 title="Previous page"
                 className="rounded border border-slate-600 p-1.5 text-slate-12 disabled:opacity-50"
                 onClick={handlePrevPage}
-                disabled={cursorHistory.length === 0 || isNavigating}
+                disabled={cursorHistory.length === 0 || isLoadingTradesPage}
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
@@ -449,7 +507,7 @@ export default function TradesPageClient({
                 title="Next page"
                 className="rounded border border-slate-600 p-1.5 text-slate-12 disabled:opacity-50"
                 onClick={handleNextPage}
-                disabled={tradesPage.isDone || isNavigating}
+                disabled={isLoadingTradesPage || displayedTradesPage.isDone}
               >
                 <ChevronRight className="h-4 w-4" />
               </button>

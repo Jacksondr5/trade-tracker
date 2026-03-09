@@ -124,6 +124,16 @@
   tr {
     transition: background-color 150ms ease;
   }
+
+}
+
+.dark-date-input {
+  color-scheme: dark !important;
+}
+
+.dark-date-input::-webkit-calendar-picker-indicator {
+  filter: invert(0.85);
+  opacity: 0.85;
 }
 
 @utility scrollbar-none {
