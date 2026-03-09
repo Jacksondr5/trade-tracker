@@ -3,5 +3,5 @@
 export default {
   plugins: ["prettier-plugin-packagejson", "prettier-plugin-tailwindcss"],
   tailwindFunctions: ["cn", "cva"],
-  tailwindStylesheet: "./src/styles/globals.css",
+  tailwindStylesheet: "./src/styles/global.css",
 };

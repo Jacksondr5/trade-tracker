@@ -1,12 +1,13 @@
 "use client";
 
 import { UserButton, useAuth } from "@clerk/nextjs";
-import { Menu } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import {
+  Button,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -18,6 +19,7 @@ import {
   getActiveAppNavigationItem,
   isAppNavigationItemActive,
 } from "./app-navigation";
+import { CommandPalette } from "./CommandPalette";
 
 function NavigationSections({
   onNavigate,
@@ -30,7 +32,7 @@ function NavigationSections({
     <nav aria-label="Primary" className="space-y-6">
       {appNavigationSections.map((section) => (
         <section key={section.title} className="space-y-2">
-          <h2 className="px-3 text-xs font-medium uppercase tracking-[0.18em] text-olive-10">
+          <h2 className="px-3 text-xs font-medium tracking-[0.18em] text-olive-10 uppercase">
             {section.title}
           </h2>
           <div className="space-y-1">
@@ -83,11 +85,70 @@ function ShellBrand({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-function DesktopSidebar({ pathname }: { pathname: string }) {
+function CommandPaletteTrigger({
+  className,
+  compact = false,
+  onOpen,
+}: {
+  className?: string;
+  compact?: boolean;
+  onOpen: () => void;
+}) {
+  if (compact) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        className={cn(
+          "h-10 w-10 border-olive-6 bg-transparent text-olive-12 hover:bg-olive-3",
+          className,
+        )}
+        onClick={onOpen}
+        aria-label="Open command palette"
+        dataTestId="open-command-palette-mobile"
+      >
+        <Search className="h-4 w-4" />
+      </Button>
+    );
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      className={cn(
+        "h-11 w-full justify-between border-olive-6 bg-transparent px-3 text-sm text-olive-11 hover:bg-olive-3 hover:text-olive-12",
+        className,
+      )}
+      onClick={onOpen}
+      dataTestId="open-command-palette-desktop"
+    >
+      <span className="flex items-center gap-2">
+        <Search className="h-4 w-4" />
+        Search
+      </span>
+      <span className="text-xs tracking-[0.18em] text-olive-10 uppercase">
+        Cmd/Ctrl+K
+      </span>
+    </Button>
+  );
+}
+
+function DesktopSidebar({
+  onOpenCommandPalette,
+  pathname,
+}: {
+  onOpenCommandPalette: () => void;
+  pathname: string;
+}) {
   return (
     <aside className="hidden h-screen border-r border-olive-6 bg-olive-2 md:sticky md:top-0 md:flex md:flex-col md:overflow-y-auto">
       <div className="flex flex-1 flex-col gap-7 px-4 py-5">
-        <ShellBrand />
+        <div className="space-y-4">
+          <ShellBrand />
+          <CommandPaletteTrigger onOpen={onOpenCommandPalette} />
+        </div>
         <NavigationSections pathname={pathname} />
       </div>
       <div className="flex justify-end border-t border-olive-6 px-4 py-4">
@@ -104,9 +165,11 @@ function DesktopSidebar({ pathname }: { pathname: string }) {
 }
 
 function MobileTopBar({
+  onOpenCommandPalette,
   onOpenDrawer,
   title,
 }: {
+  onOpenCommandPalette: () => void;
   onOpenDrawer: () => void;
   title: string;
 }) {
@@ -125,7 +188,8 @@ function MobileTopBar({
           {title}
         </p>
       </div>
-      <div className="flex w-10 justify-end">
+      <div className="flex items-center gap-2">
+        <CommandPaletteTrigger compact onOpen={onOpenCommandPalette} />
         <UserButton
           appearance={{
             elements: {
@@ -151,7 +215,7 @@ function MobileNavigationDrawer({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         hideCloseButton
-        className="inset-y-0 left-0 top-0 h-full w-[min(18rem,calc(100vw-1.5rem))] translate-x-0 translate-y-0 rounded-none border-r border-olive-6 bg-olive-2 p-0 shadow-2xl data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100"
+        className="inset-y-0 top-0 left-0 h-full w-[min(18rem,calc(100vw-1.5rem))] translate-x-0 translate-y-0 rounded-none border-r border-olive-6 bg-olive-2 p-0 shadow-2xl data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100"
       >
         <DialogTitle className="sr-only">Navigation</DialogTitle>
         <DialogDescription className="sr-only">
@@ -185,7 +249,13 @@ function MobileNavigationDrawer({
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { isLoaded, isSignedIn } = useAuth();
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  const openCommandPalette = () => {
+    setIsDrawerOpen(false);
+    setIsCommandPaletteOpen(true);
+  };
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 768px)");
@@ -204,6 +274,21 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setIsDrawerOpen(false);
+        setIsCommandPaletteOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
   if (!isLoaded) {
     return <>{children}</>;
   }
@@ -217,10 +302,14 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="md:grid md:min-h-screen md:grid-cols-[14.5rem_minmax(0,1fr)]">
-      <DesktopSidebar pathname={pathname} />
+      <DesktopSidebar
+        pathname={pathname}
+        onOpenCommandPalette={openCommandPalette}
+      />
       <div className="min-w-0">
         <MobileTopBar
           title={pageTitle}
+          onOpenCommandPalette={openCommandPalette}
           onOpenDrawer={() => setIsDrawerOpen(true)}
         />
         <MobileNavigationDrawer
@@ -228,7 +317,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           pathname={pathname}
           onOpenChange={setIsDrawerOpen}
         />
-        <main className="md:min-h-screen pb-8">{children}</main>
+        <CommandPalette
+          open={isCommandPaletteOpen}
+          onOpenChange={setIsCommandPaletteOpen}
+        />
+        <main className="pb-8 md:min-h-screen">{children}</main>
       </div>
     </div>
   );
