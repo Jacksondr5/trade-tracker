@@ -140,18 +140,18 @@ describe("campaign trade plan hierarchy helpers", () => {
     expect(isStandaloneGroupExpanded(defaultPersistedLocalHierarchyState)).toBe(false);
   });
 
-  it("lets a saved standalone-group preference override the active route", () => {
+  it("respects an explicit standalone-group expansion preference", () => {
     expect(
       isStandaloneGroupExpanded(
         {
           ...defaultPersistedLocalHierarchyState,
           groups: {
             ...defaultPersistedLocalHierarchyState.groups,
-            standaloneTradePlans: false,
+            standaloneTradePlans: true,
           },
         },
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("keeps the desktop rail enabled on the new campaign route", () => {

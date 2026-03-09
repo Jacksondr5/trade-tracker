@@ -67,7 +67,8 @@ function normalizePersistedState(rawValue: string | null): PersistedLocalHierarc
       campaignRows:
         parsed.campaignRows !== undefined &&
         parsed.campaignRows !== null &&
-        typeof parsed.campaignRows === "object"
+        typeof parsed.campaignRows === "object" &&
+        !Array.isArray(parsed.campaignRows)
           ? parsed.campaignRows
           : defaultPersistedLocalHierarchyState.campaignRows,
       groups: {
