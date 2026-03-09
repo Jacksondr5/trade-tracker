@@ -64,8 +64,10 @@ describe("trade filter helpers", () => {
       ticker: "nvda",
       withoutPortfolio: true,
     });
-    expect(result.startDate).toBeTypeOf("number");
-    expect(result.endDate).toBeTypeOf("number");
+    expect(result.startDate).toBe(new Date(2026, 2, 1, 0, 0, 0, 0).getTime());
+    expect(result.endDate).toBe(
+      new Date(2026, 2, 9, 23, 59, 59, 999).getTime(),
+    );
   });
 
   it("ignores malformed account params and invalid page sizes", () => {

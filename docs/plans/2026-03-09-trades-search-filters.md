@@ -118,7 +118,7 @@ Run:
 
 ```bash
 git worktree list
-cp /Users/jackson/repos/jacksondr5/trade-tracker/.env.local .env.local
+cp .env.local.example .env.local
 pnpm install
 ```
 

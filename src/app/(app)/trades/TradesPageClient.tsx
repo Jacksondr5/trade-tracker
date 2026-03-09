@@ -207,6 +207,7 @@ export default function TradesPageClient({
   const isLoadingTradesPage = !tradesPage;
 
   const handleDateChange = (type: "startDate" | "endDate", value: string) => {
+    setEditingTradeId(null);
     if (type === "startDate") {
       setStartDateValue(value);
     } else {
@@ -217,12 +218,14 @@ export default function TradesPageClient({
   };
 
   const handlePortfolioChange = (value: string) => {
+    setEditingTradeId(null);
     setPortfolioValue(value);
     setCursor(null);
     setCursorHistory([]);
   };
 
   const handleAccountChange = (value: string) => {
+    setEditingTradeId(null);
     setAccountValue(value);
     setCursor(null);
     setCursorHistory([]);
@@ -231,6 +234,7 @@ export default function TradesPageClient({
   const handlePrevPage = () => {
     if (cursorHistory.length === 0) return;
 
+    setEditingTradeId(null);
     const nextCursorHistory = cursorHistory.slice(0, -1);
     const previousCursor = cursorHistory[cursorHistory.length - 1];
     setCursor(previousCursor);
@@ -240,11 +244,13 @@ export default function TradesPageClient({
   const handleNextPage = () => {
     if (!tradesPage || tradesPage.isDone) return;
 
+    setEditingTradeId(null);
     setCursorHistory([...cursorHistory, cursor]);
     setCursor(tradesPage.continueCursor);
   };
 
   const handlePageSizeChange = (nextPageSize: number) => {
+    setEditingTradeId(null);
     setPageSize(normalizeTradesPageSize(nextPageSize));
     setCursor(null);
     setCursorHistory([]);

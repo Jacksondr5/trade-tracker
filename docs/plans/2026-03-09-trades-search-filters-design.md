@@ -14,7 +14,7 @@ All filters remain combinable and URL-driven.
 
 ## Goals
 
-- keep the trades page focused on scanable execution review
+- keep the trades page focused on scannable execution review
 - remove duplicate date filtering affordances
 - support the most common ways the user narrows the execution record
 - preserve stable newest-first ordering and existing cursor pagination
