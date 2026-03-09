@@ -6,7 +6,7 @@ import { Menu, Search } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   Button,
   Dialog,
@@ -287,10 +287,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     shouldLoadLocalHierarchy ? {} : "skip",
   );
 
-  const openCommandPalette = () => {
+  const openCommandPalette = useCallback(() => {
     setIsDrawerOpen(false);
     setIsCommandPaletteOpen(true);
-  };
+  }, []);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 768px)");
@@ -313,8 +313,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        setIsDrawerOpen(false);
-        setIsCommandPaletteOpen(true);
+        openCommandPalette();
       }
     };
 
@@ -322,7 +321,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, []);
+  }, [openCommandPalette]);
 
   if (!isLoaded) {
     return <>{children}</>;
