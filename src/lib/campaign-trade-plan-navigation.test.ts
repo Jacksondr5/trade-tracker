@@ -53,7 +53,9 @@ describe("campaign trade plan navigation helpers", () => {
   it("detects campaign and trade-plan domain routes", () => {
     expect(isCampaignTradePlanPathname("/campaigns")).toBe(true);
     expect(isCampaignTradePlanPathname("/campaigns/campaign-1")).toBe(true);
+    expect(isCampaignTradePlanPathname("/campaigns/campaign-1/notes")).toBe(true);
     expect(isCampaignTradePlanPathname("/trade-plans/trade-plan-1")).toBe(true);
+    expect(isCampaignTradePlanPathname("/trade-plans/trade-plan-1/history")).toBe(true);
     expect(isCampaignTradePlanPathname("/notes")).toBe(false);
   });
 
@@ -69,6 +71,7 @@ describe("campaign trade plan navigation helpers", () => {
       tradePlanId: "trade-plan-1",
     });
     expect(getCampaignTradePlanDetailRouteContext("/campaigns")).toBeNull();
+    expect(getCampaignTradePlanDetailRouteContext("/campaigns/")).toBeNull();
   });
 
   it("builds campaign breadcrumbs from shared hierarchy data", () => {

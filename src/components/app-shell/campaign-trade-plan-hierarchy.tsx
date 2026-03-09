@@ -2,7 +2,6 @@
 
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { Fragment } from "react";
 import { capitalize } from "~/lib/format";
 import {
   type BreadcrumbSegment,
@@ -192,27 +191,26 @@ export function MobileHierarchyBreadcrumbs({
           const isCurrentPage = index === breadcrumbs.length - 1;
 
           return (
-            <Fragment key={`${segment.label}-${index}`}>
+            <li key={`${segment.label}-${index}`} className="flex items-center gap-1.5">
               {index > 0 ? (
-                <li aria-hidden="true">
-                  <ChevronRight className="h-3.5 w-3.5 text-olive-8" />
-                </li>
+                <ChevronRight className="h-3.5 w-3.5 text-olive-8" aria-hidden="true" />
               ) : null}
-              <li>
-                {segment.href && !isCurrentPage ? (
-                  <Link
-                    href={segment.href}
-                    className="transition-colors hover:text-olive-12"
-                  >
-                    {segment.label}
-                  </Link>
-                ) : (
-                  <span className={isCurrentPage ? "text-olive-12" : undefined}>
-                    {segment.label}
-                  </span>
-                )}
-              </li>
-            </Fragment>
+              {segment.href && !isCurrentPage ? (
+                <Link
+                  href={segment.href}
+                  className="transition-colors hover:text-olive-12"
+                >
+                  {segment.label}
+                </Link>
+              ) : (
+                <span
+                  className={isCurrentPage ? "text-olive-12" : undefined}
+                  aria-current={isCurrentPage ? "page" : undefined}
+                >
+                  {segment.label}
+                </span>
+              )}
+            </li>
           );
         })}
       </ol>
