@@ -15,7 +15,7 @@ import { api } from "~/convex/_generated/api";
 import {
   KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME,
   isKrakenDefaultAccountId,
-} from "../../../shared/imports/constants";
+} from "../../../../shared/imports/constants";
 
 type MappingSource = "ibkr" | "kraken";
 

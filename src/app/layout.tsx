@@ -2,8 +2,6 @@ import "~/styles/global.css";
 
 import { type Metadata } from "next";
 import { Providers } from "~/app/providers";
-import { AuthGate } from "~/components/AuthGate";
-import { Header } from "~/components/Header";
 
 // Required for Clerk - avoid static page generation issues during CI builds
 export const dynamic = "force-dynamic";
@@ -26,12 +24,9 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className="text-slate-12 bg-slate-900">
+      <body className="bg-olive-1 text-olive-12">
         <Providers>
-          <Header />
-          <main>
-            <AuthGate>{children}</AuthGate>
-          </main>
+          {children}
         </Providers>
       </body>
     </html>

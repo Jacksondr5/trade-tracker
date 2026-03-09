@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
-import type { BrokerageSource } from "../../../shared/imports/types";
+import type { BrokerageSource } from "../../../../shared/imports/types";
 import {
   EditTradeForm,
   type EditTradeFormValues,

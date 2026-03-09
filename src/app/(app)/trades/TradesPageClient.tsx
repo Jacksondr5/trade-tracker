@@ -29,7 +29,7 @@ import { cn } from "~/lib/utils";
 import {
   KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME,
   isKrakenDefaultAccountId,
-} from "../../../shared/imports/constants";
+} from "../../../../shared/imports/constants";
 import { EditTradeForm } from "./components/edit-trade-form";
 
 function formatDateForInput(epochMs: number): string {

@@ -122,7 +122,7 @@ export default function PortfolioPageClient({
                 <tr key={portfolio._id} className="hover:bg-slate-800/50">
                   <td className="whitespace-nowrap px-4 py-3 text-sm font-medium">
                     <Link
-                      href={`/portfolio/${portfolio._id}`}
+                      href={`/portfolios/${portfolio._id}`}
                       className="text-slate-12 hover:underline"
                       aria-label={`View portfolio ${portfolio.name}`}
                     >
