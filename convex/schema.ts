@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { campaignStatusValidator, tradePlanStatusValidator } from "./lib/statuses";
 
 export default defineSchema({
   notes: defineTable({
@@ -20,11 +21,7 @@ export default defineSchema({
     name: v.string(),
     ownerId: v.string(),
     retrospective: v.optional(v.string()),
-    status: v.union(
-      v.literal("active"),
-      v.literal("closed"),
-      v.literal("planning"),
-    ),
+    status: campaignStatusValidator,
     thesis: v.string(),
   })
     .index("by_owner", ["ownerId"])
@@ -60,12 +57,7 @@ export default defineSchema({
     ownerId: v.string(),
     rationale: v.optional(v.string()),
     sortOrder: v.optional(v.number()),
-    status: v.union(
-      v.literal("active"),
-      v.literal("closed"),
-      v.literal("idea"),
-      v.literal("watching"),
-    ),
+    status: tradePlanStatusValidator,
     targetConditions: v.optional(v.string()),
   })
     .index("by_owner", ["ownerId"])
