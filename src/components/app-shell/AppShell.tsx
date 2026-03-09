@@ -310,6 +310,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (!isLoaded || !isSignedIn) {
+      return;
+    }
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -321,7 +325,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [openCommandPalette]);
+  }, [isLoaded, isSignedIn, openCommandPalette]);
 
   if (!isLoaded) {
     return <>{children}</>;
