@@ -138,7 +138,6 @@ describe("campaign trade plan hierarchy helpers", () => {
 
   it("keeps the standalone group closed by default even on active standalone routes", () => {
     expect(isStandaloneGroupExpanded(defaultPersistedLocalHierarchyState)).toBe(false);
-    expect(isStandaloneGroupExpanded(defaultPersistedLocalHierarchyState)).toBe(false);
   });
 
   it("lets a saved standalone-group preference override the active route", () => {
