@@ -1,8 +1,11 @@
 import { mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
+import type { Doc, Id } from "./_generated/dataModel";
+import type { QueryCtx } from "./_generated/server";
 import { assertOwner, requireUser } from "./lib/auth";
 import { tradeValidator } from "./lib/tradeValidator";
 import { paginationOptsValidator } from "convex/server";
+import { KRAKEN_DEFAULT_ACCOUNT_ID } from "../shared/imports/constants";
 
 function normalizeTicker(ticker: string): string {
   const normalizedTicker = ticker.trim().toUpperCase();
@@ -10,6 +13,234 @@ function normalizeTicker(ticker: string): string {
     throw new ConvexError("Ticker is required");
   }
   return normalizedTicker;
+}
+
+type BrokerageSource = "ibkr" | "kraken";
+
+type ListTradesPageArgs = {
+  accountId?: string;
+  accountSource?: BrokerageSource;
+  endDate?: number;
+  paginationOpts: {
+    cursor: string | null;
+    numItems: number;
+  };
+  portfolioId?: Id<"portfolios">;
+  startDate?: number;
+  ticker?: string;
+  withoutPortfolio?: boolean;
+};
+
+type FilteredTradesCursorState = {
+  bufferedIds: Array<Id<"trades">>;
+  databaseCursor: string | null;
+  didReachEnd: boolean;
+  version: 1;
+};
+
+const FILTERED_TRADES_CURSOR_VERSION = 1;
+const MIN_FILTERED_TRADES_BATCH_SIZE = 50;
+const FILTERED_TRADES_BATCH_MULTIPLIER = 3;
+
+function hasAdditionalTradeFilters(args: ListTradesPageArgs): boolean {
+  return Boolean(
+    args.ticker ||
+      args.portfolioId ||
+      args.withoutPortfolio ||
+      (args.accountSource && args.accountId),
+  );
+}
+
+function encodeFilteredTradesCursor(
+  state: FilteredTradesCursorState,
+): string {
+  return JSON.stringify(state);
+}
+
+function decodeFilteredTradesCursor(
+  cursor: string | null,
+): FilteredTradesCursorState {
+  if (!cursor) {
+    return {
+      bufferedIds: [],
+      databaseCursor: null,
+      didReachEnd: false,
+      version: FILTERED_TRADES_CURSOR_VERSION,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(cursor) as Partial<FilteredTradesCursorState>;
+    if (
+      parsed.version === FILTERED_TRADES_CURSOR_VERSION &&
+      Array.isArray(parsed.bufferedIds) &&
+      (typeof parsed.databaseCursor === "string" ||
+        parsed.databaseCursor === null) &&
+      typeof parsed.didReachEnd === "boolean"
+    ) {
+      return {
+        bufferedIds: parsed.bufferedIds,
+        databaseCursor: parsed.databaseCursor,
+        didReachEnd: parsed.didReachEnd,
+        version: FILTERED_TRADES_CURSOR_VERSION,
+      };
+    }
+  } catch {
+    // Fall through to compatibility mode for pre-filter cursors.
+  }
+
+  return {
+    bufferedIds: [],
+    databaseCursor: cursor,
+    didReachEnd: false,
+    version: FILTERED_TRADES_CURSOR_VERSION,
+  };
+}
+
+function normalizeBrokerageAccountId(
+  source: BrokerageSource,
+  accountId: string | undefined,
+): string | undefined {
+  const normalizedAccountId = accountId?.trim() || undefined;
+  if (source === "kraken") {
+    return normalizedAccountId ?? KRAKEN_DEFAULT_ACCOUNT_ID;
+  }
+  return normalizedAccountId;
+}
+
+function matchesTradeFilters(
+  trade: Doc<"trades">,
+  args: ListTradesPageArgs,
+): boolean {
+  if (args.ticker) {
+    const normalizedTickerFilter = args.ticker.trim().toUpperCase();
+    if (!trade.ticker.toUpperCase().includes(normalizedTickerFilter)) {
+      return false;
+    }
+  }
+
+  if (args.withoutPortfolio && trade.portfolioId !== undefined) {
+    return false;
+  }
+
+  if (args.portfolioId && trade.portfolioId !== args.portfolioId) {
+    return false;
+  }
+
+  if (args.accountSource && args.accountId) {
+    if (trade.source !== args.accountSource) {
+      return false;
+    }
+
+    const tradeAccountId = normalizeBrokerageAccountId(
+      args.accountSource,
+      trade.brokerageAccountId,
+    );
+
+    if (tradeAccountId !== normalizeBrokerageAccountId(args.accountSource, args.accountId)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function getTradesByDateQuery(
+  ctx: QueryCtx,
+  ownerId: string,
+  args: ListTradesPageArgs,
+) {
+  const queryByDate = ctx.db.query("trades");
+
+  if (args.startDate !== undefined && args.endDate !== undefined) {
+    return queryByDate
+      .withIndex("by_owner_date", (q) =>
+        q
+          .eq("ownerId", ownerId)
+          .gte("date", args.startDate!)
+          .lte("date", args.endDate!),
+      )
+      .order("desc");
+  }
+
+  if (args.startDate !== undefined) {
+    return queryByDate
+      .withIndex("by_owner_date", (q) =>
+        q.eq("ownerId", ownerId).gte("date", args.startDate!),
+      )
+      .order("desc");
+  }
+
+  if (args.endDate !== undefined) {
+    return queryByDate
+      .withIndex("by_owner_date", (q) =>
+        q.eq("ownerId", ownerId).lte("date", args.endDate!),
+      )
+      .order("desc");
+  }
+
+  return queryByDate
+    .withIndex("by_owner_date", (q) => q.eq("ownerId", ownerId))
+    .order("desc");
+}
+
+async function listFilteredTradesPage(
+  ctx: QueryCtx,
+  ownerId: string,
+  args: ListTradesPageArgs,
+) {
+  const cursorState = decodeFilteredTradesCursor(args.paginationOpts.cursor);
+  const trades = getTradesByDateQuery(ctx, ownerId, args);
+  const page: Array<Doc<"trades">> = [];
+  let bufferedIds = [...cursorState.bufferedIds];
+  let databaseCursor = cursorState.databaseCursor;
+  let didReachEnd = cursorState.didReachEnd;
+
+  while (page.length < args.paginationOpts.numItems) {
+    while (bufferedIds.length > 0 && page.length < args.paginationOpts.numItems) {
+      const nextTradeId = bufferedIds.shift();
+      if (!nextTradeId) {
+        break;
+      }
+
+      const trade = await ctx.db.get(nextTradeId);
+      if (trade && trade.ownerId === ownerId && matchesTradeFilters(trade, args)) {
+        page.push(trade);
+      }
+    }
+
+    if (page.length >= args.paginationOpts.numItems || didReachEnd) {
+      break;
+    }
+
+    const nextBatch = await trades.paginate({
+      cursor: databaseCursor,
+      numItems: Math.max(
+        args.paginationOpts.numItems * FILTERED_TRADES_BATCH_MULTIPLIER,
+        MIN_FILTERED_TRADES_BATCH_SIZE,
+      ),
+    });
+    const filteredBatch = nextBatch.page.filter((trade) =>
+      matchesTradeFilters(trade, args),
+    );
+    const remainingSlots = args.paginationOpts.numItems - page.length;
+
+    page.push(...filteredBatch.slice(0, remainingSlots));
+    bufferedIds = filteredBatch.slice(remainingSlots).map((trade) => trade._id);
+    databaseCursor = nextBatch.continueCursor;
+    didReachEnd = nextBatch.isDone;
+  }
+
+  return {
+    continueCursor: encodeFilteredTradesCursor({
+      bufferedIds,
+      databaseCursor,
+      didReachEnd,
+      version: FILTERED_TRADES_CURSOR_VERSION,
+    }),
+    isDone: bufferedIds.length === 0 && didReachEnd,
+    page,
+  };
 }
 
 
@@ -199,46 +430,24 @@ const paginatedTradesValidator = v.object({
 
 export const listTradesPage = query({
   args: {
+    accountId: v.optional(v.string()),
+    accountSource: v.optional(v.union(v.literal("ibkr"), v.literal("kraken"))),
     endDate: v.optional(v.number()),
     paginationOpts: paginationOptsValidator,
+    portfolioId: v.optional(v.id("portfolios")),
     startDate: v.optional(v.number()),
+    ticker: v.optional(v.string()),
+    withoutPortfolio: v.optional(v.boolean()),
   },
   returns: paginatedTradesValidator,
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
-    const { endDate, paginationOpts, startDate } = args;
-    const queryByDate = ctx.db.query("trades");
+    const tradesByDate = getTradesByDateQuery(ctx, ownerId, args);
 
-    if (startDate !== undefined && endDate !== undefined) {
-      return await queryByDate
-        .withIndex("by_owner_date", (q) =>
-          q.eq("ownerId", ownerId).gte("date", startDate).lte("date", endDate),
-        )
-        .order("desc")
-        .paginate(paginationOpts);
+    if (hasAdditionalTradeFilters(args)) {
+      return await listFilteredTradesPage(ctx, ownerId, args);
     }
 
-    if (startDate !== undefined) {
-      return await queryByDate
-        .withIndex("by_owner_date", (q) =>
-          q.eq("ownerId", ownerId).gte("date", startDate),
-        )
-        .order("desc")
-        .paginate(paginationOpts);
-    }
-
-    if (endDate !== undefined) {
-      return await queryByDate
-        .withIndex("by_owner_date", (q) =>
-          q.eq("ownerId", ownerId).lte("date", endDate),
-        )
-        .order("desc")
-        .paginate(paginationOpts);
-    }
-
-    return await queryByDate
-      .withIndex("by_owner_date", (q) => q.eq("ownerId", ownerId))
-      .order("desc")
-      .paginate(paginationOpts);
+    return await tradesByDate.paginate(args.paginationOpts);
   },
 });

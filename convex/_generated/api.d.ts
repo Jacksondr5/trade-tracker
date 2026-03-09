@@ -13,6 +13,7 @@ import type * as analytics from "../analytics.js";
 import type * as campaigns from "../campaigns.js";
 import type * as imports from "../imports.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_statuses from "../lib/statuses.js";
 import type * as lib_tradeValidator from "../lib/tradeValidator.js";
 import type * as navigation from "../navigation.js";
 import type * as notes from "../notes.js";
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   campaigns: typeof campaigns;
   imports: typeof imports;
   "lib/auth": typeof lib_auth;
+  "lib/statuses": typeof lib_statuses;
   "lib/tradeValidator": typeof lib_tradeValidator;
   navigation: typeof navigation;
   notes: typeof notes;
