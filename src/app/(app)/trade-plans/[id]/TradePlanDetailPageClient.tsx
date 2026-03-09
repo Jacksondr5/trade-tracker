@@ -1,13 +1,15 @@
 "use client";
 
-import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
+import { Preloaded, useMutation, usePreloadedQuery, useQuery } from "convex/react";
 import { Check, CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { MobileHierarchyBreadcrumbs } from "~/components/app-shell/campaign-trade-plan-hierarchy";
 import { Alert, Badge } from "~/components/ui";
 import NotesSection from "~/components/NotesSection";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
+import { buildHierarchyBreadcrumbs } from "~/lib/campaign-trade-plan-navigation";
 import { formatCurrency } from "~/lib/format";
 
 type TradePlanStatus = "idea" | "watching" | "active" | "closed";
@@ -36,6 +38,7 @@ export default function TradePlanDetailPageClient({
   const accountMappings = usePreloadedQuery(preloadedAccountMappings);
   const inboxTradesForPlan = usePreloadedQuery(preloadedInboxTradesForPlan);
   const portfolios = usePreloadedQuery(preloadedPortfolios);
+  const hierarchy = useQuery(api.navigation.getCampaignTradePlanHierarchy, {});
 
   const addNote = useMutation(api.notes.addNote);
   const updateNoteM = useMutation(api.notes.updateNote);
@@ -69,6 +72,13 @@ export default function TradePlanDetailPageClient({
   const [acceptingInboxTradeIds, setAcceptingInboxTradeIds] = useState<Set<string>>(
     new Set(),
   );
+  const breadcrumbs =
+    hierarchy === undefined
+      ? null
+      : buildHierarchyBreadcrumbs(hierarchy, {
+          kind: "tradePlan",
+          tradePlanId,
+        });
 
   useEffect(() => {
     if (tradePlan && !planNameInitialized) {
@@ -179,7 +189,21 @@ export default function TradePlanDetailPageClient({
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8">
-      <Link href="/trade-plans" className="mb-2 inline-block text-sm text-slate-11 hover:text-slate-12">
+      {breadcrumbs !== null ? (
+        <MobileHierarchyBreadcrumbs breadcrumbs={breadcrumbs} />
+      ) : (
+        <Link
+          href="/trade-plans"
+          className="mb-2 inline-block text-sm text-slate-11 hover:text-slate-12 md:hidden"
+        >
+          &larr; Back to Trade Plans
+        </Link>
+      )}
+
+      <Link
+        href="/trade-plans"
+        className="mb-2 hidden text-sm text-slate-11 hover:text-slate-12 md:inline-block"
+      >
         &larr; Back to Trade Plans
       </Link>
 

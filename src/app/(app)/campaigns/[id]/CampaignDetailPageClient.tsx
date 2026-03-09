@@ -1,15 +1,17 @@
 "use client";
 
 import { ConvexError } from "convex/values";
-import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
+import { Preloaded, useMutation, usePreloadedQuery, useQuery } from "convex/react";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
+import { MobileHierarchyBreadcrumbs } from "~/components/app-shell/campaign-trade-plan-hierarchy";
 import { Alert, Badge, Button, useAppForm } from "~/components/ui";
 import NotesSection from "~/components/NotesSection";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
+import { buildHierarchyBreadcrumbs } from "~/lib/campaign-trade-plan-navigation";
 import { formatCurrency } from "~/lib/format";
 
 type CampaignStatus = "planning" | "active" | "closed";
@@ -65,6 +67,7 @@ export default function CampaignDetailPageClient({
   const campaignNotes = usePreloadedQuery(preloadedCampaignNotes);
   const tradePlans = usePreloadedQuery(preloadedTradePlans);
   const trades = usePreloadedQuery(preloadedCampaignTrades);
+  const hierarchy = useQuery(api.navigation.getCampaignTradePlanHierarchy, {});
 
   const addNote = useMutation(api.notes.addNote);
   const updateNote = useMutation(api.notes.updateNote);
@@ -107,6 +110,13 @@ export default function CampaignDetailPageClient({
   const [tradePlanCreateError, setTradePlanCreateError] = useState<string | null>(null);
   const [tradePlanStatusError, setTradePlanStatusError] = useState<string | null>(null);
   const [showCreateTradePlanForm, setShowCreateTradePlanForm] = useState(false);
+  const breadcrumbs =
+    hierarchy === undefined
+      ? null
+      : buildHierarchyBreadcrumbs(hierarchy, {
+          campaignId,
+          kind: "campaign",
+        });
 
   const campaignNameForm = useAppForm({
     defaultValues: {
@@ -309,7 +319,21 @@ export default function CampaignDetailPageClient({
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8">
-      <Link href="/campaigns" className="mb-2 inline-block text-sm text-slate-11 hover:text-slate-12">
+      {breadcrumbs !== null ? (
+        <MobileHierarchyBreadcrumbs breadcrumbs={breadcrumbs} />
+      ) : (
+        <Link
+          href="/campaigns"
+          className="mb-2 inline-block text-sm text-slate-11 hover:text-slate-12 md:hidden"
+        >
+          &larr; Back to Campaigns
+        </Link>
+      )}
+
+      <Link
+        href="/campaigns"
+        className="mb-2 hidden text-sm text-slate-11 hover:text-slate-12 md:inline-block"
+      >
         &larr; Back to Campaigns
       </Link>
 
