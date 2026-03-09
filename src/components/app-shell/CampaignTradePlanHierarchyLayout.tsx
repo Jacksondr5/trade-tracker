@@ -65,7 +65,9 @@ function normalizePersistedState(rawValue: string | null): PersistedLocalHierarc
     const parsed = JSON.parse(rawValue) as Partial<PersistedLocalHierarchyState>;
     return {
       campaignRows:
-        parsed.campaignRows !== undefined && typeof parsed.campaignRows === "object"
+        parsed.campaignRows !== undefined &&
+        parsed.campaignRows !== null &&
+        typeof parsed.campaignRows === "object"
           ? parsed.campaignRows
           : defaultPersistedLocalHierarchyState.campaignRows,
       groups: {
@@ -337,10 +339,7 @@ function DesktopLocalRail({
 }) {
   const watchlistExpanded = persistedState.groups.watchlist;
   const campaignsExpanded = persistedState.groups.campaigns;
-  const standaloneExpanded = isStandaloneGroupExpanded(
-    persistedState,
-    activeContext.isStandaloneTradePlanActive,
-  );
+  const standaloneExpanded = isStandaloneGroupExpanded(persistedState);
 
   return (
     <aside className="hidden border-r border-olive-6 bg-olive-2 md:fixed md:top-0 md:left-[14.5rem] md:z-20 md:flex md:h-screen md:w-[23rem] md:flex-col">
@@ -521,10 +520,7 @@ export function CampaignTradePlanHierarchyLayout({
         ...currentState.groups,
         [group]:
           group === "standaloneTradePlans"
-            ? !isStandaloneGroupExpanded(
-                currentState,
-                activeContext.isStandaloneTradePlanActive,
-              )
+            ? !isStandaloneGroupExpanded(currentState)
             : !currentState.groups[group],
       },
     }));

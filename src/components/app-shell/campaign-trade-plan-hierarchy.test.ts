@@ -108,7 +108,7 @@ describe("campaign trade plan hierarchy helpers", () => {
     });
   });
 
-  it("forces active and watched-child campaigns open over persisted collapse state", () => {
+  it("respects persisted collapse state for campaigns", () => {
     const persistedState = {
       ...defaultPersistedLocalHierarchyState,
       campaignRows: {
@@ -137,8 +137,8 @@ describe("campaign trade plan hierarchy helpers", () => {
   });
 
   it("keeps the standalone group closed by default even on active standalone routes", () => {
-    expect(isStandaloneGroupExpanded(defaultPersistedLocalHierarchyState, true)).toBe(false);
-    expect(isStandaloneGroupExpanded(defaultPersistedLocalHierarchyState, false)).toBe(false);
+    expect(isStandaloneGroupExpanded(defaultPersistedLocalHierarchyState)).toBe(false);
+    expect(isStandaloneGroupExpanded(defaultPersistedLocalHierarchyState)).toBe(false);
   });
 
   it("lets a saved standalone-group preference override the active route", () => {
@@ -151,7 +151,6 @@ describe("campaign trade plan hierarchy helpers", () => {
             standaloneTradePlans: false,
           },
         },
-        true,
       ),
     ).toBe(false);
   });
