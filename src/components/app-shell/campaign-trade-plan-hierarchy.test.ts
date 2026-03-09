@@ -7,7 +7,7 @@ import {
   isStandaloneGroupExpanded,
   supportsDesktopLocalHierarchy,
   type CampaignTradePlanHierarchy,
-} from "./campaign-trade-plan-hierarchy";
+} from "./campaign-trade-plan-hierarchy-state";
 
 const campaignAlphaId = "campaign_alpha" as Id<"campaigns">;
 const campaignBetaId = "campaign_beta" as Id<"campaigns">;

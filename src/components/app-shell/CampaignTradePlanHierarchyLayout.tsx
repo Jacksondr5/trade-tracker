@@ -22,7 +22,7 @@ import {
   type CampaignTradePlanHierarchy,
   type PersistedLocalHierarchyState,
   type TradePlanNavigationItem,
-} from "./campaign-trade-plan-hierarchy";
+} from "./campaign-trade-plan-hierarchy-state";
 
 const emptyHierarchy: CampaignTradePlanHierarchy = {
   campaigns: [],
