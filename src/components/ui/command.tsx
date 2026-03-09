@@ -67,8 +67,11 @@ function CommandDialog({
 
 function CommandInput({
   className,
+  dataTestId,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.Input>) {
+}: React.ComponentProps<typeof CommandPrimitive.Input> & {
+  dataTestId: string;
+}) {
   return (
     <div
       data-slot="command-input-wrapper"
@@ -77,6 +80,7 @@ function CommandInput({
       <SearchIcon className="size-4 shrink-0 text-olive-11" />
       <CommandPrimitive.Input
         data-slot="command-input"
+        data-testid={dataTestId}
         className={cn(
           "flex h-10 w-full rounded-md bg-transparent py-3 text-sm text-olive-12 outline-hidden placeholder:text-olive-10 disabled:cursor-not-allowed disabled:opacity-50",
           className,
@@ -146,11 +150,15 @@ function CommandSeparator({
 
 function CommandItem({
   className,
+  dataTestId,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.Item>) {
+}: React.ComponentProps<typeof CommandPrimitive.Item> & {
+  dataTestId: string;
+}) {
   return (
     <CommandPrimitive.Item
       data-slot="command-item"
+      data-testid={dataTestId}
       className={cn(
         "relative flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-[selected=true]:bg-blue-3 data-[selected=true]:text-blue-12 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-olive-11 data-[selected=true]:[&_svg:not([class*='text-'])]:text-blue-11",
         className,

@@ -112,6 +112,7 @@ export function CommandPalette({
     >
       <CommandInput
         autoFocus
+        dataTestId="command-palette-input"
         placeholder="Jump to a campaign or trade plan..."
         value={searchQuery}
         onValueChange={setSearchQuery}
@@ -124,6 +125,7 @@ export function CommandPalette({
             {filteredSections.watchlist.map((item) => (
               <CommandItem
                 key={`${item.itemType}:${item.id}`}
+                dataTestId={`command-palette-watchlist-${item.itemType}-${item.id}`}
                 value={item.searchText}
                 onSelect={() => handleSelect(item.href)}
               >
@@ -148,6 +150,7 @@ export function CommandPalette({
             {filteredSections.campaigns.map((item) => (
               <CommandItem
                 key={`${item.itemType}:${item.id}`}
+                dataTestId={`command-palette-campaign-${item.id}`}
                 value={item.searchText}
                 onSelect={() => handleSelect(item.href)}
               >
@@ -168,6 +171,7 @@ export function CommandPalette({
             {filteredSections.tradePlans.map((item) => (
               <CommandItem
                 key={`${item.itemType}:${item.id}`}
+                dataTestId={`command-palette-trade-plan-${item.id}`}
                 value={item.searchText}
                 onSelect={() => handleSelect(item.href)}
               >
