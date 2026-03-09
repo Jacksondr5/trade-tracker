@@ -180,9 +180,9 @@ function MobileNavigationDrawer({
             {hasLocalHierarchy ? (
               localHierarchy === undefined ? (
                 <div className="mt-5 space-y-2 border-t border-olive-6 px-3 pt-5">
-                  <h3 className="text-xs font-medium uppercase tracking-[0.18em] text-olive-10">
+                  <p className="text-xs font-medium uppercase tracking-[0.18em] text-olive-10">
                     Local hierarchy
-                  </h3>
+                  </p>
                   <p className="text-sm text-olive-10">Loading hierarchy...</p>
                 </div>
               ) : (
