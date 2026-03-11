@@ -1,6 +1,30 @@
 export type CampaignNavigationStatus = "planning" | "active" | "closed";
 export type TradePlanNavigationStatus = "idea" | "watching" | "active" | "closed";
 
+interface TradePlanRelationshipSource {
+  parentCampaign: {
+    name: string;
+  } | null;
+}
+
+export const LINKED_TRADE_PLAN_LABEL = "Linked Trade Plan";
+export const STANDALONE_TRADE_PLAN_LABEL = "Standalone Trade Plan";
+export const STANDALONE_TRADE_PLANS_LABEL = "Standalone Trade Plans";
+
+export function getTradePlanRelationshipLabel(
+  tradePlan: TradePlanRelationshipSource,
+): string {
+  return tradePlan.parentCampaign === null
+    ? STANDALONE_TRADE_PLAN_LABEL
+    : LINKED_TRADE_PLAN_LABEL;
+}
+
+export function getTradePlanRelationshipContextLabel(
+  tradePlan: TradePlanRelationshipSource,
+): string {
+  return tradePlan.parentCampaign?.name ?? STANDALONE_TRADE_PLAN_LABEL;
+}
+
 export interface ParentCampaignNavigationContext {
   href: string;
   id: string;
@@ -82,7 +106,7 @@ function findCampaignItem(
   return hierarchy.campaigns.find((campaign) => campaign.id === campaignId) ?? null;
 }
 
-function findTradePlanItem(
+export function findTradePlanNavigationItem(
   hierarchy: CampaignTradePlanHierarchy,
   tradePlanId: string,
 ): TradePlanNavigationItem | null {
@@ -116,7 +140,7 @@ export function buildHierarchyBreadcrumbs(
     ];
   }
 
-  const tradePlan = findTradePlanItem(hierarchy, routeContext.tradePlanId);
+  const tradePlan = findTradePlanNavigationItem(hierarchy, routeContext.tradePlanId);
   if (tradePlan === null) {
     return null;
   }
@@ -124,7 +148,7 @@ export function buildHierarchyBreadcrumbs(
   if (tradePlan.parentCampaign === null) {
     return [
       { href: "/trade-plans", label: "Trade Plans" },
-      { label: "Standalone" },
+      { label: STANDALONE_TRADE_PLAN_LABEL },
       { label: tradePlan.name },
     ];
   }

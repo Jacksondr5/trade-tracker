@@ -123,7 +123,7 @@ describe("command palette helpers", () => {
         statusLabel: "Idea",
       },
       {
-        contextLabel: "ARKK • Standalone",
+        contextLabel: "ARKK • Standalone Trade Plan",
         id: "plan-3",
         statusLabel: "Active",
       },

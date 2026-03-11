@@ -8,6 +8,10 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Badge, Button, type BadgeProps } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
+import {
+  getTradePlanRelationshipContextLabel,
+  STANDALONE_TRADE_PLANS_LABEL,
+} from "~/lib/campaign-trade-plan-navigation";
 import { capitalize } from "~/lib/format";
 import { cn } from "~/lib/utils";
 import {
@@ -182,7 +186,7 @@ function TradePlanRow({
           </div>
           <p className="truncate text-xs text-olive-10">
             {showParentContext
-              ? `${item.instrumentSymbol} • ${item.parentCampaign?.name ?? "Standalone"}`
+              ? `${item.instrumentSymbol} • ${getTradePlanRelationshipContextLabel(item)}`
               : item.instrumentSymbol}
           </p>
         </div>
@@ -340,7 +344,10 @@ function DesktopLocalRail({
 }) {
   const watchlistExpanded = persistedState.groups.watchlist;
   const campaignsExpanded = persistedState.groups.campaigns;
-  const standaloneExpanded = isStandaloneGroupExpanded(persistedState);
+  const standaloneExpanded = isStandaloneGroupExpanded(
+    persistedState,
+    activeContext.isStandaloneTradePlanActive,
+  );
 
   return (
     <aside className="hidden border-r border-olive-6 bg-olive-2 md:fixed md:top-0 md:left-[14.5rem] md:z-20 md:flex md:h-screen md:w-[23rem] md:flex-col">
@@ -444,7 +451,7 @@ function DesktopLocalRail({
             </RailGroup>
 
             <RailGroup
-              title="Standalone Trade Plans"
+              title={STANDALONE_TRADE_PLANS_LABEL}
               count={hierarchy.standaloneTradePlans.length}
               expanded={standaloneExpanded}
               onToggle={() => onToggleGroup("standaloneTradePlans")}

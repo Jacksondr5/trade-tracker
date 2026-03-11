@@ -1,3 +1,8 @@
+import {
+  getTradePlanRelationshipContextLabel,
+  getTradePlanRelationshipLabel,
+} from "../../lib/campaign-trade-plan-navigation";
+
 export interface CommandPaletteCampaignItem {
   href: string;
   id: string;
@@ -78,10 +83,8 @@ function createCommandPaletteItem(
     };
   }
 
-  const parentLabel = item.parentCampaign?.name ?? "Standalone";
-
   return {
-    contextLabel: `${item.instrumentSymbol} • ${parentLabel}`,
+    contextLabel: `${item.instrumentSymbol} • ${getTradePlanRelationshipContextLabel(item)}`,
     href: item.href,
     id: item.id,
     instrumentSymbol: item.instrumentSymbol,
@@ -92,7 +95,8 @@ function createCommandPaletteItem(
       item.name,
       item.instrumentSymbol,
       item.parentCampaign?.name,
-      parentLabel,
+      getTradePlanRelationshipLabel(item),
+      getTradePlanRelationshipContextLabel(item),
       "trade plan",
     ]),
     statusLabel: item.status.charAt(0).toUpperCase() + item.status.slice(1),
