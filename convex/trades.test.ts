@@ -92,6 +92,31 @@ describe("trades filters", () => {
     expect(secondPage.isDone).toBe(true);
   });
 
+  it("rebuilds the filtered date query when one request needs multiple batches", async () => {
+    const matchingTradeDate = Date.UTC(2026, 2, 10);
+
+    for (let offset = 0; offset < 50; offset += 1) {
+      await insertTrade({
+        date: matchingTradeDate + (offset + 1) * 60_000,
+        ticker: `MSFT${offset}`,
+      });
+    }
+
+    await insertTrade({ date: matchingTradeDate, ticker: "AAPL" });
+
+    const result = await asUser().query(api.trades.listTradesPage, {
+      paginationOpts: {
+        cursor: null,
+        numItems: 1,
+      },
+      ticker: "aa",
+    });
+
+    expect(result.page).toHaveLength(1);
+    expect(result.page[0].ticker).toBe("AAPL");
+    expect(result.isDone).toBe(true);
+  });
+
   it("combines date, portfolio, and account filters", async () => {
     const retirementPortfolio = await insertPortfolio("Retirement");
     const tradingPortfolio = await insertPortfolio("Trading");

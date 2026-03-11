@@ -190,7 +190,6 @@ async function listFilteredTradesPage(
   args: ListTradesPageArgs,
 ) {
   const cursorState = decodeFilteredTradesCursor(args.paginationOpts.cursor);
-  const trades = getTradesByDateQuery(ctx, ownerId, args);
   const page: Array<Doc<"trades">> = [];
   let bufferedIds = [...cursorState.bufferedIds];
   let databaseCursor = cursorState.databaseCursor;
@@ -213,7 +212,7 @@ async function listFilteredTradesPage(
       break;
     }
 
-    const nextBatch = await trades.paginate({
+    const nextBatch = await getTradesByDateQuery(ctx, ownerId, args).paginate({
       cursor: databaseCursor,
       numItems: Math.max(
         args.paginationOpts.numItems * FILTERED_TRADES_BATCH_MULTIPLIER,
