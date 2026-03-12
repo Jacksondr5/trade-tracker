@@ -2,9 +2,20 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT_DIR = path.dirname(
-  path.dirname(path.dirname(path.dirname(fileURLToPath(import.meta.url)))),
-);
+function findProjectRoot(startDir: string): string {
+  let currentDir = startDir;
+
+  while (currentDir !== path.dirname(currentDir)) {
+    if (fs.existsSync(path.join(currentDir, "package.json"))) {
+      return currentDir;
+    }
+    currentDir = path.dirname(currentDir);
+  }
+
+  throw new Error("Could not find project root from tests/e2e/helpers/env.ts");
+}
+
+const ROOT_DIR = findProjectRoot(path.dirname(fileURLToPath(import.meta.url)));
 
 export const PLAYWRIGHT_AUTH_FILE = path.join(
   ROOT_DIR,
@@ -30,7 +41,18 @@ function loadDotenvLocal(): Record<string, string> {
       )
       .map((line) => {
         const delimiterIndex = line.indexOf("=");
-        return [line.slice(0, delimiterIndex), line.slice(delimiterIndex + 1)];
+        const key = line.slice(0, delimiterIndex).trim();
+        let value = line.slice(delimiterIndex + 1).trim();
+
+        if (
+          value.length >= 2 &&
+          ((value.startsWith('"') && value.endsWith('"')) ||
+            (value.startsWith("'") && value.endsWith("'")))
+        ) {
+          value = value.slice(1, -1);
+        }
+
+        return [key, value];
       }),
   );
 }

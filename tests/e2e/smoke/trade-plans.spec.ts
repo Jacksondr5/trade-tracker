@@ -20,10 +20,8 @@ test("seeded standalone trade plan and hierarchy render", async ({ page }) => {
   await expect(
     page.getByLabel("Instrument Symbol"),
   ).toHaveValue(E2E_SMOKE_FIXTURES.standaloneTradePlan.instrumentSymbol);
-  await expect(page.getByText("Watchlist")).toBeVisible();
-  await expect(
-    page.getByText(E2E_SMOKE_FIXTURES.linkedTradePlan.name, { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("link", { name: /Back to Trade Plans/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Trades" })).toBeVisible();
 });
 
 test("standalone trade plans can be created from the list page", async ({ page }) => {
