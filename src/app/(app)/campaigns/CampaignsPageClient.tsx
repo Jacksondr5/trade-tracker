@@ -65,6 +65,16 @@ function PendingFilterChrome() {
               0 0 0 0 rgba(82, 169, 255, 0.06);
           }
         }
+
+        @media (prefers-reduced-motion: reduce) {
+          .pulseOutline {
+            animation: none;
+            border-color: rgba(234, 246, 255, 0.95);
+            box-shadow:
+              0 0 0 2px rgba(82, 169, 255, 0.14),
+              0 0 0 5px rgba(82, 169, 255, 0.08);
+          }
+        }
       `}</style>
     </>
   );

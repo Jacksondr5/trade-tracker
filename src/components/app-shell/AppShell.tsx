@@ -268,14 +268,63 @@ function MobileNavigationDrawer({
   );
 }
 
+function AuthenticatedShell({
+  children,
+  isCommandPaletteOpen,
+  isDrawerOpen,
+  onOpenCommandPalette,
+  onSetCommandPaletteOpen,
+  onSetDrawerOpen,
+  pathname,
+}: {
+  children: ReactNode;
+  isCommandPaletteOpen: boolean;
+  isDrawerOpen: boolean;
+  onOpenCommandPalette: () => void;
+  onSetCommandPaletteOpen: (open: boolean) => void;
+  onSetDrawerOpen: (open: boolean) => void;
+  pathname: string;
+}) {
+  const { hierarchy } = useNavigationData();
+  const hasLocalHierarchy = isCampaignTradePlanPathname(pathname);
+  const localHierarchy = hasLocalHierarchy && isDrawerOpen ? hierarchy : null;
+  const activeItem = getActiveAppNavigationItem(pathname);
+  const pageTitle = activeItem?.label ?? "Trade Tracker";
+
+  return (
+    <div className="md:grid md:min-h-screen md:grid-cols-[14.5rem_minmax(0,1fr)]">
+      <DesktopSidebar
+        pathname={pathname}
+        onOpenCommandPalette={onOpenCommandPalette}
+      />
+      <div className="min-w-0">
+        <MobileTopBar
+          title={pageTitle}
+          onOpenCommandPalette={onOpenCommandPalette}
+          onOpenDrawer={() => onSetDrawerOpen(true)}
+        />
+        <MobileNavigationDrawer
+          hasLocalHierarchy={hasLocalHierarchy}
+          localHierarchy={localHierarchy}
+          open={isDrawerOpen}
+          pathname={pathname}
+          onOpenChange={onSetDrawerOpen}
+        />
+        <CommandPalette
+          open={isCommandPaletteOpen}
+          onOpenChange={onSetCommandPaletteOpen}
+        />
+        <main className="pb-8 md:min-h-screen">{children}</main>
+      </div>
+    </div>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { isLoaded, isSignedIn } = useAuth();
-  const { hierarchy } = useNavigationData();
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const hasLocalHierarchy = isCampaignTradePlanPathname(pathname);
-  const localHierarchy = hasLocalHierarchy && isDrawerOpen ? hierarchy : null;
 
   const openCommandPalette = useCallback(() => {
     setIsDrawerOpen(false);
@@ -325,34 +374,16 @@ export function AppShell({ children }: { children: ReactNode }) {
     return <>{children}</>;
   }
 
-  const activeItem = getActiveAppNavigationItem(pathname);
-  const pageTitle = activeItem?.label ?? "Trade Tracker";
-
   return (
-    <div className="md:grid md:min-h-screen md:grid-cols-[14.5rem_minmax(0,1fr)]">
-      <DesktopSidebar
-        pathname={pathname}
-        onOpenCommandPalette={openCommandPalette}
-      />
-      <div className="min-w-0">
-        <MobileTopBar
-          title={pageTitle}
-          onOpenCommandPalette={openCommandPalette}
-          onOpenDrawer={() => setIsDrawerOpen(true)}
-        />
-        <MobileNavigationDrawer
-          hasLocalHierarchy={hasLocalHierarchy}
-          localHierarchy={localHierarchy}
-          open={isDrawerOpen}
-          pathname={pathname}
-          onOpenChange={setIsDrawerOpen}
-        />
-        <CommandPalette
-          open={isCommandPaletteOpen}
-          onOpenChange={setIsCommandPaletteOpen}
-        />
-        <main className="pb-8 md:min-h-screen">{children}</main>
-      </div>
-    </div>
+    <AuthenticatedShell
+      pathname={pathname}
+      isCommandPaletteOpen={isCommandPaletteOpen}
+      isDrawerOpen={isDrawerOpen}
+      onOpenCommandPalette={openCommandPalette}
+      onSetCommandPaletteOpen={setIsCommandPaletteOpen}
+      onSetDrawerOpen={setIsDrawerOpen}
+    >
+      {children}
+    </AuthenticatedShell>
   );
 }

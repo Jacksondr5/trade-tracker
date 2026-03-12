@@ -36,6 +36,13 @@ export default function TradePlansPageClient({
   );
 
   const [error, setError] = useState<string | null>(null);
+  const [closePending, setClosePending] = useState<Id<"tradePlans"> | null>(
+    null,
+  );
+  const [closeError, setCloseError] = useState<{
+    tradePlanId: Id<"tradePlans">;
+    message: string;
+  } | null>(null);
 
   const standalonePlans = tradePlans.filter((plan) => !plan.campaignId);
   const linkedPlanCount = tradePlans.length - standalonePlans.length;
@@ -72,15 +79,26 @@ export default function TradePlansPageClient({
   });
 
   const handleClosePlan = async (tradePlanId: Id<"tradePlans">) => {
+    setCloseError((current) =>
+      current?.tradePlanId === tradePlanId ? null : current,
+    );
+    setClosePending(tradePlanId);
+
     try {
       await updateTradePlanStatus({
         status: "closed",
         tradePlanId,
       });
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to close trade plan",
+      setCloseError((current) =>
+        current?.tradePlanId === tradePlanId ? null : current,
       );
+    } catch (err) {
+      setCloseError({
+        tradePlanId,
+        message: err instanceof Error ? err.message : "Failed to close trade plan",
+      });
+    } finally {
+      setClosePending((current) => (current === tradePlanId ? null : current));
     }
   };
 
@@ -194,12 +212,18 @@ export default function TradePlansPageClient({
                           onClick={() => {
                             void handleClosePlan(plan._id);
                           }}
+                          disabled={closePending === plan._id}
                         >
-                          Close
+                          {closePending === plan._id ? "Closing..." : "Close"}
                         </Button>
                       )}
                     </div>
                   </div>
+                  {closeError?.tradePlanId === plan._id ? (
+                    <Alert variant="error" className="mt-3">
+                      {closeError.message}
+                    </Alert>
+                  ) : null}
                 </div>
               ))}
             </div>

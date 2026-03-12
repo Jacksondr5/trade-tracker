@@ -77,15 +77,17 @@ function normalizePersistedState(
           : defaultPersistedLocalHierarchyState.campaignRows,
       groups: {
         campaigns:
-          parsed.groups?.campaigns ??
-          defaultPersistedLocalHierarchyState.groups.campaigns,
+          typeof parsed.groups?.campaigns === "boolean"
+            ? parsed.groups?.campaigns
+            : defaultPersistedLocalHierarchyState.groups.campaigns,
         standaloneTradePlans:
           typeof parsed.groups?.standaloneTradePlans === "boolean"
             ? parsed.groups.standaloneTradePlans
             : defaultPersistedLocalHierarchyState.groups.standaloneTradePlans,
         watchlist:
-          parsed.groups?.watchlist ??
-          defaultPersistedLocalHierarchyState.groups.watchlist,
+          typeof parsed.groups?.watchlist === "boolean"
+            ? parsed.groups?.watchlist
+            : defaultPersistedLocalHierarchyState.groups.watchlist,
       },
     };
   } catch {
@@ -225,6 +227,7 @@ function CampaignRow({
 }) {
   const active = isActiveItem(item, activeItemType, activeItemId);
   const parentActive = !active && item.id === activeCampaignId;
+  const childPanelId = `campaign-children-${item.id}`;
 
   return (
     <div className="space-y-1">
@@ -243,6 +246,8 @@ function CampaignRow({
           aria-label={
             expanded ? `Collapse ${item.name}` : `Expand ${item.name}`
           }
+          aria-expanded={expanded}
+          aria-controls={item.tradePlans.length > 0 ? childPanelId : undefined}
         >
           {expanded ? (
             <ChevronDown className="h-4 w-4" />
@@ -282,7 +287,10 @@ function CampaignRow({
       </div>
 
       {expanded ? (
-        <div className="ml-10 space-y-1 border-l border-olive-6 pl-3">
+        <div
+          id={childPanelId}
+          className="ml-10 space-y-1 border-l border-olive-6 pl-3"
+        >
           {item.tradePlans.length === 0 ? (
             <p className="px-3 py-1 text-xs text-olive-10">
               No linked trade plans.
@@ -312,12 +320,14 @@ function RailGroup({
   count,
   expanded,
   onToggle,
+  panelId,
   title,
 }: {
   children: ReactNode;
   count: number;
   expanded: boolean;
   onToggle: () => void;
+  panelId: string;
   title: string;
 }) {
   return (
@@ -330,6 +340,8 @@ function RailGroup({
           dataTestId={`toggle-local-group-${title.toLowerCase().replace(/\s+/g, "-")}`}
           className="h-auto min-w-0 justify-start gap-2 px-1 py-1 text-left text-xs font-medium tracking-[0.18em] text-olive-10 uppercase hover:bg-transparent hover:text-olive-12"
           onClick={onToggle}
+          aria-expanded={expanded}
+          aria-controls={panelId}
         >
           {expanded ? (
             <ChevronDown className="h-3.5 w-3.5" />
@@ -340,7 +352,7 @@ function RailGroup({
         </Button>
         <span className="text-[11px] text-olive-10">{count}</span>
       </div>
-      {expanded ? children : null}
+      {expanded ? <div id={panelId}>{children}</div> : null}
     </section>
   );
 }
@@ -392,6 +404,7 @@ function DesktopLocalRail({
               count={hierarchy.watchlist.length}
               expanded={watchlistExpanded}
               onToggle={() => onToggleGroup("watchlist")}
+              panelId="watchlist-group-panel"
             >
               {hierarchy.watchlist.length === 0 ? (
                 <NavigationState
@@ -466,6 +479,7 @@ function DesktopLocalRail({
               count={hierarchy.campaigns.length}
               expanded={campaignsExpanded}
               onToggle={() => onToggleGroup("campaigns")}
+              panelId="campaigns-group-panel"
             >
               {hierarchy.campaigns.length === 0 ? (
                 <NavigationState
@@ -501,6 +515,7 @@ function DesktopLocalRail({
               count={hierarchy.standaloneTradePlans.length}
               expanded={standaloneExpanded}
               onToggle={() => onToggleGroup("standaloneTradePlans")}
+              panelId="standalone-trade-plans-group-panel"
             >
               {hierarchy.standaloneTradePlans.length === 0 ? (
                 <NavigationState
@@ -580,7 +595,10 @@ export function CampaignTradePlanHierarchyLayout({
         ...currentState.groups,
         [group]:
           group === "standaloneTradePlans"
-            ? !isStandaloneGroupExpanded(currentState)
+            ? !isStandaloneGroupExpanded(
+                currentState,
+                activeContext.isStandaloneTradePlanActive,
+              )
             : !currentState.groups[group],
       },
     }));
