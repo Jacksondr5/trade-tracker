@@ -3,7 +3,6 @@
 import { Preloaded, usePreloadedQuery, useQuery } from "convex/react";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Badge, Button, Card, CardContent } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
@@ -85,7 +84,6 @@ export default function CampaignsPageClient({
 }: {
   preloadedAllCampaigns: Preloaded<typeof api.campaigns.listCampaigns>;
 }) {
-  const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   const allCampaigns = usePreloadedQuery(preloadedAllCampaigns);
@@ -112,8 +110,7 @@ export default function CampaignsPageClient({
   const displayedFilter =
     requestedCampaigns !== undefined ? statusFilter : resolvedFilter;
   const campaigns = requestedCampaigns ?? resolvedCampaigns;
-  const showEmptyState =
-    requestedCampaigns !== undefined && requestedCampaigns.length === 0;
+  const showEmptyState = campaigns.length === 0;
 
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8">
@@ -184,16 +181,16 @@ export default function CampaignsPageClient({
           <CardContent className="p-6 sm:p-8">
             <div className="max-w-xl space-y-3">
               <p className="text-sm font-medium text-olive-12">
-                {statusFilter === "all"
+                {displayedFilter === "all"
                   ? "No campaigns yet"
-                  : `No ${statusFilter} campaigns`}
+                  : `No ${displayedFilter} campaigns`}
               </p>
               <p className="text-sm text-olive-11">
-                {statusFilter === "all"
+                {displayedFilter === "all"
                   ? "Create your first campaign to start organizing linked trade plans and watchlist priorities."
                   : "Try another lifecycle filter or clear the filter to view all campaigns."}
               </p>
-              {statusFilter === "all" ? (
+              {displayedFilter === "all" ? (
                 <Button asChild dataTestId="empty-state-new-campaign-button">
                   <Link href="/campaigns/new">Create campaign</Link>
                 </Button>
@@ -222,11 +219,17 @@ export default function CampaignsPageClient({
                 : `${capitalize(displayedFilter)} campaigns`}
             </p>
             <div
+              aria-hidden={!isFilterPending}
+              role={isFilterPending ? "status" : undefined}
+              aria-live={isFilterPending ? "polite" : undefined}
               className={`flex items-center gap-2 text-xs transition-opacity ${
                 isFilterPending ? "opacity-100" : "opacity-0"
               }`}
             >
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-11" />
+              <Loader2
+                aria-hidden="true"
+                className="h-3.5 w-3.5 animate-spin text-blue-11"
+              />
               <span className="text-slate-11">Updating campaigns...</span>
             </div>
           </div>
@@ -252,21 +255,16 @@ export default function CampaignsPageClient({
               {campaigns.map((campaign) => (
                 <tr
                   key={campaign._id}
-                  className="cursor-pointer hover:bg-slate-3/80"
-                  onClick={() => router.push(`/campaigns/${campaign._id}`)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      router.push(`/campaigns/${campaign._id}`);
-                    }
-                  }}
-                  tabIndex={0}
-                  role="button"
-                  aria-label={`View campaign ${campaign.name}`}
+                  className="hover:bg-slate-3/80"
                   data-testid={`campaign-row-${campaign._id}`}
                 >
                   <td className="px-4 py-3 text-sm font-medium whitespace-nowrap text-slate-12">
-                    {campaign.name}
+                    <Link
+                      href={`/campaigns/${campaign._id}`}
+                      className="inline-flex rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-8"
+                    >
+                      {campaign.name}
+                    </Link>
                   </td>
                   <td className="px-4 py-3 text-sm whitespace-nowrap">
                     <Badge
