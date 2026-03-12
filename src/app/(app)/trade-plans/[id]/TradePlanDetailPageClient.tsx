@@ -1,10 +1,13 @@
 "use client";
 
-import { Preloaded, useMutation, usePreloadedQuery, useQuery } from "convex/react";
+import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
 import { Check, CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { MobileHierarchyBreadcrumbs } from "~/components/app-shell/campaign-trade-plan-hierarchy";
+import {
+  MobileHierarchyBreadcrumbs,
+} from "~/components/app-shell/campaign-trade-plan-hierarchy";
+import { useNavigationData } from "~/components/app-shell";
 import { Alert, Badge } from "~/components/ui";
 import NotesSection from "~/components/NotesSection";
 import { api } from "~/convex/_generated/api";
@@ -43,7 +46,7 @@ export default function TradePlanDetailPageClient({
   const accountMappings = usePreloadedQuery(preloadedAccountMappings);
   const inboxTradesForPlan = usePreloadedQuery(preloadedInboxTradesForPlan);
   const portfolios = usePreloadedQuery(preloadedPortfolios);
-  const hierarchy = useQuery(api.navigation.getCampaignTradePlanHierarchy, {});
+  const { hierarchy } = useNavigationData();
 
   const addNote = useMutation(api.notes.addNote);
   const updateNoteM = useMutation(api.notes.updateNote);
@@ -77,16 +80,12 @@ export default function TradePlanDetailPageClient({
   const [acceptingInboxTradeIds, setAcceptingInboxTradeIds] = useState<Set<string>>(
     new Set(),
   );
-  const breadcrumbs =
-    hierarchy === undefined
-      ? null
-      : buildHierarchyBreadcrumbs(hierarchy, {
-          kind: "tradePlan",
-          tradePlanId,
-        });
+  const breadcrumbs = buildHierarchyBreadcrumbs(hierarchy, {
+    kind: "tradePlan",
+    tradePlanId,
+  });
   const navigationTradePlan = useMemo(
-    () =>
-      hierarchy === undefined ? null : findTradePlanNavigationItem(hierarchy, tradePlanId),
+    () => findTradePlanNavigationItem(hierarchy, tradePlanId),
     [hierarchy, tradePlanId],
   );
   const linkedCampaign = navigationTradePlan?.parentCampaign ?? null;
