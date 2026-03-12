@@ -36,13 +36,12 @@ export default function TradePlansPageClient({
   );
 
   const [error, setError] = useState<string | null>(null);
-  const [closePending, setClosePending] = useState<Id<"tradePlans"> | null>(
-    null,
+  const [pendingCloseIds, setPendingCloseIds] = useState<Set<Id<"tradePlans">>>(
+    () => new Set(),
   );
-  const [closeError, setCloseError] = useState<{
-    tradePlanId: Id<"tradePlans">;
-    message: string;
-  } | null>(null);
+  const [closeErrors, setCloseErrors] = useState<
+    Map<Id<"tradePlans">, string>
+  >(() => new Map());
 
   const standalonePlans = tradePlans.filter((plan) => !plan.campaignId);
   const linkedPlanCount = tradePlans.length - standalonePlans.length;
@@ -79,26 +78,42 @@ export default function TradePlansPageClient({
   });
 
   const handleClosePlan = async (tradePlanId: Id<"tradePlans">) => {
-    setCloseError((current) =>
-      current?.tradePlanId === tradePlanId ? null : current,
-    );
-    setClosePending(tradePlanId);
+    setCloseErrors((current) => {
+      const next = new Map(current);
+      next.delete(tradePlanId);
+      return next;
+    });
+    setPendingCloseIds((current) => {
+      const next = new Set(current);
+      next.add(tradePlanId);
+      return next;
+    });
 
     try {
       await updateTradePlanStatus({
         status: "closed",
         tradePlanId,
       });
-      setCloseError((current) =>
-        current?.tradePlanId === tradePlanId ? null : current,
-      );
+      setCloseErrors((current) => {
+        const next = new Map(current);
+        next.delete(tradePlanId);
+        return next;
+      });
     } catch (err) {
-      setCloseError({
-        tradePlanId,
-        message: err instanceof Error ? err.message : "Failed to close trade plan",
+      setCloseErrors((current) => {
+        const next = new Map(current);
+        next.set(
+          tradePlanId,
+          err instanceof Error ? err.message : "Failed to close trade plan",
+        );
+        return next;
       });
     } finally {
-      setClosePending((current) => (current === tradePlanId ? null : current));
+      setPendingCloseIds((current) => {
+        const next = new Set(current);
+        next.delete(tradePlanId);
+        return next;
+      });
     }
   };
 
@@ -212,16 +227,16 @@ export default function TradePlansPageClient({
                           onClick={() => {
                             void handleClosePlan(plan._id);
                           }}
-                          disabled={closePending === plan._id}
+                          disabled={pendingCloseIds.has(plan._id)}
                         >
-                          {closePending === plan._id ? "Closing..." : "Close"}
+                          {pendingCloseIds.has(plan._id) ? "Closing..." : "Close"}
                         </Button>
                       )}
                     </div>
                   </div>
-                  {closeError?.tradePlanId === plan._id ? (
+                  {closeErrors.has(plan._id) ? (
                     <Alert variant="error" className="mt-3">
-                      {closeError.message}
+                      {closeErrors.get(plan._id)}
                     </Alert>
                   ) : null}
                 </div>
