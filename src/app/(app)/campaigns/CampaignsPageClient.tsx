@@ -99,6 +99,8 @@ export default function CampaignsPageClient({
   }, [requestedCampaigns, statusFilter]);
 
   const isFilterPending = requestedCampaigns === undefined;
+  const displayedFilter =
+    requestedCampaigns !== undefined ? statusFilter : resolvedFilter;
   const campaigns = requestedCampaigns ?? resolvedCampaigns;
   const showEmptyState =
     requestedCampaigns !== undefined && requestedCampaigns.length === 0;
@@ -169,17 +171,33 @@ export default function CampaignsPageClient({
 
       {showEmptyState ? (
         <Card className="border-olive-6 bg-olive-2">
-          <CardContent className="p-8 text-center">
-            <p className="text-sm font-medium text-olive-12">
-              {statusFilter === "all"
-                ? "No campaigns yet"
-                : `No ${statusFilter} campaigns`}
-            </p>
-            <p className="mt-2 text-sm text-olive-11">
-              {statusFilter === "all"
-                ? "Create your first campaign to start organizing linked trade plans and watchlist priorities."
-                : "Try another lifecycle filter or create a new campaign."}
-            </p>
+          <CardContent className="p-6 sm:p-8">
+            <div className="max-w-xl space-y-3">
+              <p className="text-sm font-medium text-olive-12">
+                {statusFilter === "all"
+                  ? "No campaigns yet"
+                  : `No ${statusFilter} campaigns`}
+              </p>
+              <p className="text-sm text-olive-11">
+                {statusFilter === "all"
+                  ? "Create your first campaign to start organizing linked trade plans and watchlist priorities."
+                  : "Try another lifecycle filter or clear the filter to view all campaigns."}
+              </p>
+              {statusFilter === "all" ? (
+                <Button asChild dataTestId="empty-state-new-campaign-button">
+                  <Link href="/campaigns/new">Create campaign</Link>
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  dataTestId="empty-state-show-all-campaigns-button"
+                  onClick={() => setStatusFilter("all")}
+                >
+                  Show all campaigns
+                </Button>
+              )}
+            </div>
           </CardContent>
         </Card>
       ) : (
@@ -189,9 +207,9 @@ export default function CampaignsPageClient({
         >
           <div className="flex items-center justify-between border-b border-slate-6 bg-slate-3/70 px-4 py-2">
             <p className="text-xs font-medium tracking-[0.18em] text-slate-11 uppercase">
-              {resolvedFilter === "all"
+              {displayedFilter === "all"
                 ? "All campaigns"
-                : `${capitalize(resolvedFilter)} campaigns`}
+                : `${capitalize(displayedFilter)} campaigns`}
             </p>
             <div
               className={`flex items-center gap-2 text-xs transition-opacity ${
