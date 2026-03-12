@@ -1,0 +1,96 @@
+name: Preview E2E
+
+on:
+  repository_dispatch:
+    types: [vercel.deployment.ready]
+  workflow_dispatch:
+    inputs:
+      preview_url:
+        description: Preview deployment URL to test
+        required: true
+        type: string
+
+concurrency:
+  group: preview-e2e-${{ github.event.client_payload.sha || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Resolve preview metadata
+        id: preview
+        env:
+          INPUT_PREVIEW_URL: ${{ inputs.preview_url }}
+          PAYLOAD_ENVIRONMENT: ${{ github.event.client_payload.environment }}
+          PAYLOAD_TARGET: ${{ github.event.client_payload.target }}
+          PAYLOAD_URL: ${{ github.event.client_payload.url }}
+        run: |
+          set -euo pipefail
+
+          url="${INPUT_PREVIEW_URL:-${PAYLOAD_URL:-}}"
+          environment="${PAYLOAD_ENVIRONMENT:-${PAYLOAD_TARGET:-preview}}"
+
+          if [ -z "$url" ]; then
+            echo "::error::Missing preview URL. Provide workflow_dispatch input or Vercel client_payload.url."
+            exit 1
+          fi
+
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "environment=$environment" >> "$GITHUB_OUTPUT"
+          echo "Resolved preview URL: $url"
+          echo "Resolved environment: $environment"
+
+      - name: Skip non-preview deployment events
+        if: github.event_name == 'repository_dispatch' && steps.preview.outputs.environment == 'production'
+        run: |
+          echo "Received a production deployment event. Skipping preview smoke tests."
+
+      - name: Checkout repository
+        if: github.event_name != 'repository_dispatch' || steps.preview.outputs.environment != 'production'
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        if: github.event_name != 'repository_dispatch' || steps.preview.outputs.environment != 'production'
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        if: github.event_name != 'repository_dispatch' || steps.preview.outputs.environment != 'production'
+        uses: actions/setup-node@v5
+        with:
+          cache: pnpm
+          node-version-file: .nvmrc
+
+      - name: Install dependencies
+        if: github.event_name != 'repository_dispatch' || steps.preview.outputs.environment != 'production'
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        if: github.event_name != 'repository_dispatch' || steps.preview.outputs.environment != 'production'
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run preview smoke suite
+        if: github.event_name != 'repository_dispatch' || steps.preview.outputs.environment != 'production'
+        env:
+          CI: true
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_CLERK_FRONTEND_API_URL: ${{ secrets.NEXT_PUBLIC_CLERK_FRONTEND_API_URL }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          PLAYWRIGHT_BASE_URL: ${{ steps.preview.outputs.url }}
+          PLAYWRIGHT_PASSWORD: ${{ secrets.PLAYWRIGHT_PASSWORD }}
+          PLAYWRIGHT_USERNAME: ${{ secrets.PLAYWRIGHT_USERNAME }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: pnpm test:e2e:smoke
+
+      - name: Upload Playwright artifacts
+        if: always() && (github.event_name != 'repository_dispatch' || steps.preview.outputs.environment != 'production')
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore

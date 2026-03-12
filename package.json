@@ -10,9 +10,12 @@
     "start": "next start",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:setup": "playwright test --project=setup",
+    "test:e2e:smoke": "playwright test --project=chromium-smoke",
     "test:e2e:ui": "playwright test --ui",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "vercel-build": "convex deploy --cmd-url-env-var-name NEXT_PUBLIC_CONVEX_URL --cmd 'pnpm build' --preview-run 'e2eSeed:setupPreviewData'"
   },
   "dependencies": {
     "@clerk/nextjs": "6.38.2",
@@ -50,6 +53,7 @@
     "zod": "4.3.6"
   },
   "devDependencies": {
+    "@clerk/testing": "^2.0.4",
     "@edge-runtime/vm": "^5.0.0",
     "@eslint/eslintrc": "3.3.4",
     "@eslint/js": "9.35.0",

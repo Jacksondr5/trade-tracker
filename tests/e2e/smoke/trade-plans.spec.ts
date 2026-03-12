@@ -1,0 +1,39 @@
+import { expect, test } from "@playwright/test";
+import {
+  E2E_SMOKE_FIXTURES,
+  buildCreatedStandaloneTradePlanName,
+} from "../../../shared/e2e/smokeFixtures";
+import { getStandaloneTradePlanLink } from "../helpers/selectors";
+
+test("seeded standalone trade plan and hierarchy render", async ({ page }) => {
+  await page.goto("/trade-plans");
+
+  await expect(page.getByRole("heading", { name: "Trade Plans" })).toBeVisible();
+  await expect(getStandaloneTradePlanLink(page)).toBeVisible();
+
+  await getStandaloneTradePlanLink(page).click();
+
+  await expect(page).toHaveURL(/\/trade-plans\/[^/]+$/);
+  await expect(
+    page.getByLabel("Plan Name"),
+  ).toHaveValue(E2E_SMOKE_FIXTURES.standaloneTradePlan.name);
+  await expect(
+    page.getByLabel("Instrument Symbol"),
+  ).toHaveValue(E2E_SMOKE_FIXTURES.standaloneTradePlan.instrumentSymbol);
+  await expect(page.getByText("Watchlist")).toBeVisible();
+  await expect(
+    page.getByText(E2E_SMOKE_FIXTURES.linkedTradePlan.name, { exact: true }),
+  ).toBeVisible();
+});
+
+test("standalone trade plans can be created from the list page", async ({ page }) => {
+  const uniquePlanName = buildCreatedStandaloneTradePlanName(Date.now());
+
+  await page.goto("/trade-plans");
+
+  await page.getByTestId("name-input").fill(uniquePlanName);
+  await page.getByTestId("instrumentSymbol-input").fill("AAPL");
+  await page.getByTestId("create-trade-plan-button").click();
+
+  await expect(page.getByRole("link", { name: uniquePlanName })).toBeVisible();
+});

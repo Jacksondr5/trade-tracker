@@ -1,0 +1,251 @@
+import { ConvexError, v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
+import { internalMutation, type MutationCtx } from "./_generated/server";
+import { E2E_SMOKE_FIXTURES } from "../shared/e2e/smokeFixtures";
+
+type SmokeTradePlanFixture =
+  (typeof E2E_SMOKE_FIXTURES)["linkedTradePlan" | "standaloneTradePlan"];
+
+function getPlaywrightOwnerId(): string {
+  const ownerId = process.env.PLAYWRIGHT_OWNER_ID?.trim();
+
+  if (!ownerId) {
+    throw new ConvexError(
+      "PLAYWRIGHT_OWNER_ID is required to seed preview smoke data.",
+    );
+  }
+
+  return ownerId;
+}
+
+async function upsertPortfolio(
+  ctx: MutationCtx,
+  ownerId: string,
+) {
+  const existingPortfolio = (
+    await ctx.db
+      .query("portfolios")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect()
+  ).find((portfolio) => portfolio.name === E2E_SMOKE_FIXTURES.portfolio.name);
+
+  if (existingPortfolio) {
+    return existingPortfolio;
+  }
+
+  const portfolioId = await ctx.db.insert("portfolios", {
+    name: E2E_SMOKE_FIXTURES.portfolio.name,
+    ownerId,
+  });
+
+  return (await ctx.db.get(portfolioId))!;
+}
+
+async function upsertCampaign(
+  ctx: MutationCtx,
+  ownerId: string,
+) {
+  const existingCampaign = (
+    await ctx.db
+      .query("campaigns")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect()
+  ).find((campaign) => campaign.name === E2E_SMOKE_FIXTURES.campaign.name);
+
+  if (existingCampaign) {
+    await ctx.db.patch(existingCampaign._id, {
+      closedAt: undefined,
+      name: E2E_SMOKE_FIXTURES.campaign.name,
+      retrospective: undefined,
+      status: E2E_SMOKE_FIXTURES.campaign.status,
+      thesis: E2E_SMOKE_FIXTURES.campaign.thesis,
+    });
+
+    return (await ctx.db.get(existingCampaign._id))!;
+  }
+
+  const campaignId = await ctx.db.insert("campaigns", {
+    name: E2E_SMOKE_FIXTURES.campaign.name,
+    ownerId,
+    retrospective: undefined,
+    status: E2E_SMOKE_FIXTURES.campaign.status,
+    thesis: E2E_SMOKE_FIXTURES.campaign.thesis,
+  });
+
+  return (await ctx.db.get(campaignId))!;
+}
+
+async function upsertTradePlan(
+  ctx: MutationCtx,
+  args: {
+    campaignId?: Id<"campaigns">;
+    fixture: SmokeTradePlanFixture;
+    ownerId: string;
+  },
+) {
+  const existingTradePlan = (
+    await ctx.db
+      .query("tradePlans")
+      .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
+      .collect()
+  ).find((tradePlan) => tradePlan.name === args.fixture.name);
+
+  const patch = {
+    campaignId: args.campaignId,
+    closedAt: undefined,
+    instrumentSymbol: args.fixture.instrumentSymbol,
+    invalidatedAt: undefined,
+    name: args.fixture.name,
+    rationale: undefined,
+    sortOrder: args.fixture.sortOrder,
+    status: args.fixture.status,
+  };
+
+  if (existingTradePlan) {
+    await ctx.db.patch(existingTradePlan._id, patch);
+    return (await ctx.db.get(existingTradePlan._id))!;
+  }
+
+  const tradePlanId = await ctx.db.insert("tradePlans", {
+    ...patch,
+    ownerId: args.ownerId,
+  });
+
+  return (await ctx.db.get(tradePlanId))!;
+}
+
+async function ensureWatchlistItem(
+  ctx: MutationCtx,
+  args:
+    | {
+        campaignId: Id<"campaigns">;
+        itemType: "campaign";
+        ownerId: string;
+      }
+    | {
+        itemType: "tradePlan";
+        ownerId: string;
+        tradePlanId: Id<"tradePlans">;
+      },
+) {
+  const existingWatch =
+    args.itemType === "campaign"
+      ? await ctx.db
+          .query("watchlist")
+          .withIndex("by_owner_campaignId", (q) =>
+            q.eq("ownerId", args.ownerId).eq("campaignId", args.campaignId),
+          )
+          .unique()
+      : await ctx.db
+          .query("watchlist")
+          .withIndex("by_owner_tradePlanId", (q) =>
+            q.eq("ownerId", args.ownerId).eq("tradePlanId", args.tradePlanId),
+          )
+          .unique();
+
+  if (existingWatch) {
+    return;
+  }
+
+  await ctx.db.insert("watchlist", {
+    campaignId: args.itemType === "campaign" ? args.campaignId : undefined,
+    itemType: args.itemType,
+    ownerId: args.ownerId,
+    tradePlanId: args.itemType === "tradePlan" ? args.tradePlanId : undefined,
+    watchedAt: Date.now(),
+  });
+}
+
+async function upsertTrade(
+  ctx: MutationCtx,
+  args: {
+    ownerId: string;
+    portfolioId?: Id<"portfolios">;
+    trade: (typeof E2E_SMOKE_FIXTURES.trades)[number];
+    tradePlanId: Id<"tradePlans">;
+  },
+) {
+  const existingTrade = (
+    await ctx.db
+      .query("trades")
+      .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
+      .collect()
+  ).find((trade) => trade.notes === args.trade.notes);
+
+  const patch = {
+    assetType: args.trade.assetType,
+    date: args.trade.date,
+    direction: args.trade.direction,
+    notes: args.trade.notes,
+    ownerId: args.ownerId,
+    portfolioId: args.portfolioId,
+    price: args.trade.price,
+    quantity: args.trade.quantity,
+    side: args.trade.side,
+    source: "manual" as const,
+    ticker: args.trade.ticker,
+    tradePlanId: args.tradePlanId,
+  };
+
+  if (existingTrade) {
+    await ctx.db.patch(existingTrade._id, patch);
+    return;
+  }
+
+  await ctx.db.insert("trades", patch);
+}
+
+export const setupPreviewData = internalMutation({
+  args: {},
+  returns: v.object({
+    campaignId: v.id("campaigns"),
+    linkedTradePlanId: v.id("tradePlans"),
+    portfolioId: v.id("portfolios"),
+    standaloneTradePlanId: v.id("tradePlans"),
+  }),
+  handler: async (ctx) => {
+    const ownerId = getPlaywrightOwnerId();
+    const portfolio = await upsertPortfolio(ctx, ownerId);
+    const campaign = await upsertCampaign(ctx, ownerId);
+    const linkedTradePlan = await upsertTradePlan(ctx, {
+      campaignId: campaign._id,
+      fixture: E2E_SMOKE_FIXTURES.linkedTradePlan,
+      ownerId,
+    });
+    const standaloneTradePlan = await upsertTradePlan(ctx, {
+      fixture: E2E_SMOKE_FIXTURES.standaloneTradePlan,
+      ownerId,
+    });
+
+    await ensureWatchlistItem(ctx, {
+      campaignId: campaign._id,
+      itemType: "campaign",
+      ownerId,
+    });
+    await ensureWatchlistItem(ctx, {
+      itemType: "tradePlan",
+      ownerId,
+      tradePlanId: standaloneTradePlan._id,
+    });
+
+    for (const trade of E2E_SMOKE_FIXTURES.trades) {
+      await upsertTrade(ctx, {
+        ownerId,
+        portfolioId:
+          trade.portfolio === "shared" ? portfolio._id : undefined,
+        trade,
+        tradePlanId:
+          trade.tradePlan === "linked"
+            ? linkedTradePlan._id
+            : standaloneTradePlan._id,
+      });
+    }
+
+    return {
+      campaignId: campaign._id,
+      linkedTradePlanId: linkedTradePlan._id,
+      portfolioId: portfolio._id,
+      standaloneTradePlanId: standaloneTradePlan._id,
+    };
+  },
+});

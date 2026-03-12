@@ -13,6 +13,9 @@ const config = [
       "**/.next/**",
       "**/out-tsc",
       "**/next-env.d.ts",
+      "**/playwright-report/**",
+      "**/test-results/**",
+      "**/output/playwright/**",
     ],
   },
   {

@@ -88,6 +88,8 @@ NEXT_PUBLIC_CLERK_FRONTEND_API_URL=your-clerk-frontend-api-url
 NEXT_PUBLIC_CONVEX_URL=https://your-deployment.convex.cloud
 PLAYWRIGHT_USERNAME=your-playwright-test-user@example.com
 PLAYWRIGHT_PASSWORD=your-playwright-test-password
+PLAYWRIGHT_OWNER_ID=your-clerk-token-identifier-for-the-playwright-user
+VERCEL_AUTOMATION_BYPASS_SECRET=your-vercel-automation-bypass-secret
 ```
 
 Notes:
@@ -95,6 +97,9 @@ Notes:
 - `NEXT_PUBLIC_CONVEX_URL` is used by the React client in `src/app/providers.tsx`.
 - `NEXT_PUBLIC_CLERK_FRONTEND_API_URL` is required by `convex/auth.config.ts` and is now also validated in `src/env.ts`.
 - `PLAYWRIGHT_USERNAME` and `PLAYWRIGHT_PASSWORD` are for local Playwright/Codex UI automation and are documented in `AGENTS.md`.
+- Playwright auth setup now uses Clerk's `@clerk/testing` helpers, so preview CI also needs `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, and `NEXT_PUBLIC_CLERK_FRONTEND_API_URL` available to the test job.
+- `PLAYWRIGHT_OWNER_ID` is the Convex/Clerk owner identifier used to seed the dedicated Playwright account on fresh preview deployments.
+- `VERCEL_AUTOMATION_BYPASS_SECRET` is only needed when running Playwright against Vercel previews protected by Deployment Protection.
 - `.env.example` is intended as the source of truth for local setup.
 
 ### 5. Start the app
@@ -120,7 +125,10 @@ pnpm typecheck   # TypeScript checks
 pnpm test        # Vitest run
 pnpm test:watch  # Vitest watch mode
 pnpm test:e2e    # Playwright end-to-end tests
+pnpm test:e2e:setup # Playwright auth setup only
+pnpm test:e2e:smoke # Preview-oriented Chromium smoke suite
 pnpm test:e2e:ui # Playwright UI runner
+pnpm vercel-build # Convex-backed Vercel build command with preview seeding
 ```
 
 ## Project structure
@@ -147,9 +155,12 @@ pnpm test:e2e:ui # Playwright UI runner
 
 - Unit-style tests run through Vitest via `pnpm test`.
 - Browser tests run through Playwright via `pnpm test:e2e`.
+- The preview smoke suite is `pnpm test:e2e:smoke`; it expects `PLAYWRIGHT_BASE_URL` and optionally `VERCEL_AUTOMATION_BYPASS_SECRET` when targeting protected Vercel previews.
+- `pnpm test:e2e:setup` now authenticates through Clerk's Playwright testing helpers rather than filling the sign-in UI manually.
+- Vercel preview deployments should use `pnpm vercel-build` so Convex preview deployments get seeded through `--preview-run 'e2eSeed:setupPreviewData'`.
 - This repo intentionally keeps both `@playwright/test` and `playwright` installed. Playwright generally recommends using only one top-level package, but the current Codex `playwright-interactive` workflow expects a direct `playwright` import while this repo's end-to-end tests run through `@playwright/test`.
 - For app-focused Playwright work, start both `pnpm dev` and `pnpm convex dev` first.
-- Playwright reuses `output/playwright/auth.json` when present; only fall back to manual Clerk login and `.env.local` credentials if that auth state is missing or stale.
+- Playwright reuses `output/playwright/auth.json` when present; refresh it with `pnpm test:e2e:setup` if it goes stale.
 
 ## Useful routes
 
