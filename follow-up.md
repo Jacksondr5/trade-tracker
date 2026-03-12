@@ -13,3 +13,11 @@ Portfolio detail campaign linkage currently relies on multiple read paths (inclu
 **Suggested follow-up:**
 - Introduce more batched lookup patterns for campaign linkage computation.
 - Consider pre-aggregated/denormalized summaries if portfolio data volume grows.
+
+## 3) Shared pending-control treatment
+The campaign filter now uses a pulsing pending outline that would likely be useful in other places, especially navigation controls and non-blocking save/update actions. The current implementation is route-local and should not stay that way if the pattern spreads.
+
+**Suggested follow-up:**
+- Extract the pending outline treatment into the shared UI layer instead of keeping it inside `src/app/(app)/campaigns/CampaignsPageClient.tsx`.
+- Keep it opt-in rather than replacing the existing `Button` loading-spinner behavior globally.
+- Design the shared API so both `Button`-based actions and link-like navigation controls can adopt the same pending treatment.

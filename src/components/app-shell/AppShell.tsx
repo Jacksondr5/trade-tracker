@@ -1,7 +1,6 @@
 "use client";
 
 import { UserButton, useAuth } from "@clerk/nextjs";
-import { useQuery } from "convex/react";
 import { Menu, Search } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -14,7 +13,6 @@ import {
   DialogDescription,
   DialogTitle,
 } from "~/components/ui";
-import { api } from "~/convex/_generated/api";
 import {
   type CampaignTradePlanHierarchy,
   isCampaignTradePlanPathname,
@@ -27,6 +25,7 @@ import {
   isAppNavigationItemActive,
 } from "./app-navigation";
 import { CommandPalette } from "./CommandPalette";
+import { useNavigationData } from "./NavigationDataProvider";
 
 function NavigationSections({
   onNavigate,
@@ -182,14 +181,17 @@ function MobileTopBar({
 }) {
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between border-b border-olive-6 bg-olive-2/95 px-4 py-3 backdrop-blur md:hidden">
-      <button
+      <Button
         type="button"
+        variant="outline"
+        size="icon"
+        className="h-10 w-10 border-olive-6 bg-transparent text-olive-12 hover:bg-olive-3"
         onClick={onOpenDrawer}
-        className="flex h-10 w-10 items-center justify-center rounded-lg border border-olive-6 text-olive-12 transition-colors hover:bg-olive-3"
         aria-label="Open navigation menu"
+        dataTestId="open-navigation-drawer"
       >
         <Menu className="h-5 w-5" />
-      </button>
+      </Button>
       <div className="min-w-0 flex-1 px-3">
         <p className="truncate text-center text-sm font-medium text-olive-12">
           {title}
@@ -217,7 +219,7 @@ function MobileNavigationDrawer({
   pathname,
 }: {
   hasLocalHierarchy: boolean;
-  localHierarchy: CampaignTradePlanHierarchy | undefined;
+  localHierarchy: CampaignTradePlanHierarchy | null;
   onOpenChange: (open: boolean) => void;
   open: boolean;
   pathname: string;
@@ -241,15 +243,7 @@ function MobileNavigationDrawer({
               pathname={pathname}
               onNavigate={() => onOpenChange(false)}
             />
-            {hasLocalHierarchy ? (
-              localHierarchy === undefined ? (
-                <div className="mt-5 space-y-2 border-t border-olive-6 px-3 pt-5">
-                  <p className="text-xs font-medium uppercase tracking-[0.18em] text-olive-10">
-                    Local hierarchy
-                  </p>
-                  <p className="text-sm text-olive-10">Loading hierarchy...</p>
-                </div>
-              ) : (
+            {hasLocalHierarchy && localHierarchy !== null ? (
                 <div className="mt-5">
                   <CampaignTradePlanHierarchyNavigation
                     hierarchy={localHierarchy}
@@ -257,7 +251,6 @@ function MobileNavigationDrawer({
                     onNavigate={() => onOpenChange(false)}
                   />
                 </div>
-              )
             ) : null}
           </div>
           <div className="flex justify-end border-t border-olive-6 px-4 py-4">
@@ -278,14 +271,11 @@ function MobileNavigationDrawer({
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { isLoaded, isSignedIn } = useAuth();
+  const { hierarchy } = useNavigationData();
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const hasLocalHierarchy = isCampaignTradePlanPathname(pathname);
-  const shouldLoadLocalHierarchy = hasLocalHierarchy && isDrawerOpen;
-  const localHierarchy = useQuery(
-    api.navigation.getCampaignTradePlanHierarchy,
-    shouldLoadLocalHierarchy ? {} : "skip",
-  );
+  const localHierarchy = hasLocalHierarchy && isDrawerOpen ? hierarchy : null;
 
   const openCommandPalette = useCallback(() => {
     setIsDrawerOpen(false);

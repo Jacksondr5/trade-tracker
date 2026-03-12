@@ -1,6 +1,5 @@
 "use client";
 
-import { useQuery } from "convex/react";
 import { Map, SquareChartGantt, Star } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
@@ -13,12 +12,12 @@ import {
   CommandItem,
   CommandList,
 } from "~/components/ui";
-import { api } from "~/convex/_generated/api";
 import {
-  buildCommandPaletteSections,
   filterCommandPaletteSections,
   hasCommandPaletteResults,
 } from "./command-palette";
+import { NavigationState } from "./NavigationState";
+import { useNavigationData } from "./NavigationDataProvider";
 
 function CommandPaletteResult({
   contextLabel,
@@ -58,7 +57,7 @@ export function CommandPalette({
   open: boolean;
 }) {
   const router = useRouter();
-  const hierarchy = useQuery(api.navigation.getCampaignTradePlanHierarchy, {});
+  const { commandPaletteSections } = useNavigationData();
   const [searchQuery, setSearchQuery] = useState("");
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
@@ -68,31 +67,24 @@ export function CommandPalette({
     }
   }, [open]);
 
-  const sections = useMemo(() => {
-    if (hierarchy === undefined) {
-      return null;
-    }
-
-    return buildCommandPaletteSections(hierarchy);
-  }, [hierarchy]);
-
   const filteredSections = useMemo(() => {
-    if (sections === null) {
-      return null;
-    }
+    return filterCommandPaletteSections(commandPaletteSections, deferredSearchQuery);
+  }, [commandPaletteSections, deferredSearchQuery]);
 
-    return filterCommandPaletteSections(sections, deferredSearchQuery);
-  }, [deferredSearchQuery, sections]);
+  const hasResults = hasCommandPaletteResults(filteredSections);
 
-  const hasResults =
-    filteredSections !== null && hasCommandPaletteResults(filteredSections);
-
-  const emptyMessage =
-    hierarchy === undefined
-      ? "Loading campaigns and trade plans..."
-      : deferredSearchQuery
-        ? "No matching campaigns or trade plans."
-        : "No campaigns or trade plans yet.";
+  const emptyState =
+    deferredSearchQuery
+      ? {
+          description:
+            "Try a campaign name, instrument symbol, or parent campaign.",
+          title: "No matching campaigns or trade plans",
+        }
+      : {
+          description:
+            "Create a campaign or trade plan to make it available from the command palette.",
+          title: "No campaigns or trade plans yet",
+        };
 
   const handleSelect = (href: string) => {
     flushSync(() => {
@@ -118,7 +110,15 @@ export function CommandPalette({
         onValueChange={setSearchQuery}
       />
       <CommandList className="max-h-[min(60vh,28rem)]">
-        {hasResults ? null : <CommandEmpty>{emptyMessage}</CommandEmpty>}
+        {hasResults ? null : (
+          <CommandEmpty>
+            <NavigationState
+              className="mx-auto max-w-sm border-0 bg-transparent px-0 py-0 text-left"
+              title={emptyState.title}
+              description={emptyState.description}
+            />
+          </CommandEmpty>
+        )}
 
         {filteredSections?.watchlist.length ? (
           <CommandGroup heading="Watchlist">

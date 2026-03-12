@@ -1,12 +1,15 @@
 "use client";
 
 import { ConvexError } from "convex/values";
-import { Preloaded, useMutation, usePreloadedQuery, useQuery } from "convex/react";
+import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
-import { MobileHierarchyBreadcrumbs } from "~/components/app-shell/campaign-trade-plan-hierarchy";
+import {
+  MobileHierarchyBreadcrumbs,
+} from "~/components/app-shell/campaign-trade-plan-hierarchy";
+import { useNavigationData } from "~/components/app-shell";
 import { Alert, Badge, Button, useAppForm } from "~/components/ui";
 import NotesSection from "~/components/NotesSection";
 import { api } from "~/convex/_generated/api";
@@ -67,7 +70,7 @@ export default function CampaignDetailPageClient({
   const campaignNotes = usePreloadedQuery(preloadedCampaignNotes);
   const tradePlans = usePreloadedQuery(preloadedTradePlans);
   const trades = usePreloadedQuery(preloadedCampaignTrades);
-  const hierarchy = useQuery(api.navigation.getCampaignTradePlanHierarchy, {});
+  const { hierarchy } = useNavigationData();
 
   const addNote = useMutation(api.notes.addNote);
   const updateNote = useMutation(api.notes.updateNote);
@@ -110,13 +113,10 @@ export default function CampaignDetailPageClient({
   const [tradePlanCreateError, setTradePlanCreateError] = useState<string | null>(null);
   const [tradePlanStatusError, setTradePlanStatusError] = useState<string | null>(null);
   const [showCreateTradePlanForm, setShowCreateTradePlanForm] = useState(false);
-  const breadcrumbs =
-    hierarchy === undefined
-      ? null
-      : buildHierarchyBreadcrumbs(hierarchy, {
-          campaignId,
-          kind: "campaign",
-        });
+  const breadcrumbs = buildHierarchyBreadcrumbs(hierarchy, {
+    campaignId,
+    kind: "campaign",
+  });
 
   const campaignNameForm = useAppForm({
     defaultValues: {
