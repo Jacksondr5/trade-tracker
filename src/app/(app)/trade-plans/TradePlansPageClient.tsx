@@ -94,11 +94,6 @@ export default function TradePlansPageClient({
         status: "closed",
         tradePlanId,
       });
-      setCloseErrors((current) => {
-        const next = new Map(current);
-        next.delete(tradePlanId);
-        return next;
-      });
     } catch (err) {
       setCloseErrors((current) => {
         const next = new Map(current);
