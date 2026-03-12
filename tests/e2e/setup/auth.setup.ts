@@ -17,9 +17,7 @@ async function loadSavedAuthState(page: Page): Promise<void> {
     return;
   }
 
-  const storageState = JSON.parse(
-    fs.readFileSync(resolvedAuthFile, "utf8"),
-  ) as {
+  let storageState: {
     cookies?: Array<{
       name: string;
       value: string;
@@ -32,6 +30,16 @@ async function loadSavedAuthState(page: Page): Promise<void> {
     }>;
     origins?: StoredOrigin[];
   };
+
+  try {
+    storageState = JSON.parse(fs.readFileSync(resolvedAuthFile, "utf8"));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(
+      `Warning: Failed to parse Playwright auth state file ${resolvedAuthFile}: ${message}`,
+    );
+    return;
+  }
 
   if (storageState.cookies && storageState.cookies.length > 0) {
     await page.context().addCookies(storageState.cookies);
