@@ -1,6 +1,8 @@
 name: Preview E2E
 
 on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   repository_dispatch:
     types: [vercel.deployment.ready]
   workflow_dispatch:
@@ -28,10 +30,16 @@ jobs:
           PAYLOAD_ENVIRONMENT: ${{ github.event.client_payload.environment }}
           PAYLOAD_TARGET: ${{ github.event.client_payload.target }}
           PAYLOAD_URL: ${{ github.event.client_payload.url }}
+          PR_PREVIEW_URL: https://trade-tracker-qcb088jv7-jackson-millers-projects.vercel.app/
         run: |
           set -euo pipefail
 
-          url="${INPUT_PREVIEW_URL:-${PAYLOAD_URL:-}}"
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            url="${PR_PREVIEW_URL}"
+          else
+            url="${INPUT_PREVIEW_URL:-${PAYLOAD_URL:-}}"
+          fi
+
           environment="${PAYLOAD_ENVIRONMENT:-${PAYLOAD_TARGET:-preview}}"
 
           if [ -z "$url" ]; then
