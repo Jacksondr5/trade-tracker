@@ -45,8 +45,9 @@ type BadgeVariant = NonNullable<BadgeProps["variant"]>;
 function getStatusVariant(status: string): BadgeVariant {
   switch (status) {
     case "planning":
-    case "idea":
       return "info";
+    case "idea":
+      return "neutral";
     case "watching":
       return "warning";
     case "active":
@@ -224,9 +225,6 @@ export default function CampaignDetailPageClient({
     validators: {
       onChange: ({ value }) => {
         setThesisError(null);
-        if (thesisSaveState === "saved") {
-          setThesisSaveState("idle");
-        }
         return validateWithSchema(thesisSchema, value);
       },
     },
@@ -241,7 +239,7 @@ export default function CampaignDetailPageClient({
           thesis: parsed.thesis,
         });
         thesisForm.setFieldValue("thesis", parsed.thesis);
-        setThesisSaveState("saved");
+        setThesisSaveState("idle");
         setIsEditingThesis(false);
       } catch (error) {
         setThesisError(error instanceof Error ? error.message : "Failed to save thesis");
@@ -699,12 +697,6 @@ export default function CampaignDetailPageClient({
                 </span>
               )}
 
-              {thesisSaveState === "saved" && (
-                <span className="flex items-center gap-1 text-sm text-grass-9">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Saved
-                </span>
-              )}
             </div>
           </form>
         ) : (
