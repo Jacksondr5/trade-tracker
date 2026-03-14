@@ -22,7 +22,7 @@ test("seeded standalone trade plan and hierarchy render", async ({ page }) => {
   await expect(page.getByTestId("trade-plan-symbol-input")).toHaveValue(
     E2E_SMOKE_FIXTURES.standaloneTradePlan.instrumentSymbol,
   );
-  await expect(page.getByTestId("trade-plan-back-link")).toBeVisible();
+  await expect(page.getByTestId("trade-plan-back-link-desktop")).toBeVisible();
   await expect(
     page.getByTestId("trade-plan-trades-section-title"),
   ).toBeVisible();
