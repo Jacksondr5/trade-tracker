@@ -2,7 +2,7 @@
 
 import { ConvexError } from "convex/values";
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2, Star } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
@@ -38,6 +38,23 @@ const thesisSchema = z.object({
 const retrospectiveSchema = z.object({
   retrospective: z.string(),
 });
+
+function WatchlistIndicator({
+  label,
+}: {
+  label: string;
+}) {
+  return (
+    <span
+      title={label}
+      aria-label={label}
+      className="inline-flex items-center gap-1 rounded-full border border-amber-8/70 bg-amber-3/30 px-2 py-1 text-xs font-medium text-amber-11"
+    >
+      <Star className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
+      <span>{label}</span>
+    </span>
+  );
+}
 
 const validateWithSchema = <TSchema extends z.ZodTypeAny>(
   schema: TSchema,
@@ -407,9 +424,11 @@ export default function CampaignDetailPageClient({
         )}
 
         <div className="mt-3 flex flex-wrap gap-2">
-          <Badge variant={workspaceSummary.isWatched ? "info" : "neutral"}>
-            {workspaceSummary.isWatched ? "On watchlist" : "Not watched"}
-          </Badge>
+          {workspaceSummary.isWatched ? (
+            <WatchlistIndicator label="On watchlist" />
+          ) : (
+            <WatchlistIndicator label="Not watched" />
+          )}
           <Badge variant="neutral">
             {workspaceSummary.linkedTradePlans.totalCount} linked plans
           </Badge>
@@ -541,7 +560,7 @@ export default function CampaignDetailPageClient({
                       <option value="active">Active</option>
                       <option value="closed">Closed</option>
                     </select>
-                    {plan.isWatched ? <Badge variant="info">Watched</Badge> : null}
+                    {plan.isWatched ? <WatchlistIndicator label="Watched" /> : null}
                     <Badge variant="neutral">{plan.status}</Badge>
                   </div>
                 </div>
