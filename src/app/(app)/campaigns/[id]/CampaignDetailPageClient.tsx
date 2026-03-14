@@ -4,7 +4,7 @@ import { ConvexError } from "convex/values";
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
 import { CheckCircle2, Loader2, Pencil, Star } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import {
   MobileHierarchyBreadcrumbs,
@@ -107,6 +107,7 @@ export default function CampaignDetailPageClient({
     [campaignWorkspace],
   );
   const workspaceSummary = campaignWorkspace?.summary ?? null;
+  const thesisPreview = campaign?.thesis ?? null;
 
   const addNote = useMutation(api.notes.addNote);
   const updateNote = useMutation(api.notes.updateNote);
@@ -139,6 +140,8 @@ export default function CampaignDetailPageClient({
   const [watchError, setWatchError] = useState<string | null>(null);
   const [isEditingName, setIsEditingName] = useState(false);
   const [showFullThesis, setShowFullThesis] = useState(false);
+  const [isThesisOverflowing, setIsThesisOverflowing] = useState(false);
+  const thesisPreviewRef = useRef<HTMLParagraphElement>(null);
 
   const [campaignNameInitialized, setCampaignNameInitialized] = useState(false);
   const [campaignNameError, setCampaignNameError] = useState<string | null>(null);
@@ -167,9 +170,6 @@ export default function CampaignDetailPageClient({
     validators: {
       onChange: ({ value }) => {
         setCampaignNameError(null);
-        if (campaignNameSaveState === "saved") {
-          setCampaignNameSaveState("idle");
-        }
         return validateWithSchema(campaignNameSchema, value);
       },
     },
@@ -184,7 +184,8 @@ export default function CampaignDetailPageClient({
           name: parsed.name,
         });
         campaignNameForm.setFieldValue("name", parsed.name);
-        setCampaignNameSaveState("saved");
+        setCampaignNameSaveState("idle");
+        setIsEditingName(false);
       } catch (error) {
         setCampaignNameError(
           error instanceof ConvexError
@@ -348,6 +349,41 @@ export default function CampaignDetailPageClient({
     }
   };
 
+  useEffect(() => {
+    setShowFullThesis(false);
+
+    if (!thesisPreview) {
+      setIsThesisOverflowing(false);
+      return;
+    }
+
+    const element = thesisPreviewRef.current;
+    if (!element) {
+      return;
+    }
+
+    const measureOverflow = () => {
+      const isClamped = element.classList.contains("line-clamp-3");
+
+      if (!isClamped) {
+        element.classList.add("line-clamp-3");
+      }
+
+      setIsThesisOverflowing(element.scrollHeight > element.clientHeight + 1);
+
+      if (!isClamped) {
+        element.classList.remove("line-clamp-3");
+      }
+    };
+
+    measureOverflow();
+    window.addEventListener("resize", measureOverflow);
+
+    return () => {
+      window.removeEventListener("resize", measureOverflow);
+    };
+  }, [thesisPreview]);
+
   const handleToggleWatch = async () => {
     setWatchError(null);
     setIsWatchPending(true);
@@ -406,9 +442,7 @@ export default function CampaignDetailPageClient({
                   onSubmit={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
-                    void campaignNameForm.handleSubmit().then(() => {
-                      setIsEditingName(false);
-                    });
+                    void campaignNameForm.handleSubmit();
                   }}
                   className="space-y-2"
                 >
@@ -425,17 +459,22 @@ export default function CampaignDetailPageClient({
                     <campaignNameForm.AppForm>
                       <campaignNameForm.SubmitButton label="Save Name" />
                     </campaignNameForm.AppForm>
-                    <Button
-                      dataTestId="cancel-edit-campaign-name"
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setIsEditingName(false);
-                        campaignNameForm.setFieldValue("name", campaign.name);
-                      }}
-                    >
-                      Cancel
-                    </Button>
+                    <campaignNameForm.Subscribe selector={(state) => state.isSubmitting}>
+                      {(isSubmitting) => (
+                        <Button
+                          dataTestId="cancel-edit-campaign-name"
+                          type="button"
+                          variant="outline"
+                          disabled={isSubmitting}
+                          onClick={() => {
+                            setIsEditingName(false);
+                            campaignNameForm.setFieldValue("name", campaign.name);
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      )}
+                    </campaignNameForm.Subscribe>
                   </div>
                 </form>
                 {campaignNameError && (
@@ -449,12 +488,6 @@ export default function CampaignDetailPageClient({
                     Saving...
                   </span>
                 )}
-                {campaignNameSaveState === "saved" && (
-                  <span className="mt-2 flex items-center gap-1 text-sm text-grass-9">
-                    <CheckCircle2 className="h-4 w-4" />
-                    Saved
-                  </span>
-                )}
               </div>
             ) : (
               <div className="flex items-center gap-2">
@@ -462,14 +495,16 @@ export default function CampaignDetailPageClient({
                 <Badge variant={getStatusVariant(campaign.status)}>
                   {capitalize(campaign.status)}
                 </Badge>
-                <button
+                <Button
+                  dataTestId="edit-campaign-name"
                   type="button"
-                  className="rounded-md p-1 text-olive-10 hover:bg-olive-4 hover:text-olive-12"
+                  variant="ghost"
+                  size="icon"
                   aria-label="Edit campaign name"
                   onClick={() => setIsEditingName(true)}
                 >
                   <Pencil className="h-4 w-4" />
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -484,7 +519,7 @@ export default function CampaignDetailPageClient({
                 value={campaign.status}
                 disabled={isChangingCampaignStatus}
                 onChange={(e) => void handleCampaignStatusChange(e.target.value as CampaignStatus)}
-                className="h-9 w-full rounded-md border border-olive-6 bg-olive-3 px-3 py-1 text-sm text-olive-12 focus:outline-none focus:ring-1 focus:ring-olive-8"
+                className="h-9 w-full rounded-md border border-olive-6 bg-olive-3 px-3 py-1 text-sm text-olive-12 focus:outline-none focus:ring-1 focus:ring-blue-8"
               >
                 <option value="planning">Planning</option>
                 <option value="active">Active</option>
@@ -505,6 +540,7 @@ export default function CampaignDetailPageClient({
                 "mt-4 h-8 w-8 rounded-md text-olive-10 hover:bg-olive-4 hover:text-olive-12",
                 workspaceSummary.isWatched && "text-amber-11 hover:text-amber-12",
               )}
+              aria-pressed={workspaceSummary.isWatched}
               disabled={isWatchPending}
               onClick={() => void handleToggleWatch()}
             >
@@ -514,24 +550,28 @@ export default function CampaignDetailPageClient({
         </div>
 
         {/* Thesis preview */}
-        {campaign.thesis && (
+        {thesisPreview && (
           <div className="mt-3">
             <p
+              ref={thesisPreviewRef}
               className={cn(
                 "text-sm text-olive-11",
                 !showFullThesis && "line-clamp-3",
               )}
             >
-              {campaign.thesis}
+              {thesisPreview}
             </p>
-            {campaign.thesis.length > 200 && (
-              <button
+            {isThesisOverflowing && (
+              <Button
+                dataTestId="toggle-thesis-preview"
                 type="button"
-                className="mt-1 text-xs text-olive-10 hover:text-olive-12"
+                variant="ghost"
+                size="sm"
+                className="mt-1 h-auto px-0 py-0 text-xs text-olive-10 hover:bg-transparent hover:text-olive-12"
                 onClick={() => setShowFullThesis((prev) => !prev)}
               >
                 {showFullThesis ? "Show less" : "Show more"}
-              </button>
+              </Button>
             )}
           </div>
         )}
@@ -804,9 +844,9 @@ export default function CampaignDetailPageClient({
         )}
       </section>
 
-      <section className="rounded-lg border border-olive-6 bg-olive-2 p-4">
+      <section className="rounded-lg border border-slate-6 bg-slate-2 p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-olive-12">Trades</h2>
+          <h2 className="text-lg font-semibold text-slate-12">Trades</h2>
           <Link href="/trades/new" className="rounded bg-olive-3 px-3 py-1.5 text-sm font-medium text-olive-12 hover:bg-olive-4">
             Add Trade
           </Link>
@@ -818,7 +858,7 @@ export default function CampaignDetailPageClient({
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-olive-6 text-left text-olive-11">
+                <tr className="border-b border-slate-6 text-left text-slate-11">
                   <th className="px-2 py-2">Date</th>
                   <th className="px-2 py-2">Ticker</th>
                   <th className="px-2 py-2">Account</th>
@@ -830,7 +870,7 @@ export default function CampaignDetailPageClient({
               </thead>
               <tbody>
                 {trades.map((trade) => (
-                  <tr key={trade._id} className="border-b border-olive-6/60">
+                  <tr key={trade._id} className="border-b border-slate-6/60">
                     <td className="px-2 py-2 text-olive-11">{new Date(trade.date).toLocaleDateString("en-US")}</td>
                     <td className="px-2 py-2 text-olive-12">{trade.ticker}</td>
                     <td className="px-2 py-2 text-olive-11">
