@@ -187,7 +187,7 @@ export default function CampaignDetailPageClient({
           name: parsed.name,
         });
         campaignNameForm.setFieldValue("name", parsed.name);
-        setCampaignNameSaveState("saved");
+        setCampaignNameSaveState("idle");
         setIsEditingName(false);
       } catch (error) {
         setCampaignNameError(
@@ -869,7 +869,7 @@ export default function CampaignDetailPageClient({
               </thead>
               <tbody>
                 {trades.map((trade) => (
-                  <tr key={trade._id} className="border-b border-olive-6/60">
+                  <tr key={trade._id} className="border-b border-slate-6/60">
                     <td className="px-2 py-2 text-olive-11">{new Date(trade.date).toLocaleDateString("en-US")}</td>
                     <td className="px-2 py-2 text-olive-12">{trade.ticker}</td>
                     <td className="px-2 py-2 text-olive-11">
