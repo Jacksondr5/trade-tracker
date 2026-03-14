@@ -1,6 +1,6 @@
 "use client";
 
-import { UserButton } from "@clerk/nextjs";
+import { useAuth, UserButton } from "@clerk/nextjs";
 import { Menu, Search } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -321,9 +321,11 @@ function AuthenticatedShell({
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const { isLoaded, isSignedIn } = useAuth();
   const pathname = usePathname();
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
 
   const openCommandPalette = useCallback(() => {
     setIsDrawerOpen(false);
@@ -360,6 +362,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [openCommandPalette]);
+
+  if (!isLoaded || !isSignedIn) {
+    return <>{children}</>;
+  }
 
   return (
     <AuthenticatedShell
