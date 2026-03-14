@@ -185,6 +185,7 @@ export default function CampaignDetailPageClient({
         });
         campaignNameForm.setFieldValue("name", parsed.name);
         setCampaignNameSaveState("saved");
+        setIsEditingName(false);
       } catch (error) {
         setCampaignNameError(
           error instanceof ConvexError
@@ -406,9 +407,7 @@ export default function CampaignDetailPageClient({
                   onSubmit={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
-                    void campaignNameForm.handleSubmit().then(() => {
-                      setIsEditingName(false);
-                    });
+                    void campaignNameForm.handleSubmit();
                   }}
                   className="space-y-2"
                 >
@@ -462,14 +461,16 @@ export default function CampaignDetailPageClient({
                 <Badge variant={getStatusVariant(campaign.status)}>
                   {capitalize(campaign.status)}
                 </Badge>
-                <button
+                <Button
+                  dataTestId="edit-campaign-name"
                   type="button"
-                  className="rounded-md p-1 text-olive-10 hover:bg-olive-4 hover:text-olive-12"
+                  variant="ghost"
+                  size="icon"
                   aria-label="Edit campaign name"
                   onClick={() => setIsEditingName(true)}
                 >
                   <Pencil className="h-4 w-4" />
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -804,7 +805,7 @@ export default function CampaignDetailPageClient({
         )}
       </section>
 
-      <section className="rounded-lg border border-olive-6 bg-olive-2 p-4">
+      <section className="rounded-lg border border-slate-6 bg-slate-2 p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-olive-12">Trades</h2>
           <Link href="/trades/new" className="rounded bg-olive-3 px-3 py-1.5 text-sm font-medium text-olive-12 hover:bg-olive-4">
@@ -818,7 +819,7 @@ export default function CampaignDetailPageClient({
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-olive-6 text-left text-olive-11">
+                <tr className="border-b border-slate-6 text-left text-slate-11">
                   <th className="px-2 py-2">Date</th>
                   <th className="px-2 py-2">Ticker</th>
                   <th className="px-2 py-2">Account</th>
