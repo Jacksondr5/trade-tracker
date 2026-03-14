@@ -10,7 +10,7 @@ export function getCampaignRow(page: Page): Locator {
 export function getStandaloneTradePlanLink(page: Page): Locator {
   return page.getByRole("link", {
     exact: true,
-    name: E2E_SMOKE_FIXTURES.standaloneTradePlan.name,
+    name: `${E2E_SMOKE_FIXTURES.standaloneTradePlan.name} ${E2E_SMOKE_FIXTURES.standaloneTradePlan.instrumentSymbol}`,
   });
 }
 

@@ -75,13 +75,22 @@ export function getBaseUrl(): string {
     : "http://127.0.0.1:3000";
 }
 
+function shouldUseBypassHeaders(baseUrl: string): boolean {
+  try {
+    const { hostname } = new URL(baseUrl);
+    return hostname !== "127.0.0.1" && hostname !== "localhost";
+  } catch {
+    return false;
+  }
+}
+
 export function getBypassHeaders(): Record<string, string> | undefined {
   const bypassSecret = (
     process.env.VERCEL_AUTOMATION_BYPASS_SECRET ??
     dotenvLocal.VERCEL_AUTOMATION_BYPASS_SECRET
   )?.trim();
 
-  if (!bypassSecret) {
+  if (!bypassSecret || !shouldUseBypassHeaders(getBaseUrl())) {
     return undefined;
   }
 
