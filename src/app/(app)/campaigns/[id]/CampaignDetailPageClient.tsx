@@ -55,22 +55,27 @@ export default function CampaignDetailPageClient({
   preloadedAccountMappings,
   preloadedCampaignTrades,
   preloadedCampaign,
+  preloadedCampaignWorkspace,
   preloadedCampaignNotes,
-  preloadedTradePlans,
 }: {
   campaignId: Id<"campaigns">;
   preloadedAccountMappings: Preloaded<typeof api.accountMappings.listAccountMappings>;
   preloadedCampaignTrades: Preloaded<typeof api.trades.listTradesByCampaign>;
   preloadedCampaign: Preloaded<typeof api.campaigns.getCampaign>;
+  preloadedCampaignWorkspace: Preloaded<typeof api.campaigns.getCampaignWorkspace>;
   preloadedCampaignNotes: Preloaded<typeof api.notes.getNotesByCampaign>;
-  preloadedTradePlans: Preloaded<typeof api.tradePlans.listTradePlansByCampaign>;
 }) {
   const accountMappings = usePreloadedQuery(preloadedAccountMappings);
   const campaign = usePreloadedQuery(preloadedCampaign);
+  const campaignWorkspace = usePreloadedQuery(preloadedCampaignWorkspace);
   const campaignNotes = usePreloadedQuery(preloadedCampaignNotes);
-  const tradePlans = usePreloadedQuery(preloadedTradePlans);
   const trades = usePreloadedQuery(preloadedCampaignTrades);
   const { hierarchy } = useNavigationData();
+  const linkedTradePlans = useMemo(
+    () => campaignWorkspace?.linkedTradePlans ?? [],
+    [campaignWorkspace],
+  );
+  const workspaceSummary = campaignWorkspace?.summary ?? null;
 
   const addNote = useMutation(api.notes.addNote);
   const updateNote = useMutation(api.notes.updateNote);
@@ -81,11 +86,11 @@ export default function CampaignDetailPageClient({
 
   const tradePlanNameById = useMemo(() => {
     const map = new Map<Id<"tradePlans">, string>();
-    for (const tradePlan of tradePlans) {
-      map.set(tradePlan._id, tradePlan.name);
+    for (const tradePlan of linkedTradePlans) {
+      map.set(tradePlan.id, tradePlan.name);
     }
     return map;
-  }, [tradePlans]);
+  }, [linkedTradePlans]);
 
   const accountNameByAccountId = useMemo(() => {
     const map = new Map<string, string>();
@@ -306,7 +311,7 @@ export default function CampaignDetailPageClient({
     }
   };
 
-  if (campaign === null) {
+  if (campaign === null || campaignWorkspace === null || workspaceSummary === null) {
     return (
       <div className="container mx-auto px-4 py-8">
         <p className="text-slate-11">Campaign not found.</p>
@@ -401,6 +406,18 @@ export default function CampaignDetailPageClient({
           <p className="text-xs text-slate-11">Closed {new Date(campaign.closedAt).toLocaleDateString("en-US")}</p>
         )}
 
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Badge variant={workspaceSummary.isWatched ? "info" : "neutral"}>
+            {workspaceSummary.isWatched ? "On watchlist" : "Not watched"}
+          </Badge>
+          <Badge variant="neutral">
+            {workspaceSummary.linkedTradePlans.totalCount} linked plans
+          </Badge>
+          <Badge variant="neutral">
+            {workspaceSummary.linkedTrades.totalCount} linked trades
+          </Badge>
+        </div>
+
         {statusChangeError && (
           <Alert variant="error" className="mt-3" onDismiss={() => setStatusChangeError(null)}>
             {statusChangeError}
@@ -465,7 +482,9 @@ export default function CampaignDetailPageClient({
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-12">Trade Plans</h2>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-slate-11">{tradePlans.length} plans</span>
+            <span className="text-sm text-slate-11">
+              {workspaceSummary.linkedTradePlans.totalCount} plans
+            </span>
             <button
               type="button"
               className="rounded bg-blue-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-600"
@@ -489,26 +508,29 @@ export default function CampaignDetailPageClient({
           </Alert>
         )}
 
-        {tradePlans.length === 0 ? (
+        {linkedTradePlans.length === 0 ? (
           <p className="mb-4 text-sm text-slate-11">No trade plans yet.</p>
         ) : (
           <div className="mb-4 space-y-3">
-            {tradePlans.map((plan) => (
-              <div key={plan._id} className="rounded border border-slate-600 p-3">
+            {linkedTradePlans.map((plan) => (
+              <div key={plan.id} className="rounded border border-slate-600 p-3">
                 <div className="flex items-center justify-between gap-2">
                   <Link
-                    href={`/trade-plans/${plan._id}`}
+                    href={`/trade-plans/${plan.id}`}
                     className="flex-1 hover:underline"
                   >
                     <p className="font-semibold text-slate-12">{plan.name}</p>
-                    <p className="text-sm text-slate-11">{plan.instrumentSymbol}</p>
+                    <p className="text-sm text-slate-11">
+                      {plan.instrumentSymbol}
+                      {plan.tradeCount > 0 ? ` · ${plan.tradeCount} trades` : ""}
+                    </p>
                   </Link>
                   <div className="flex items-center gap-2">
                     <select
                       value={plan.status}
                       onChange={(e) =>
                         void handleTradePlanStatusChange(
-                          plan._id,
+                          plan.id,
                           e.target.value as TradePlanStatus,
                         )
                       }
@@ -519,6 +541,7 @@ export default function CampaignDetailPageClient({
                       <option value="active">Active</option>
                       <option value="closed">Closed</option>
                     </select>
+                    {plan.isWatched ? <Badge variant="info">Watched</Badge> : null}
                     <Badge variant="neutral">{plan.status}</Badge>
                   </div>
                 </div>

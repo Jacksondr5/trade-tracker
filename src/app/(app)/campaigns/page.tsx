@@ -5,7 +5,15 @@ import CampaignsPageClient from "./CampaignsPageClient";
 
 export default async function CampaignsPage() {
   const token = await getConvexTokenOrThrow();
-  const preloadedAllCampaigns = await preloadQuery(api.campaigns.listCampaigns, {}, { token });
+  const preloadedCampaignWorkspaceSummaries = await preloadQuery(
+    api.campaigns.listCampaignWorkspaceSummaries,
+    {},
+    { token },
+  );
 
-  return <CampaignsPageClient preloadedAllCampaigns={preloadedAllCampaigns} />;
+  return (
+    <CampaignsPageClient
+      preloadedCampaignWorkspaceSummaries={preloadedCampaignWorkspaceSummaries}
+    />
+  );
 }

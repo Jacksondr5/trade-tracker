@@ -81,17 +81,19 @@ function PendingFilterChrome() {
 }
 
 export default function CampaignsPageClient({
-  preloadedAllCampaigns,
+  preloadedCampaignWorkspaceSummaries,
 }: {
-  preloadedAllCampaigns: Preloaded<typeof api.campaigns.listCampaigns>;
+  preloadedCampaignWorkspaceSummaries: Preloaded<
+    typeof api.campaigns.listCampaignWorkspaceSummaries
+  >;
 }) {
   const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
-  const allCampaigns = usePreloadedQuery(preloadedAllCampaigns);
+  const allCampaigns = usePreloadedQuery(preloadedCampaignWorkspaceSummaries);
   const filteredCampaigns = useQuery(
-    api.campaigns.listCampaignsByStatus,
-    statusFilter !== "all" ? { status: statusFilter } : "skip",
+    api.campaigns.listCampaignWorkspaceSummaries,
+    statusFilter === "all" ? "skip" : { status: statusFilter },
   );
 
   const requestedCampaigns =
@@ -251,19 +253,19 @@ export default function CampaignsPageClient({
             >
               {campaigns.map((campaign) => (
                 <tr
-                  key={campaign._id}
+                  key={campaign.id}
                   className="cursor-pointer hover:bg-slate-3/80"
-                  onClick={() => router.push(`/campaigns/${campaign._id}`)}
+                  onClick={() => router.push(`/campaigns/${campaign.id}`)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      router.push(`/campaigns/${campaign._id}`);
+                      router.push(`/campaigns/${campaign.id}`);
                     }
                   }}
                   tabIndex={0}
                   role="button"
                   aria-label={`View campaign ${campaign.name}`}
-                  data-testid={`campaign-row-${campaign._id}`}
+                  data-testid={`campaign-row-${campaign.id}`}
                 >
                   <td className="px-4 py-3 text-sm font-medium whitespace-nowrap text-slate-12">
                     {campaign.name}
@@ -282,7 +284,7 @@ export default function CampaignsPageClient({
                     </Badge>
                   </td>
                   <td className="px-4 py-3 text-sm whitespace-nowrap text-slate-11">
-                    {formatDate(campaign._creationTime)}
+                    {formatDate(campaign.createdAt)}
                   </td>
                 </tr>
               ))}
