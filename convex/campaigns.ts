@@ -77,6 +77,8 @@ const campaignWorkspaceDetailValidator = v.object({
 type CampaignDoc = Doc<"campaigns">;
 type TradePlanDoc = Doc<"tradePlans">;
 
+const DETAIL_SOURCE_DATA_CONCURRENCY = 20;
+
 function sortTradePlansByOrderThenNewest(
   a: Pick<TradePlanDoc, "_creationTime" | "sortOrder">,
   b: Pick<TradePlanDoc, "_creationTime" | "sortOrder">,
@@ -250,7 +252,7 @@ async function loadCampaignWorkspaceDetailSourceData(
       .withIndex("by_owner_campaignId", (q) =>
         q.eq("ownerId", ownerId).eq("campaignId", campaignId),
       )
-      .unique(),
+      .first(),
   ]);
 
   const watchedCampaignIds = new Set<Id<"campaigns">>();
@@ -264,41 +266,45 @@ async function loadCampaignWorkspaceDetailSourceData(
     { latestTradeDate: number | null; totalCount: number }
   >();
 
-  await Promise.all(
-    tradePlans.map(async (tradePlan) => {
-      const [trades, watchedTradePlan] = await Promise.all([
-        ctx.db
-          .query("trades")
-          .withIndex("by_owner_tradePlanId", (q) =>
-            q.eq("ownerId", ownerId).eq("tradePlanId", tradePlan._id),
-          )
-          .collect(),
-        ctx.db
-          .query("watchlist")
-          .withIndex("by_owner_tradePlanId", (q) =>
-            q.eq("ownerId", ownerId).eq("tradePlanId", tradePlan._id),
-          )
-          .unique(),
-      ]);
+  for (let i = 0; i < tradePlans.length; i += DETAIL_SOURCE_DATA_CONCURRENCY) {
+    const tradePlanChunk = tradePlans.slice(i, i + DETAIL_SOURCE_DATA_CONCURRENCY);
 
-      if (watchedTradePlan?.itemType === "tradePlan" && watchedTradePlan.tradePlanId) {
-        watchedTradePlanIds.add(watchedTradePlan.tradePlanId);
-      }
+    await Promise.all(
+      tradePlanChunk.map(async (tradePlan) => {
+        const [trades, watchedTradePlan] = await Promise.all([
+          ctx.db
+            .query("trades")
+            .withIndex("by_owner_tradePlanId", (q) =>
+              q.eq("ownerId", ownerId).eq("tradePlanId", tradePlan._id),
+            )
+            .collect(),
+          ctx.db
+            .query("watchlist")
+            .withIndex("by_owner_tradePlanId", (q) =>
+              q.eq("ownerId", ownerId).eq("tradePlanId", tradePlan._id),
+            )
+            .unique(),
+        ]);
 
-      let latestTradeDate: number | null = null;
-      for (const trade of trades) {
-        latestTradeDate =
-          latestTradeDate === null || trade.date > latestTradeDate
-            ? trade.date
-            : latestTradeDate;
-      }
+        if (watchedTradePlan?.itemType === "tradePlan" && watchedTradePlan.tradePlanId) {
+          watchedTradePlanIds.add(watchedTradePlan.tradePlanId);
+        }
 
-      tradeStatsByPlanId.set(tradePlan._id, {
-        latestTradeDate,
-        totalCount: trades.length,
-      });
-    }),
-  );
+        let latestTradeDate: number | null = null;
+        for (const trade of trades) {
+          latestTradeDate =
+            latestTradeDate === null || trade.date > latestTradeDate
+              ? trade.date
+              : latestTradeDate;
+        }
+
+        tradeStatsByPlanId.set(tradePlan._id, {
+          latestTradeDate,
+          totalCount: trades.length,
+        });
+      }),
+    );
+  }
 
   return {
     tradePlansByCampaignId: new Map([[campaignId, tradePlans]]),
