@@ -424,11 +424,7 @@ export default function CampaignDetailPageClient({
         )}
 
         <div className="mt-3 flex flex-wrap gap-2">
-          {workspaceSummary.isWatched ? (
-            <WatchlistIndicator label="On watchlist" />
-          ) : (
-            <WatchlistIndicator label="Not watched" />
-          )}
+          {workspaceSummary.isWatched ? <WatchlistIndicator label="On watchlist" /> : null}
           <Badge variant="neutral">
             {workspaceSummary.linkedTradePlans.totalCount} linked plans
           </Badge>
