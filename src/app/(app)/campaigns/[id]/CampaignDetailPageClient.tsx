@@ -4,7 +4,7 @@ import { ConvexError } from "convex/values";
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
 import { CheckCircle2, Loader2, Pencil, Star } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 import {
   MobileHierarchyBreadcrumbs,
@@ -110,7 +110,6 @@ export default function CampaignDetailPageClient({
     [campaignWorkspace],
   );
   const workspaceSummary = campaignWorkspace?.summary ?? null;
-  const thesisPreview = campaign?.thesis ?? null;
 
   const addNote = useMutation(api.notes.addNote);
   const updateNote = useMutation(api.notes.updateNote);
@@ -155,9 +154,6 @@ export default function CampaignDetailPageClient({
   const [watchError, setWatchError] = useState<string | null>(null);
   const [isEditingName, setIsEditingName] = useState(false);
   const [isEditingThesis, setIsEditingThesis] = useState(false);
-  const [showFullThesis, setShowFullThesis] = useState(false);
-  const [isThesisOverflowing, setIsThesisOverflowing] = useState(false);
-  const thesisPreviewRef = useRef<HTMLParagraphElement>(null);
 
   const [campaignNameInitialized, setCampaignNameInitialized] = useState(false);
   const [campaignNameError, setCampaignNameError] = useState<string | null>(null);
@@ -366,41 +362,6 @@ export default function CampaignDetailPageClient({
     }
   };
 
-  useEffect(() => {
-    setShowFullThesis(false);
-
-    if (!thesisPreview) {
-      setIsThesisOverflowing(false);
-      return;
-    }
-
-    const element = thesisPreviewRef.current;
-    if (!element) {
-      return;
-    }
-
-    const measureOverflow = () => {
-      const isClamped = element.classList.contains("line-clamp-3");
-
-      if (!isClamped) {
-        element.classList.add("line-clamp-3");
-      }
-
-      setIsThesisOverflowing(element.scrollHeight > element.clientHeight + 1);
-
-      if (!isClamped) {
-        element.classList.remove("line-clamp-3");
-      }
-    };
-
-    measureOverflow();
-    window.addEventListener("resize", measureOverflow);
-
-    return () => {
-      window.removeEventListener("resize", measureOverflow);
-    };
-  }, [thesisPreview]);
-
   const handleToggleWatch = async () => {
     setWatchError(null);
     setIsWatchPending(true);
@@ -422,7 +383,7 @@ export default function CampaignDetailPageClient({
     return (
       <div className="container mx-auto px-4 py-8">
         <p className="text-olive-11">Campaign not found.</p>
-        <Link href="/campaigns" className="mt-4 inline-block text-grass-9 hover:underline">
+        <Link href="/campaigns" className="mt-4 inline-block text-blue-9 hover:underline">
           Back to campaigns
         </Link>
       </div>
@@ -516,9 +477,6 @@ export default function CampaignDetailPageClient({
             ) : (
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-bold text-olive-12 md:text-3xl">{campaign.name}</h1>
-                <Badge variant={getStatusVariant(campaign.status)}>
-                  {capitalize(campaign.status)}
-                </Badge>
                 <Button
                   dataTestId="edit-campaign-name"
                   type="button"
@@ -549,9 +507,6 @@ export default function CampaignDetailPageClient({
                 <option value="active">Active</option>
                 <option value="closed">Closed</option>
               </select>
-              <p className="mt-1 text-xs text-olive-10">
-                Created {formatDate(campaign._creationTime)}
-              </p>
               {campaign.status === "closed" && workspaceSummary.linkedTradePlans.openCount > 0 && (
                 <p className="mt-1 text-xs text-amber-11">
                   This campaign has {workspaceSummary.linkedTradePlans.openCount} open trade plan{workspaceSummary.linkedTradePlans.openCount !== 1 ? "s" : ""}. They can be closed independently but cannot be reopened while the campaign remains closed.
@@ -580,33 +535,6 @@ export default function CampaignDetailPageClient({
             </Button>
           </div>
         </div>
-
-        {/* Thesis preview */}
-        {thesisPreview && (
-          <div className="mt-3">
-            <p
-              ref={thesisPreviewRef}
-              className={cn(
-                "text-sm text-olive-11",
-                !showFullThesis && "line-clamp-3",
-              )}
-            >
-              {thesisPreview}
-            </p>
-            {isThesisOverflowing && (
-              <Button
-                dataTestId="toggle-thesis-preview"
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="mt-1 h-auto px-0 py-0 text-xs text-olive-10 hover:bg-transparent hover:text-olive-12"
-                onClick={() => setShowFullThesis((prev) => !prev)}
-              >
-                {showFullThesis ? "Show less" : "Show more"}
-              </Button>
-            )}
-          </div>
-        )}
 
         {/* Rollup stats row */}
         <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-olive-10">
@@ -799,6 +727,7 @@ export default function CampaignDetailPageClient({
                     </p>
                   </Link>
                   <div className="flex items-center gap-2">
+                    {plan.isWatched ? <WatchlistIndicator label="Watched" /> : null}
                     <select
                       value={plan.status}
                       onChange={(e) =>
@@ -814,7 +743,6 @@ export default function CampaignDetailPageClient({
                       <option value="active">Active</option>
                       <option value="closed">Closed</option>
                     </select>
-                    {plan.isWatched ? <WatchlistIndicator label="Watched" /> : null}
                   </div>
                 </div>
               </div>
@@ -986,7 +914,7 @@ export default function CampaignDetailPageClient({
                       {trade.tradePlanId ? (
                         <Link
                           href={`/trade-plans/${trade.tradePlanId}`}
-                          className="text-grass-9 hover:underline"
+                          className="text-blue-9 hover:underline"
                         >
                           {tradePlanNameById.get(trade.tradePlanId) ?? "\u2014"}
                         </Link>
