@@ -1,6 +1,6 @@
 "use client";
 
-import { UserButton, useAuth } from "@clerk/nextjs";
+import { UserButton } from "@clerk/nextjs";
 import { Menu, Search } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -75,7 +75,7 @@ function NavigationSections({
 function ShellBrand({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <Link
-      href="/"
+      href="/dashboard"
       onClick={onNavigate}
       className="flex items-center gap-2.5 text-lg font-semibold tracking-tight text-olive-12"
     >
@@ -323,7 +323,6 @@ function AuthenticatedShell({
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { isLoaded, isSignedIn } = useAuth();
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
@@ -350,10 +349,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn) {
-      return;
-    }
-
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -365,15 +360,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isLoaded, isSignedIn, openCommandPalette]);
-
-  if (!isLoaded) {
-    return <>{children}</>;
-  }
-
-  if (!isSignedIn) {
-    return <>{children}</>;
-  }
+  }, [openCommandPalette]);
 
   return (
     <AuthenticatedShell

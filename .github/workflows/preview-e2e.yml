@@ -11,7 +11,7 @@ on:
         type: string
 
 concurrency:
-  group: preview-e2e-${{ github.event.client_payload.sha || github.run_id }}
+  group: preview-e2e-${{ github.event.client_payload.git.sha || github.event.client_payload.sha || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -20,38 +20,59 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+      statuses: write
     steps:
       - name: Resolve preview metadata
         id: preview
         env:
           INPUT_PREVIEW_URL: ${{ inputs.preview_url }}
           PAYLOAD_ENVIRONMENT: ${{ github.event.client_payload.environment }}
+          PAYLOAD_GIT_SHA: ${{ github.event.client_payload.git.sha }}
           PAYLOAD_TARGET: ${{ github.event.client_payload.target }}
           PAYLOAD_URL: ${{ github.event.client_payload.url }}
         run: |
           set -euo pipefail
 
           url="${INPUT_PREVIEW_URL:-${PAYLOAD_URL:-}}"
-
           environment="${PAYLOAD_ENVIRONMENT:-${PAYLOAD_TARGET:-preview}}"
+          git_sha="${PAYLOAD_GIT_SHA:-}"
 
           if [ -z "$url" ]; then
             echo "::error::Missing preview URL. Provide workflow_dispatch input or Vercel client_payload.url."
             exit 1
           fi
 
+          if [ "${GITHUB_EVENT_NAME}" = "repository_dispatch" ] && [ -z "$git_sha" ]; then
+            echo "::error::Missing deployment commit SHA in Vercel client_payload.git.sha."
+            exit 1
+          fi
+
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "environment=$environment" >> "$GITHUB_OUTPUT"
+          echo "git_sha=$git_sha" >> "$GITHUB_OUTPUT"
           echo "Resolved preview URL: $url"
           echo "Resolved environment: $environment"
+          if [ -n "$git_sha" ]; then
+            echo "Resolved deployment SHA: $git_sha"
+          fi
 
       - name: Skip non-preview deployment events
         if: github.event_name == 'repository_dispatch' && steps.preview.outputs.environment == 'production'
         run: |
           echo "Received a production deployment event. Skipping preview smoke tests."
 
-      - name: Checkout repository
-        if: github.event_name != 'repository_dispatch' || steps.preview.outputs.environment != 'production'
+      - name: Notify Vercel
+        if: github.event_name == 'repository_dispatch' && steps.preview.outputs.environment != 'production'
+        uses: vercel/repository-dispatch/actions/status@v1
+        with:
+          name: Vercel - preview-e2e-${{ steps.preview.outputs.environment }}
+
+      - name: Checkout repository for Vercel deployment event
+        if: github.event_name == 'repository_dispatch' && steps.preview.outputs.environment != 'production'
+        uses: vercel/repository-dispatch/actions/checkout@v1
+
+      - name: Checkout repository for manual dispatch
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/checkout@v5
 
       - name: Setup pnpm

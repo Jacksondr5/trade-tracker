@@ -2,10 +2,19 @@ import { expect, test } from "@playwright/test";
 import { waitForAuthenticatedApp } from "../helpers/app";
 import { APP_PAGE_TITLES, getNavigationLink } from "../helpers/selectors";
 
+test("authenticated users are redirected from the entry page to dashboard", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.waitForURL(/\/dashboard$/);
+  await waitForAuthenticatedApp(page, APP_PAGE_TITLES.dashboard);
+});
+
 test("authenticated app shell renders primary navigation", async ({ page }) => {
   await page.goto("/campaigns");
   await waitForAuthenticatedApp(page, APP_PAGE_TITLES.campaigns);
 
+  await expect(getNavigationLink(page, "dashboard")).toBeVisible();
   await expect(getNavigationLink(page, "trades")).toBeVisible();
   await expect(getNavigationLink(page, "campaigns")).toBeVisible();
   await expect(getNavigationLink(page, "tradePlans")).toBeVisible();

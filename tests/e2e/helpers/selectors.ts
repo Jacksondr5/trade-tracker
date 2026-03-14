@@ -8,6 +8,7 @@ import {
 } from "../../../shared/e2e/testIds";
 
 export const APP_PAGE_TITLES = {
+  dashboard: "dashboard-page-title",
   campaigns: "campaigns-page-title",
   positions: "positions-page-title",
   tradePlans: "trade-plans-page-title",
@@ -15,6 +16,7 @@ export const APP_PAGE_TITLES = {
 } as const;
 
 export const NAVIGATION_TEST_IDS = {
+  dashboard: "nav-dashboard-link",
   campaigns: "nav-campaigns-link",
   positions: "nav-positions-link",
   tradePlans: "nav-trade-plans-link",

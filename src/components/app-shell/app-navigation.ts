@@ -30,11 +30,11 @@ export const appNavigationSections: AppNavigationSection[] = [
     title: "Activity",
     items: [
       {
-        href: "/",
+        href: "/dashboard",
         icon: LayoutDashboard,
         label: "Dashboard",
-        matchPrefixes: ["/"],
         testId: "nav-dashboard-link",
+        matchPrefixes: ["/dashboard"],
       },
       {
         href: "/trades",
@@ -123,10 +123,6 @@ export function isAppNavigationItemActive(
   item: AppNavigationItem,
 ): boolean {
   return item.matchPrefixes.some((prefix) => {
-    if (prefix === "/") {
-      return pathname === "/";
-    }
-
     return pathname === prefix || pathname.startsWith(`${prefix}/`);
   });
 }
