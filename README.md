@@ -111,7 +111,7 @@ pnpm dev
 
 Open `http://localhost:3000`.
 
-The dashboard at `/` is visible without auth, but the rest of the product flow expects you to sign in.
+The root route `/` is a public entry page. Signed-in users are redirected to `/dashboard`.
 
 ## Scripts
 
@@ -165,7 +165,8 @@ pnpm vercel-build # Convex-backed Vercel build command with preview seeding
 
 ## Useful routes
 
-- `/` dashboard
+- `/` public entry
+- `/dashboard` dashboard
 - `/trades` trade journal and filters
 - `/trades/new` manual trade entry
 - `/trade-plans` trade plan management
