@@ -75,26 +75,7 @@ const campaignWorkspaceDetailValidator = v.object({
 });
 
 type CampaignDoc = Doc<"campaigns">;
-type TradePlanStatus = "active" | "closed" | "idea" | "watching";
-type TradePlanDoc = {
-  _creationTime: number;
-  _id: Id<"tradePlans">;
-  campaignId?: Id<"campaigns">;
-  closedAt?: number;
-  instrumentSymbol: string;
-  invalidatedAt?: number;
-  name: string;
-  ownerId: string;
-  sortOrder?: number;
-  status: TradePlanStatus;
-};
-
-type TradeDoc = {
-  _id: Id<"trades">;
-  date: number;
-  ownerId: string;
-  tradePlanId?: Id<"tradePlans">;
-};
+type TradePlanDoc = Doc<"tradePlans">;
 
 function sortTradePlansByOrderThenNewest(
   a: Pick<TradePlanDoc, "_creationTime" | "sortOrder">,
@@ -213,7 +194,7 @@ async function loadCampaignWorkspaceSourceData(
   }
 
   const tradePlansByCampaignId = new Map<Id<"campaigns">, Array<TradePlanDoc>>();
-  for (const tradePlan of tradePlans as Array<TradePlanDoc>) {
+  for (const tradePlan of tradePlans) {
     if (!tradePlan.campaignId) {
       continue;
     }
@@ -227,7 +208,7 @@ async function loadCampaignWorkspaceSourceData(
     Id<"tradePlans">,
     { latestTradeDate: number | null; totalCount: number }
   >();
-  for (const trade of trades as Array<TradeDoc>) {
+  for (const trade of trades) {
     if (!trade.tradePlanId) {
       continue;
     }
@@ -246,6 +227,81 @@ async function loadCampaignWorkspaceSourceData(
 
   return {
     tradePlansByCampaignId,
+    tradeStatsByPlanId,
+    watchedCampaignIds,
+    watchedTradePlanIds,
+  };
+}
+
+async function loadCampaignWorkspaceDetailSourceData(
+  ctx: QueryCtx,
+  ownerId: string,
+  campaignId: Id<"campaigns">,
+) {
+  const [tradePlans, watchedCampaign] = await Promise.all([
+    ctx.db
+      .query("tradePlans")
+      .withIndex("by_owner_campaignId", (q) =>
+        q.eq("ownerId", ownerId).eq("campaignId", campaignId),
+      )
+      .collect(),
+    ctx.db
+      .query("watchlist")
+      .withIndex("by_owner_campaignId", (q) =>
+        q.eq("ownerId", ownerId).eq("campaignId", campaignId),
+      )
+      .unique(),
+  ]);
+
+  const watchedCampaignIds = new Set<Id<"campaigns">>();
+  if (watchedCampaign?.itemType === "campaign" && watchedCampaign.campaignId) {
+    watchedCampaignIds.add(watchedCampaign.campaignId);
+  }
+
+  const watchedTradePlanIds = new Set<Id<"tradePlans">>();
+  const tradeStatsByPlanId = new Map<
+    Id<"tradePlans">,
+    { latestTradeDate: number | null; totalCount: number }
+  >();
+
+  await Promise.all(
+    tradePlans.map(async (tradePlan) => {
+      const [trades, watchedTradePlan] = await Promise.all([
+        ctx.db
+          .query("trades")
+          .withIndex("by_owner_tradePlanId", (q) =>
+            q.eq("ownerId", ownerId).eq("tradePlanId", tradePlan._id),
+          )
+          .collect(),
+        ctx.db
+          .query("watchlist")
+          .withIndex("by_owner_tradePlanId", (q) =>
+            q.eq("ownerId", ownerId).eq("tradePlanId", tradePlan._id),
+          )
+          .unique(),
+      ]);
+
+      if (watchedTradePlan?.itemType === "tradePlan" && watchedTradePlan.tradePlanId) {
+        watchedTradePlanIds.add(watchedTradePlan.tradePlanId);
+      }
+
+      let latestTradeDate: number | null = null;
+      for (const trade of trades) {
+        latestTradeDate =
+          latestTradeDate === null || trade.date > latestTradeDate
+            ? trade.date
+            : latestTradeDate;
+      }
+
+      tradeStatsByPlanId.set(tradePlan._id, {
+        latestTradeDate,
+        totalCount: trades.length,
+      });
+    }),
+  );
+
+  return {
+    tradePlansByCampaignId: new Map([[campaignId, tradePlans]]),
     tradeStatsByPlanId,
     watchedCampaignIds,
     watchedTradePlanIds,
@@ -455,7 +511,11 @@ export const getCampaignWorkspace = query({
       return null;
     }
 
-    const sourceData = await loadCampaignWorkspaceSourceData(ctx, ownerId);
+    const sourceData = await loadCampaignWorkspaceDetailSourceData(
+      ctx,
+      ownerId,
+      campaign._id,
+    );
     const linkedTradePlans =
       sourceData.tradePlansByCampaignId.get(campaign._id)?.sort(sortTradePlansByOrderThenNewest) ??
       [];

@@ -140,6 +140,11 @@ describe("campaign workspace queries", () => {
   it("surfaces closed-campaign lifecycle metadata and watched state", async () => {
     const closedAt = Date.UTC(2026, 2, 11);
     const tradeDate = Date.UTC(2026, 2, 10);
+    const openCampaignId = await insertCampaign({
+      name: "Still Open Campaign",
+      ownerId: ownerA,
+      status: "active",
+    });
     const campaignId = await insertCampaign({
       closedAt,
       name: "Finished Campaign",
@@ -171,8 +176,12 @@ describe("campaign workspace queries", () => {
       status: "closed",
     });
     const detail = await user.query(api.campaigns.getCampaignWorkspace, { campaignId });
+    const openCampaignDetail = await user.query(api.campaigns.getCampaignWorkspace, {
+      campaignId: openCampaignId,
+    });
 
     expect(summaries).toHaveLength(1);
+    expect(summaries.map((summary) => summary.id)).not.toContain(openCampaignId);
     expect(summaries[0]).toMatchObject({
       id: campaignId,
       isWatched: true,
@@ -198,6 +207,8 @@ describe("campaign workspace queries", () => {
       },
       status: "closed",
     });
+
+    expect(openCampaignDetail?.summary.status).toBe("active");
 
     expect(detail).toMatchObject({
       linkedTradePlans: [
