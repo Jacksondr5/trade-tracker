@@ -43,8 +43,8 @@ for PR_NUM in $(jq '.[].number' "$RAW_DIR/_all_prs.json"); do
   ISSUE_COMMENTS=$(gh api "repos/$REPO/issues/$PR_NUM/comments?per_page=100" --paginate 2>/dev/null | jq -s 'add // []')
   REVIEWS=$(gh api "repos/$REPO/pulls/$PR_NUM/reviews?per_page=100" --paginate 2>/dev/null | jq -s 'add // []')
 
-  # Filter AI reviewer comments
-  AI_PATTERN=$(printf '%s\n' "${AI_REVIEWERS[@]}" | jq -R . | jq -s 'join("|")')
+  # Filter AI reviewer comments (escape regex metacharacters in reviewer names)
+  AI_PATTERN=$(printf '%s\n' "${AI_REVIEWERS[@]}" | sed 's/\[/\\[/g; s/\]/\\]/g' | jq -R . | jq -s 'join("|")')
   AI_REVIEW_COMMENTS=$(echo "$REVIEW_COMMENTS" | jq --argjson pattern "$AI_PATTERN" '[.[] | select(.user.login | test($pattern; "i"))]')
   AI_ISSUE_COMMENTS=$(echo "$ISSUE_COMMENTS" | jq --argjson pattern "$AI_PATTERN" '[.[] | select(.user.login | test($pattern; "i"))]')
   AI_REVIEWS=$(echo "$REVIEWS" | jq --argjson pattern "$AI_PATTERN" '[.[] | select(.user.login | test($pattern; "i"))]')
