@@ -2,26 +2,10 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { useConvexAuth } from "convex/react";
-import { usePathname } from "next/navigation";
-
-const PUBLIC_ROUTE_PREFIXES = ["/sign-in", "/sign-up"];
-
-function isPublicRoute(pathname: string): boolean {
-  if (pathname === "/") {
-    return true;
-  }
-
-  return PUBLIC_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
-}
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
   const { isLoaded: isClerkLoaded, isSignedIn } = useAuth();
   const { isLoading: isConvexAuthLoading, isAuthenticated } = useConvexAuth();
-
-  if (isPublicRoute(pathname)) {
-    return <>{children}</>;
-  }
 
   if (
     !isClerkLoaded ||
