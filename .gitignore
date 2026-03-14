@@ -49,5 +49,5 @@ data/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
-/output/playwright/
+output/
 /.playwright-cli/
