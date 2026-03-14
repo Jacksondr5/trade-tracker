@@ -84,7 +84,7 @@ Then fill in the values:
 ```bash
 CLERK_SECRET_KEY=sk_test_...
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
-NEXT_PUBLIC_CLERK_FRONTEND_API_URL=your-clerk-frontend-api-url
+NEXT_PUBLIC_CLERK_FRONTEND_API_URL=your-clerk-frontend-api-domain
 NEXT_PUBLIC_CONVEX_URL=https://your-deployment.convex.cloud
 PLAYWRIGHT_USERNAME=your-playwright-test-user@example.com
 PLAYWRIGHT_PASSWORD=your-playwright-test-password
@@ -95,7 +95,7 @@ VERCEL_AUTOMATION_BYPASS_SECRET=your-vercel-automation-bypass-secret
 Notes:
 
 - `NEXT_PUBLIC_CONVEX_URL` is used by the React client in `src/app/providers.tsx`.
-- `NEXT_PUBLIC_CLERK_FRONTEND_API_URL` is required by `convex/auth.config.ts` and is now also validated in `src/env.ts`.
+- `NEXT_PUBLIC_CLERK_FRONTEND_API_URL` should be the Clerk frontend API domain without `https://`, for example `nearby-muskox-55.clerk.accounts.dev`.
 - `PLAYWRIGHT_USERNAME` and `PLAYWRIGHT_PASSWORD` are for local Playwright/Codex UI automation and are documented in `AGENTS.md`.
 - Playwright auth setup now uses Clerk's `@clerk/testing` helpers, so preview CI also needs `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, and `NEXT_PUBLIC_CLERK_FRONTEND_API_URL` available to the test job.
 - `PLAYWRIGHT_OWNER_ID` is the Convex/Clerk owner identifier used to seed the dedicated Playwright account on fresh preview deployments.

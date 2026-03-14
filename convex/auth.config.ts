@@ -1,4 +1,5 @@
-const domain = process.env.NEXT_PUBLIC_CLERK_FRONTEND_API_URL;
+const rawDomain = process.env.NEXT_PUBLIC_CLERK_FRONTEND_API_URL;
+const domain = rawDomain?.replace(/^https?:\/\//, "").replace(/\/$/, "");
 
 if (!domain) {
   throw new Error("NEXT_PUBLIC_CLERK_FRONTEND_API_URL is not defined");

@@ -59,6 +59,10 @@ function loadDotenvLocal(): Record<string, string> {
 
 const dotenvLocal = loadDotenvLocal();
 
+function normalizeClerkFrontendApiUrl(value: string): string {
+  return value.replace(/^https?:\/\//, "").replace(/\/$/, "");
+}
+
 export function getBaseUrl(): string {
   const configuredBaseUrl =
     process.env.PLAYWRIGHT_BASE_URL?.trim() ||
@@ -99,7 +103,9 @@ function getRequiredEnv(name: string): string {
 
 export function getClerkTestingConfig() {
   return {
-    frontendApiUrl: getRequiredEnv("NEXT_PUBLIC_CLERK_FRONTEND_API_URL"),
+    frontendApiUrl: normalizeClerkFrontendApiUrl(
+      getRequiredEnv("NEXT_PUBLIC_CLERK_FRONTEND_API_URL"),
+    ),
     publishableKey: getRequiredEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"),
   };
 }
