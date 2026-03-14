@@ -519,7 +519,7 @@ export default function CampaignDetailPageClient({
                 value={campaign.status}
                 disabled={isChangingCampaignStatus}
                 onChange={(e) => void handleCampaignStatusChange(e.target.value as CampaignStatus)}
-                className="h-9 w-full rounded-md border border-olive-6 bg-olive-3 px-3 py-1 text-sm text-olive-12 focus:outline-none focus:ring-1 focus:ring-olive-8"
+                className="h-9 w-full rounded-md border border-olive-6 bg-olive-3 px-3 py-1 text-sm text-olive-12 focus:outline-none focus:ring-1 focus:ring-blue-8"
               >
                 <option value="planning">Planning</option>
                 <option value="active">Active</option>
@@ -846,7 +846,7 @@ export default function CampaignDetailPageClient({
 
       <section className="rounded-lg border border-slate-6 bg-slate-2 p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-olive-12">Trades</h2>
+          <h2 className="text-lg font-semibold text-slate-12">Trades</h2>
           <Link href="/trades/new" className="rounded bg-olive-3 px-3 py-1.5 text-sm font-medium text-olive-12 hover:bg-olive-4">
             Add Trade
           </Link>
