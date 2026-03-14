@@ -325,6 +325,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
+
   const openCommandPalette = useCallback(() => {
     setIsDrawerOpen(false);
     setIsCommandPaletteOpen(true);
