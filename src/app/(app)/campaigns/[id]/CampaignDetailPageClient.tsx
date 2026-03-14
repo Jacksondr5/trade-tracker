@@ -454,6 +454,7 @@ export default function CampaignDetailPageClient({
                           onClick={() => {
                             setIsEditingName(false);
                             campaignNameForm.setFieldValue("name", campaign.name);
+                            setCampaignNameError(null);
                           }}
                         >
                           Cancel
