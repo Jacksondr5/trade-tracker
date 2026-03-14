@@ -30,7 +30,7 @@ jobs:
           PAYLOAD_ENVIRONMENT: ${{ github.event.client_payload.environment }}
           PAYLOAD_TARGET: ${{ github.event.client_payload.target }}
           PAYLOAD_URL: ${{ github.event.client_payload.url }}
-          PR_PREVIEW_URL: https://trade-tracker-9f92zewvd-jackson-millers-projects.vercel.app/
+          PR_PREVIEW_URL: https://trade-tracker-git-t3code-playwr-4033eb-jackson-millers-projects.vercel.app/
         run: |
           set -euo pipefail
 
