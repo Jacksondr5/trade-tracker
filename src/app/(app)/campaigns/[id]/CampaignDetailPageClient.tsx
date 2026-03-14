@@ -4,7 +4,7 @@ import { ConvexError } from "convex/values";
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
 import { CheckCircle2, Loader2, Pencil, Star } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import {
   MobileHierarchyBreadcrumbs,
@@ -107,6 +107,7 @@ export default function CampaignDetailPageClient({
     [campaignWorkspace],
   );
   const workspaceSummary = campaignWorkspace?.summary ?? null;
+  const thesisPreview = campaign?.thesis ?? null;
 
   const addNote = useMutation(api.notes.addNote);
   const updateNote = useMutation(api.notes.updateNote);
@@ -139,6 +140,8 @@ export default function CampaignDetailPageClient({
   const [watchError, setWatchError] = useState<string | null>(null);
   const [isEditingName, setIsEditingName] = useState(false);
   const [showFullThesis, setShowFullThesis] = useState(false);
+  const [isThesisOverflowing, setIsThesisOverflowing] = useState(false);
+  const thesisPreviewRef = useRef<HTMLParagraphElement>(null);
 
   const [campaignNameInitialized, setCampaignNameInitialized] = useState(false);
   const [campaignNameError, setCampaignNameError] = useState<string | null>(null);
@@ -349,6 +352,39 @@ export default function CampaignDetailPageClient({
     }
   };
 
+  useEffect(() => {
+    if (!thesisPreview) {
+      setIsThesisOverflowing(false);
+      return;
+    }
+
+    const element = thesisPreviewRef.current;
+    if (!element) {
+      return;
+    }
+
+    const measureOverflow = () => {
+      const isClamped = element.classList.contains("line-clamp-3");
+
+      if (!isClamped) {
+        element.classList.add("line-clamp-3");
+      }
+
+      setIsThesisOverflowing(element.scrollHeight > element.clientHeight + 1);
+
+      if (!isClamped) {
+        element.classList.remove("line-clamp-3");
+      }
+    };
+
+    measureOverflow();
+    window.addEventListener("resize", measureOverflow);
+
+    return () => {
+      window.removeEventListener("resize", measureOverflow);
+    };
+  }, [thesisPreview]);
+
   const handleToggleWatch = async () => {
     setWatchError(null);
     setIsWatchPending(true);
@@ -506,6 +542,7 @@ export default function CampaignDetailPageClient({
                 "mt-4 h-8 w-8 rounded-md text-olive-10 hover:bg-olive-4 hover:text-olive-12",
                 workspaceSummary.isWatched && "text-amber-11 hover:text-amber-12",
               )}
+              aria-pressed={workspaceSummary.isWatched}
               disabled={isWatchPending}
               onClick={() => void handleToggleWatch()}
             >
@@ -515,17 +552,18 @@ export default function CampaignDetailPageClient({
         </div>
 
         {/* Thesis preview */}
-        {campaign.thesis && (
+        {thesisPreview && (
           <div className="mt-3">
             <p
+              ref={thesisPreviewRef}
               className={cn(
                 "text-sm text-olive-11",
                 !showFullThesis && "line-clamp-3",
               )}
             >
-              {campaign.thesis}
+              {thesisPreview}
             </p>
-            {campaign.thesis.length > 200 && (
+            {isThesisOverflowing && (
               <button
                 type="button"
                 className="mt-1 text-xs text-olive-10 hover:text-olive-12"
