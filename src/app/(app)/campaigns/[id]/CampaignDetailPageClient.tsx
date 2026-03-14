@@ -557,13 +557,16 @@ export default function CampaignDetailPageClient({
               {thesisPreview}
             </p>
             {isThesisOverflowing && (
-              <button
+              <Button
+                dataTestId="toggle-thesis-preview"
                 type="button"
-                className="mt-1 text-xs text-olive-10 hover:text-olive-12"
+                variant="ghost"
+                size="sm"
+                className="mt-1 h-auto px-0 py-0 text-xs text-olive-10 hover:bg-transparent hover:text-olive-12"
                 onClick={() => setShowFullThesis((prev) => !prev)}
               >
                 {showFullThesis ? "Show less" : "Show more"}
-              </button>
+              </Button>
             )}
           </div>
         )}
