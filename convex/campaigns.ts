@@ -478,6 +478,10 @@ export const listCampaignWorkspaceSummaries = query({
             .order("desc")
             .collect();
 
+    if (campaigns.length === 0) {
+      return [];
+    }
+
     const sourceData = await loadCampaignWorkspaceSourceData(ctx, ownerId);
 
     return campaigns.map((campaign) => buildCampaignWorkspaceSummary(campaign, sourceData));

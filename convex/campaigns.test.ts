@@ -92,6 +92,14 @@ describe("campaign workspace queries", () => {
     });
   }
 
+  it("returns an empty list when the user has no campaigns", async () => {
+    const user = asUser(ownerA);
+
+    await expect(
+      user.query(api.campaigns.listCampaignWorkspaceSummaries, {}),
+    ).resolves.toEqual([]);
+  });
+
   it("returns empty rollups for campaigns with no linked plans or trades", async () => {
     const campaignId = await insertCampaign({
       name: "Fresh Campaign",
