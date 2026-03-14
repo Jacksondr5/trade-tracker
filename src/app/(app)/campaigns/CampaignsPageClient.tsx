@@ -30,7 +30,6 @@ type CampaignSummary = CampaignSummaries[number];
 
 function CampaignCard({ campaign }: { campaign: CampaignSummary }) {
   const hasPlans = campaign.linkedTradePlans.totalCount > 0;
-  const hasTrades = campaign.linkedTrades.totalCount > 0;
 
   return (
     <Link
@@ -88,13 +87,11 @@ function CampaignCard({ campaign }: { campaign: CampaignSummary }) {
           )}
         </span>
 
-        {hasTrades && (
-          <span className="inline-flex items-center gap-1">
-            <TrendingUp className="size-3" />
-            {campaign.linkedTrades.totalCount}{" "}
-            {campaign.linkedTrades.totalCount === 1 ? "trade" : "trades"}
-          </span>
-        )}
+        <span className="inline-flex items-center gap-1">
+          <TrendingUp className="size-3" />
+          {campaign.linkedTrades.totalCount}{" "}
+          {campaign.linkedTrades.totalCount === 1 ? "trade" : "trades"}
+        </span>
 
         <span className="ml-auto text-slate-11/70">
           {formatDate(campaign.createdAt)}
