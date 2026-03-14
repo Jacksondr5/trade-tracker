@@ -459,17 +459,22 @@ export default function CampaignDetailPageClient({
                     <campaignNameForm.AppForm>
                       <campaignNameForm.SubmitButton label="Save Name" />
                     </campaignNameForm.AppForm>
-                    <Button
-                      dataTestId="cancel-edit-campaign-name"
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setIsEditingName(false);
-                        campaignNameForm.setFieldValue("name", campaign.name);
-                      }}
-                    >
-                      Cancel
-                    </Button>
+                    <campaignNameForm.Subscribe selector={(state) => state.isSubmitting}>
+                      {(isSubmitting) => (
+                        <Button
+                          dataTestId="cancel-edit-campaign-name"
+                          type="button"
+                          variant="outline"
+                          disabled={isSubmitting}
+                          onClick={() => {
+                            setIsEditingName(false);
+                            campaignNameForm.setFieldValue("name", campaign.name);
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      )}
+                    </campaignNameForm.Subscribe>
                   </div>
                 </form>
                 {campaignNameError && (
