@@ -353,6 +353,8 @@ export default function CampaignDetailPageClient({
   };
 
   useEffect(() => {
+    setShowFullThesis(false);
+
     if (!thesisPreview) {
       setIsThesisOverflowing(false);
       return;
