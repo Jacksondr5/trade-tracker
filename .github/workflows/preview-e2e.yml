@@ -62,14 +62,18 @@ jobs:
           echo "Received a production deployment event. Skipping preview smoke tests."
 
       - name: Notify Vercel
-        if: github.event_name != 'repository_dispatch' || steps.preview.outputs.environment != 'production'
+        if: github.event_name == 'repository_dispatch' && steps.preview.outputs.environment != 'production'
         uses: vercel/repository-dispatch/actions/status@v1
         with:
           name: Vercel - preview-e2e-${{ steps.preview.outputs.environment }}
 
-      - name: Checkout repository
-        if: github.event_name != 'repository_dispatch' || steps.preview.outputs.environment != 'production'
+      - name: Checkout repository for Vercel deployment event
+        if: github.event_name == 'repository_dispatch' && steps.preview.outputs.environment != 'production'
         uses: vercel/repository-dispatch/actions/checkout@v1
+
+      - name: Checkout repository for manual dispatch
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@v5
 
       - name: Setup pnpm
         if: github.event_name != 'repository_dispatch' || steps.preview.outputs.environment != 'production'
