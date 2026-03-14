@@ -1,10 +1,10 @@
 "use client";
 
-import { Preloaded, usePreloadedQuery, useQuery } from "convex/react";
+import { Preloaded, usePreloadedQuery } from "convex/react";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge, Button, Card, CardContent } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import { capitalize, formatDate } from "~/lib/format";
@@ -91,31 +91,17 @@ export default function CampaignsPageClient({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   const allCampaigns = usePreloadedQuery(preloadedCampaignWorkspaceSummaries);
-  const filteredCampaigns = useQuery(
-    api.campaigns.listCampaignWorkspaceSummaries,
-    statusFilter === "all" ? "skip" : { status: statusFilter },
+  const campaigns = useMemo(
+    () =>
+      statusFilter === "all"
+        ? allCampaigns
+        : allCampaigns.filter((campaign) => campaign.status === statusFilter),
+    [allCampaigns, statusFilter],
   );
 
-  const requestedCampaigns =
-    statusFilter === "all" ? allCampaigns : filteredCampaigns;
-  const [resolvedCampaigns, setResolvedCampaigns] = useState(allCampaigns);
-  const [resolvedFilter, setResolvedFilter] = useState<StatusFilter>("all");
-
-  useEffect(() => {
-    if (requestedCampaigns === undefined) {
-      return;
-    }
-
-    setResolvedCampaigns(requestedCampaigns);
-    setResolvedFilter(statusFilter);
-  }, [requestedCampaigns, statusFilter]);
-
-  const isFilterPending = requestedCampaigns === undefined;
-  const displayedFilter =
-    requestedCampaigns !== undefined ? statusFilter : resolvedFilter;
-  const campaigns = requestedCampaigns ?? resolvedCampaigns;
-  const showEmptyState =
-    requestedCampaigns !== undefined && requestedCampaigns.length === 0;
+  const isFilterPending = false;
+  const displayedFilter = statusFilter;
+  const showEmptyState = campaigns.length === 0;
 
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8">
