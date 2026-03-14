@@ -317,8 +317,10 @@ async function loadCampaignWorkspaceDetailSourceData(
 function buildCampaignWorkspaceSummary(
   campaign: CampaignDoc,
   sourceData: Awaited<ReturnType<typeof loadCampaignWorkspaceSourceData>>,
+  linkedTradePlansOverride?: Array<TradePlanDoc>,
 ) {
   const linkedTradePlans =
+    linkedTradePlansOverride ??
     sourceData.tradePlansByCampaignId.get(campaign._id)?.sort(sortTradePlansByOrderThenNewest) ??
     [];
   const linkedTradePlanRollup = buildTradePlanRollup(linkedTradePlans);
@@ -549,7 +551,7 @@ export const getCampaignWorkspace = query({
           tradeCount: tradeStats.totalCount,
         };
       }),
-      summary: buildCampaignWorkspaceSummary(campaign, sourceData),
+      summary: buildCampaignWorkspaceSummary(campaign, sourceData, linkedTradePlans),
     };
   },
 });
