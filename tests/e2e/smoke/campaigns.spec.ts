@@ -14,7 +14,5 @@ test("seeded campaign is visible and detail page loads", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: E2E_SMOKE_FIXTURES.campaign.name }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("textbox", { name: "Thesis" }),
-  ).toHaveValue(E2E_SMOKE_FIXTURES.campaign.thesis);
+  await expect(page.getByText(E2E_SMOKE_FIXTURES.campaign.thesis)).toBeVisible();
 });
