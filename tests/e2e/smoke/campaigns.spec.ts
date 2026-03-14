@@ -12,9 +12,7 @@ test("seeded campaign is visible and detail page loads", async ({ page }) => {
 
   await expect(page).toHaveURL(/\/campaigns\/[^/]+$/);
   await expect(
-    page.getByRole("textbox", { name: "Campaign Name" }),
-  ).toHaveValue(E2E_SMOKE_FIXTURES.campaign.name);
-  await expect(
-    page.getByRole("textbox", { name: "Thesis" }),
-  ).toHaveValue(E2E_SMOKE_FIXTURES.campaign.thesis);
+    page.getByRole("heading", { name: E2E_SMOKE_FIXTURES.campaign.name }),
+  ).toBeVisible();
+  await expect(page.getByText(E2E_SMOKE_FIXTURES.campaign.thesis)).toBeVisible();
 });
