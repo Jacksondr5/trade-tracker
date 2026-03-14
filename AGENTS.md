@@ -63,12 +63,9 @@ Shared rules:
 - For Playwright-based work, prefer `127.0.0.1` over `localhost` when both are available
 - Playwright credentials live in `.env.local` as `PLAYWRIGHT_USERNAME` and `PLAYWRIGHT_PASSWORD`
 - Standard shared auth state file: `output/playwright/auth.json`
-- Try loading saved auth state before doing a manual Clerk login, but if the app is not running on the same origin the saved auth may not restore cleanly
-
-Clerk sign-in currently uses a two-step flow for the Playwright account when auth state is missing or expired:
-
-1. Enter `PLAYWRIGHT_USERNAME` on `/sign-in`
-2. Submit, then enter `PLAYWRIGHT_PASSWORD` on `/sign-in/factor-one`
+- Preferred auth refresh command: `pnpm test:e2e:setup`
+- The Playwright auth setup uses Clerk's `@clerk/testing` helpers and requires `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, and `NEXT_PUBLIC_CLERK_FRONTEND_API_URL` alongside the Playwright credentials
+- Try loading saved auth state first, but if the app is not running on the same origin the saved auth may not restore cleanly
 
 ### `playwright-interactive` Default
 
@@ -78,7 +75,7 @@ Use this first for UI tasks, especially when the agent expects to make code edit
 - After resetting `js_repl`, rerun the Playwright bootstrap/setup cells before interacting with the app
 - Reuse the same live `browser`, `context`, and `page` handles across checks instead of reopening the browser repeatedly
 - Set the interactive target URL from the actual running Next.js port before calling `page.goto(...)`
-- Load `output/playwright/auth.json` into the browser context before falling back to manual Clerk login
+- Load `output/playwright/auth.json` into the browser context before rerunning `pnpm test:e2e:setup` or falling back to manual Clerk login
 - Save refreshed auth state back to `output/playwright/auth.json` after a manual login succeeds
 
 ```js
@@ -119,10 +116,10 @@ source .env.local
 "$PWCLI" snapshot
 ```
 
-If the saved auth file is missing or no longer valid, complete the manual Clerk login once and then refresh the shared state:
+If the saved auth file is missing or no longer valid, prefer refreshing it with:
 
 ```bash
-"$PWCLI" state-save output/playwright/auth.json
+pnpm test:e2e:setup
 ```
 
 Notes:

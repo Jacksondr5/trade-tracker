@@ -11,6 +11,7 @@
 import type * as accountMappings from "../accountMappings.js";
 import type * as analytics from "../analytics.js";
 import type * as campaigns from "../campaigns.js";
+import type * as e2eSeed from "../e2eSeed.js";
 import type * as imports from "../imports.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_statuses from "../lib/statuses.js";
@@ -34,6 +35,7 @@ declare const fullApi: ApiFromModules<{
   accountMappings: typeof accountMappings;
   analytics: typeof analytics;
   campaigns: typeof campaigns;
+  e2eSeed: typeof e2eSeed;
   imports: typeof imports;
   "lib/auth": typeof lib_auth;
   "lib/statuses": typeof lib_statuses;
