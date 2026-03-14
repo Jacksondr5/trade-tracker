@@ -15,15 +15,15 @@ export default async function CampaignDetailPage({
   const token = await getConvexTokenOrThrow();
   const [
     preloadedCampaign,
+    preloadedCampaignWorkspace,
     preloadedCampaignNotes,
-    preloadedTradePlans,
     preloadedCampaignTrades,
     preloadedAccountMappings,
   ] =
     await Promise.all([
       preloadQuery(api.campaigns.getCampaign, { campaignId }, { token }),
+      preloadQuery(api.campaigns.getCampaignWorkspace, { campaignId }, { token }),
       preloadQuery(api.notes.getNotesByCampaign, { campaignId }, { token }),
-      preloadQuery(api.tradePlans.listTradePlansByCampaign, { campaignId }, { token }),
       preloadQuery(api.trades.listTradesByCampaign, { campaignId }, { token }),
       preloadQuery(api.accountMappings.listAccountMappings, {}, { token }),
     ]);
@@ -34,8 +34,8 @@ export default async function CampaignDetailPage({
       preloadedAccountMappings={preloadedAccountMappings}
       preloadedCampaignTrades={preloadedCampaignTrades}
       preloadedCampaign={preloadedCampaign}
+      preloadedCampaignWorkspace={preloadedCampaignWorkspace}
       preloadedCampaignNotes={preloadedCampaignNotes}
-      preloadedTradePlans={preloadedTradePlans}
     />
   );
 }
