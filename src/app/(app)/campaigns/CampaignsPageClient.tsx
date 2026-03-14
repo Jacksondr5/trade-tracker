@@ -8,6 +8,7 @@ import { useMemo, useState } from "react";
 import { Badge, Button, Card, CardContent } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import { capitalize, formatDate } from "~/lib/format";
+import { getCampaignRowTestId } from "../../../../shared/e2e/testIds";
 
 type CampaignStatus = "planning" | "active" | "closed";
 type StatusFilter = "all" | CampaignStatus;
@@ -107,7 +108,12 @@ export default function CampaignsPageClient({
     <div className="container mx-auto max-w-6xl px-4 py-8">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold text-olive-12">Campaigns</h1>
+          <h1
+            className="text-3xl font-bold text-olive-12"
+            data-testid="campaigns-page-title"
+          >
+            Campaigns
+          </h1>
           <p className="max-w-2xl text-sm text-olive-11">
             Track live themes, keep linked trade plans grouped, and return to
             watched campaigns from the shared hierarchy.
@@ -150,15 +156,13 @@ export default function CampaignsPageClient({
                       ? "relative isolate overflow-hidden border border-blue-7 bg-blue-3 text-blue-12 hover:bg-blue-4 hover:text-blue-12"
                       : active
                         ? "border border-blue-7 bg-blue-3 text-blue-12 hover:bg-blue-4 hover:text-blue-12"
-                      : "border border-olive-6 bg-transparent text-olive-11 hover:bg-olive-3 hover:text-olive-12"
+                        : "border border-olive-6 bg-transparent text-olive-11 hover:bg-olive-3 hover:text-olive-12"
                   }
                   onClick={() => setStatusFilter(option.value)}
                   aria-pressed={active}
                   disabled={pending}
                 >
-                  {pending ? (
-                    <PendingFilterChrome />
-                  ) : null}
+                  {pending ? <PendingFilterChrome /> : null}
                   <span className="relative z-10">{option.label}</span>
                 </Button>
               );
@@ -251,7 +255,7 @@ export default function CampaignsPageClient({
                   tabIndex={0}
                   role="button"
                   aria-label={`View campaign ${campaign.name}`}
-                  data-testid={`campaign-row-${campaign.id}`}
+                  data-testid={getCampaignRowTestId(campaign.name)}
                 >
                   <td className="px-4 py-3 text-sm font-medium whitespace-nowrap text-slate-12">
                     {campaign.name}

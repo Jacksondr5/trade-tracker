@@ -50,6 +50,7 @@ function NavigationSections({
                 <Link
                   key={item.href}
                   href={item.href}
+                  data-testid={item.testId}
                   onClick={onNavigate}
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
@@ -244,13 +245,13 @@ function MobileNavigationDrawer({
               onNavigate={() => onOpenChange(false)}
             />
             {hasLocalHierarchy && localHierarchy !== null ? (
-                <div className="mt-5">
-                  <CampaignTradePlanHierarchyNavigation
-                    hierarchy={localHierarchy}
-                    pathname={pathname}
-                    onNavigate={() => onOpenChange(false)}
-                  />
-                </div>
+              <div className="mt-5">
+                <CampaignTradePlanHierarchyNavigation
+                  hierarchy={localHierarchy}
+                  pathname={pathname}
+                  onNavigate={() => onOpenChange(false)}
+                />
+              </div>
             ) : null}
           </div>
           <div className="flex justify-end border-t border-olive-6 px-4 py-4">

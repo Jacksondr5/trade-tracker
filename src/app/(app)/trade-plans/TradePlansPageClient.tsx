@@ -18,6 +18,10 @@ import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { STANDALONE_TRADE_PLANS_LABEL } from "~/lib/campaign-trade-plan-navigation";
 import { capitalize } from "~/lib/format";
+import {
+  getStandaloneTradePlanCardTestId,
+  getTradePlanLinkTestId,
+} from "../../../../shared/e2e/testIds";
 
 const createTradePlanSchema = z.object({
   instrumentSymbol: z.string().trim().min(1, "Instrument symbol is required"),
@@ -39,9 +43,9 @@ export default function TradePlansPageClient({
   const [pendingCloseIds, setPendingCloseIds] = useState<Set<Id<"tradePlans">>>(
     () => new Set(),
   );
-  const [closeErrors, setCloseErrors] = useState<
-    Map<Id<"tradePlans">, string>
-  >(() => new Map());
+  const [closeErrors, setCloseErrors] = useState<Map<Id<"tradePlans">, string>>(
+    () => new Map(),
+  );
 
   const standalonePlans = tradePlans.filter((plan) => !plan.campaignId);
   const linkedPlanCount = tradePlans.length - standalonePlans.length;
@@ -115,7 +119,12 @@ export default function TradePlansPageClient({
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8">
       <div className="mb-6 space-y-2">
-        <h1 className="text-3xl font-bold text-olive-12">Trade Plans</h1>
+        <h1
+          className="text-3xl font-bold text-olive-12"
+          data-testid="trade-plans-page-title"
+        >
+          Trade Plans
+        </h1>
         <p className="max-w-2xl text-sm text-olive-11">
           Create standalone trade plans here, then move through linked plans
           from the shared campaign hierarchy.
@@ -200,11 +209,13 @@ export default function TradePlansPageClient({
               {standalonePlans.map((plan) => (
                 <div
                   key={plan._id}
+                  data-testid={getStandaloneTradePlanCardTestId(plan.name)}
                   className="rounded-lg border border-olive-6 bg-olive-3/50 p-3 transition-colors hover:border-olive-7 hover:bg-olive-3"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <Link
                       href={`/trade-plans/${plan._id}`}
+                      data-testid={getTradePlanLinkTestId(plan.name)}
                       className="min-w-0 flex-1 hover:underline"
                     >
                       <p className="font-semibold text-olive-12">{plan.name}</p>
@@ -224,7 +235,9 @@ export default function TradePlansPageClient({
                           }}
                           disabled={pendingCloseIds.has(plan._id)}
                         >
-                          {pendingCloseIds.has(plan._id) ? "Closing..." : "Close"}
+                          {pendingCloseIds.has(plan._id)
+                            ? "Closing..."
+                            : "Close"}
                         </Button>
                       )}
                     </div>

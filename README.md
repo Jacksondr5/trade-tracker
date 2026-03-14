@@ -155,8 +155,10 @@ pnpm vercel-build # Convex-backed Vercel build command with preview seeding
 
 - Unit-style tests run through Vitest via `pnpm test`.
 - Browser tests run through Playwright via `pnpm test:e2e`.
+- The durable Playwright selector contract lives in `docs/product/technical-architecture-overview.md`, with agent workflow details in `AGENTS.md`.
 - The preview smoke suite is `pnpm test:e2e:smoke`; it expects `PLAYWRIGHT_BASE_URL` and optionally `VERCEL_AUTOMATION_BYPASS_SECRET` when targeting protected Vercel previews.
 - `pnpm test:e2e:setup` now authenticates through Clerk's Playwright testing helpers rather than filling the sign-in UI manually.
+- Local Playwright setup resets and reseeds the dedicated Playwright user before authenticated specs run against a local target.
 - Vercel preview deployments should use `pnpm vercel-build` so Convex preview deployments get seeded through `--preview-run 'e2eSeed:setupPreviewData'`.
 - This repo intentionally keeps both `@playwright/test` and `playwright` installed. Playwright generally recommends using only one top-level package, but the current Codex `playwright-interactive` workflow expects a direct `playwright` import while this repo's end-to-end tests run through `@playwright/test`.
 - For app-focused Playwright work, start both `pnpm dev` and `pnpm convex dev` first.

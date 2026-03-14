@@ -16,6 +16,8 @@ function findProjectRoot(startDir: string): string {
 }
 
 const ROOT_DIR = findProjectRoot(path.dirname(fileURLToPath(import.meta.url)));
+const LOCAL_PLAYWRIGHT_HOSTS = new Set(["127.0.0.1", "localhost"]);
+const DOTENV_LOCAL_PATH = path.join(ROOT_DIR, ".env.local");
 
 export const PLAYWRIGHT_AUTH_FILE = path.join(
   ROOT_DIR,
@@ -23,8 +25,7 @@ export const PLAYWRIGHT_AUTH_FILE = path.join(
   "playwright",
   "auth.json",
 );
-
-const DOTENV_LOCAL_PATH = path.join(ROOT_DIR, ".env.local");
+export const PLAYWRIGHT_ENV_FILE = DOTENV_LOCAL_PATH;
 
 function loadDotenvLocal(): Record<string, string> {
   if (!fs.existsSync(DOTENV_LOCAL_PATH)) {
@@ -37,7 +38,8 @@ function loadDotenvLocal(): Record<string, string> {
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(
-        (line) => line.length > 0 && !line.startsWith("#") && line.includes("="),
+        (line) =>
+          line.length > 0 && !line.startsWith("#") && line.includes("="),
       )
       .map((line) => {
         const delimiterIndex = line.indexOf("=");
@@ -78,7 +80,20 @@ export function getBaseUrl(): string {
 function shouldUseBypassHeaders(baseUrl: string): boolean {
   try {
     const { hostname } = new URL(baseUrl);
-    return hostname !== "127.0.0.1" && hostname !== "localhost";
+    return !LOCAL_PLAYWRIGHT_HOSTS.has(hostname);
+  } catch {
+    return false;
+  }
+}
+
+export function getProjectRoot(): string {
+  return ROOT_DIR;
+}
+
+export function isLocalPlaywrightTarget(): boolean {
+  try {
+    const { hostname } = new URL(getBaseUrl());
+    return LOCAL_PLAYWRIGHT_HOSTS.has(hostname);
   } catch {
     return false;
   }

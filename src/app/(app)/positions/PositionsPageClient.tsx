@@ -15,13 +15,18 @@ export default function PositionsPageClient({
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-slate-12 text-2xl font-bold">Positions</h1>
+        <h1
+          className="text-2xl font-bold text-slate-12"
+          data-testid="positions-page-title"
+        >
+          Positions
+        </h1>
       </div>
 
       {positions.length === 0 ? (
         <div className="rounded-lg border border-slate-700 bg-slate-800 p-8 text-center">
           <p className="text-slate-11">No open positions.</p>
-          <p className="text-slate-11 mt-2 text-sm">
+          <p className="mt-2 text-sm text-slate-11">
             Your open positions will appear here when you have active trades.
           </p>
         </div>
@@ -30,16 +35,16 @@ export default function PositionsPageClient({
           <table className="w-full table-auto">
             <thead className="bg-slate-800">
               <tr>
-                <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
+                <th className="px-4 py-3 text-left text-sm font-medium text-slate-11">
                   Ticker
                 </th>
-                <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
+                <th className="px-4 py-3 text-left text-sm font-medium text-slate-11">
                   Direction
                 </th>
-                <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
+                <th className="px-4 py-3 text-right text-sm font-medium text-slate-11">
                   Quantity
                 </th>
-                <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
+                <th className="px-4 py-3 text-right text-sm font-medium text-slate-11">
                   Average Cost
                 </th>
               </tr>
@@ -51,18 +56,22 @@ export default function PositionsPageClient({
                   className="hover:bg-slate-800/50"
                   data-testid={`position-row-${position.ticker}-${position.direction}`}
                 >
-                  <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-sm font-medium">
+                  <td className="px-4 py-3 text-sm font-medium whitespace-nowrap text-slate-12">
                     {position.ticker}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-sm">
-                    <Badge variant={position.direction === "long" ? "success" : "danger"}>
+                  <td className="px-4 py-3 text-sm whitespace-nowrap">
+                    <Badge
+                      variant={
+                        position.direction === "long" ? "success" : "danger"
+                      }
+                    >
                       {position.direction.toUpperCase()}
                     </Badge>
                   </td>
-                  <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">
+                  <td className="px-4 py-3 text-right text-sm whitespace-nowrap text-slate-12">
                     {position.quantity}
                   </td>
-                  <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">
+                  <td className="px-4 py-3 text-right text-sm whitespace-nowrap text-slate-12">
                     {formatCurrency(position.averageCost)}
                   </td>
                 </tr>

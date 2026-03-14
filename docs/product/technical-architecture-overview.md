@@ -104,6 +104,16 @@ Contributors should use the product docs for product-wide guidance instead of in
 - New primitives should be added through the shared UI layer, not embedded ad hoc inside feature code.
 - Interactive elements must expose a stable `dataTestId` prop for test selectors.
 
+### Playwright selector contract
+
+- App-owned Playwright coverage must use exact `getByTestId()` selectors through shared helpers or fixtures.
+- Do not add new Playwright selectors that depend on visible copy, headings, labels, generic table text, CSS classes, or DOM position.
+- Use semantic stable ids for fixed controls such as navigation links, buttons, inputs, dialogs, and empty-state actions.
+- Prefer dynamic ids backed by stable product keys such as `campaign-row-<id>` or `trade-row-<id>`. If a test must target deterministic seeded fixture content before it knows the record id, use a normalized semantic key that the fixture controls.
+- Treat `data-testid` names as a public testing contract. Renaming or removing one used by Playwright requires updating the affected helpers and specs in the same change.
+- Exceptions should stay narrow and explicit. Third-party surfaces the app does not own, such as Clerk auth, may use non-`data-testid` selectors in setup helpers only.
+- New browser coverage should not land until the app surface exposes the stable `data-testid` hooks it needs.
+
 When adding new primitives via ShadCN CLI (`npx shadcn@latest add <component>`), complete this checklist before use:
 
 1. Replace CSS-variable color defaults with the app’s Radix token classes.

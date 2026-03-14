@@ -24,6 +24,7 @@ import {
   KRAKEN_DEFAULT_ACCOUNT_ID,
   isKrakenDefaultAccountId,
 } from "../../../../shared/imports/constants";
+import { getTradeRowTickerTestId } from "../../../../shared/e2e/testIds";
 import { EditTradeForm } from "./components/edit-trade-form";
 
 function formatDateForInput(epochMs: number): string {
@@ -91,19 +92,28 @@ export default function TradesPageClient({
   const accountMappings = usePreloadedQuery(preloadedAccountMappings);
   const knownAccounts = usePreloadedQuery(preloadedKnownAccounts);
   const portfolios = usePreloadedQuery(preloadedPortfolios);
-  const [editingTradeId, setEditingTradeId] = useState<Id<"trades"> | null>(null);
-  const [lastResolvedTradesPage, setLastResolvedTradesPage] = useState(
-    initialTradesPage,
+  const [editingTradeId, setEditingTradeId] = useState<Id<"trades"> | null>(
+    null,
   );
-  const [startDateValue, setStartDateValue] = useState(initialFilterState.startDate);
+  const [lastResolvedTradesPage, setLastResolvedTradesPage] =
+    useState(initialTradesPage);
+  const [startDateValue, setStartDateValue] = useState(
+    initialFilterState.startDate,
+  );
   const [endDateValue, setEndDateValue] = useState(initialFilterState.endDate);
-  const [tickerInput, setTickerInput] = useState(initialFilterState.ticker ?? "");
+  const [tickerInput, setTickerInput] = useState(
+    initialFilterState.ticker ?? "",
+  );
   const [appliedTicker, setAppliedTicker] = useState<string | null>(
     initialFilterState.ticker,
   );
-  const [portfolioValue, setPortfolioValue] = useState(initialFilterState.portfolio);
+  const [portfolioValue, setPortfolioValue] = useState(
+    initialFilterState.portfolio,
+  );
   const [accountValue, setAccountValue] = useState(initialFilterState.account);
-  const [cursor, setCursor] = useState<string | null>(initialFilterState.cursor);
+  const [cursor, setCursor] = useState<string | null>(
+    initialFilterState.cursor,
+  );
   const [cursorHistory, setCursorHistory] = useState<Array<string | null>>([]);
   const [pageSize, setPageSize] = useState(initialFilterState.pageSize);
   const currentPage = cursorHistory.length + 1;
@@ -125,7 +135,7 @@ export default function TradesPageClient({
           `${mapping.source}|${mapping.accountId}`,
           mapping.friendlyName,
         ]),
-    ),
+      ),
     [accountMappings],
   );
 
@@ -152,7 +162,8 @@ export default function TradesPageClient({
         };
       })
       .sort(
-        (a, b) => a.label.localeCompare(b.label) || a.value.localeCompare(b.value),
+        (a, b) =>
+          a.label.localeCompare(b.label) || a.value.localeCompare(b.value),
       );
   }, [accountNameByKey, knownAccounts]);
 
@@ -207,7 +218,9 @@ export default function TradesPageClient({
     api.trades.listTradesPage,
     isUsingInitialTradesPage ? "skip" : queryArgs,
   );
-  const tradesPage = isUsingInitialTradesPage ? initialTradesPage : queriedTradesPage;
+  const tradesPage = isUsingInitialTradesPage
+    ? initialTradesPage
+    : queriedTradesPage;
 
   useEffect(() => {
     if (tradesPage) {
@@ -272,13 +285,22 @@ export default function TradesPageClient({
   const isTickerPending =
     normalizeTradesTickerParam(tickerInput) !== appliedTicker;
   const hasActiveFilters = Boolean(
-    startDateValue || endDateValue || appliedTicker || portfolioValue || accountValue,
+    startDateValue ||
+    endDateValue ||
+    appliedTicker ||
+    portfolioValue ||
+    accountValue,
   );
 
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-slate-12 text-2xl font-bold">Trades</h1>
+        <h1
+          className="text-2xl font-bold text-slate-12"
+          data-testid="trades-page-title"
+        >
+          Trades
+        </h1>
         <Link href="/trades/new">
           <Button dataTestId="new-trade-button">New Trade</Button>
         </Link>
@@ -287,29 +309,33 @@ export default function TradesPageClient({
       <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <label className="flex flex-col gap-2">
-            <span className="text-slate-11 text-sm">Start date</span>
+            <span className="text-sm text-slate-11">Start date</span>
             <Input
               aria-label="Start date"
               className="dark-date-input"
               dataTestId="trades-filter-start-date"
               type="date"
               value={startDateValue}
-              onChange={(event) => handleDateChange("startDate", event.target.value)}
+              onChange={(event) =>
+                handleDateChange("startDate", event.target.value)
+              }
             />
           </label>
           <label className="flex flex-col gap-2">
-            <span className="text-slate-11 text-sm">End date</span>
+            <span className="text-sm text-slate-11">End date</span>
             <Input
               aria-label="End date"
               className="dark-date-input"
               dataTestId="trades-filter-end-date"
               type="date"
               value={endDateValue}
-              onChange={(event) => handleDateChange("endDate", event.target.value)}
+              onChange={(event) =>
+                handleDateChange("endDate", event.target.value)
+              }
             />
           </label>
           <label className="flex flex-col gap-2">
-            <span className="text-slate-11 text-sm">Ticker</span>
+            <span className="text-sm text-slate-11">Ticker</span>
             <Input
               aria-label="Ticker"
               dataTestId="trades-filter-ticker"
@@ -319,15 +345,15 @@ export default function TradesPageClient({
               onChange={(event) => setTickerInput(event.target.value)}
             />
             {isTickerPending ? (
-              <span className="text-slate-11 text-xs">Updating filter…</span>
+              <span className="text-xs text-slate-11">Updating filter…</span>
             ) : null}
           </label>
           <label className="flex flex-col gap-2">
-            <span className="text-slate-11 text-sm">Portfolio</span>
+            <span className="text-sm text-slate-11">Portfolio</span>
             <select
               aria-label="Portfolio"
               data-testid="trades-filter-portfolio"
-              className="text-slate-12 block h-9 w-full rounded-md border border-olive-7 bg-transparent px-3 text-sm shadow-xs focus:border-blue-500 focus:outline-none"
+              className="block h-9 w-full rounded-md border border-olive-7 bg-transparent px-3 text-sm text-slate-12 shadow-xs focus:border-blue-500 focus:outline-none"
               value={portfolioValue}
               onChange={(event) => handlePortfolioChange(event.target.value)}
             >
@@ -341,11 +367,11 @@ export default function TradesPageClient({
             </select>
           </label>
           <label className="flex flex-col gap-2">
-            <span className="text-slate-11 text-sm">Account</span>
+            <span className="text-sm text-slate-11">Account</span>
             <select
               aria-label="Account"
               data-testid="trades-filter-account"
-              className="text-slate-12 block h-9 w-full rounded-md border border-olive-7 bg-transparent px-3 text-sm shadow-xs focus:border-blue-500 focus:outline-none"
+              className="block h-9 w-full rounded-md border border-olive-7 bg-transparent px-3 text-sm text-slate-12 shadow-xs focus:border-blue-500 focus:outline-none"
               value={accountValue}
               onChange={(event) => handleAccountChange(event.target.value)}
             >
@@ -367,7 +393,7 @@ export default function TradesPageClient({
               : "No trades yet."}
           </p>
           {!hasActiveFilters && (
-            <p className="text-slate-11 mt-2 text-sm">
+            <p className="mt-2 text-sm text-slate-11">
               Click &quot;New Trade&quot; to record your first trade.
             </p>
           )}
@@ -378,17 +404,39 @@ export default function TradesPageClient({
             <table className="w-full table-auto">
               <thead className="bg-slate-800">
                 <tr>
-                  <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">Date</th>
-                  <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">Ticker</th>
-                  <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">Trade Plan</th>
-                  <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">Portfolio</th>
-                  <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">Side</th>
-                  <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">Direction</th>
-                  <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">Price</th>
-                  <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">Quantity</th>
-                  <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">Total</th>
-                  <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">Account</th>
-                  <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">Actions</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-11">
+                    Date
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-11">
+                    Ticker
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-11">
+                    Trade Plan
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-11">
+                    Portfolio
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-11">
+                    Side
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-11">
+                    Direction
+                  </th>
+                  <th className="px-4 py-3 text-right text-sm font-medium text-slate-11">
+                    Price
+                  </th>
+                  <th className="px-4 py-3 text-right text-sm font-medium text-slate-11">
+                    Quantity
+                  </th>
+                  <th className="px-4 py-3 text-right text-sm font-medium text-slate-11">
+                    Total
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-11">
+                    Account
+                  </th>
+                  <th className="px-4 py-3 text-right text-sm font-medium text-slate-11">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700 bg-slate-900">
@@ -425,34 +473,59 @@ export default function TradesPageClient({
 
                   return (
                     <React.Fragment key={trade._id}>
-                      <tr className="hover:bg-slate-800/50" data-testid={`trade-row-${trade._id}`}>
-                        <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-sm">{formatDate(trade.date)}</td>
-                        <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-sm font-medium">{trade.ticker}</td>
-                        <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
-                          {trade.tradePlanId ? (tradePlanNameMap.get(trade.tradePlanId) ?? "—") : "—"}
+                      <tr
+                        className="hover:bg-slate-800/50"
+                        data-testid={getTradeRowTickerTestId(trade.ticker)}
+                      >
+                        <td className="px-4 py-3 text-sm whitespace-nowrap text-slate-12">
+                          {formatDate(trade.date)}
                         </td>
-                        <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">
-                          {trade.portfolioId ? (portfolioNameMap.get(trade.portfolioId) ?? "—") : "—"}
+                        <td className="px-4 py-3 text-sm font-medium whitespace-nowrap text-slate-12">
+                          {trade.ticker}
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-sm">
-                          <Badge variant={trade.side === "buy" ? "success" : "danger"}>
+                        <td className="px-4 py-3 text-sm whitespace-nowrap text-slate-11">
+                          {trade.tradePlanId
+                            ? (tradePlanNameMap.get(trade.tradePlanId) ?? "—")
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-sm whitespace-nowrap text-slate-11">
+                          {trade.portfolioId
+                            ? (portfolioNameMap.get(trade.portfolioId) ?? "—")
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-sm whitespace-nowrap">
+                          <Badge
+                            variant={
+                              trade.side === "buy" ? "success" : "danger"
+                            }
+                          >
                             {trade.side.toUpperCase()}
                           </Badge>
                         </td>
-                        <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">{trade.direction}</td>
-                        <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">{formatCurrency(trade.price)}</td>
-                        <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm">{trade.quantity}</td>
-                        <td className="text-slate-12 whitespace-nowrap px-4 py-3 text-right text-sm font-medium">
+                        <td className="px-4 py-3 text-sm whitespace-nowrap text-slate-11">
+                          {trade.direction}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm whitespace-nowrap text-slate-12">
+                          {formatCurrency(trade.price)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm whitespace-nowrap text-slate-12">
+                          {trade.quantity}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm font-medium whitespace-nowrap text-slate-12">
                           {formatCurrency(trade.price * trade.quantity)}
                         </td>
-                        <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-sm">{accountDisplay}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
+                        <td className="px-4 py-3 text-sm whitespace-nowrap text-slate-11">
+                          {accountDisplay}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm whitespace-nowrap">
                           <button
                             type="button"
                             onClick={() =>
-                              setEditingTradeId(editingTradeId === trade._id ? null : trade._id)
+                              setEditingTradeId(
+                                editingTradeId === trade._id ? null : trade._id,
+                              )
                             }
-                            className="text-slate-11 hover:text-slate-12 transition-colors"
+                            className="text-slate-11 transition-colors hover:text-slate-12"
                             aria-label="Edit trade"
                             data-testid={`edit-trade-${trade._id}`}
                           >
@@ -493,16 +566,19 @@ export default function TradesPageClient({
           </div>
 
           <div className="mt-4 flex flex-col gap-3 rounded-lg border border-slate-700 bg-slate-800 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-slate-11 text-sm">
+            <div className="text-sm text-slate-11">
               Showing {trades.length} trade{trades.length === 1 ? "" : "s"}
             </div>
             <div className="flex items-center gap-3">
-              <label className="text-slate-11 text-sm" htmlFor="page-size-select">
+              <label
+                className="text-sm text-slate-11"
+                htmlFor="page-size-select"
+              >
                 Rows per page
               </label>
               <select
                 id="page-size-select"
-                className="text-slate-12 rounded border border-slate-600 bg-slate-700 px-2 py-1 text-sm"
+                className="rounded border border-slate-600 bg-slate-700 px-2 py-1 text-sm text-slate-12"
                 value={pageSize}
                 onChange={(e) => handlePageSizeChange(Number(e.target.value))}
                 disabled={isLoadingTradesPage}
@@ -523,7 +599,7 @@ export default function TradesPageClient({
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <span className="text-slate-11 text-sm">Page {currentPage}</span>
+              <span className="text-sm text-slate-11">Page {currentPage}</span>
               <button
                 type="button"
                 aria-label="Next page"

@@ -17,6 +17,7 @@ export interface AppNavigationItem {
   icon: LucideIcon;
   label: string;
   matchPrefixes: string[];
+  testId: string;
 }
 
 export interface AppNavigationSection {
@@ -33,24 +34,28 @@ export const appNavigationSections: AppNavigationSection[] = [
         icon: LayoutDashboard,
         label: "Dashboard",
         matchPrefixes: ["/"],
+        testId: "nav-dashboard-link",
       },
       {
         href: "/trades",
         icon: ChartCandlestick,
         label: "Trades",
         matchPrefixes: ["/trades"],
+        testId: "nav-trades-link",
       },
       {
         href: "/campaigns",
         icon: Map,
         label: "Campaigns",
         matchPrefixes: ["/campaigns"],
+        testId: "nav-campaigns-link",
       },
       {
         href: "/trade-plans",
         icon: SquareChartGantt,
         label: "Trade Plans",
         matchPrefixes: ["/trade-plans"],
+        testId: "nav-trade-plans-link",
       },
     ],
   },
@@ -62,18 +67,21 @@ export const appNavigationSections: AppNavigationSection[] = [
         icon: GalleryVerticalEnd,
         label: "Positions",
         matchPrefixes: ["/positions"],
+        testId: "nav-positions-link",
       },
       {
         href: "/portfolios",
         icon: FolderKanban,
         label: "Portfolios",
         matchPrefixes: ["/portfolios", "/portfolio"],
+        testId: "nav-portfolios-link",
       },
       {
         href: "/imports",
         icon: ImportIcon,
         label: "Imports",
         matchPrefixes: ["/imports"],
+        testId: "nav-imports-link",
       },
     ],
   },
@@ -85,12 +93,14 @@ export const appNavigationSections: AppNavigationSection[] = [
         icon: NotebookPen,
         label: "Notes",
         matchPrefixes: ["/notes"],
+        testId: "nav-notes-link",
       },
       {
         href: "/strategy",
         icon: NotepadText,
         label: "Strategy",
         matchPrefixes: ["/strategy"],
+        testId: "nav-strategy-link",
       },
     ],
   },
@@ -102,6 +112,7 @@ export const appNavigationSections: AppNavigationSection[] = [
         icon: Wallet,
         label: "Accounts",
         matchPrefixes: ["/accounts"],
+        testId: "nav-accounts-link",
       },
     ],
   },

@@ -4,9 +4,7 @@ import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
 import { Check, CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import {
-  MobileHierarchyBreadcrumbs,
-} from "~/components/app-shell/campaign-trade-plan-hierarchy";
+import { MobileHierarchyBreadcrumbs } from "~/components/app-shell/campaign-trade-plan-hierarchy";
 import { useNavigationData } from "~/components/app-shell";
 import { Alert, Badge } from "~/components/ui";
 import NotesSection from "~/components/NotesSection";
@@ -36,8 +34,12 @@ export default function TradePlanDetailPageClient({
   preloadedTradePlan: Preloaded<typeof api.tradePlans.getTradePlan>;
   preloadedNotes: Preloaded<typeof api.notes.getNotesByTradePlan>;
   preloadedTrades: Preloaded<typeof api.trades.listTradesByTradePlan>;
-  preloadedAccountMappings: Preloaded<typeof api.accountMappings.listAccountMappings>;
-  preloadedInboxTradesForPlan: Preloaded<typeof api.imports.listInboxTradesForTradePlan>;
+  preloadedAccountMappings: Preloaded<
+    typeof api.accountMappings.listAccountMappings
+  >;
+  preloadedInboxTradesForPlan: Preloaded<
+    typeof api.imports.listInboxTradesForTradePlan
+  >;
   preloadedPortfolios: Preloaded<typeof api.portfolios.listPortfolios>;
 }) {
   const tradePlan = usePreloadedQuery(preloadedTradePlan);
@@ -51,10 +53,14 @@ export default function TradePlanDetailPageClient({
   const addNote = useMutation(api.notes.addNote);
   const updateNoteM = useMutation(api.notes.updateNote);
   const updateTradePlan = useMutation(api.tradePlans.updateTradePlan);
-  const updateTradePlanStatus = useMutation(api.tradePlans.updateTradePlanStatus);
+  const updateTradePlanStatus = useMutation(
+    api.tradePlans.updateTradePlanStatus,
+  );
   const acceptTrade = useMutation(api.imports.acceptTrade);
 
-  const [pendingPortfolioIds, setPendingPortfolioIds] = useState<Record<string, string>>({});
+  const [pendingPortfolioIds, setPendingPortfolioIds] = useState<
+    Record<string, string>
+  >({});
 
   const accountNameByAccountId = useMemo(() => {
     const map = new Map<string, string>();
@@ -70,16 +76,20 @@ export default function TradePlanDetailPageClient({
   const [planNameSaveState, setPlanNameSaveState] = useState<SaveState>("idle");
 
   const [instrumentSymbol, setInstrumentSymbol] = useState("");
-  const [instrumentSymbolInitialized, setInstrumentSymbolInitialized] = useState(false);
-  const [instrumentSymbolError, setInstrumentSymbolError] = useState<string | null>(null);
-  const [instrumentSymbolSaveState, setInstrumentSymbolSaveState] = useState<SaveState>("idle");
+  const [instrumentSymbolInitialized, setInstrumentSymbolInitialized] =
+    useState(false);
+  const [instrumentSymbolError, setInstrumentSymbolError] = useState<
+    string | null
+  >(null);
+  const [instrumentSymbolSaveState, setInstrumentSymbolSaveState] =
+    useState<SaveState>("idle");
 
   const [statusError, setStatusError] = useState<string | null>(null);
   const [isChangingStatus, setIsChangingStatus] = useState(false);
   const [inboxAcceptError, setInboxAcceptError] = useState<string | null>(null);
-  const [acceptingInboxTradeIds, setAcceptingInboxTradeIds] = useState<Set<string>>(
-    new Set(),
-  );
+  const [acceptingInboxTradeIds, setAcceptingInboxTradeIds] = useState<
+    Set<string>
+  >(new Set());
   const breadcrumbs = buildHierarchyBreadcrumbs(hierarchy, {
     kind: "tradePlan",
     tradePlanId,
@@ -122,7 +132,9 @@ export default function TradePlanDetailPageClient({
       setPlanName(trimmed);
       setPlanNameSaveState("saved");
     } catch (error) {
-      setPlanNameError(error instanceof Error ? error.message : "Failed to save name");
+      setPlanNameError(
+        error instanceof Error ? error.message : "Failed to save name",
+      );
       setPlanNameSaveState("idle");
     }
   };
@@ -141,7 +153,9 @@ export default function TradePlanDetailPageClient({
       setInstrumentSymbol(trimmed);
       setInstrumentSymbolSaveState("saved");
     } catch (error) {
-      setInstrumentSymbolError(error instanceof Error ? error.message : "Failed to save symbol");
+      setInstrumentSymbolError(
+        error instanceof Error ? error.message : "Failed to save symbol",
+      );
       setInstrumentSymbolSaveState("idle");
     }
   };
@@ -152,7 +166,9 @@ export default function TradePlanDetailPageClient({
     try {
       await updateTradePlanStatus({ tradePlanId, status });
     } catch (error) {
-      setStatusError(error instanceof Error ? error.message : "Failed to update status");
+      setStatusError(
+        error instanceof Error ? error.message : "Failed to update status",
+      );
     } finally {
       setIsChangingStatus(false);
     }
@@ -172,7 +188,9 @@ export default function TradePlanDetailPageClient({
       const result = await acceptTrade({
         inboxTradeId,
         tradePlanId,
-        portfolioId: portfolioId ? (portfolioId as Id<"portfolios">) : undefined,
+        portfolioId: portfolioId
+          ? (portfolioId as Id<"portfolios">)
+          : undefined,
       });
       if (result.error) {
         setInboxAcceptError(result.error);
@@ -180,7 +198,9 @@ export default function TradePlanDetailPageClient({
         setInboxAcceptError("Failed to accept trade");
       }
     } catch (error) {
-      setInboxAcceptError(error instanceof Error ? error.message : "Failed to accept trade");
+      setInboxAcceptError(
+        error instanceof Error ? error.message : "Failed to accept trade",
+      );
     } finally {
       setAcceptingInboxTradeIds((prev) => {
         const next = new Set(prev);
@@ -194,7 +214,10 @@ export default function TradePlanDetailPageClient({
     return (
       <div className="container mx-auto px-4 py-8">
         <p className="text-slate-11">Trade plan not found.</p>
-        <Link href="/trade-plans" className="mt-4 inline-block text-blue-400 hover:underline">
+        <Link
+          href="/trade-plans"
+          className="mt-4 inline-block text-blue-400 hover:underline"
+        >
           Back to trade plans
         </Link>
       </div>
@@ -208,6 +231,7 @@ export default function TradePlanDetailPageClient({
       ) : (
         <Link
           href="/trade-plans"
+          data-testid="trade-plan-back-link"
           className="mb-2 inline-block text-sm text-slate-11 hover:text-slate-12 md:hidden"
         >
           &larr; Back to Trade Plans
@@ -216,6 +240,7 @@ export default function TradePlanDetailPageClient({
 
       <Link
         href="/trade-plans"
+        data-testid="trade-plan-back-link"
         className="mb-2 hidden text-sm text-slate-11 hover:text-slate-12 md:inline-block"
       >
         &larr; Back to Trade Plans
@@ -223,14 +248,16 @@ export default function TradePlanDetailPageClient({
 
       <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
         <div className="mb-4 space-y-1">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-11">
+          <p className="text-xs font-medium tracking-[0.18em] text-slate-11 uppercase">
             {relationshipLabel}
           </p>
           {tradePlan.campaignId ? (
             <p className="text-sm text-slate-11">
               Campaign:{" "}
               <Link
-                href={linkedCampaign?.href ?? `/campaigns/${tradePlan.campaignId}`}
+                href={
+                  linkedCampaign?.href ?? `/campaigns/${tradePlan.campaignId}`
+                }
                 className="text-blue-400 hover:underline"
               >
                 {linkedCampaign?.name ?? "View Campaign"}
@@ -242,19 +269,24 @@ export default function TradePlanDetailPageClient({
         <div className="mb-2 flex items-start justify-between gap-3">
           <div className="flex-1 space-y-3">
             <div>
-              <label htmlFor="plan-name" className="mb-1 block text-xs uppercase tracking-wide text-slate-11">
+              <label
+                htmlFor="plan-name"
+                className="mb-1 block text-xs tracking-wide text-slate-11 uppercase"
+              >
                 Plan Name
               </label>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <input
                   id="plan-name"
+                  data-testid="trade-plan-name-input"
                   maxLength={120}
                   className="w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-xl font-bold text-slate-12"
                   value={planName}
                   onChange={(e) => {
                     setPlanName(e.target.value);
                     setPlanNameError(null);
-                    if (planNameSaveState === "saved") setPlanNameSaveState("idle");
+                    if (planNameSaveState === "saved")
+                      setPlanNameSaveState("idle");
                   }}
                 />
                 <button
@@ -266,7 +298,11 @@ export default function TradePlanDetailPageClient({
                   Save Name
                 </button>
               </div>
-              {planNameError && <Alert variant="error" className="mt-2">{planNameError}</Alert>}
+              {planNameError && (
+                <Alert variant="error" className="mt-2">
+                  {planNameError}
+                </Alert>
+              )}
               {planNameSaveState === "saving" && (
                 <span className="mt-2 flex items-center gap-1 text-sm text-slate-11">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -282,19 +318,24 @@ export default function TradePlanDetailPageClient({
             </div>
 
             <div>
-              <label htmlFor="plan-symbol" className="mb-1 block text-xs uppercase tracking-wide text-slate-11">
+              <label
+                htmlFor="plan-symbol"
+                className="mb-1 block text-xs tracking-wide text-slate-11 uppercase"
+              >
                 Instrument Symbol
               </label>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <input
                   id="plan-symbol"
+                  data-testid="trade-plan-symbol-input"
                   maxLength={20}
                   className="w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12 sm:w-40"
                   value={instrumentSymbol}
                   onChange={(e) => {
                     setInstrumentSymbol(e.target.value);
                     setInstrumentSymbolError(null);
-                    if (instrumentSymbolSaveState === "saved") setInstrumentSymbolSaveState("idle");
+                    if (instrumentSymbolSaveState === "saved")
+                      setInstrumentSymbolSaveState("idle");
                   }}
                 />
                 <button
@@ -306,7 +347,11 @@ export default function TradePlanDetailPageClient({
                   Save Symbol
                 </button>
               </div>
-              {instrumentSymbolError && <Alert variant="error" className="mt-2">{instrumentSymbolError}</Alert>}
+              {instrumentSymbolError && (
+                <Alert variant="error" className="mt-2">
+                  {instrumentSymbolError}
+                </Alert>
+              )}
               {instrumentSymbolSaveState === "saving" && (
                 <span className="mt-2 flex items-center gap-1 text-sm text-slate-11">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -323,15 +368,20 @@ export default function TradePlanDetailPageClient({
           </div>
 
           <div className="w-44">
-            <label htmlFor="plan-status" className="mb-1 block text-xs uppercase tracking-wide text-slate-11">
+            <label
+              htmlFor="plan-status"
+              className="mb-1 block text-xs tracking-wide text-slate-11 uppercase"
+            >
               Status
             </label>
             <select
               id="plan-status"
               value={tradePlan.status}
               disabled={isChangingStatus}
-              onChange={(e) => void handleStatusChange(e.target.value as TradePlanStatus)}
-              className="h-9 w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-1 text-sm text-slate-12 focus:outline-none focus:ring-1 focus:ring-slate-500"
+              onChange={(e) =>
+                void handleStatusChange(e.target.value as TradePlanStatus)
+              }
+              className="h-9 w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-1 text-sm text-slate-12 focus:ring-1 focus:ring-slate-500 focus:outline-none"
             >
               <option value="idea">Idea</option>
               <option value="watching">Watching</option>
@@ -342,10 +392,16 @@ export default function TradePlanDetailPageClient({
         </div>
 
         {tradePlan.status === "closed" && tradePlan.closedAt && (
-          <p className="text-xs text-slate-11">Closed {new Date(tradePlan.closedAt).toLocaleDateString("en-US")}</p>
+          <p className="text-xs text-slate-11">
+            Closed {new Date(tradePlan.closedAt).toLocaleDateString("en-US")}
+          </p>
         )}
 
-        {statusError && <Alert variant="error" className="mt-3">{statusError}</Alert>}
+        {statusError && (
+          <Alert variant="error" className="mt-3">
+            {statusError}
+          </Alert>
+        )}
       </div>
 
       <NotesSection
@@ -354,26 +410,44 @@ export default function TradePlanDetailPageClient({
           await addNote({ tradePlanId, content, chartUrls });
         }}
         onUpdateNote={async (noteId, content, chartUrls) => {
-          await updateNoteM({ noteId: noteId as Id<"notes">, content, chartUrls });
+          await updateNoteM({
+            noteId: noteId as Id<"notes">,
+            content,
+            chartUrls,
+          });
         }}
       />
 
       <section className="rounded-lg border border-slate-700 bg-slate-800 p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-12">Trades</h2>
-          <Link href="/trades/new" className="rounded bg-slate-700 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-600">
+          <h2
+            className="text-lg font-semibold text-slate-12"
+            data-testid="trade-plan-trades-section-title"
+          >
+            Trades
+          </h2>
+          <Link
+            href="/trades/new"
+            className="rounded bg-slate-700 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-600"
+          >
             Add Trade
           </Link>
         </div>
 
         {inboxAcceptError && (
-          <Alert variant="error" className="mb-3" onDismiss={() => setInboxAcceptError(null)}>
+          <Alert
+            variant="error"
+            className="mb-3"
+            onDismiss={() => setInboxAcceptError(null)}
+          >
             {inboxAcceptError}
           </Alert>
         )}
 
         {trades.length === 0 && inboxTradesForPlan.length === 0 ? (
-          <p className="text-sm text-slate-11">No trades linked to this plan yet.</p>
+          <p className="text-sm text-slate-11">
+            No trades linked to this plan yet.
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -392,18 +466,33 @@ export default function TradePlanDetailPageClient({
                 {inboxTradesForPlan.map(({ inboxTrade, matchType }) => {
                   const portfolioId = pendingPortfolioIds[inboxTrade._id] ?? "";
                   return (
-                    <tr key={inboxTrade._id} className="border-b border-slate-700 bg-blue-900/20">
+                    <tr
+                      key={inboxTrade._id}
+                      className="border-b border-slate-700 bg-blue-900/20"
+                    >
                       <td className="px-2 py-2 text-slate-11">
-                        {inboxTrade.date ? new Date(inboxTrade.date).toLocaleDateString("en-US") : "---"}
+                        {inboxTrade.date
+                          ? new Date(inboxTrade.date).toLocaleDateString(
+                              "en-US",
+                            )
+                          : "---"}
                       </td>
                       <td className="px-2 py-2 text-slate-12">
                         {inboxTrade.ticker ?? "---"}{" "}
-                        <Badge variant={matchType === "suggested" ? "info" : "neutral"}>
+                        <Badge
+                          variant={
+                            matchType === "suggested" ? "info" : "neutral"
+                          }
+                        >
                           {matchType === "suggested" ? "Suggested" : "Pending"}
                         </Badge>
                       </td>
                       <td className="px-2 py-2 text-slate-11">
-                        {accountNameByAccountId.get(inboxTrade.brokerageAccountId ?? "") ?? inboxTrade.brokerageAccountId ?? "---"}
+                        {accountNameByAccountId.get(
+                          inboxTrade.brokerageAccountId ?? "",
+                        ) ??
+                          inboxTrade.brokerageAccountId ??
+                          "---"}
                       </td>
                       <td className="px-2 py-2 text-slate-11">
                         <Badge
@@ -418,9 +507,13 @@ export default function TradePlanDetailPageClient({
                           {inboxTrade.side ?? "---"}
                         </Badge>
                       </td>
-                      <td className="px-2 py-2 text-slate-11">{inboxTrade.quantity ?? "---"}</td>
                       <td className="px-2 py-2 text-slate-11">
-                        {inboxTrade.price !== undefined ? formatCurrency(inboxTrade.price) : "---"}
+                        {inboxTrade.quantity ?? "---"}
+                      </td>
+                      <td className="px-2 py-2 text-slate-11">
+                        {inboxTrade.price !== undefined
+                          ? formatCurrency(inboxTrade.price)
+                          : "---"}
                       </td>
                       <td className="px-2 py-2">
                         <div className="flex items-center gap-1">
@@ -433,7 +526,7 @@ export default function TradePlanDetailPageClient({
                                 [inboxTrade._id]: e.target.value,
                               }))
                             }
-                            className="text-slate-12 h-7 rounded border border-slate-600 bg-slate-700 px-1 text-xs"
+                            className="h-7 rounded border border-slate-600 bg-slate-700 px-1 text-xs text-slate-12"
                           >
                             <option value="">No portfolio</option>
                             {portfolios?.map((p) => (
@@ -445,10 +538,17 @@ export default function TradePlanDetailPageClient({
                           <button
                             type="button"
                             aria-label={`Accept ${inboxTrade.ticker ?? "trade"} from inbox`}
-                            onClick={() => void handleAcceptInboxTrade(inboxTrade._id, portfolioId)}
+                            onClick={() =>
+                              void handleAcceptInboxTrade(
+                                inboxTrade._id,
+                                portfolioId,
+                              )
+                            }
                             className="rounded p-1.5 text-green-400 hover:bg-green-900/50 disabled:opacity-50"
                             title="Accept"
-                            disabled={acceptingInboxTradeIds.has(inboxTrade._id)}
+                            disabled={acceptingInboxTradeIds.has(
+                              inboxTrade._id,
+                            )}
                           >
                             {acceptingInboxTradeIds.has(inboxTrade._id) ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
@@ -463,14 +563,24 @@ export default function TradePlanDetailPageClient({
                 })}
                 {trades.map((trade) => (
                   <tr key={trade._id} className="border-b border-slate-700/60">
-                    <td className="px-2 py-2 text-slate-11">{new Date(trade.date).toLocaleDateString("en-US")}</td>
+                    <td className="px-2 py-2 text-slate-11">
+                      {new Date(trade.date).toLocaleDateString("en-US")}
+                    </td>
                     <td className="px-2 py-2 text-slate-12">{trade.ticker}</td>
                     <td className="px-2 py-2 text-slate-11">
-                      {trade.brokerageAccountId ? accountNameByAccountId.get(trade.brokerageAccountId) ?? trade.brokerageAccountId : "\u2014"}
+                      {trade.brokerageAccountId
+                        ? (accountNameByAccountId.get(
+                            trade.brokerageAccountId,
+                          ) ?? trade.brokerageAccountId)
+                        : "\u2014"}
                     </td>
                     <td className="px-2 py-2 text-slate-11">{trade.side}</td>
-                    <td className="px-2 py-2 text-slate-11">{trade.quantity}</td>
-                    <td className="px-2 py-2 text-slate-11">{formatCurrency(trade.price)}</td>
+                    <td className="px-2 py-2 text-slate-11">
+                      {trade.quantity}
+                    </td>
+                    <td className="px-2 py-2 text-slate-11">
+                      {formatCurrency(trade.price)}
+                    </td>
                     <td className="px-2 py-2 text-slate-11">—</td>
                   </tr>
                 ))}
