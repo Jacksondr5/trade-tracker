@@ -237,7 +237,7 @@ export default function CampaignDetailPageClient({
           thesis: parsed.thesis,
         });
         thesisForm.setFieldValue("thesis", parsed.thesis);
-        setThesisSaveState("saved");
+        setThesisSaveState("idle");
         setIsEditingThesis(false);
       } catch (error) {
         setThesisError(error instanceof Error ? error.message : "Failed to save thesis");
