@@ -30,16 +30,18 @@ type CampaignSummary = CampaignSummaries[number];
 
 function CampaignCard({ campaign }: { campaign: CampaignSummary }) {
   const hasPlans = campaign.linkedTradePlans.totalCount > 0;
+  const titleId = `campaign-title-${campaign.id}`;
 
   return (
     <Link
       href={`/campaigns/${campaign.id}`}
+      aria-labelledby={titleId}
       className="group block rounded-lg border border-olive-6 bg-olive-2 p-4 transition-colors hover:border-olive-7 hover:bg-olive-3"
       data-testid={`campaign-card-${campaign.id}`}
     >
       <div className="mb-2 flex items-start justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          <h3 className="truncate text-sm font-semibold text-olive-12">
+          <h3 id={titleId} className="truncate text-sm font-semibold text-olive-12">
             {campaign.name}
           </h3>
           {campaign.isWatched && (
