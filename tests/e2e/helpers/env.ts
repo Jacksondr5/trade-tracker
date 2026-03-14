@@ -100,6 +100,16 @@ export function getBypassHeaders(): Record<string, string> | undefined {
   };
 }
 
+export function getBypassBootstrapUrl(): string | undefined {
+  const bypassHeaders = getBypassHeaders();
+
+  if (!bypassHeaders) {
+    return undefined;
+  }
+
+  return new URL("/", getBaseUrl()).toString();
+}
+
 function getRequiredEnv(name: string): string {
   const value = (process.env[name] ?? dotenvLocal[name])?.trim();
 

@@ -1,5 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
-import { PLAYWRIGHT_AUTH_FILE, getBaseUrl, getBypassHeaders } from "./tests/e2e/helpers/env";
+import { PLAYWRIGHT_AUTH_FILE, getBaseUrl } from "./tests/e2e/helpers/env";
 
 export default defineConfig({
   globalSetup: "./tests/e2e/setup/global.setup.ts",
@@ -13,7 +13,6 @@ export default defineConfig({
   timeout: 60_000,
   use: {
     baseURL: getBaseUrl(),
-    extraHTTPHeaders: getBypassHeaders(),
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     video: "retain-on-failure",
