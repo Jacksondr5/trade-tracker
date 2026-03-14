@@ -45,12 +45,12 @@ type BadgeVariant = NonNullable<BadgeProps["variant"]>;
 function getStatusVariant(status: string): BadgeVariant {
   switch (status) {
     case "planning":
-    case "idea":
       return "info";
     case "watching":
       return "warning";
     case "active":
       return "success";
+    case "idea":
     default:
       return "neutral";
   }
