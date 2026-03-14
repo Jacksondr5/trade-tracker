@@ -268,9 +268,12 @@ export const resetPlaywrightData = internalMutation({
       .query("watchlist")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
       .collect();
-    const inboxTrades = (await ctx.db.query("inboxTrades").collect()).filter(
-      (item) => item.ownerId === ownerId,
-    );
+    const inboxTrades = await ctx.db
+      .query("inboxTrades")
+      .withIndex("by_owner_status", (q) =>
+        q.eq("ownerId", ownerId).eq("status", "pending_review"),
+      )
+      .collect();
     const trades = await ctx.db
       .query("trades")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))

@@ -24,7 +24,7 @@ import {
   KRAKEN_DEFAULT_ACCOUNT_ID,
   isKrakenDefaultAccountId,
 } from "../../../../shared/imports/constants";
-import { getTradeRowTickerTestId } from "../../../../shared/e2e/testIds";
+import { APP_PAGE_TITLES, getTradeRowTestId } from "../../../../shared/e2e/testIds";
 import { EditTradeForm } from "./components/edit-trade-form";
 
 function formatDateForInput(epochMs: number): string {
@@ -297,7 +297,7 @@ export default function TradesPageClient({
       <div className="mb-6 flex items-center justify-between">
         <h1
           className="text-2xl font-bold text-slate-12"
-          data-testid="trades-page-title"
+          data-testid={APP_PAGE_TITLES.trades}
         >
           Trades
         </h1>
@@ -475,7 +475,7 @@ export default function TradesPageClient({
                     <React.Fragment key={trade._id}>
                       <tr
                         className="hover:bg-slate-800/50"
-                        data-testid={getTradeRowTickerTestId(trade.ticker)}
+                        data-testid={getTradeRowTestId(trade.ticker, trade.date)}
                       >
                         <td className="px-4 py-3 text-sm whitespace-nowrap text-slate-12">
                           {formatDate(trade.date)}

@@ -72,9 +72,13 @@ export function getBaseUrl(): string {
     process.env.APP_URL?.trim() ||
     dotenvLocal.APP_URL?.trim();
 
-  return configuredBaseUrl && configuredBaseUrl.length > 0
-    ? configuredBaseUrl
-    : "http://127.0.0.1:3000";
+  if (!configuredBaseUrl || configuredBaseUrl.length === 0) {
+    throw new Error(
+      "PLAYWRIGHT_BASE_URL or APP_URL must be set for Playwright runs.",
+    );
+  }
+
+  return configuredBaseUrl;
 }
 
 function shouldUseBypassHeaders(baseUrl: string): boolean {
@@ -90,9 +94,9 @@ export function getProjectRoot(): string {
   return ROOT_DIR;
 }
 
-export function isLocalPlaywrightTarget(): boolean {
+export function isLocalPlaywrightTarget(baseUrl: string): boolean {
   try {
-    const { hostname } = new URL(getBaseUrl());
+    const { hostname } = new URL(baseUrl);
     return LOCAL_PLAYWRIGHT_HOSTS.has(hostname);
   } catch {
     return false;

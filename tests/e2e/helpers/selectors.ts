@@ -1,27 +1,15 @@
 import type { Locator, Page } from "@playwright/test";
 import { E2E_SMOKE_FIXTURES } from "../../../shared/e2e/smokeFixtures";
 import {
+  APP_PAGE_TITLES,
+  NAVIGATION_TEST_IDS,
   getCampaignRowTestId,
   getStandaloneTradePlanCardTestId,
   getTradePlanLinkTestId,
-  getTradeRowTickerTestId,
+  getTradeRowTestId,
 } from "../../../shared/e2e/testIds";
 
-export const APP_PAGE_TITLES = {
-  dashboard: "dashboard-page-title",
-  campaigns: "campaigns-page-title",
-  positions: "positions-page-title",
-  tradePlans: "trade-plans-page-title",
-  trades: "trades-page-title",
-} as const;
-
-export const NAVIGATION_TEST_IDS = {
-  dashboard: "nav-dashboard-link",
-  campaigns: "nav-campaigns-link",
-  positions: "nav-positions-link",
-  tradePlans: "nav-trade-plans-link",
-  trades: "nav-trades-link",
-} as const;
+export { APP_PAGE_TITLES, NAVIGATION_TEST_IDS };
 
 export function getNavigationLink(
   page: Page,
@@ -55,8 +43,9 @@ export function getCreatedTradePlanCard(page: Page): Locator {
 
 export function getLinkedTradeRow(page: Page): Locator {
   return page.getByTestId(
-    getTradeRowTickerTestId(
+    getTradeRowTestId(
       E2E_SMOKE_FIXTURES.linkedTradePlan.instrumentSymbol,
+      E2E_SMOKE_FIXTURES.trades[0].date,
     ),
   );
 }

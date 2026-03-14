@@ -240,7 +240,7 @@ export default function TradePlanDetailPageClient({
 
       <Link
         href="/trade-plans"
-        data-testid="trade-plan-back-link"
+        data-testid="trade-plan-back-link-desktop"
         className="mb-2 hidden text-sm text-slate-11 hover:text-slate-12 md:inline-block"
       >
         &larr; Back to Trade Plans

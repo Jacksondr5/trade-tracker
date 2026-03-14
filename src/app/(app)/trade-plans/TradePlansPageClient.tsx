@@ -19,6 +19,7 @@ import type { Id } from "~/convex/_generated/dataModel";
 import { STANDALONE_TRADE_PLANS_LABEL } from "~/lib/campaign-trade-plan-navigation";
 import { capitalize } from "~/lib/format";
 import {
+  APP_PAGE_TITLES,
   getStandaloneTradePlanCardTestId,
   getTradePlanLinkTestId,
 } from "../../../../shared/e2e/testIds";
@@ -121,7 +122,7 @@ export default function TradePlansPageClient({
       <div className="mb-6 space-y-2">
         <h1
           className="text-3xl font-bold text-olive-12"
-          data-testid="trade-plans-page-title"
+          data-testid={APP_PAGE_TITLES.tradePlans}
         >
           Trade Plans
         </h1>

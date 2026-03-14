@@ -36,6 +36,10 @@ test("standalone trade plans can be created from the list page", async ({
 
   await page.goto("/trade-plans");
   await waitForAuthenticatedApp(page, APP_PAGE_TITLES.tradePlans);
+  const standaloneTradePlanCards = page.getByTestId(
+    /^standalone-trade-plan-card-/,
+  );
+  const initialCardCount = await standaloneTradePlanCards.count();
   await expect(createdTradePlanCard).toHaveCount(0);
 
   await page.getByTestId("name-input").fill(createdPlanName);
@@ -44,5 +48,6 @@ test("standalone trade plans can be created from the list page", async ({
     .fill(E2E_SMOKE_FIXTURES.createdStandaloneTradePlan.instrumentSymbol);
   await page.getByTestId("create-trade-plan-button").click();
 
+  await expect(standaloneTradePlanCards).toHaveCount(initialCardCount + 1);
   await expect(createdTradePlanCard).toContainText(createdPlanName);
 });

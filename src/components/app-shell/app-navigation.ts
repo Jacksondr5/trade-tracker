@@ -1,3 +1,4 @@
+import { NAVIGATION_TEST_IDS } from "../../../shared/e2e/testIds";
 import type { LucideIcon } from "lucide-react";
 import {
   ChartCandlestick,
@@ -33,7 +34,7 @@ export const appNavigationSections: AppNavigationSection[] = [
         href: "/dashboard",
         icon: LayoutDashboard,
         label: "Dashboard",
-        testId: "nav-dashboard-link",
+        testId: NAVIGATION_TEST_IDS.dashboard,
         matchPrefixes: ["/dashboard"],
       },
       {
@@ -41,21 +42,21 @@ export const appNavigationSections: AppNavigationSection[] = [
         icon: ChartCandlestick,
         label: "Trades",
         matchPrefixes: ["/trades"],
-        testId: "nav-trades-link",
+        testId: NAVIGATION_TEST_IDS.trades,
       },
       {
         href: "/campaigns",
         icon: Map,
         label: "Campaigns",
+        testId: NAVIGATION_TEST_IDS.campaigns,
         matchPrefixes: ["/campaigns"],
-        testId: "nav-campaigns-link",
       },
       {
         href: "/trade-plans",
         icon: SquareChartGantt,
         label: "Trade Plans",
         matchPrefixes: ["/trade-plans"],
-        testId: "nav-trade-plans-link",
+        testId: NAVIGATION_TEST_IDS.tradePlans,
       },
     ],
   },
@@ -67,7 +68,7 @@ export const appNavigationSections: AppNavigationSection[] = [
         icon: GalleryVerticalEnd,
         label: "Positions",
         matchPrefixes: ["/positions"],
-        testId: "nav-positions-link",
+        testId: NAVIGATION_TEST_IDS.positions,
       },
       {
         href: "/portfolios",

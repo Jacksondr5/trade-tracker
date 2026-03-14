@@ -54,6 +54,10 @@ export const E2E_SMOKE_FIXTURES = {
   ],
 } as const;
 
-export function getCreatedStandaloneTradePlanName(): string {
-  return E2E_SMOKE_FIXTURES.createdStandaloneTradePlan.name;
+export function getCreatedStandaloneTradePlanName(isLocalTarget: boolean): string {
+  if (isLocalTarget) {
+    return E2E_SMOKE_FIXTURES.createdStandaloneTradePlan.name;
+  }
+
+  return `${E2E_SMOKE_FIXTURES.createdStandaloneTradePlan.name}-${Date.now()}`;
 }

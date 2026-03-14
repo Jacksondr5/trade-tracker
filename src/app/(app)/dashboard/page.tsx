@@ -2,6 +2,7 @@
 
 import { useQuery } from "convex/react";
 import { api } from "~/convex/_generated/api";
+import { APP_PAGE_TITLES } from "../../../../shared/e2e/testIds";
 
 interface StatCardProps {
   title: string;
@@ -55,7 +56,7 @@ export default function DashboardPage() {
     <div className="container mx-auto px-4 py-8">
       <h1
         className="mb-6 text-2xl font-bold text-slate-12"
-        data-testid="dashboard-page-title"
+        data-testid={APP_PAGE_TITLES.dashboard}
       >
         Dashboard
       </h1>

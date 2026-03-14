@@ -7,7 +7,7 @@ import { useMemo, useState } from "react";
 import { Badge, Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import { capitalize, formatDate } from "~/lib/format";
-import { getCampaignRowTestId } from "../../../../shared/e2e/testIds";
+import { APP_PAGE_TITLES, getCampaignRowTestId } from "../../../../shared/e2e/testIds";
 
 type CampaignStatus = "planning" | "active" | "closed";
 type StatusFilter = "all" | CampaignStatus;
@@ -170,7 +170,7 @@ export default function CampaignsPageClient({
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1
           className="text-3xl font-bold text-olive-12"
-          data-testid="campaigns-page-title"
+          data-testid={APP_PAGE_TITLES.campaigns}
         >
           Campaigns
         </h1>

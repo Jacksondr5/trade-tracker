@@ -36,14 +36,16 @@ function runConvexFunction<T>(functionName: string): T {
       cwd: getProjectRoot(),
       encoding: "utf8",
       env: process.env,
+      shell: true,
+      timeout: 30_000,
     },
   );
 
   return parseConvexRunOutput<T>(output);
 }
 
-export function setupPlaywrightFixtureState(): void {
-  if (!isLocalPlaywrightTarget()) {
+export function setupPlaywrightFixtureState(baseUrl: string): void {
+  if (!isLocalPlaywrightTarget(baseUrl)) {
     return;
   }
 

@@ -4,6 +4,7 @@ import { Preloaded, usePreloadedQuery } from "convex/react";
 import { Badge } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import { formatCurrency } from "~/lib/format";
+import { APP_PAGE_TITLES } from "../../../../shared/e2e/testIds";
 
 export default function PositionsPageClient({
   preloadedPositions,
@@ -17,7 +18,7 @@ export default function PositionsPageClient({
       <div className="mb-6 flex items-center justify-between">
         <h1
           className="text-2xl font-bold text-slate-12"
-          data-testid="positions-page-title"
+          data-testid={APP_PAGE_TITLES.positions}
         >
           Positions
         </h1>
