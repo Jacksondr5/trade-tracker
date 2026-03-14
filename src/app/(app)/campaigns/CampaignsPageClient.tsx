@@ -163,7 +163,7 @@ export default function CampaignsPageClient({
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-3xl font-bold text-olive-12">Campaigns</h1>
         <Button asChild dataTestId="new-campaign-button">
-          <Link href="/campaigns/new">New Campaign</Link>
+          <Link href="/campaigns/new">New campaign</Link>
         </Button>
       </div>
 
