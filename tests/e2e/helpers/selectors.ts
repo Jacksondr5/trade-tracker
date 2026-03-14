@@ -42,11 +42,14 @@ export function getStandaloneTradePlanLink(page: Page): Locator {
   );
 }
 
+export function getStandaloneTradePlanCard(page: Page, name: string): Locator {
+  return page.getByTestId(getStandaloneTradePlanCardTestId(name));
+}
+
 export function getCreatedTradePlanCard(page: Page): Locator {
-  return page.getByTestId(
-    getStandaloneTradePlanCardTestId(
-      E2E_SMOKE_FIXTURES.createdStandaloneTradePlan.name,
-    ),
+  return getStandaloneTradePlanCard(
+    page,
+    E2E_SMOKE_FIXTURES.createdStandaloneTradePlan.name,
   );
 }
 

@@ -11,9 +11,11 @@ test("seeded campaign is visible and detail page loads", async ({ page }) => {
   await getCampaignRow(page).click();
 
   await expect(page).toHaveURL(/\/campaigns\/[^/]+$/);
+  await page.getByTestId("edit-campaign-name").click();
   await expect(page.getByTestId("name-input")).toHaveValue(
     E2E_SMOKE_FIXTURES.campaign.name,
   );
+  await page.getByTestId("edit-thesis").click();
   await expect(page.getByTestId("thesis-textarea")).toHaveValue(
     E2E_SMOKE_FIXTURES.campaign.thesis,
   );
