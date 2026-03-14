@@ -30,10 +30,18 @@ export default defineConfig({
     {
       name: "chromium-smoke",
       dependencies: ["setup"],
-      testIgnore: /.*\.setup\.ts/,
+      testIgnore: [/.*\.setup\.ts/, /public-home\.spec\.ts/],
       use: {
         ...devices["Desktop Chrome"],
         storageState: PLAYWRIGHT_AUTH_FILE,
+      },
+    },
+    {
+      name: "chromium-public-smoke",
+      testMatch: /public-home\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: undefined,
       },
     },
   ],

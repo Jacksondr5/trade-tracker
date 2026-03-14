@@ -36,6 +36,12 @@ The navigation model should help the target user answer two different questions 
 
 Trade Tracker has three navigation layers.
 
+The route `/` is the public entry page for the product.
+
+- Signed-out users should see a simple entry experience that leads to `Sign in` and `Sign up`.
+- Signed-in users should be redirected from `/` to `/dashboard`.
+- The authenticated app shell begins at authenticated routes such as `/dashboard`, not at `/`.
+
 ### 1. Global navigation
 
 This is the app-wide shell used to move between major product areas.
