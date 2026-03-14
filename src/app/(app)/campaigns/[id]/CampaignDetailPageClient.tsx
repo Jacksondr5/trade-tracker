@@ -170,9 +170,6 @@ export default function CampaignDetailPageClient({
     validators: {
       onChange: ({ value }) => {
         setCampaignNameError(null);
-        if (campaignNameSaveState === "saved") {
-          setCampaignNameSaveState("idle");
-        }
         return validateWithSchema(campaignNameSchema, value);
       },
     },
@@ -484,12 +481,6 @@ export default function CampaignDetailPageClient({
                   <span className="mt-2 flex items-center gap-1 text-sm text-olive-11">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Saving...
-                  </span>
-                )}
-                {campaignNameSaveState === "saved" && (
-                  <span className="mt-2 flex items-center gap-1 text-sm text-grass-9">
-                    <CheckCircle2 className="h-4 w-4" />
-                    Saved
                   </span>
                 )}
               </div>
