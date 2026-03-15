@@ -16,6 +16,7 @@ import {
   KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME,
   isKrakenDefaultAccountId,
 } from "../../../../shared/imports/constants";
+import { APP_PAGE_TITLES } from "../../../../shared/e2e/testIds";
 
 type MappingSource = "ibkr" | "kraken";
 
@@ -114,7 +115,10 @@ export default function AccountsPageClient({
 
   return (
     <div className="container mx-auto space-y-6 px-4 py-8">
-      <h1 className="text-slate-12 text-2xl font-bold">
+      <h1
+        className="text-2xl font-bold text-slate-12"
+        data-testid={APP_PAGE_TITLES.accounts}
+      >
         Account Name Mappings
       </h1>
 
@@ -129,7 +133,7 @@ export default function AccountsPageClient({
             </Alert>
           )}
           {knownAccounts.length === 0 ? (
-            <p className="text-slate-11 text-sm">
+            <p className="text-sm text-slate-11">
               No brokerage account IDs detected in imports or trades yet.
             </p>
           ) : (
@@ -137,22 +141,22 @@ export default function AccountsPageClient({
               <table className="w-full table-auto">
                 <thead className="bg-slate-800">
                   <tr>
-                    <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
+                    <th className="px-4 py-3 text-left text-sm font-medium text-slate-11">
                       Brokerage
                     </th>
-                    <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
+                    <th className="px-4 py-3 text-left text-sm font-medium text-slate-11">
                       Account ID
                     </th>
-                    <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
+                    <th className="px-4 py-3 text-right text-sm font-medium text-slate-11">
                       Trades
                     </th>
-                    <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
+                    <th className="px-4 py-3 text-right text-sm font-medium text-slate-11">
                       Inbox
                     </th>
-                    <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
+                    <th className="px-4 py-3 text-left text-sm font-medium text-slate-11">
                       Mapped Name
                     </th>
-                    <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
+                    <th className="px-4 py-3 text-right text-sm font-medium text-slate-11">
                       Actions
                     </th>
                   </tr>
@@ -165,18 +169,18 @@ export default function AccountsPageClient({
 
                     return (
                       <tr key={key} className="hover:bg-slate-800/50">
-                        <td className="text-slate-12 px-4 py-3 text-sm">
+                        <td className="px-4 py-3 text-sm text-slate-12">
                           {SOURCE_LABELS[account.source]}
                         </td>
-                        <td className="text-slate-12 px-4 py-3 font-mono text-sm">
+                        <td className="px-4 py-3 font-mono text-sm text-slate-12">
                           {isKrakenDefaultAccountId(account.accountId)
                             ? "Kraken (Default)"
                             : account.accountId}
                         </td>
-                        <td className="text-slate-12 px-4 py-3 text-right text-sm">
+                        <td className="px-4 py-3 text-right text-sm text-slate-12">
                           {account.tradeCount}
                         </td>
-                        <td className="text-slate-12 px-4 py-3 text-right text-sm">
+                        <td className="px-4 py-3 text-right text-sm text-slate-12">
                           {account.inboxTradeCount}
                         </td>
                         <td className="px-4 py-3 text-sm">
@@ -216,7 +220,7 @@ export default function AccountsPageClient({
                                 aria-label="Cancel editing"
                                 title="Cancel"
                                 data-testid={`cancel-mapping-${key}`}
-                                className="rounded p-1.5 text-slate-11 hover:text-slate-12 hover:bg-slate-700 disabled:opacity-50"
+                                className="rounded p-1.5 text-slate-11 hover:bg-slate-700 hover:text-slate-12 disabled:opacity-50"
                                 onClick={cancelEditing}
                                 disabled={isSavingEdit}
                               >
@@ -229,7 +233,7 @@ export default function AccountsPageClient({
                               aria-label="Edit mapping"
                               title="Edit"
                               data-testid={`edit-mapping-${key}`}
-                              className="rounded p-1.5 text-slate-11 hover:text-slate-12 hover:bg-slate-700"
+                              className="rounded p-1.5 text-slate-11 hover:bg-slate-700 hover:text-slate-12"
                               onClick={() => startEditing(account)}
                             >
                               <Pencil className="h-4 w-4" />

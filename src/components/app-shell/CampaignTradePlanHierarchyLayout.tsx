@@ -5,6 +5,11 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  getLocalHierarchyCampaignChildrenToggleTestId,
+  getLocalHierarchyItemTestId,
+  getLocalHierarchyWatchToggleTestId,
+} from "../../../shared/e2e/testIds";
 import { WatchToggleButton } from "~/components/WatchToggleButton";
 import { Alert, Badge, Button, type BadgeProps } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
@@ -97,17 +102,19 @@ function normalizePersistedState(
 }
 
 function ItemWatchButton({
+  dataTestId,
   item,
   onToggle,
   pending,
 }: {
+  dataTestId: string;
   item: WatchableItem;
   onToggle: (item: WatchableItem) => void;
   pending: boolean;
 }) {
   return (
     <WatchToggleButton
-      dataTestId={`toggle-watch-${item.itemType}-${item.id}`}
+      dataTestId={dataTestId}
       isWatched={item.isWatched}
       itemName={item.name}
       disabled={pending}
@@ -120,6 +127,7 @@ function HierarchyLink({
   active,
   children,
   className,
+  dataTestId,
   href,
   onClick,
   parentActive = false,
@@ -127,6 +135,7 @@ function HierarchyLink({
   active: boolean;
   children: ReactNode;
   className?: string;
+  dataTestId?: string;
   href: string;
   onClick?: () => void;
   parentActive?: boolean;
@@ -134,6 +143,7 @@ function HierarchyLink({
   return (
     <Link
       href={href}
+      data-testid={dataTestId}
       onClick={onClick}
       aria-current={active ? "page" : undefined}
       className={cn(
@@ -155,22 +165,26 @@ function TradePlanRow({
   activeItemId,
   activeItemType,
   item,
+  linkTestId,
   onToggleWatch,
   pending,
   showParentContext = false,
+  watchToggleTestId,
 }: {
   activeItemId: Id<"campaigns"> | Id<"tradePlans"> | null;
   activeItemType: "campaign" | "tradePlan" | null;
   item: TradePlanNavigationItem;
+  linkTestId: string;
   onToggleWatch: (item: WatchableItem) => void;
   pending: boolean;
   showParentContext?: boolean;
+  watchToggleTestId: string;
 }) {
   const active = isActiveItem(item, activeItemType, activeItemId);
 
   return (
     <div className="flex items-start gap-2">
-      <HierarchyLink href={item.href} active={active}>
+      <HierarchyLink href={item.href} active={active} dataTestId={linkTestId}>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="truncate text-sm font-medium">{item.name}</span>
@@ -188,7 +202,12 @@ function TradePlanRow({
           </p>
         </div>
       </HierarchyLink>
-      <ItemWatchButton item={item} onToggle={onToggleWatch} pending={pending} />
+      <ItemWatchButton
+        dataTestId={watchToggleTestId}
+        item={item}
+        onToggle={onToggleWatch}
+        pending={pending}
+      />
     </div>
   );
 }
@@ -225,7 +244,7 @@ function CampaignRow({
           type="button"
           variant="ghost"
           size="icon"
-          dataTestId={`toggle-campaign-children-${item.id}`}
+          dataTestId={getLocalHierarchyCampaignChildrenToggleTestId(item.name)}
           className={cn(
             "mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-olive-10 transition-colors hover:bg-olive-4 hover:text-olive-12",
             item.tradePlans.length === 0 && "opacity-0",
@@ -248,6 +267,7 @@ function CampaignRow({
           href={item.href}
           active={active}
           className="-ml-2"
+          dataTestId={getLocalHierarchyItemTestId("campaign", item.name)}
           parentActive={parentActive}
           onClick={() => onNavigateToCampaign(item.id)}
         >
@@ -269,6 +289,7 @@ function CampaignRow({
           </div>
         </HierarchyLink>
         <ItemWatchButton
+          dataTestId={getLocalHierarchyWatchToggleTestId("campaign", item.name)}
           item={item}
           onToggle={onToggleWatch}
           pending={pendingWatchIds.has(`${item.itemType}:${item.id}`)}
@@ -291,9 +312,17 @@ function CampaignRow({
                 activeItemId={activeItemId}
                 activeItemType={activeItemType}
                 item={tradePlan}
+                linkTestId={getLocalHierarchyItemTestId(
+                  "campaign-trade-plan",
+                  tradePlan.name,
+                )}
                 onToggleWatch={onToggleWatch}
                 pending={pendingWatchIds.has(
                   `${tradePlan.itemType}:${tradePlan.id}`,
+                )}
+                watchToggleTestId={getLocalHierarchyWatchToggleTestId(
+                  "campaign-trade-plan",
+                  tradePlan.name,
                 )}
               />
             ))
@@ -415,6 +444,10 @@ function DesktopLocalRail({
                             activeContext.activeItemType,
                             activeContext.activeItemId,
                           )}
+                          dataTestId={getLocalHierarchyItemTestId(
+                            "watchlist-campaign",
+                            item.name,
+                          )}
                           parentActive={
                             item.id === activeContext.activeCampaignId
                           }
@@ -438,6 +471,10 @@ function DesktopLocalRail({
                           </div>
                         </HierarchyLink>
                         <ItemWatchButton
+                          dataTestId={getLocalHierarchyWatchToggleTestId(
+                            "watchlist-campaign",
+                            item.name,
+                          )}
                           item={item}
                           onToggle={onToggleWatch}
                           pending={pendingWatchIds.has(
@@ -451,11 +488,19 @@ function DesktopLocalRail({
                         activeItemId={activeContext.activeItemId}
                         activeItemType={activeContext.activeItemType}
                         item={item}
+                        linkTestId={getLocalHierarchyItemTestId(
+                          "watchlist-trade-plan",
+                          item.name,
+                        )}
                         onToggleWatch={onToggleWatch}
                         pending={pendingWatchIds.has(
                           `${item.itemType}:${item.id}`,
                         )}
                         showParentContext
+                        watchToggleTestId={getLocalHierarchyWatchToggleTestId(
+                          "watchlist-trade-plan",
+                          item.name,
+                        )}
                       />
                     ),
                   )}
@@ -519,9 +564,17 @@ function DesktopLocalRail({
                       activeItemId={activeContext.activeItemId}
                       activeItemType={activeContext.activeItemType}
                       item={tradePlan}
+                      linkTestId={getLocalHierarchyItemTestId(
+                        "standalone-trade-plan",
+                        tradePlan.name,
+                      )}
                       onToggleWatch={onToggleWatch}
                       pending={pendingWatchIds.has(
                         `${tradePlan.itemType}:${tradePlan.id}`,
+                      )}
+                      watchToggleTestId={getLocalHierarchyWatchToggleTestId(
+                        "standalone-trade-plan",
+                        tradePlan.name,
                       )}
                     />
                   ))}
