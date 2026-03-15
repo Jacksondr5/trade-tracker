@@ -37,7 +37,11 @@ function NavigationSections({
   return (
     <nav aria-label="Primary" className="space-y-6">
       {appNavigationSections.map((section) => (
-        <section key={section.title} className="space-y-2">
+        <section
+          key={section.title}
+          data-testid={section.testId}
+          className="space-y-2"
+        >
           <h2 className="px-3 text-xs font-medium tracking-[0.18em] text-olive-10 uppercase">
             {section.title}
           </h2>
@@ -325,7 +329,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-
 
   const openCommandPalette = useCallback(() => {
     setIsDrawerOpen(false);

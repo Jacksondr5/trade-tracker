@@ -2,6 +2,7 @@
 
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
+import { getLocalHierarchyItemTestId } from "../../../shared/e2e/testIds";
 import { capitalize } from "~/lib/format";
 import {
   getTradePlanRelationshipContextLabel,
@@ -36,6 +37,7 @@ function getWatchlistMeta(
 }
 
 function HierarchyLink({
+  dataTestId,
   href,
   isActive,
   meta,
@@ -43,6 +45,7 @@ function HierarchyLink({
   title,
   tone = "default",
 }: {
+  dataTestId?: string;
   href: string;
   isActive: boolean;
   meta?: string;
@@ -53,6 +56,7 @@ function HierarchyLink({
   return (
     <Link
       href={href}
+      data-testid={dataTestId}
       onClick={onNavigate}
       aria-current={isActive ? "page" : undefined}
       className={cn(
@@ -71,7 +75,7 @@ function HierarchyLink({
 
 function SectionHeading({ title }: { title: string }) {
   return (
-    <h3 className="px-3 text-xs font-medium uppercase tracking-[0.18em] text-olive-10">
+    <h3 className="px-3 text-xs font-medium tracking-[0.18em] text-olive-10 uppercase">
       {title}
     </h3>
   );
@@ -89,7 +93,7 @@ export function CampaignTradePlanHierarchyNavigation({
   return (
     <div className="space-y-6 border-t border-olive-6 pt-5">
       <div className="space-y-1 px-3">
-        <p className="text-xs font-medium uppercase tracking-[0.18em] text-olive-10">
+        <p className="text-xs font-medium tracking-[0.18em] text-olive-10 uppercase">
           Local hierarchy
         </p>
         <p className="text-xs text-olive-10">
@@ -107,6 +111,12 @@ export function CampaignTradePlanHierarchyNavigation({
               hierarchy.watchlist.map((item) => (
                 <HierarchyLink
                   key={`${item.itemType}-${item.id}`}
+                  dataTestId={getLocalHierarchyItemTestId(
+                    item.itemType === "campaign"
+                      ? "watchlist-campaign"
+                      : "watchlist-trade-plan",
+                    item.name,
+                  )}
                   href={item.href}
                   isActive={isHierarchyItemActive(pathname, item.href)}
                   meta={getWatchlistMeta(item)}
@@ -128,6 +138,10 @@ export function CampaignTradePlanHierarchyNavigation({
                 <div key={campaign.id} className="space-y-1">
                   <HierarchyLink
                     href={campaign.href}
+                    dataTestId={getLocalHierarchyItemTestId(
+                      "campaign",
+                      campaign.name,
+                    )}
                     isActive={isHierarchyItemActive(pathname, campaign.href)}
                     meta={getCampaignMeta(campaign)}
                     onNavigate={onNavigate}
@@ -136,6 +150,10 @@ export function CampaignTradePlanHierarchyNavigation({
                   {campaign.tradePlans.map((tradePlan) => (
                     <HierarchyLink
                       key={tradePlan.id}
+                      dataTestId={getLocalHierarchyItemTestId(
+                        "campaign-trade-plan",
+                        tradePlan.name,
+                      )}
                       href={tradePlan.href}
                       isActive={isHierarchyItemActive(pathname, tradePlan.href)}
                       meta={getTradePlanMeta(tradePlan)}
@@ -161,6 +179,10 @@ export function CampaignTradePlanHierarchyNavigation({
               hierarchy.standaloneTradePlans.map((tradePlan) => (
                 <HierarchyLink
                   key={tradePlan.id}
+                  dataTestId={getLocalHierarchyItemTestId(
+                    "standalone-trade-plan",
+                    tradePlan.name,
+                  )}
                   href={tradePlan.href}
                   isActive={isHierarchyItemActive(pathname, tradePlan.href)}
                   meta={getTradePlanMeta(tradePlan)}
@@ -192,9 +214,15 @@ export function MobileHierarchyBreadcrumbs({
           const isCurrentPage = index === breadcrumbs.length - 1;
 
           return (
-            <li key={`${segment.label}-${index}`} className="flex items-center gap-1.5">
+            <li
+              key={`${segment.label}-${index}`}
+              className="flex items-center gap-1.5"
+            >
               {index > 0 ? (
-                <ChevronRight className="h-3.5 w-3.5 text-olive-8" aria-hidden="true" />
+                <ChevronRight
+                  className="h-3.5 w-3.5 text-olive-8"
+                  aria-hidden="true"
+                />
               ) : null}
               {segment.href && !isCurrentPage ? (
                 <Link

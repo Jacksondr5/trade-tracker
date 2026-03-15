@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { StrategyEditor } from "~/components/ui/strategy-editor";
 import { Alert } from "~/components/ui/alert";
 import { api } from "~/convex/_generated/api";
+import { APP_PAGE_TITLES } from "../../../../shared/e2e/testIds";
 
 type SaveState = "idle" | "saving" | "saved";
 
@@ -90,7 +91,12 @@ export default function StrategyPageClient({
   return (
     <div className="mx-auto max-w-4xl px-6 py-8">
       <div className="mb-6 flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold text-slate-12">Strategy</h1>
+        <h1
+          className="text-2xl font-bold text-slate-12"
+          data-testid={APP_PAGE_TITLES.strategy}
+        >
+          Strategy
+        </h1>
         <div className="flex items-center gap-2 text-sm">
           {saveState === "saving" && (
             <span className="flex items-center gap-1 text-olive-11">
@@ -108,12 +114,19 @@ export default function StrategyPageClient({
       </div>
 
       {error && (
-        <Alert variant="error" className="mb-4" onDismiss={() => setError(null)}>
+        <Alert
+          variant="error"
+          className="mb-4"
+          onDismiss={() => setError(null)}
+        >
           {error}
         </Alert>
       )}
 
-      <StrategyEditor initialContent={doc?.content ?? ""} onUpdate={handleUpdate} />
+      <StrategyEditor
+        initialContent={doc?.content ?? ""}
+        onUpdate={handleUpdate}
+      />
     </div>
   );
 }
