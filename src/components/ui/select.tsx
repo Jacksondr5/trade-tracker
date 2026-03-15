@@ -53,6 +53,8 @@ export interface SelectProps
 
 const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
   ({ className, dataTestId, error, size, ...props }, ref) => {
+    const { ["aria-invalid"]: ariaInvalidProp, ...selectProps } = props;
+
     return (
       <div className="relative w-full">
         <select
@@ -60,7 +62,8 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
           data-slot="select"
           data-testid={dataTestId}
           className={cn(selectClassName({ error, size, className }))}
-          {...props}
+          aria-invalid={ariaInvalidProp ?? (error ? true : undefined)}
+          {...selectProps}
         />
         <ChevronDown
           aria-hidden="true"

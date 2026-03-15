@@ -44,7 +44,7 @@ Expected: one entry identifies the main checkout path
 
 **Step 2: Copy the local env file only if `.env.local` is missing**
 
-Run: `test -f .env.local || cp <main-checkout>/.env.local .env.local`
+Run: `MAIN_CHECKOUT="$(git worktree list | awk 'NR==1{print $1}')" && { test -f .env.local || cp "$MAIN_CHECKOUT/.env.local" .env.local; }`
 Expected: `.env.local` exists in this worktree
 
 **Step 3: Install dependencies if needed**
