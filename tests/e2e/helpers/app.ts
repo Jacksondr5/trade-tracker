@@ -1,10 +1,10 @@
 import { expect, type Page } from "@playwright/test";
 
-export async function waitForAuthenticatedApp(page: Page, heading: string) {
-  await expect(page.getByText("Loading...", { exact: true })).toBeHidden({
-    timeout: 15_000,
-  });
-  await expect(page.getByRole("heading", { name: heading })).toBeVisible({
+export async function waitForAuthenticatedApp(
+  page: Page,
+  pageTitleTestId: string,
+) {
+  await expect(page.getByTestId(pageTitleTestId)).toBeVisible({
     timeout: 15_000,
   });
 }

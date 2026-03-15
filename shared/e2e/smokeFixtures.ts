@@ -20,6 +20,10 @@ export const E2E_SMOKE_FIXTURES = {
     sortOrder: 20,
     status: "watching" as const,
   },
+  createdStandaloneTradePlan: {
+    instrumentSymbol: "AAPL",
+    name: "E2E Created Standalone Plan",
+  },
   trades: [
     {
       assetType: "stock" as const,
@@ -50,6 +54,10 @@ export const E2E_SMOKE_FIXTURES = {
   ],
 } as const;
 
-export function buildCreatedStandaloneTradePlanName(seed: number): string {
-  return `E2E Created Standalone Plan ${seed}`;
+export function getCreatedStandaloneTradePlanName(isLocalTarget: boolean): string {
+  if (isLocalTarget) {
+    return E2E_SMOKE_FIXTURES.createdStandaloneTradePlan.name;
+  }
+
+  return `${E2E_SMOKE_FIXTURES.createdStandaloneTradePlan.name}-${Date.now()}`;
 }

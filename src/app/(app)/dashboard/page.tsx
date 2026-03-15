@@ -2,6 +2,7 @@
 
 import { useQuery } from "convex/react";
 import { api } from "~/convex/_generated/api";
+import { APP_PAGE_TITLES } from "../../../../shared/e2e/testIds";
 
 interface StatCardProps {
   title: string;
@@ -11,14 +12,22 @@ interface StatCardProps {
   loading?: boolean;
 }
 
-function StatCard({ title, value, subtitle, colorClass, loading }: StatCardProps) {
+function StatCard({
+  title,
+  value,
+  subtitle,
+  colorClass,
+  loading,
+}: StatCardProps) {
   return (
     <div className="rounded-lg border border-slate-700 bg-slate-800 p-6">
       <h3 className="text-sm font-medium text-slate-11">{title}</h3>
       {loading ? (
         <div className="mt-2 h-8 w-24 animate-pulse rounded bg-slate-700" />
       ) : (
-        <p className={`mt-2 text-2xl font-bold ${colorClass || "text-slate-12"}`}>
+        <p
+          className={`mt-2 text-2xl font-bold ${colorClass || "text-slate-12"}`}
+        >
           {value}
         </p>
       )}
@@ -45,7 +54,12 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="mb-6 text-2xl font-bold text-slate-12">Dashboard</h1>
+      <h1
+        className="mb-6 text-2xl font-bold text-slate-12"
+        data-testid={APP_PAGE_TITLES.dashboard}
+      >
+        Dashboard
+      </h1>
 
       {loading ? (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -64,7 +78,10 @@ export default function DashboardPage() {
                 : undefined
             }
           />
-          <StatCard title="Closed Campaigns" value={stats.closedCampaignCount} />
+          <StatCard
+            title="Closed Campaigns"
+            value={stats.closedCampaignCount}
+          />
           <StatCard title="Total Trades" value={stats.totalTradeCount} />
         </div>
       )}

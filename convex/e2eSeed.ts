@@ -3,8 +3,9 @@ import type { Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import { E2E_SMOKE_FIXTURES } from "../shared/e2e/smokeFixtures";
 
-type SmokeTradePlanFixture =
-  (typeof E2E_SMOKE_FIXTURES)["linkedTradePlan" | "standaloneTradePlan"];
+type SmokeTradePlanFixture = (typeof E2E_SMOKE_FIXTURES)[
+  | "linkedTradePlan"
+  | "standaloneTradePlan"];
 
 function getPlaywrightOwnerId(): string {
   const ownerId = process.env.PLAYWRIGHT_OWNER_ID?.trim();
@@ -18,10 +19,7 @@ function getPlaywrightOwnerId(): string {
   return ownerId;
 }
 
-async function upsertPortfolio(
-  ctx: MutationCtx,
-  ownerId: string,
-) {
+async function upsertPortfolio(ctx: MutationCtx, ownerId: string) {
   const existingPortfolio = (
     await ctx.db
       .query("portfolios")
@@ -41,10 +39,7 @@ async function upsertPortfolio(
   return (await ctx.db.get(portfolioId))!;
 }
 
-async function upsertCampaign(
-  ctx: MutationCtx,
-  ownerId: string,
-) {
+async function upsertCampaign(ctx: MutationCtx, ownerId: string) {
   const existingCampaign = (
     await ctx.db
       .query("campaigns")
@@ -189,10 +184,11 @@ async function upsertTrade(
 
   if (existingTrade) {
     await ctx.db.patch(existingTrade._id, patch);
-    return;
+    return (await ctx.db.get(existingTrade._id))!;
   }
 
-  await ctx.db.insert("trades", patch);
+  const tradeId = await ctx.db.insert("trades", patch);
+  return (await ctx.db.get(tradeId))!;
 }
 
 export const setupPreviewData = internalMutation({
@@ -231,8 +227,7 @@ export const setupPreviewData = internalMutation({
     for (const trade of E2E_SMOKE_FIXTURES.trades) {
       await upsertTrade(ctx, {
         ownerId,
-        portfolioId:
-          trade.portfolio === "shared" ? portfolio._id : undefined,
+        portfolioId: trade.portfolio === "shared" ? portfolio._id : undefined,
         trade,
         tradePlanId:
           trade.tradePlan === "linked"
@@ -246,6 +241,102 @@ export const setupPreviewData = internalMutation({
       linkedTradePlanId: linkedTradePlan._id,
       portfolioId: portfolio._id,
       standaloneTradePlanId: standaloneTradePlan._id,
+    };
+  },
+});
+
+export const resetPlaywrightData = internalMutation({
+  args: {},
+  returns: v.object({
+    accountMappingsDeleted: v.number(),
+    campaignsDeleted: v.number(),
+    inboxTradesDeleted: v.number(),
+    notesDeleted: v.number(),
+    portfoliosDeleted: v.number(),
+    strategyDocsDeleted: v.number(),
+    tradePlansDeleted: v.number(),
+    tradesDeleted: v.number(),
+    watchlistDeleted: v.number(),
+  }),
+  handler: async (ctx) => {
+    const ownerId = getPlaywrightOwnerId();
+    const notes = await ctx.db
+      .query("notes")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
+    const watchlistItems = await ctx.db
+      .query("watchlist")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
+    const inboxTrades = await ctx.db
+      .query("inboxTrades")
+      .withIndex("by_owner_status", (q) =>
+        q.eq("ownerId", ownerId).eq("status", "pending_review"),
+      )
+      .collect();
+    const trades = await ctx.db
+      .query("trades")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
+    const tradePlans = await ctx.db
+      .query("tradePlans")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
+    const campaigns = await ctx.db
+      .query("campaigns")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
+    const portfolios = await ctx.db
+      .query("portfolios")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
+    const accountMappings = await ctx.db
+      .query("accountMappings")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
+    const strategyDocs = await ctx.db
+      .query("strategyDoc")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
+
+    for (const doc of notes) {
+      await ctx.db.delete(doc._id);
+    }
+    for (const doc of watchlistItems) {
+      await ctx.db.delete(doc._id);
+    }
+    for (const doc of inboxTrades) {
+      await ctx.db.delete(doc._id);
+    }
+    for (const doc of trades) {
+      await ctx.db.delete(doc._id);
+    }
+    for (const doc of tradePlans) {
+      await ctx.db.delete(doc._id);
+    }
+    for (const doc of campaigns) {
+      await ctx.db.delete(doc._id);
+    }
+    for (const doc of portfolios) {
+      await ctx.db.delete(doc._id);
+    }
+    for (const doc of accountMappings) {
+      await ctx.db.delete(doc._id);
+    }
+    for (const doc of strategyDocs) {
+      await ctx.db.delete(doc._id);
+    }
+
+    return {
+      accountMappingsDeleted: accountMappings.length,
+      campaignsDeleted: campaigns.length,
+      inboxTradesDeleted: inboxTrades.length,
+      notesDeleted: notes.length,
+      portfoliosDeleted: portfolios.length,
+      strategyDocsDeleted: strategyDocs.length,
+      tradePlansDeleted: tradePlans.length,
+      tradesDeleted: trades.length,
+      watchlistDeleted: watchlistItems.length,
     };
   },
 });

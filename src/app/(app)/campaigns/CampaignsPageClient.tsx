@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { Badge, Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import { capitalize, formatDate } from "~/lib/format";
+import { APP_PAGE_TITLES, getCampaignRowTestId } from "../../../../shared/e2e/testIds";
 
 type CampaignStatus = "planning" | "active" | "closed";
 type StatusFilter = "all" | CampaignStatus;
@@ -21,11 +22,12 @@ const statusFilterOptions: Array<{
   { label: "Closed", value: "closed" },
 ];
 
-type CampaignSummaries = typeof api.campaigns.listCampaignWorkspaceSummaries extends {
-  _returnType: infer R;
-}
-  ? R
-  : never;
+type CampaignSummaries =
+  typeof api.campaigns.listCampaignWorkspaceSummaries extends {
+    _returnType: infer R;
+  }
+    ? R
+    : never;
 type CampaignSummary = CampaignSummaries[number];
 
 function CampaignCard({ campaign }: { campaign: CampaignSummary }) {
@@ -37,19 +39,22 @@ function CampaignCard({ campaign }: { campaign: CampaignSummary }) {
       href={`/campaigns/${campaign.id}`}
       aria-labelledby={titleId}
       className="group block rounded-lg border border-olive-6 bg-olive-2 p-4 transition-colors hover:border-olive-7 hover:bg-olive-3"
-      data-testid={`campaign-card-${campaign.id}`}
+      data-testid={getCampaignRowTestId(campaign.name)}
     >
       <div className="mb-2 flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <h3 id={titleId} className="truncate text-sm font-semibold text-olive-12">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <h3
+            id={titleId}
+            className="truncate text-sm font-semibold text-olive-12"
+          >
             {campaign.name}
           </h3>
-          {campaign.isWatched && (
+          {campaign.isWatched ? (
             <Star
               className="size-3.5 shrink-0 fill-amber-9 text-amber-9"
               aria-label="Watched"
             />
-          )}
+          ) : null}
         </div>
         <Badge
           variant={
@@ -65,11 +70,11 @@ function CampaignCard({ campaign }: { campaign: CampaignSummary }) {
         </Badge>
       </div>
 
-      {campaign.thesis && (
+      {campaign.thesis ? (
         <p className="mb-3 line-clamp-2 text-sm text-olive-11">
           {campaign.thesis}
         </p>
-      )}
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-11">
         <span className="inline-flex items-center gap-1">
@@ -78,11 +83,11 @@ function CampaignCard({ campaign }: { campaign: CampaignSummary }) {
             <>
               {campaign.linkedTradePlans.totalCount}{" "}
               {campaign.linkedTradePlans.totalCount === 1 ? "plan" : "plans"}
-              {campaign.linkedTradePlans.openCount > 0 && (
+              {campaign.linkedTradePlans.openCount > 0 ? (
                 <span className="text-olive-10">
                   ({campaign.linkedTradePlans.openCount} open)
                 </span>
-              )}
+              ) : null}
             </>
           ) : (
             "No plans"
@@ -163,7 +168,12 @@ export default function CampaignsPageClient({
   return (
     <div className="mx-auto max-w-4xl px-6 py-8">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-3xl font-bold text-olive-12">Campaigns</h1>
+        <h1
+          className="text-3xl font-bold text-olive-12"
+          data-testid={APP_PAGE_TITLES.campaigns}
+        >
+          Campaigns
+        </h1>
         <Button asChild dataTestId="new-campaign-button">
           <Link href="/campaigns/new">New campaign</Link>
         </Button>

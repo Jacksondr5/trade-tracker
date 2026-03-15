@@ -67,6 +67,19 @@ Shared rules:
 - The Playwright auth setup uses Clerk's `@clerk/testing` helpers and requires `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, and `NEXT_PUBLIC_CLERK_FRONTEND_API_URL` alongside the Playwright credentials
 - Try loading saved auth state first, but if the app is not running on the same origin the saved auth may not restore cleanly
 
+### Selector And Testing Contract
+
+- The evergreen selector contract lives in `docs/product/technical-architecture-overview.md`. Follow that doc if guidance diverges from older plan documents.
+- App-owned Playwright specs and helper functions must use exact `getByTestId()` selectors only.
+- Do not add new selectors that rely on visible copy, headings, labels, generic table text, CSS classes, or DOM position.
+- Prefer semantic fixed ids such as `nav-trades-link` or `campaign-name-input` for stable controls.
+- Prefer dynamic ids when the record id is the stable lookup key, such as `campaign-row-<id>` or `trade-row-<id>`. If the test must target deterministic seeded fixture content before it knows the backend id, use a normalized semantic key that the fixture controls.
+- Treat `data-testid` values used by Playwright as a compatibility contract. Update helpers and specs in the same change when a hook changes.
+- Third-party surfaces the repo does not own, such as Clerk auth, are the only routine exception. Keep those selectors isolated in setup helpers rather than spreading them through specs.
+- Shared Playwright helpers should encode selector lookups so specs do not duplicate raw test id strings.
+- The default local data model is deterministic suite-level reset and seed for the dedicated Playwright user before authenticated specs run. Tests that create or mutate data should use dedicated helpers or clean up their own side effects.
+- `tests/e2e/setup/global.setup.ts` is responsible for local reset/seed before specs execute.
+
 ### `playwright-interactive` Default
 
 Use this first for UI tasks, especially when the agent expects to make code edits and re-check the UI multiple times in the same task.
