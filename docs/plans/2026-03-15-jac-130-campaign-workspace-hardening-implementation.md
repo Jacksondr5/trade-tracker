@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Document The Approved Scope
+## Task 1: Document The Approved Scope
 
 **Files:**
 
@@ -30,7 +30,7 @@ Write this task-by-task implementation handoff so the execution work stays const
 Run: `ls docs/plans | grep '2026-03-15-jac-130-campaign-workspace-hardening'`
 Expected: both new plan files are listed
 
-### Task 2: Bootstrap The Worktree
+## Task 2: Bootstrap The Worktree
 
 **Files:**
 
@@ -52,7 +52,7 @@ Expected: `.env.local` exists in this worktree
 Run: `pnpm install`
 Expected: `node_modules/` is created without install errors
 
-### Task 3: Add The Shared Select Cleanup
+## Task 3: Add The Shared Select Cleanup
 
 **Files:**
 
@@ -77,7 +77,7 @@ Swap the raw campaign status and linked trade-plan status `<select>` controls fo
 Run: `pnpm test convex/campaigns.test.ts`
 Expected: campaign workspace tests pass
 
-### Task 4: Unify The Watch Toggle And Touched Copy
+## Task 4: Unify The Watch Toggle And Touched Copy
 
 **Files:**
 
@@ -98,7 +98,7 @@ Update touched campaign copy so button labels and helper text follow the product
 Run: `pnpm test convex/campaigns.test.ts`
 Expected: campaign workspace tests still pass
 
-### Task 5: Extend Deterministic Regression Coverage
+## Task 5: Extend Deterministic Regression Coverage
 
 **Files:**
 
@@ -128,7 +128,7 @@ Expected: PASS
 Run: `pnpm test:e2e --grep campaigns`
 Expected: PASS
 
-### Task 6: Final Validation
+## Task 6: Final Validation
 
 **Files:**
 

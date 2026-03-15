@@ -35,7 +35,7 @@ const iconClassName = cva(
       size: {
         default: "size-4",
         sm: "size-3.5",
-        lg: "size-4.5",
+        lg: "size-[1.125rem]",
       },
     },
     defaultVariants: {
