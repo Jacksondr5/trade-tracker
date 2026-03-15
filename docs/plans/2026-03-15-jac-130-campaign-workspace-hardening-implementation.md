@@ -1,6 +1,6 @@
 # Campaign Workspace Hardening Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **For implementers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Replace residual route-local campaign UI controls with shared primitives and add regression coverage for the campaign workspace list/detail flows.
 
@@ -42,9 +42,9 @@ Expected: both new plan files are listed
 Run: `git worktree list`
 Expected: one entry identifies the main checkout path
 
-**Step 2: Copy the local env file if needed**
+**Step 2: Copy the local env file only if `.env.local` is missing**
 
-Run: `cp <main-checkout>/.env.local .env.local`
+Run: `test -f .env.local || cp <main-checkout>/.env.local .env.local`
 Expected: `.env.local` exists in this worktree
 
 **Step 3: Install dependencies if needed**

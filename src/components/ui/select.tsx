@@ -49,7 +49,6 @@ export interface SelectProps
     Omit<React.SelectHTMLAttributes<HTMLSelectElement>, "size">,
     VariantProps<typeof selectClassName> {
   dataTestId: string;
-  error?: boolean;
 }
 
 const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
