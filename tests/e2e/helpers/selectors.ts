@@ -19,9 +19,11 @@ export function getNavigationLink(
 }
 
 export function getCampaignRow(page: Page): Locator {
-  return page.getByTestId(
-    getCampaignRowTestId(E2E_SMOKE_FIXTURES.campaign.name),
-  );
+  return getCampaignRowByName(page, E2E_SMOKE_FIXTURES.campaign.name);
+}
+
+export function getCampaignRowByName(page: Page, name: string): Locator {
+  return page.getByTestId(getCampaignRowTestId(name));
 }
 
 export function getStandaloneTradePlanLink(page: Page): Locator {

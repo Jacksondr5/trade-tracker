@@ -5,6 +5,7 @@ import { cn } from "~/lib/utils";
 import { useFieldContext } from "./form-contexts";
 import { FormErrorMessage } from "./form-error-message";
 import { Label } from "./label";
+import { Select, type SelectProps } from "./select";
 
 export interface FieldSelectOption {
   label: string;
@@ -16,7 +17,16 @@ export const FieldSelect = ({
   label,
   options,
   placeholder,
-}: {
+  ...props
+}: Omit<
+  SelectProps,
+  | "aria-describedby"
+  | "aria-invalid"
+  | "dataTestId"
+  | "onBlur"
+  | "onChange"
+  | "value"
+> & {
   className?: string;
   label: string;
   options: FieldSelectOption[];
@@ -35,20 +45,16 @@ export const FieldSelect = ({
       >
         {label}
       </Label>
-      <select
+      <Select
+        {...props}
         id={field.name}
-        data-testid={`${field.name}-select`}
+        dataTestId={`${field.name}-select`}
         value={field.state.value || ""}
         onChange={(e) => field.handleChange(e.target.value)}
         onBlur={field.handleBlur}
         aria-invalid={hasError}
         aria-describedby={hasError ? errorId : undefined}
-        className={cn(
-          "text-slate-12 h-9 w-full rounded-md border bg-slate-700 px-3 py-1 text-sm focus:outline-none focus:ring-1",
-          hasError
-            ? "border-red-700 focus:ring-red-700/50"
-            : "border-slate-600 focus:ring-slate-500",
-        )}
+        error={hasError}
       >
         {placeholder && <option value="">{placeholder}</option>}
         {options.map((option) => (
@@ -56,7 +62,7 @@ export const FieldSelect = ({
             {option.label}
           </option>
         ))}
-      </select>
+      </Select>
       {hasError && (
         <FormErrorMessage
           id={errorId}

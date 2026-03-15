@@ -60,11 +60,51 @@ async function upsertCampaign(ctx: MutationCtx, ownerId: string) {
   }
 
   const campaignId = await ctx.db.insert("campaigns", {
+    closedAt: undefined,
     name: E2E_SMOKE_FIXTURES.campaign.name,
     ownerId,
     retrospective: undefined,
     status: E2E_SMOKE_FIXTURES.campaign.status,
     thesis: E2E_SMOKE_FIXTURES.campaign.thesis,
+  });
+
+  return (await ctx.db.get(campaignId))!;
+}
+
+async function upsertAuxiliaryCampaign(
+  ctx: MutationCtx,
+  args: {
+    fixture:
+      | (typeof E2E_SMOKE_FIXTURES)["planningCampaign"]
+      | (typeof E2E_SMOKE_FIXTURES)["closedCampaign"];
+    ownerId: string;
+  },
+) {
+  const closedAt = Date.parse("2026-02-18T00:00:00.000Z");
+  const existingCampaign = (
+    await ctx.db
+      .query("campaigns")
+      .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
+      .collect()
+  ).find((campaign) => campaign.name === args.fixture.name);
+
+  const patch = {
+    closedAt: args.fixture.status === "closed" ? closedAt : undefined,
+    name: args.fixture.name,
+    retrospective:
+      "retrospective" in args.fixture ? args.fixture.retrospective : undefined,
+    status: args.fixture.status,
+    thesis: args.fixture.thesis,
+  };
+
+  if (existingCampaign) {
+    await ctx.db.patch(existingCampaign._id, patch);
+    return (await ctx.db.get(existingCampaign._id))!;
+  }
+
+  const campaignId = await ctx.db.insert("campaigns", {
+    ...patch,
+    ownerId: args.ownerId,
   });
 
   return (await ctx.db.get(campaignId))!;
@@ -203,6 +243,14 @@ export const setupPreviewData = internalMutation({
     const ownerId = getPlaywrightOwnerId();
     const portfolio = await upsertPortfolio(ctx, ownerId);
     const campaign = await upsertCampaign(ctx, ownerId);
+    await upsertAuxiliaryCampaign(ctx, {
+      fixture: E2E_SMOKE_FIXTURES.planningCampaign,
+      ownerId,
+    });
+    await upsertAuxiliaryCampaign(ctx, {
+      fixture: E2E_SMOKE_FIXTURES.closedCampaign,
+      ownerId,
+    });
     const linkedTradePlan = await upsertTradePlan(ctx, {
       campaignId: campaign._id,
       fixture: E2E_SMOKE_FIXTURES.linkedTradePlan,

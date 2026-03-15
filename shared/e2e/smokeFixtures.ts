@@ -5,6 +5,20 @@ export const E2E_SMOKE_FIXTURES = {
     thesis:
       "Synthetic preview-smoke campaign used to verify deployment wiring and hierarchy navigation.",
   },
+  planningCampaign: {
+    name: "E2E Planning Base",
+    status: "planning" as const,
+    thesis:
+      "Synthetic planning campaign used to verify lifecycle filtering on the campaigns collection page.",
+  },
+  closedCampaign: {
+    name: "E2E Closed Review",
+    retrospective:
+      "Synthetic closed campaign used to verify lifecycle filtering on the campaigns collection page.",
+    status: "closed" as const,
+    thesis:
+      "Synthetic closed campaign used to verify lifecycle filtering on the campaigns collection page.",
+  },
   linkedTradePlan: {
     instrumentSymbol: "FCX",
     name: "E2E FCX Breakout",
@@ -54,7 +68,9 @@ export const E2E_SMOKE_FIXTURES = {
   ],
 } as const;
 
-export function getCreatedStandaloneTradePlanName(isLocalTarget: boolean): string {
+export function getCreatedStandaloneTradePlanName(
+  isLocalTarget: boolean,
+): string {
   if (isLocalTarget) {
     return E2E_SMOKE_FIXTURES.createdStandaloneTradePlan.name;
   }
