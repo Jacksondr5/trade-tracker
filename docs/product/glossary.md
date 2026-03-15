@@ -43,7 +43,7 @@ Trades preserve the execution record and may optionally link to a trade plan.
 
 A time-stamped reasoning record with optional chart screenshots.
 
-Notes may belong to a campaign, a trade plan, a trade, or no parent object.
+Notes may belong to a campaign, a trade plan, or no parent object.
 
 ### Strategy
 
