@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { APP_SHELL_TEST_IDS } from "../../../shared/e2e/testIds";
 import { E2E_SMOKE_FIXTURES } from "../../../shared/e2e/smokeFixtures";
 import { waitForAuthenticatedApp } from "../helpers/app";
 import {
@@ -48,7 +49,7 @@ test("seeded campaign is visible and detail page loads", async ({ page }) => {
   await expect(page.getByTestId("campaign-status-select")).toHaveValue(
     E2E_SMOKE_FIXTURES.campaign.status,
   );
-  await page.getByTestId("edit-campaign-name").click();
+  await page.getByTestId(APP_SHELL_TEST_IDS.editCampaignName).click();
   await expect(page.getByTestId("name-input")).toHaveValue(
     E2E_SMOKE_FIXTURES.campaign.name,
   );

@@ -4,6 +4,7 @@ import { Map, SquareChartGantt, Star } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { flushSync } from "react-dom";
+import { getCommandPaletteItemTestId } from "../../../shared/e2e/testIds";
 import {
   CommandDialog,
   CommandEmpty,
@@ -68,23 +69,25 @@ export function CommandPalette({
   }, [open]);
 
   const filteredSections = useMemo(() => {
-    return filterCommandPaletteSections(commandPaletteSections, deferredSearchQuery);
+    return filterCommandPaletteSections(
+      commandPaletteSections,
+      deferredSearchQuery,
+    );
   }, [commandPaletteSections, deferredSearchQuery]);
 
   const hasResults = hasCommandPaletteResults(filteredSections);
 
-  const emptyState =
-    deferredSearchQuery
-      ? {
-          description:
-            "Try a campaign name, instrument symbol, or parent campaign.",
-          title: "No matching campaigns or trade plans",
-        }
-      : {
-          description:
-            "Create a campaign or trade plan to make it available from the command palette.",
-          title: "No campaigns or trade plans yet",
-        };
+  const emptyState = deferredSearchQuery
+    ? {
+        description:
+          "Try a campaign name, instrument symbol, or parent campaign.",
+        title: "No matching campaigns or trade plans",
+      }
+    : {
+        description:
+          "Create a campaign or trade plan to make it available from the command palette.",
+        title: "No campaigns or trade plans yet",
+      };
 
   const handleSelect = (href: string) => {
     flushSync(() => {
@@ -125,7 +128,12 @@ export function CommandPalette({
             {filteredSections.watchlist.map((item) => (
               <CommandItem
                 key={`${item.itemType}:${item.id}`}
-                dataTestId={`command-palette-watchlist-${item.itemType}-${item.id}`}
+                dataTestId={getCommandPaletteItemTestId(
+                  item.itemType === "campaign"
+                    ? "watchlist-campaign"
+                    : "watchlist-trade-plan",
+                  item.name,
+                )}
                 value={item.searchText}
                 onSelect={() => handleSelect(item.href)}
               >
@@ -150,7 +158,7 @@ export function CommandPalette({
             {filteredSections.campaigns.map((item) => (
               <CommandItem
                 key={`${item.itemType}:${item.id}`}
-                dataTestId={`command-palette-campaign-${item.id}`}
+                dataTestId={getCommandPaletteItemTestId("campaign", item.name)}
                 value={item.searchText}
                 onSelect={() => handleSelect(item.href)}
               >
@@ -171,7 +179,10 @@ export function CommandPalette({
             {filteredSections.tradePlans.map((item) => (
               <CommandItem
                 key={`${item.itemType}:${item.id}`}
-                dataTestId={`command-palette-trade-plan-${item.id}`}
+                dataTestId={getCommandPaletteItemTestId(
+                  "trade-plan",
+                  item.name,
+                )}
                 value={item.searchText}
                 onSelect={() => handleSelect(item.href)}
               >

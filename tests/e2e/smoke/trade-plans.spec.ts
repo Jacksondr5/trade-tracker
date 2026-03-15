@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { APP_SHELL_TEST_IDS } from "../../../shared/e2e/testIds";
 import { E2E_SMOKE_FIXTURES } from "../../../shared/e2e/smokeFixtures";
 import { waitForAuthenticatedApp } from "../helpers/app";
 import {
@@ -16,7 +17,7 @@ test("seeded standalone trade plan and hierarchy render", async ({ page }) => {
   await getStandaloneTradePlanLink(page).click();
 
   await expect(page).toHaveURL(/\/trade-plans\/[^/]+$/);
-  await expect(page.getByTestId("trade-plan-name-input")).toHaveValue(
+  await expect(page.getByTestId(APP_SHELL_TEST_IDS.tradePlanNameInput)).toHaveValue(
     E2E_SMOKE_FIXTURES.standaloneTradePlan.name,
   );
   await expect(page.getByTestId("trade-plan-symbol-input")).toHaveValue(

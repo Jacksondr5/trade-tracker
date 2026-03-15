@@ -1,4 +1,7 @@
-import { NAVIGATION_TEST_IDS } from "../../../shared/e2e/testIds";
+import {
+  NAVIGATION_SECTION_TEST_IDS,
+  NAVIGATION_TEST_IDS,
+} from "../../../shared/e2e/testIds";
 import type { LucideIcon } from "lucide-react";
 import {
   ChartCandlestick,
@@ -23,11 +26,13 @@ export interface AppNavigationItem {
 
 export interface AppNavigationSection {
   items: AppNavigationItem[];
+  testId: string;
   title: string;
 }
 
 export const appNavigationSections: AppNavigationSection[] = [
   {
+    testId: NAVIGATION_SECTION_TEST_IDS.activity,
     title: "Activity",
     items: [
       {
@@ -61,6 +66,7 @@ export const appNavigationSections: AppNavigationSection[] = [
     ],
   },
   {
+    testId: NAVIGATION_SECTION_TEST_IDS.review,
     title: "Review",
     items: [
       {
@@ -75,18 +81,19 @@ export const appNavigationSections: AppNavigationSection[] = [
         icon: FolderKanban,
         label: "Portfolios",
         matchPrefixes: ["/portfolios", "/portfolio"],
-        testId: "nav-portfolios-link",
+        testId: NAVIGATION_TEST_IDS.portfolios,
       },
       {
         href: "/imports",
         icon: ImportIcon,
         label: "Imports",
         matchPrefixes: ["/imports"],
-        testId: "nav-imports-link",
+        testId: NAVIGATION_TEST_IDS.imports,
       },
     ],
   },
   {
+    testId: NAVIGATION_SECTION_TEST_IDS.writing,
     title: "Writing",
     items: [
       {
@@ -94,18 +101,19 @@ export const appNavigationSections: AppNavigationSection[] = [
         icon: NotebookPen,
         label: "Notes",
         matchPrefixes: ["/notes"],
-        testId: "nav-notes-link",
+        testId: NAVIGATION_TEST_IDS.notes,
       },
       {
         href: "/strategy",
         icon: NotepadText,
         label: "Strategy",
         matchPrefixes: ["/strategy"],
-        testId: "nav-strategy-link",
+        testId: NAVIGATION_TEST_IDS.strategy,
       },
     ],
   },
   {
+    testId: NAVIGATION_SECTION_TEST_IDS.settings,
     title: "Settings",
     items: [
       {
@@ -113,7 +121,7 @@ export const appNavigationSections: AppNavigationSection[] = [
         icon: Wallet,
         label: "Accounts",
         matchPrefixes: ["/accounts"],
-        testId: "nav-accounts-link",
+        testId: NAVIGATION_TEST_IDS.accounts,
       },
     ],
   },

@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
+import { APP_PAGE_TITLES } from "../../../../shared/e2e/testIds";
 import type { BrokerageSource } from "../../../../shared/imports/types";
 import {
   EditTradeForm,
@@ -169,7 +170,10 @@ export default function ImportsPageClient({
         ...prev,
         [inboxTradeId]: newPlanId,
       }));
-      const persisted = await persistTradePlanSelection(inboxTradeId, newPlanId);
+      const persisted = await persistTradePlanSelection(
+        inboxTradeId,
+        newPlanId,
+      );
       if (!persisted) {
         setInlineTradePlanIds((prev) => ({
           ...prev,
@@ -180,9 +184,7 @@ export default function ImportsPageClient({
       return true;
     } catch (error) {
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Failed to create trade plan",
+        error instanceof Error ? error.message : "Failed to create trade plan",
       );
       return false;
     }
@@ -245,9 +247,7 @@ export default function ImportsPageClient({
     void acceptTrade({
       inboxTradeId,
       notes: notesValue,
-      portfolioId: portfolioId
-        ? (portfolioId as Id<"portfolios">)
-        : undefined,
+      portfolioId: portfolioId ? (portfolioId as Id<"portfolios">) : undefined,
       tradePlanId: tradePlanId ? (tradePlanId as Id<"tradePlans">) : undefined,
     })
       .then((result) => {
@@ -274,16 +274,15 @@ export default function ImportsPageClient({
               selected !== (trade.tradePlanId ? String(trade.tradePlanId) : "");
             const notesChanged = notes !== (trade.notes ?? "");
             const portfolioChanged =
-              portfolio !== (trade.portfolioId ? String(trade.portfolioId) : "");
+              portfolio !==
+              (trade.portfolioId ? String(trade.portfolioId) : "");
             if (!tradePlanChanged && !notesChanged && !portfolioChanged)
               return Promise.resolve();
 
             return updateInboxTrade({
               inboxTradeId: trade._id,
               notes: notes || null,
-              portfolioId: portfolio
-                ? (portfolio as Id<"portfolios">)
-                : null,
+              portfolioId: portfolio ? (portfolio as Id<"portfolios">) : null,
               tradePlanId: selected ? (selected as Id<"tradePlans">) : null,
             });
           }),
@@ -318,7 +317,12 @@ export default function ImportsPageClient({
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-slate-12 mb-6 text-2xl font-bold">Import Trades</h1>
+      <h1
+        className="mb-6 text-2xl font-bold text-slate-12"
+        data-testid={APP_PAGE_TITLES.imports}
+      >
+        Import Trades
+      </h1>
 
       <UploadSection
         brokerage={brokerage}
@@ -332,7 +336,7 @@ export default function ImportsPageClient({
 
       <div>
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-slate-12 text-lg font-semibold">
+          <h2 className="text-lg font-semibold text-slate-12">
             Inbox
             {inboxTrades && inboxTrades.length > 0 && (
               <span className="ml-2 text-sm font-normal text-slate-400">
@@ -413,7 +417,10 @@ export default function ImportsPageClient({
               ...prev,
               [inboxTradeId]: attemptedTradePlanId,
             }));
-            void persistTradePlanSelection(inboxTradeId, attemptedTradePlanId).then((persisted) => {
+            void persistTradePlanSelection(
+              inboxTradeId,
+              attemptedTradePlanId,
+            ).then((persisted) => {
               if (!persisted) {
                 setInlineTradePlanIds((prev) => {
                   if ((prev[inboxTradeId] ?? "") !== attemptedTradePlanId) {

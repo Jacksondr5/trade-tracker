@@ -7,6 +7,7 @@ import { useState } from "react";
 import { z } from "zod";
 import { Alert, useAppForm } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
+import { APP_PAGE_TITLES } from "../../../../shared/e2e/testIds";
 
 const createPortfolioSchema = z.object({
   name: z
@@ -62,7 +63,12 @@ export default function PortfolioPageClient({
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-slate-12 text-2xl font-bold">Portfolios</h1>
+        <h1
+          className="text-2xl font-bold text-slate-12"
+          data-testid={APP_PAGE_TITLES.portfolios}
+        >
+          Portfolios
+        </h1>
       </div>
 
       {/* Inline create form */}
@@ -94,7 +100,11 @@ export default function PortfolioPageClient({
           </form.AppForm>
         </form>
         {errorMessage && (
-          <Alert variant="error" className="mt-2" onDismiss={() => setErrorMessage(null)}>
+          <Alert
+            variant="error"
+            className="mt-2"
+            onDismiss={() => setErrorMessage(null)}
+          >
             {errorMessage}
           </Alert>
         )}
@@ -109,10 +119,10 @@ export default function PortfolioPageClient({
           <table className="w-full table-auto">
             <thead className="bg-slate-800">
               <tr>
-                <th className="text-slate-11 px-4 py-3 text-left text-sm font-medium">
+                <th className="px-4 py-3 text-left text-sm font-medium text-slate-11">
                   Name
                 </th>
-                <th className="text-slate-11 px-4 py-3 text-right text-sm font-medium">
+                <th className="px-4 py-3 text-right text-sm font-medium text-slate-11">
                   Trade Count
                 </th>
               </tr>
@@ -120,7 +130,7 @@ export default function PortfolioPageClient({
             <tbody className="divide-y divide-slate-700 bg-slate-900">
               {portfolios.map((portfolio) => (
                 <tr key={portfolio._id} className="hover:bg-slate-800/50">
-                  <td className="whitespace-nowrap px-4 py-3 text-sm font-medium">
+                  <td className="px-4 py-3 text-sm font-medium whitespace-nowrap">
                     <Link
                       href={`/portfolios/${portfolio._id}`}
                       className="text-slate-12 hover:underline"
@@ -129,7 +139,7 @@ export default function PortfolioPageClient({
                       {portfolio.name}
                     </Link>
                   </td>
-                  <td className="text-slate-11 whitespace-nowrap px-4 py-3 text-right text-sm">
+                  <td className="px-4 py-3 text-right text-sm whitespace-nowrap text-slate-11">
                     {portfolio.tradeCount}
                   </td>
                 </tr>
