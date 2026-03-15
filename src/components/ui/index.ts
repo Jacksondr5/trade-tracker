@@ -52,6 +52,12 @@ export {
 export { Input, inputVariants, type InputProps } from "./input";
 export { Label } from "./label";
 export { RadioGroup, RadioGroupItem } from "./radio-group";
+export {
+  Select,
+  selectClassName,
+  selectVariants,
+  type SelectProps,
+} from "./select";
 export { SubmitButton } from "./submit-button";
 export { Textarea, textareaVariants, type TextareaProps } from "./textarea";
 export { useAppForm } from "./use-app-form";

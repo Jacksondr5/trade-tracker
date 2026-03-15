@@ -6,21 +6,46 @@ import { CheckCircle2, Loader2, Pencil, Star } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
-import {
-  MobileHierarchyBreadcrumbs,
-} from "~/components/app-shell/campaign-trade-plan-hierarchy";
+import { WatchToggleButton } from "~/components/WatchToggleButton";
+import { MobileHierarchyBreadcrumbs } from "~/components/app-shell/campaign-trade-plan-hierarchy";
 import { useNavigationData } from "~/components/app-shell";
-import { Alert, Badge, type BadgeProps, Button, useAppForm } from "~/components/ui";
+import {
+  Alert,
+  Badge,
+  Button,
+  Label,
+  Select,
+  type BadgeProps,
+  useAppForm,
+} from "~/components/ui";
 import NotesSection from "~/components/NotesSection";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { buildHierarchyBreadcrumbs } from "~/lib/campaign-trade-plan-navigation";
 import { capitalize, formatCurrency, formatDate } from "~/lib/format";
-import { cn } from "~/lib/utils";
 
 type CampaignStatus = "planning" | "active" | "closed";
 type TradePlanStatus = "idea" | "watching" | "active" | "closed";
 type SaveState = "idle" | "saving" | "saved";
+
+const campaignStatusOptions: Array<{
+  label: string;
+  value: CampaignStatus;
+}> = [
+  { label: "Planning", value: "planning" },
+  { label: "Active", value: "active" },
+  { label: "Closed", value: "closed" },
+];
+
+const tradePlanStatusOptions: Array<{
+  label: string;
+  value: TradePlanStatus;
+}> = [
+  { label: "Idea", value: "idea" },
+  { label: "Watching", value: "watching" },
+  { label: "Active", value: "active" },
+  { label: "Closed", value: "closed" },
+];
 
 const tradePlanSchema = z.object({
   instrumentSymbol: z.string().trim().min(1, "Instrument symbol is required"),
@@ -56,23 +81,6 @@ function getStatusVariant(status: string): BadgeVariant {
   }
 }
 
-function WatchlistIndicator({
-  label,
-}: {
-  label: string;
-}) {
-  return (
-    <span
-      title={label}
-      aria-label={label}
-      className="inline-flex items-center gap-1 rounded-full border border-amber-8/70 bg-amber-3/30 px-2 py-1 text-xs font-medium text-amber-11"
-    >
-      <Star className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
-      <span>{label}</span>
-    </span>
-  );
-}
-
 const validateWithSchema = <TSchema extends z.ZodTypeAny>(
   schema: TSchema,
   value: unknown,
@@ -93,10 +101,14 @@ export default function CampaignDetailPageClient({
   preloadedCampaignNotes,
 }: {
   campaignId: Id<"campaigns">;
-  preloadedAccountMappings: Preloaded<typeof api.accountMappings.listAccountMappings>;
+  preloadedAccountMappings: Preloaded<
+    typeof api.accountMappings.listAccountMappings
+  >;
   preloadedCampaignTrades: Preloaded<typeof api.trades.listTradesByCampaign>;
   preloadedCampaign: Preloaded<typeof api.campaigns.getCampaign>;
-  preloadedCampaignWorkspace: Preloaded<typeof api.campaigns.getCampaignWorkspace>;
+  preloadedCampaignWorkspace: Preloaded<
+    typeof api.campaigns.getCampaignWorkspace
+  >;
   preloadedCampaignNotes: Preloaded<typeof api.notes.getNotesByCampaign>;
 }) {
   const accountMappings = usePreloadedQuery(preloadedAccountMappings);
@@ -114,7 +126,9 @@ export default function CampaignDetailPageClient({
   const addNote = useMutation(api.notes.addNote);
   const updateNote = useMutation(api.notes.updateNote);
   const createTradePlan = useMutation(api.tradePlans.createTradePlan);
-  const updateTradePlanStatus = useMutation(api.tradePlans.updateTradePlanStatus);
+  const updateTradePlanStatus = useMutation(
+    api.tradePlans.updateTradePlanStatus,
+  );
   const updateCampaign = useMutation(api.campaigns.updateCampaign);
   const updateCampaignStatus = useMutation(api.campaigns.updateCampaignStatus);
   const watchItem = useMutation(api.watchlist.watchItem);
@@ -148,27 +162,41 @@ export default function CampaignDetailPageClient({
     };
   }, [trades]);
 
-  const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
-  const [isChangingCampaignStatus, setIsChangingCampaignStatus] = useState(false);
+  const [statusChangeError, setStatusChangeError] = useState<string | null>(
+    null,
+  );
+  const [isChangingCampaignStatus, setIsChangingCampaignStatus] =
+    useState(false);
   const [isWatchPending, setIsWatchPending] = useState(false);
   const [watchError, setWatchError] = useState<string | null>(null);
   const [isEditingName, setIsEditingName] = useState(false);
   const [isEditingThesis, setIsEditingThesis] = useState(false);
 
   const [campaignNameInitialized, setCampaignNameInitialized] = useState(false);
-  const [campaignNameError, setCampaignNameError] = useState<string | null>(null);
-  const [campaignNameSaveState, setCampaignNameSaveState] = useState<SaveState>("idle");
+  const [campaignNameError, setCampaignNameError] = useState<string | null>(
+    null,
+  );
+  const [campaignNameSaveState, setCampaignNameSaveState] =
+    useState<SaveState>("idle");
 
   const [thesisInitialized, setThesisInitialized] = useState(false);
   const [thesisError, setThesisError] = useState<string | null>(null);
   const [thesisSaveState, setThesisSaveState] = useState<SaveState>("idle");
 
-  const [retrospectiveInitialized, setRetrospectiveInitialized] = useState(false);
-  const [retrospectiveError, setRetrospectiveError] = useState<string | null>(null);
-  const [retrospectiveSaveState, setRetrospectiveSaveState] = useState<SaveState>("idle");
+  const [retrospectiveInitialized, setRetrospectiveInitialized] =
+    useState(false);
+  const [retrospectiveError, setRetrospectiveError] = useState<string | null>(
+    null,
+  );
+  const [retrospectiveSaveState, setRetrospectiveSaveState] =
+    useState<SaveState>("idle");
 
-  const [tradePlanCreateError, setTradePlanCreateError] = useState<string | null>(null);
-  const [tradePlanStatusError, setTradePlanStatusError] = useState<string | null>(null);
+  const [tradePlanCreateError, setTradePlanCreateError] = useState<
+    string | null
+  >(null);
+  const [tradePlanStatusError, setTradePlanStatusError] = useState<
+    string | null
+  >(null);
   const [showCreateTradePlanForm, setShowCreateTradePlanForm] = useState(false);
   const breadcrumbs = buildHierarchyBreadcrumbs(hierarchy, {
     campaignId,
@@ -240,7 +268,9 @@ export default function CampaignDetailPageClient({
         setThesisSaveState("idle");
         setIsEditingThesis(false);
       } catch (error) {
-        setThesisError(error instanceof Error ? error.message : "Failed to save thesis");
+        setThesisError(
+          error instanceof Error ? error.message : "Failed to save thesis",
+        );
         setThesisSaveState("idle");
       }
     },
@@ -274,7 +304,9 @@ export default function CampaignDetailPageClient({
         setRetrospectiveSaveState("saved");
       } catch (error) {
         setRetrospectiveError(
-          error instanceof Error ? error.message : "Failed to save retrospective",
+          error instanceof Error
+            ? error.message
+            : "Failed to save retrospective",
         );
         setRetrospectiveSaveState("idle");
       }
@@ -306,7 +338,9 @@ export default function CampaignDetailPageClient({
         setShowCreateTradePlanForm(false);
       } catch (error) {
         setTradePlanCreateError(
-          error instanceof Error ? error.message : "Failed to create trade plan",
+          error instanceof Error
+            ? error.message
+            : "Failed to create trade plan",
         );
       }
     },
@@ -328,7 +362,10 @@ export default function CampaignDetailPageClient({
 
   useEffect(() => {
     if (campaign && !retrospectiveInitialized) {
-      retrospectiveForm.setFieldValue("retrospective", campaign.retrospective || "");
+      retrospectiveForm.setFieldValue(
+        "retrospective",
+        campaign.retrospective || "",
+      );
       setRetrospectiveInitialized(true);
     }
   }, [campaign, retrospectiveForm, retrospectiveInitialized]);
@@ -341,7 +378,9 @@ export default function CampaignDetailPageClient({
       await updateCampaignStatus({ campaignId, status });
     } catch (error) {
       setStatusChangeError(
-        error instanceof Error ? error.message : "Failed to update campaign status",
+        error instanceof Error
+          ? error.message
+          : "Failed to update campaign status",
       );
     } finally {
       setIsChangingCampaignStatus(false);
@@ -357,7 +396,9 @@ export default function CampaignDetailPageClient({
       await updateTradePlanStatus({ tradePlanId, status });
     } catch (error) {
       setTradePlanStatusError(
-        error instanceof Error ? error.message : "Failed to update trade plan status",
+        error instanceof Error
+          ? error.message
+          : "Failed to update trade plan status",
       );
     }
   };
@@ -373,19 +414,34 @@ export default function CampaignDetailPageClient({
         await watchItem(payload);
       }
     } catch (error) {
-      setWatchError(error instanceof Error ? error.message : "Failed to update Watchlist state.");
+      setWatchError(
+        error instanceof Error
+          ? error.message
+          : "Failed to update Watchlist state.",
+      );
     } finally {
       setIsWatchPending(false);
     }
   };
 
-  if (campaign === null || campaignWorkspace === null || workspaceSummary === null) {
+  if (
+    campaign === null ||
+    campaignWorkspace === null ||
+    workspaceSummary === null
+  ) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <p className="text-olive-11">Campaign not found.</p>
-        <Link href="/campaigns" className="mt-4 inline-block text-blue-9 hover:underline">
-          Back to campaigns
-        </Link>
+        <Alert variant="info" className="max-w-md">
+          Campaign not found.
+        </Alert>
+        <Button
+          asChild
+          variant="link"
+          className="mt-4 px-0 text-sm"
+          dataTestId="back-to-campaigns-link"
+        >
+          <Link href="/campaigns">Back to campaigns</Link>
+        </Button>
       </div>
     );
   }
@@ -411,10 +467,16 @@ export default function CampaignDetailPageClient({
       </Link>
 
       {campaign.status === "closed" && (
-        <div className="mb-4 rounded-lg border border-olive-6 bg-olive-3 p-3 text-sm text-olive-11">
-          This campaign was closed on {campaign.closedAt ? formatDate(campaign.closedAt) : "an unknown date"}.
-          {!workspaceSummary.lifecycle.hasRetrospective && " No retrospective has been written yet."}
-        </div>
+        <Alert variant="warning" className="mb-4">
+          This campaign was closed on{" "}
+          {campaign.closedAt
+            ? formatDate(campaign.closedAt)
+            : "an unknown date"}
+          .
+          {!workspaceSummary.lifecycle.hasRetrospective
+            ? " No campaign review has been written yet."
+            : null}
+        </Alert>
       )}
 
       <div className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4">
@@ -442,9 +504,11 @@ export default function CampaignDetailPageClient({
                   </campaignNameForm.AppField>
                   <div className="flex items-center gap-2">
                     <campaignNameForm.AppForm>
-                      <campaignNameForm.SubmitButton label="Save Name" />
+                      <campaignNameForm.SubmitButton label="Save name" />
                     </campaignNameForm.AppForm>
-                    <campaignNameForm.Subscribe selector={(state) => state.isSubmitting}>
+                    <campaignNameForm.Subscribe
+                      selector={(state) => state.isSubmitting}
+                    >
                       {(isSubmitting) => (
                         <Button
                           dataTestId="cancel-edit-campaign-name"
@@ -453,7 +517,10 @@ export default function CampaignDetailPageClient({
                           disabled={isSubmitting}
                           onClick={() => {
                             setIsEditingName(false);
-                            campaignNameForm.setFieldValue("name", campaign.name);
+                            campaignNameForm.setFieldValue(
+                              "name",
+                              campaign.name,
+                            );
                           }}
                         >
                           Cancel
@@ -463,7 +530,11 @@ export default function CampaignDetailPageClient({
                   </div>
                 </form>
                 {campaignNameError && (
-                  <Alert variant="error" className="mt-2" onDismiss={() => setCampaignNameError(null)}>
+                  <Alert
+                    variant="error"
+                    className="mt-2"
+                    onDismiss={() => setCampaignNameError(null)}
+                  >
                     {campaignNameError}
                   </Alert>
                 )}
@@ -476,7 +547,9 @@ export default function CampaignDetailPageClient({
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-olive-12 md:text-3xl">{campaign.name}</h1>
+                <h1 className="text-2xl font-bold text-olive-12 md:text-3xl">
+                  {campaign.name}
+                </h1>
                 <Button
                   dataTestId="edit-campaign-name"
                   type="button"
@@ -493,52 +566,61 @@ export default function CampaignDetailPageClient({
 
           <div className="flex items-center gap-2">
             <div className="w-36">
-              <label htmlFor="campaign-status" className="mb-1 block text-xs uppercase tracking-wide text-olive-11">
+              <Label
+                htmlFor="campaign-status"
+                dataTestId="campaign-status-label"
+                className="mb-1 block"
+              >
                 Status
-              </label>
-              <select
+              </Label>
+              <Select
                 id="campaign-status"
+                dataTestId="campaign-status-select"
                 value={campaign.status}
                 disabled={isChangingCampaignStatus}
-                onChange={(e) => void handleCampaignStatusChange(e.target.value as CampaignStatus)}
-                className="h-9 w-full rounded-md border border-olive-6 bg-olive-3 px-3 py-1 text-sm text-olive-12 focus:outline-none focus:ring-1 focus:ring-blue-8"
+                onChange={(e) =>
+                  void handleCampaignStatusChange(
+                    e.target.value as CampaignStatus,
+                  )
+                }
+                aria-label="Campaign status"
               >
-                <option value="planning">Planning</option>
-                <option value="active">Active</option>
-                <option value="closed">Closed</option>
-              </select>
-              {campaign.status === "closed" && workspaceSummary.linkedTradePlans.openCount > 0 && (
-                <p className="mt-1 text-xs text-amber-11">
-                  This campaign has {workspaceSummary.linkedTradePlans.openCount} open trade plan{workspaceSummary.linkedTradePlans.openCount !== 1 ? "s" : ""}. They can be closed independently but cannot be reopened while the campaign remains closed.
-                </p>
-              )}
+                {campaignStatusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+              {campaign.status === "closed" &&
+                workspaceSummary.linkedTradePlans.openCount > 0 && (
+                  <p className="mt-1 text-xs text-amber-11">
+                    This campaign has{" "}
+                    {workspaceSummary.linkedTradePlans.openCount} open trade
+                    plan
+                    {workspaceSummary.linkedTradePlans.openCount !== 1
+                      ? "s"
+                      : ""}
+                    . They can be closed independently but cannot be reopened
+                    while the campaign remains closed.
+                  </p>
+                )}
             </div>
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
+            <WatchToggleButton
               dataTestId="toggle-watch-campaign"
-              aria-label={
-                workspaceSummary.isWatched
-                  ? `Remove ${campaign.name} from Watchlist`
-                  : `Add ${campaign.name} to Watchlist`
-              }
-              className={cn(
-                "mt-4 h-8 w-8 rounded-md text-olive-10 hover:bg-olive-4 hover:text-olive-12",
-                workspaceSummary.isWatched && "text-amber-11 hover:text-amber-12",
-              )}
-              aria-pressed={workspaceSummary.isWatched}
+              isWatched={workspaceSummary.isWatched}
+              itemName={campaign.name}
+              className="mt-4"
               disabled={isWatchPending}
               onClick={() => void handleToggleWatch()}
-            >
-              <Star className={cn("h-4 w-4", workspaceSummary.isWatched && "fill-current")} />
-            </Button>
+            />
           </div>
         </div>
 
         {/* Rollup stats row */}
         <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-olive-10">
-          <span>{workspaceSummary.linkedTradePlans.totalCount} trade plans</span>
+          <span>
+            {workspaceSummary.linkedTradePlans.totalCount} trade plans
+          </span>
           <span className="text-olive-6">&middot;</span>
           <span>{workspaceSummary.linkedTrades.totalCount} trades</span>
           {campaign.status === "closed" && campaign.closedAt && (
@@ -550,12 +632,20 @@ export default function CampaignDetailPageClient({
         </div>
 
         {statusChangeError && (
-          <Alert variant="error" className="mt-3" onDismiss={() => setStatusChangeError(null)}>
+          <Alert
+            variant="error"
+            className="mt-3"
+            onDismiss={() => setStatusChangeError(null)}
+          >
             {statusChangeError}
           </Alert>
         )}
         {watchError && (
-          <Alert variant="error" className="mt-3" onDismiss={() => setWatchError(null)}>
+          <Alert
+            variant="error"
+            className="mt-3"
+            onDismiss={() => setWatchError(null)}
+          >
             {watchError}
           </Alert>
         )}
@@ -578,7 +668,11 @@ export default function CampaignDetailPageClient({
           )}
         </div>
         {thesisError && (
-          <Alert variant="error" className="mb-2" onDismiss={() => setThesisError(null)}>
+          <Alert
+            variant="error"
+            className="mb-2"
+            onDismiss={() => setThesisError(null)}
+          >
             {thesisError}
           </Alert>
         )}
@@ -591,16 +685,11 @@ export default function CampaignDetailPageClient({
             }}
           >
             <thesisForm.AppField name="thesis">
-              {(field) => (
-                <field.FieldTextarea
-                  label="Thesis"
-                  rows={6}
-                />
-              )}
+              {(field) => <field.FieldTextarea label="Thesis" rows={6} />}
             </thesisForm.AppField>
             <div className="mt-2 flex items-center gap-3">
               <thesisForm.AppForm>
-                <thesisForm.SubmitButton label="Save Thesis" />
+                <thesisForm.SubmitButton label="Save thesis" />
               </thesisForm.AppForm>
               <thesisForm.Subscribe selector={(state) => state.isSubmitting}>
                 {(isSubmitting) => (
@@ -636,28 +725,36 @@ export default function CampaignDetailPageClient({
             </div>
           </form>
         ) : (
-          <p className="whitespace-pre-wrap text-sm text-olive-11">
+          <p className="text-sm whitespace-pre-wrap text-olive-11">
             {campaign.thesis || "No thesis written yet."}
           </p>
         )}
       </section>
 
       <section className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4">
-        <h2 className="mb-2 text-lg font-semibold text-olive-12">Campaign Notes</h2>
+        <h2 className="mb-2 text-lg font-semibold text-olive-12">
+          Campaign Notes
+        </h2>
         <NotesSection
           notes={campaignNotes}
           onAddNote={async (content, chartUrls) => {
             await addNote({ campaignId, content, chartUrls });
           }}
           onUpdateNote={async (noteId, content, chartUrls) => {
-            await updateNote({ noteId: noteId as Id<"notes">, content, chartUrls });
+            await updateNote({
+              noteId: noteId as Id<"notes">,
+              content,
+              chartUrls,
+            });
           }}
         />
       </section>
 
       <section className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-olive-12">Linked Trade Plans</h2>
+          <h2 className="text-lg font-semibold text-olive-12">
+            Linked Trade Plans
+          </h2>
           <div className="flex items-center gap-3">
             <span className="text-sm text-olive-11">
               {workspaceSummary.linkedTradePlans.totalCount} plans
@@ -671,7 +768,7 @@ export default function CampaignDetailPageClient({
                 setTradePlanCreateError(null);
               }}
             >
-              {showCreateTradePlanForm ? "Hide Form" : "Link trade plan"}
+              {showCreateTradePlanForm ? "Cancel linking" : "Link trade plan"}
             </Button>
           </div>
         </div>
@@ -688,7 +785,8 @@ export default function CampaignDetailPageClient({
 
         {linkedTradePlans.length === 0 ? (
           <p className="mb-4 text-sm text-olive-11">
-            No linked trade plans. Add a trade plan to start expressing this campaign&apos;s thesis.
+            No linked trade plans. Link a trade plan to start expressing this
+            campaign&apos;s thesis.
           </p>
         ) : (
           <div className="mb-4 space-y-3">
@@ -700,13 +798,17 @@ export default function CampaignDetailPageClient({
                     className="min-w-0 flex-1 hover:underline"
                   >
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-olive-12">{plan.name}</span>
+                      <span className="font-semibold text-olive-12">
+                        {plan.name}
+                      </span>
                       <Badge variant={getStatusVariant(plan.status)}>
                         {capitalize(plan.status)}
                       </Badge>
                     </div>
                     <p className="mt-0.5 text-sm">
-                      <span className="font-medium text-olive-12">{plan.instrumentSymbol}</span>
+                      <span className="font-medium text-olive-12">
+                        {plan.instrumentSymbol}
+                      </span>
                       <span className="text-olive-11">
                         {" \u00b7 "}
                         {plan.tradeCount > 0
@@ -727,22 +829,33 @@ export default function CampaignDetailPageClient({
                     </p>
                   </Link>
                   <div className="flex items-center gap-2">
-                    {plan.isWatched ? <WatchlistIndicator label="Watched" /> : null}
-                    <select
+                    {plan.isWatched ? (
+                      <Badge variant="warning" className="gap-1">
+                        <Star
+                          className="h-3 w-3 fill-current"
+                          aria-hidden="true"
+                        />
+                        Watched
+                      </Badge>
+                    ) : null}
+                    <Select
+                      dataTestId={`linked-trade-plan-status-${plan.id}`}
                       value={plan.status}
+                      size="sm"
+                      aria-label={`${plan.name} status`}
                       onChange={(e) =>
                         void handleTradePlanStatusChange(
                           plan.id,
                           e.target.value as TradePlanStatus,
                         )
                       }
-                      className="h-8 rounded border border-olive-6 bg-olive-3 px-2 text-xs text-olive-12"
                     >
-                      <option value="idea">Idea</option>
-                      <option value="watching">Watching</option>
-                      <option value="active">Active</option>
-                      <option value="closed">Closed</option>
-                    </select>
+                      {tradePlanStatusOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </Select>
                   </div>
                 </div>
               </div>
@@ -791,13 +904,18 @@ export default function CampaignDetailPageClient({
                 <tradePlanForm.AppForm>
                   <tradePlanForm.SubmitButton label="Create trade plan" />
                 </tradePlanForm.AppForm>
-                <tradePlanForm.Subscribe selector={(state) => state.isSubmitting}>
+                <tradePlanForm.Subscribe
+                  selector={(state) => state.isSubmitting}
+                >
                   {(isSubmitting) => (
                     <Button
                       dataTestId="cancel-trade-plan-form-button"
                       type="button"
                       variant="outline"
-                      onClick={() => { setShowCreateTradePlanForm(false); setTradePlanCreateError(null); }}
+                      onClick={() => {
+                        setShowCreateTradePlanForm(false);
+                        setTradePlanCreateError(null);
+                      }}
                       disabled={isSubmitting}
                     >
                       Cancel
@@ -811,14 +929,20 @@ export default function CampaignDetailPageClient({
       </section>
 
       <section className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4">
-        <h2 className="mb-3 text-lg font-semibold text-olive-12">Campaign Review</h2>
+        <h2 className="mb-3 text-lg font-semibold text-olive-12">
+          Campaign Review
+        </h2>
 
         {campaign.status !== "closed" ? (
-          <p className="text-sm text-olive-11">Campaign review becomes available when the campaign is closed.</p>
+          <p className="text-sm text-olive-11">
+            Campaign review becomes available when the campaign is closed.
+          </p>
         ) : (
           <>
             {!campaign.retrospective?.trim() && (
-              <p className="mb-3 text-sm text-olive-10">Capture what you learned while it&apos;s fresh.</p>
+              <p className="mb-3 text-sm text-olive-10">
+                Capture what you learned while it&apos;s fresh.
+              </p>
             )}
             {retrospectiveError && (
               <Alert
@@ -874,19 +998,27 @@ export default function CampaignDetailPageClient({
 
         {executionStats && (
           <div className="mb-3 flex flex-wrap items-center gap-3 text-sm text-olive-11">
-            <span>{executionStats.totalCount} trade{executionStats.totalCount !== 1 ? "s" : ""}</span>
-            <span className="text-olive-6">&middot;</span>
-            <span>{executionStats.uniqueInstruments} instrument{executionStats.uniqueInstruments !== 1 ? "s" : ""}</span>
+            <span>
+              {executionStats.totalCount} trade
+              {executionStats.totalCount !== 1 ? "s" : ""}
+            </span>
             <span className="text-olive-6">&middot;</span>
             <span>
-              {formatDate(executionStats.earliestDate)} &mdash; {formatDate(executionStats.latestDate)}
+              {executionStats.uniqueInstruments} instrument
+              {executionStats.uniqueInstruments !== 1 ? "s" : ""}
+            </span>
+            <span className="text-olive-6">&middot;</span>
+            <span>
+              {formatDate(executionStats.earliestDate)} &mdash;{" "}
+              {formatDate(executionStats.latestDate)}
             </span>
           </div>
         )}
 
         {trades.length === 0 ? (
           <p className="text-sm text-olive-11">
-            No trades recorded yet. Trades appear here as they are linked through this campaign&apos;s trade plans.
+            No trades recorded yet. Trades appear here as they are linked
+            through this campaign&apos;s trade plans.
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -905,10 +1037,16 @@ export default function CampaignDetailPageClient({
               <tbody>
                 {trades.map((trade) => (
                   <tr key={trade._id} className="border-b border-olive-6/60">
-                    <td className="px-2 py-2 text-olive-11">{new Date(trade.date).toLocaleDateString("en-US")}</td>
+                    <td className="px-2 py-2 text-olive-11">
+                      {new Date(trade.date).toLocaleDateString("en-US")}
+                    </td>
                     <td className="px-2 py-2 text-olive-12">{trade.ticker}</td>
                     <td className="px-2 py-2 text-olive-11">
-                      {trade.brokerageAccountId ? accountNameByAccountId.get(trade.brokerageAccountId) ?? trade.brokerageAccountId : "\u2014"}
+                      {trade.brokerageAccountId
+                        ? (accountNameByAccountId.get(
+                            trade.brokerageAccountId,
+                          ) ?? trade.brokerageAccountId)
+                        : "\u2014"}
                     </td>
                     <td className="px-2 py-2 text-olive-11">
                       {trade.tradePlanId ? (
@@ -923,8 +1061,12 @@ export default function CampaignDetailPageClient({
                       )}
                     </td>
                     <td className="px-2 py-2 text-olive-11">{trade.side}</td>
-                    <td className="px-2 py-2 text-olive-11">{trade.quantity}</td>
-                    <td className="px-2 py-2 text-olive-11">{formatCurrency(trade.price)}</td>
+                    <td className="px-2 py-2 text-olive-11">
+                      {trade.quantity}
+                    </td>
+                    <td className="px-2 py-2 text-olive-11">
+                      {formatCurrency(trade.price)}
+                    </td>
                   </tr>
                 ))}
               </tbody>

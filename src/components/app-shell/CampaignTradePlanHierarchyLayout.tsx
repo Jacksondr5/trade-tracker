@@ -1,10 +1,11 @@
 "use client";
 
 import { useMutation } from "convex/react";
-import { ChevronDown, ChevronRight, Star } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { WatchToggleButton } from "~/components/WatchToggleButton";
 import { Alert, Badge, Button, type BadgeProps } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
@@ -105,25 +106,13 @@ function ItemWatchButton({
   pending: boolean;
 }) {
   return (
-    <Button
-      type="button"
-      size="icon"
-      variant="ghost"
+    <WatchToggleButton
       dataTestId={`toggle-watch-${item.itemType}-${item.id}`}
-      aria-label={
-        item.isWatched
-          ? `Remove ${item.name} from Watchlist`
-          : `Add ${item.name} to Watchlist`
-      }
-      className={cn(
-        "h-8 w-8 rounded-md text-olive-10 hover:bg-olive-4 hover:text-olive-12",
-        item.isWatched && "text-amber-11 hover:text-amber-12",
-      )}
+      isWatched={item.isWatched}
+      itemName={item.name}
       disabled={pending}
       onClick={() => onToggle(item)}
-    >
-      <Star className={cn("h-4 w-4", item.isWatched && "fill-current")} />
-    </Button>
+    />
   );
 }
 

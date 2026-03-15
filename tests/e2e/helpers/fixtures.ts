@@ -1,9 +1,5 @@
 import { execFileSync } from "node:child_process";
-import {
-  PLAYWRIGHT_ENV_FILE,
-  getProjectRoot,
-  isLocalPlaywrightTarget,
-} from "./env";
+import { getProjectRoot, isLocalPlaywrightTarget } from "./env";
 
 function parseConvexRunOutput<T>(output: string): T {
   const trimmed = output.trim();
@@ -29,17 +25,13 @@ function parseConvexRunOutput<T>(output: string): T {
 }
 
 function runConvexFunction<T>(functionName: string): T {
-  const output = execFileSync(
-    "pnpm",
-    ["exec", "convex", "run", "--env-file", PLAYWRIGHT_ENV_FILE, functionName],
-    {
-      cwd: getProjectRoot(),
-      encoding: "utf8",
-      env: process.env,
-      shell: true,
-      timeout: 30_000,
-    },
-  );
+  const output = execFileSync("pnpm", ["exec", "convex", "run", functionName], {
+    cwd: getProjectRoot(),
+    encoding: "utf8",
+    env: process.env,
+    shell: true,
+    timeout: 30_000,
+  });
 
   return parseConvexRunOutput<T>(output);
 }

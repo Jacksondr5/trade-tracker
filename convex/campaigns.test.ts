@@ -108,8 +108,13 @@ describe("campaign workspace queries", () => {
     });
 
     const user = asUser(ownerA);
-    const summaries = await user.query(api.campaigns.listCampaignWorkspaceSummaries, {});
-    const detail = await user.query(api.campaigns.getCampaignWorkspace, { campaignId });
+    const summaries = await user.query(
+      api.campaigns.listCampaignWorkspaceSummaries,
+      {},
+    );
+    const detail = await user.query(api.campaigns.getCampaignWorkspace, {
+      campaignId,
+    });
 
     expect(summaries).toHaveLength(1);
     expect(summaries[0]).toMatchObject({
@@ -180,16 +185,26 @@ describe("campaign workspace queries", () => {
       item: { campaignId, itemType: "campaign" },
     });
 
-    const summaries = await user.query(api.campaigns.listCampaignWorkspaceSummaries, {
-      status: "closed",
+    const summaries = await user.query(
+      api.campaigns.listCampaignWorkspaceSummaries,
+      {
+        status: "closed",
+      },
+    );
+    const detail = await user.query(api.campaigns.getCampaignWorkspace, {
+      campaignId,
     });
-    const detail = await user.query(api.campaigns.getCampaignWorkspace, { campaignId });
-    const openCampaignDetail = await user.query(api.campaigns.getCampaignWorkspace, {
-      campaignId: openCampaignId,
-    });
+    const openCampaignDetail = await user.query(
+      api.campaigns.getCampaignWorkspace,
+      {
+        campaignId: openCampaignId,
+      },
+    );
 
     expect(summaries).toHaveLength(1);
-    expect(summaries.map((summary) => summary.id)).not.toContain(openCampaignId);
+    expect(summaries.map((summary) => summary.id)).not.toContain(
+      openCampaignId,
+    );
     expect(summaries[0]).toMatchObject({
       id: campaignId,
       isWatched: true,
@@ -319,8 +334,13 @@ describe("campaign workspace queries", () => {
       item: { itemType: "tradePlan", tradePlanId: watchingPlanId },
     });
 
-    const summaries = await user.query(api.campaigns.listCampaignWorkspaceSummaries, {});
-    const detail = await user.query(api.campaigns.getCampaignWorkspace, { campaignId });
+    const summaries = await user.query(
+      api.campaigns.listCampaignWorkspaceSummaries,
+      {},
+    );
+    const detail = await user.query(api.campaigns.getCampaignWorkspace, {
+      campaignId,
+    });
 
     expect(summaries).toHaveLength(1);
     expect(summaries[0]).toMatchObject({
@@ -385,5 +405,116 @@ describe("campaign workspace queries", () => {
       ],
       summary: summaries[0],
     });
+  });
+
+  it("filters workspace summaries by lifecycle status", async () => {
+    const planningCampaignId = await insertCampaign({
+      name: "Planning Campaign",
+      ownerId: ownerA,
+      status: "planning",
+    });
+    const activeCampaignId = await insertCampaign({
+      name: "Active Campaign",
+      ownerId: ownerA,
+      status: "active",
+    });
+    const closedCampaignId = await insertCampaign({
+      closedAt: Date.UTC(2026, 2, 14),
+      name: "Closed Campaign",
+      ownerId: ownerA,
+      status: "closed",
+    });
+
+    const activeTradePlanId = await insertTradePlan({
+      campaignId: activeCampaignId,
+      instrumentSymbol: "QQQ",
+      name: "Active Campaign Plan",
+      ownerId: ownerA,
+      status: "watching",
+    });
+    const closedTradePlanId = await insertTradePlan({
+      campaignId: closedCampaignId,
+      closedAt: Date.UTC(2026, 2, 14),
+      instrumentSymbol: "XLE",
+      name: "Closed Campaign Plan",
+      ownerId: ownerA,
+      status: "closed",
+    });
+
+    await insertTrade({
+      date: Date.UTC(2026, 2, 13),
+      ownerId: ownerA,
+      ticker: "QQQ",
+      tradePlanId: activeTradePlanId,
+    });
+    await insertTrade({
+      date: Date.UTC(2026, 2, 12),
+      ownerId: ownerA,
+      ticker: "XLE",
+      tradePlanId: closedTradePlanId,
+    });
+
+    const user = asUser(ownerA);
+
+    await expect(
+      user.query(api.campaigns.listCampaignWorkspaceSummaries, {
+        status: "planning",
+      }),
+    ).resolves.toMatchObject([
+      {
+        id: planningCampaignId,
+        linkedTradePlans: {
+          totalCount: 0,
+        },
+        linkedTrades: {
+          totalCount: 0,
+        },
+        status: "planning",
+      },
+    ]);
+
+    await expect(
+      user.query(api.campaigns.listCampaignWorkspaceSummaries, {
+        status: "active",
+      }),
+    ).resolves.toMatchObject([
+      {
+        id: activeCampaignId,
+        linkedTradePlans: {
+          openCount: 1,
+          totalCount: 1,
+          watchingCount: 1,
+        },
+        linkedTrades: {
+          latestTradeDate: Date.UTC(2026, 2, 13),
+          totalCount: 1,
+        },
+        status: "active",
+      },
+    ]);
+
+    await expect(
+      user.query(api.campaigns.listCampaignWorkspaceSummaries, {
+        status: "closed",
+      }),
+    ).resolves.toMatchObject([
+      {
+        id: closedCampaignId,
+        lifecycle: {
+          hasClosedTradePlans: true,
+          isClosed: true,
+        },
+        linkedTradePlans: {
+          closedCount: 1,
+          openCount: 0,
+          totalCount: 1,
+        },
+        linkedTrades: {
+          latestTradeDate: Date.UTC(2026, 2, 12),
+          totalCount: 1,
+        },
+        status: "closed",
+      },
+    ]);
   });
 });
