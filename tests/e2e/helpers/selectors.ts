@@ -37,6 +37,26 @@ export function getPageTitle(
   return page.getByTestId(APP_PAGE_TITLES[key]);
 }
 
+export function getEditCampaignName(page: Page): Locator {
+  return page.getByTestId("edit-campaign-name");
+}
+
+export function getTradePlanNameInput(page: Page): Locator {
+  return page.getByTestId("trade-plan-name-input");
+}
+
+export function getToggleLocalGroupStandaloneTradePlans(page: Page): Locator {
+  return page.getByTestId("toggle-local-group-standalone-trade-plans");
+}
+
+export function getOpenCommandPaletteDesktop(page: Page): Locator {
+  return page.getByTestId("open-command-palette-desktop");
+}
+
+export function getCommandPaletteInput(page: Page): Locator {
+  return page.getByTestId("command-palette-input");
+}
+
 export function getCampaignRow(page: Page): Locator {
   return getCampaignRowByName(page, E2E_SMOKE_FIXTURES.campaign.name);
 }
