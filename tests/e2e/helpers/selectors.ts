@@ -2,6 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 import { E2E_SMOKE_FIXTURES } from "../../../shared/e2e/smokeFixtures";
 import {
   APP_PAGE_TITLES,
+  APP_SHELL_TEST_IDS,
   NAVIGATION_SECTION_TEST_IDS,
   NAVIGATION_TEST_IDS,
   getCommandPaletteItemTestId,
@@ -38,23 +39,23 @@ export function getPageTitle(
 }
 
 export function getEditCampaignName(page: Page): Locator {
-  return page.getByTestId("edit-campaign-name");
+  return page.getByTestId(APP_SHELL_TEST_IDS.editCampaignName);
 }
 
 export function getTradePlanNameInput(page: Page): Locator {
-  return page.getByTestId("trade-plan-name-input");
+  return page.getByTestId(APP_SHELL_TEST_IDS.tradePlanNameInput);
 }
 
 export function getToggleLocalGroupStandaloneTradePlans(page: Page): Locator {
-  return page.getByTestId("toggle-local-group-standalone-trade-plans");
+  return page.getByTestId(APP_SHELL_TEST_IDS.toggleLocalGroupStandaloneTradePlans);
 }
 
 export function getOpenCommandPaletteDesktop(page: Page): Locator {
-  return page.getByTestId("open-command-palette-desktop");
+  return page.getByTestId(APP_SHELL_TEST_IDS.openCommandPaletteDesktop);
 }
 
 export function getCommandPaletteInput(page: Page): Locator {
-  return page.getByTestId("command-palette-input");
+  return page.getByTestId(APP_SHELL_TEST_IDS.commandPaletteInput);
 }
 
 export function getCampaignRow(page: Page): Locator {

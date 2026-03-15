@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { APP_SHELL_TEST_IDS } from "../../../shared/e2e/testIds";
 import { waitForAuthenticatedApp } from "../helpers/app";
 import {
   APP_PAGE_TITLES,
@@ -34,7 +35,7 @@ test("authenticated app shell renders primary navigation", async ({ page }) => {
   await expect(getNavigationLink(page, "notes")).toBeVisible();
   await expect(getNavigationLink(page, "strategy")).toBeVisible();
   await expect(getNavigationLink(page, "accounts")).toBeVisible();
-  await expect(page.getByTestId("open-command-palette-desktop")).toBeVisible();
+  await expect(page.getByTestId(APP_SHELL_TEST_IDS.openCommandPaletteDesktop)).toBeVisible();
 
   const routeChecks = [
     ["dashboard", "dashboard", "/dashboard"],
