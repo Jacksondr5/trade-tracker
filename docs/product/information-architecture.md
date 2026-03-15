@@ -132,11 +132,11 @@ Typical contents:
 - brokerage account
 - optional portfolio
 - optional trade plan
-- optional linked trade-level notes (stored in the unified `notes` table via parent IDs, see `convex/notes.ts`)
 
 Role:
 
 - trades are the execution record used for history, review, and analytics
+- supporting reasoning should remain attached to campaigns or trade plans rather than directly to trades
 
 Important constraint:
 
@@ -151,14 +151,13 @@ A note belongs to exactly one of:
 
 - a campaign
 - a trade plan
-- a trade
 - no parent at all
 
 Preferred interpretation:
 
-- campaign notes, trade-plan notes, general notes, and trade-level notes all live in one unified notes table
-- note types are distinguished by parent IDs (campaignId, tradePlanId, or tradeId; none means general notes)
-- trade-level notes are supported but intentionally secondary to trade-plan notes when both are viable
+- campaign notes, trade-plan notes, and general notes all live in one unified notes table
+- note types are distinguished by parent IDs (campaignId or tradePlanId; none means general notes)
+- notes do not attach directly to trades
 
 ### Strategy
 
@@ -231,7 +230,6 @@ More precisely:
 
 - a campaign can have many notes
 - a trade plan can have many notes
-- a trade can have many notes in the model
 - screenshots belong to notes, not directly to campaigns, trade plans, or trades
 
 ### Overlay relationships
