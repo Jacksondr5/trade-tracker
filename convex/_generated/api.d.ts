@@ -18,6 +18,7 @@ import type * as lib_statuses from "../lib/statuses.js";
 import type * as lib_tradeValidator from "../lib/tradeValidator.js";
 import type * as navigation from "../navigation.js";
 import type * as notes from "../notes.js";
+import type * as notesCleanup from "../notesCleanup.js";
 import type * as portfolios from "../portfolios.js";
 import type * as positions from "../positions.js";
 import type * as strategyDoc from "../strategyDoc.js";
@@ -42,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   "lib/tradeValidator": typeof lib_tradeValidator;
   navigation: typeof navigation;
   notes: typeof notes;
+  notesCleanup: typeof notesCleanup;
   portfolios: typeof portfolios;
   positions: typeof positions;
   strategyDoc: typeof strategyDoc;
