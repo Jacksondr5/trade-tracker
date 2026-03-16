@@ -9,6 +9,7 @@ import {
 import { E2E_SMOKE_FIXTURES } from "../../../shared/e2e/smokeFixtures";
 import { waitForAuthenticatedApp } from "../helpers/app";
 import { runConvexFunction } from "../helpers/convex";
+import { getBaseUrl, isLocalPlaywrightTarget } from "../helpers/env";
 import {
   APP_PAGE_TITLES,
   getStandaloneTradePlanCard,
@@ -60,7 +61,7 @@ test("standalone trade plans can be created from the list page", async ({
   await expect(createdTradePlanCard).toContainText(createdPlanName);
 });
 
-test("trade plan workspace covers standalone and linked detail flows plus inbox acceptance", async ({
+test("trade plan workspace covers standalone and linked detail flows", async ({
   page,
 }) => {
   const timestamp = Date.now();
@@ -151,6 +152,51 @@ test("trade plan workspace covers standalone and linked detail flows plus inbox 
   await expect(page.getByTestId("trade-plan-campaign-link")).toContainText(
     linkedCampaignName,
   );
+
+  await expect(page.getByTestId("trade-plan-status-select")).toHaveValue("idea");
+});
+
+test("trade plan detail accepts seeded inbox trades locally", async ({ page }) => {
+  test.skip(
+    !isLocalPlaywrightTarget(getBaseUrl()),
+    "Deterministic inbox acceptance seeding is only available against local Convex targets.",
+  );
+
+  const timestamp = Date.now();
+  const standalonePlanName = `E2E Inbox Standalone Plan ${timestamp}`;
+  const standaloneUpdatedSymbol = "ETH";
+  const linkedCampaignName = `E2E Inbox Campaign ${timestamp}`;
+  const linkedPlanName = `E2E Inbox Linked Plan ${timestamp}`;
+  const linkedUpdatedSymbol = "AMD";
+
+  await page.goto("/trade-plans");
+  await waitForAuthenticatedApp(page, APP_PAGE_TITLES.tradePlans);
+
+  await page.getByTestId("name-input").fill(standalonePlanName);
+  await page.getByTestId("instrumentSymbol-input").fill("SOL");
+  await page.getByTestId("create-trade-plan-button").click();
+
+  await page.getByTestId(getTradePlanLinkTestId(standalonePlanName)).click();
+  await page.getByTestId("trade-plan-symbol-input").fill(standaloneUpdatedSymbol);
+  await page.getByTestId("save-trade-plan-symbol-button").click();
+
+  const standalonePlanId = page.url().match(/\/trade-plans\/([^/]+)$/)?.[1];
+  if (!standalonePlanId) {
+    throw new Error("Expected standalone trade plan id in detail route.");
+  }
+
+  await page.goto("/campaigns/new");
+  await page.getByTestId("name-input").fill(linkedCampaignName);
+  await page.getByTestId("thesis-textarea").fill(`Inbox linked thesis ${timestamp}`);
+  await page.getByTestId("create-campaign-button").click();
+
+  await page.getByTestId("add-trade-plan-button").click();
+  await page.getByTestId("name-input").fill(linkedPlanName);
+  await page.getByTestId("instrumentSymbol-input").fill("INTC");
+  await page.getByTestId("create-linked-trade-plan-button").click();
+  await page.getByTestId(getTradePlanLinkTestId(linkedPlanName)).click();
+  await page.getByTestId("trade-plan-symbol-input").fill(linkedUpdatedSymbol);
+  await page.getByTestId("save-trade-plan-symbol-button").click();
 
   const linkedPlanId = page.url().match(/\/trade-plans\/([^/]+)$/)?.[1];
   if (!linkedPlanId) {
