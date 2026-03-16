@@ -1,4 +1,4 @@
-function normalizeSegment(value: string | number): string {
+export function normalizeSegment(value: string | number): string {
   return String(value)
     .trim()
     .toLowerCase()
@@ -77,6 +77,27 @@ export function getTradeRowTestId(
   uniqueKey: string | number,
 ): string {
   return `trade-row-${normalizeSegment(ticker)}-${normalizeSegment(uniqueKey)}`;
+}
+
+export function getInboxTradeRowTestId(
+  ticker: string,
+  uniqueKey: string | number,
+): string {
+  return `inbox-trade-row-${normalizeSegment(ticker)}-${normalizeSegment(uniqueKey)}`;
+}
+
+export function getInboxTradeAcceptButtonTestId(
+  ticker: string,
+  uniqueKey: string | number,
+): string {
+  return `inbox-trade-accept-${normalizeSegment(ticker)}-${normalizeSegment(uniqueKey)}`;
+}
+
+export function getInboxTradePortfolioSelectTestId(
+  ticker: string,
+  uniqueKey: string | number,
+): string {
+  return `inbox-trade-portfolio-${normalizeSegment(ticker)}-${normalizeSegment(uniqueKey)}`;
 }
 
 export function getCommandPaletteItemTestId(

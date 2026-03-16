@@ -34,12 +34,14 @@ interface NotesSectionProps {
     content: string,
     chartUrls?: string[],
   ) => Promise<void>;
+  testIdPrefix?: string;
 }
 
 export default function NotesSection({
   notes,
   onAddNote,
   onUpdateNote,
+  testIdPrefix = "notes",
 }: NotesSectionProps) {
   const [addNoteError, setAddNoteError] = useState<string | null>(null);
   const [editNoteError, setEditNoteError] = useState<string | null>(null);
@@ -123,22 +125,37 @@ export default function NotesSection({
   };
 
   return (
-    <section className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
+    <section
+      className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4"
+      data-testid={`${testIdPrefix}-notes-section`}
+    >
       <h2 className="mb-3 text-lg font-semibold text-slate-12">Notes</h2>
 
       {notes.length === 0 ? (
-        <p className="mb-3 text-sm text-slate-11">No notes yet.</p>
+        <p
+          className="mb-3 text-sm text-slate-11"
+          data-testid={`${testIdPrefix}-notes-empty-state`}
+        >
+          No notes yet.
+        </p>
       ) : (
-        <div className="mb-4 space-y-2">
+        <div
+          className="mb-4 space-y-2"
+          data-testid={`${testIdPrefix}-notes-list`}
+        >
           {notes.map((note) => {
             const isEditing = editingNoteId === note._id;
             return (
               <div
                 key={note._id}
                 className="rounded border border-slate-600 p-3"
+                data-testid={`${testIdPrefix}-note-row-${note._id}`}
               >
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="text-xs text-slate-11">
+                  <span
+                    className="text-xs text-slate-11"
+                    data-testid={`${testIdPrefix}-note-date-${note._id}`}
+                  >
                     {formatDate(note._creationTime)}
                   </span>
                   {!isEditing && (
@@ -147,6 +164,7 @@ export default function NotesSection({
                       aria-label="Edit note"
                       title="Edit"
                       className="rounded p-1.5 text-slate-11 hover:bg-slate-700 hover:text-slate-12"
+                      data-testid={`${testIdPrefix}-edit-note-button-${note._id}`}
                       onClick={() => startEditingNote(note)}
                     >
                       <Pencil className="h-4 w-4" />
@@ -161,6 +179,7 @@ export default function NotesSection({
                     </label>
                     <textarea
                       id={`edit-note-${note._id}`}
+                      data-testid={`${testIdPrefix}-edit-note-textarea-${note._id}`}
                       className="min-h-24 w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
                       value={editingNoteContent}
                       onChange={(e) => setEditingNoteContent(e.target.value)}
@@ -175,6 +194,7 @@ export default function NotesSection({
                         aria-label="Save note"
                         title="Save"
                         className="rounded p-1.5 text-green-400 hover:bg-green-900/50 disabled:opacity-50"
+                        data-testid={`${testIdPrefix}-save-note-button-${note._id}`}
                         onClick={() => void handleSaveNote()}
                         disabled={isSavingNote}
                       >
@@ -189,6 +209,7 @@ export default function NotesSection({
                         aria-label="Cancel editing"
                         title="Cancel"
                         className="rounded p-1.5 text-slate-11 hover:bg-slate-700 hover:text-slate-12"
+                        data-testid={`${testIdPrefix}-cancel-note-button-${note._id}`}
                         onClick={() => {
                           setEditingNoteId(null);
                           setEditingNoteContent("");
@@ -207,7 +228,10 @@ export default function NotesSection({
                   </>
                 ) : (
                   <>
-                    <p className="whitespace-pre-wrap text-sm text-slate-11">
+                    <p
+                      className="whitespace-pre-wrap text-sm text-slate-11"
+                      data-testid={`${testIdPrefix}-note-content-${note._id}`}
+                    >
                       {note.content}
                     </p>
                     {note.chartUrls && note.chartUrls.length > 0 && (
@@ -234,6 +258,7 @@ export default function NotesSection({
           void noteForm.handleSubmit();
         }}
         className="space-y-2"
+        data-testid={`${testIdPrefix}-add-note-form`}
       >
         <noteForm.AppField name="content">
           {(field) => (
@@ -241,12 +266,14 @@ export default function NotesSection({
               label="Add note"
               placeholder="Add a note"
               rows={4}
+              dataTestId={`${testIdPrefix}-add-note-textarea`}
             />
           )}
         </noteForm.AppField>
         <ChartUrlInputs urls={newChartUrls} onChange={setNewChartUrls} />
         <noteForm.AppForm>
           <noteForm.SubmitButton
+            dataTestId={`${testIdPrefix}-add-note-button`}
             label={isAddingNote ? "Saving..." : "Add Note"}
           />
         </noteForm.AppForm>

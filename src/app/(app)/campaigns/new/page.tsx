@@ -77,7 +77,12 @@ export default function NewCampaignPage() {
 
   return (
     <div className="container mx-auto max-w-2xl px-4 py-8">
-      <h1 className="text-slate-12 mb-6 text-2xl font-bold">New Campaign</h1>
+      <h1
+        className="text-slate-12 mb-6 text-2xl font-bold"
+        data-testid="new-campaign-page-title"
+      >
+        New Campaign
+      </h1>
 
       {successMessage && (
         <Alert variant="success" className="mb-4">
@@ -140,7 +145,10 @@ export default function NewCampaignPage() {
                     </Button>
                   )}
                 </form.Subscribe>
-                <form.SubmitButton label="Create Campaign" />
+                <form.SubmitButton
+                  dataTestId="create-campaign-button"
+                  label="Create Campaign"
+                />
               </form.AppForm>
             </div>
           </div>

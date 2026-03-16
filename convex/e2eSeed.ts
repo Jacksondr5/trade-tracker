@@ -231,6 +231,62 @@ async function upsertTrade(
   return (await ctx.db.get(tradeId))!;
 }
 
+async function upsertInboxTrade(
+  ctx: MutationCtx,
+  args: {
+    assetType: "crypto" | "stock";
+    brokerageAccountId?: string;
+    date: number;
+    direction: "long" | "short";
+    externalId: string;
+    notes?: string;
+    ownerId: string;
+    price: number;
+    quantity: number;
+    side: "buy" | "sell";
+    source: "ibkr" | "kraken";
+    ticker: string;
+    tradePlanId?: Id<"tradePlans">;
+  },
+) {
+  const existingTrade = await ctx.db
+    .query("inboxTrades")
+    .withIndex("by_owner_source_externalId", (q) =>
+      q
+        .eq("ownerId", args.ownerId)
+        .eq("source", args.source)
+        .eq("externalId", args.externalId),
+    )
+    .unique();
+
+  const patch = {
+    assetType: args.assetType,
+    brokerageAccountId: args.brokerageAccountId,
+    date: args.date,
+    direction: args.direction,
+    externalId: args.externalId,
+    notes: args.notes,
+    ownerId: args.ownerId,
+    price: args.price,
+    quantity: args.quantity,
+    side: args.side,
+    source: args.source,
+    status: "pending_review" as const,
+    ticker: args.ticker,
+    tradePlanId: args.tradePlanId,
+    validationErrors: [],
+    validationWarnings: [],
+  };
+
+  if (existingTrade) {
+    await ctx.db.patch(existingTrade._id, patch);
+    return (await ctx.db.get(existingTrade._id))!;
+  }
+
+  const inboxTradeId = await ctx.db.insert("inboxTrades", patch);
+  return (await ctx.db.get(inboxTradeId))!;
+}
+
 export const setupPreviewData = internalMutation({
   args: {},
   returns: v.object({
@@ -385,6 +441,71 @@ export const resetPlaywrightData = internalMutation({
       tradePlansDeleted: tradePlans.length,
       tradesDeleted: trades.length,
       watchlistDeleted: watchlistItems.length,
+    };
+  },
+});
+
+export const seedTradePlanInboxScenarios = internalMutation({
+  args: {
+    linkedTradePlanId: v.id("tradePlans"),
+    scope: v.string(),
+    standaloneTradePlanId: v.id("tradePlans"),
+  },
+  returns: v.object({
+    linkedSuggestedExternalId: v.string(),
+    standaloneAssignedExternalId: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const ownerId = getPlaywrightOwnerId();
+    const linkedTradePlan = await ctx.db.get(args.linkedTradePlanId);
+    const standaloneTradePlan = await ctx.db.get(args.standaloneTradePlanId);
+
+    if (
+      linkedTradePlan === null ||
+      linkedTradePlan.ownerId !== ownerId ||
+      standaloneTradePlan === null ||
+      standaloneTradePlan.ownerId !== ownerId
+    ) {
+      throw new ConvexError("Trade plan not found for inbox seed setup.");
+    }
+
+    const linkedSuggestedExternalId = `${args.scope}-${E2E_SMOKE_FIXTURES.inboxTrades.linkedSuggested.fixtureKey}`;
+    const standaloneAssignedExternalId = `${args.scope}-${E2E_SMOKE_FIXTURES.inboxTrades.standaloneAssigned.fixtureKey}`;
+
+    await upsertInboxTrade(ctx, {
+      assetType: "stock",
+      brokerageAccountId: "playwright-linked-account",
+      date: E2E_SMOKE_FIXTURES.inboxTrades.linkedSuggested.date,
+      direction: "long",
+      externalId: linkedSuggestedExternalId,
+      notes: "[e2e-smoke] linked suggested inbox trade",
+      ownerId,
+      price: 44.25,
+      quantity: 8,
+      side: "buy",
+      source: "ibkr",
+      ticker: linkedTradePlan.instrumentSymbol,
+    });
+
+    await upsertInboxTrade(ctx, {
+      assetType: "crypto",
+      brokerageAccountId: "playwright-standalone-account",
+      date: E2E_SMOKE_FIXTURES.inboxTrades.standaloneAssigned.date,
+      direction: "short",
+      externalId: standaloneAssignedExternalId,
+      notes: "[e2e-smoke] standalone assigned inbox trade",
+      ownerId,
+      price: 97500,
+      quantity: 0.75,
+      side: "sell",
+      source: "kraken",
+      ticker: standaloneTradePlan.instrumentSymbol,
+      tradePlanId: standaloneTradePlan._id,
+    });
+
+    return {
+      linkedSuggestedExternalId,
+      standaloneAssignedExternalId,
     };
   },
 });
