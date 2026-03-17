@@ -30,7 +30,7 @@ export function EvidenceUrlInputs({
             />
             <button
               type="button"
-              aria-label="Remove chart URL"
+              aria-label={`Remove chart URL ${i + 1}`}
               title="Remove"
               className="rounded p-1.5 text-olive-11 hover:bg-olive-4 hover:text-red-9"
               onClick={() => removeUrl(i)}

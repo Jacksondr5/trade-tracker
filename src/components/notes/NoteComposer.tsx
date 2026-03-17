@@ -2,6 +2,11 @@
 
 import { useState } from "react";
 import { z } from "zod";
+import {
+  getNoteComposerFormTestId,
+  getNoteComposerSubmitButtonTestId,
+  getNoteComposerTextareaTestId,
+} from "../../../shared/e2e/testIds";
 import { Alert, useAppForm } from "~/components/ui";
 import { EvidenceUrlInputs } from "./EvidenceUrlInputs";
 
@@ -75,7 +80,7 @@ export function NoteComposer({ onAddNote, testIdPrefix }: NoteComposerProps) {
           void noteForm.handleSubmit();
         }}
         className="space-y-3"
-        data-testid={`${testIdPrefix}-add-note-form`}
+        data-testid={getNoteComposerFormTestId(testIdPrefix)}
       >
         <noteForm.AppField name="content">
           {(field) => (
@@ -83,7 +88,7 @@ export function NoteComposer({ onAddNote, testIdPrefix }: NoteComposerProps) {
               label="Add note"
               placeholder="Capture a thought, observation, or decision..."
               rows={3}
-              dataTestId={`${testIdPrefix}-add-note-textarea`}
+              dataTestId={getNoteComposerTextareaTestId(testIdPrefix)}
             />
           )}
         </noteForm.AppField>
@@ -91,7 +96,7 @@ export function NoteComposer({ onAddNote, testIdPrefix }: NoteComposerProps) {
         <div className="flex justify-end">
           <noteForm.AppForm>
             <noteForm.SubmitButton
-              dataTestId={`${testIdPrefix}-add-note-button`}
+              dataTestId={getNoteComposerSubmitButtonTestId(testIdPrefix)}
               label={isAddingNote ? "Saving..." : "Add note"}
             />
           </noteForm.AppForm>

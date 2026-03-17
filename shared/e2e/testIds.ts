@@ -42,7 +42,8 @@ export const NAVIGATION_SECTION_TEST_IDS = {
 export const APP_SHELL_TEST_IDS = {
   editCampaignName: "edit-campaign-name",
   tradePlanNameInput: "trade-plan-name-input",
-  toggleLocalGroupStandaloneTradePlans: "toggle-local-group-standalone-trade-plans",
+  toggleLocalGroupStandaloneTradePlans:
+    "toggle-local-group-standalone-trade-plans",
   openCommandPaletteDesktop: "open-command-palette-desktop",
   commandPaletteInput: "command-palette-input",
 } as const;
@@ -125,4 +126,16 @@ export function getLocalHierarchyWatchToggleTestId(
   key: string,
 ): string {
   return `local-hierarchy-watch-toggle-${scope}-${normalizeSegment(key)}`;
+}
+
+export function getNoteComposerFormTestId(prefix: string): string {
+  return `${prefix}-add-note-form`;
+}
+
+export function getNoteComposerTextareaTestId(prefix: string): string {
+  return `${prefix}-add-note-textarea`;
+}
+
+export function getNoteComposerSubmitButtonTestId(prefix: string): string {
+  return `${prefix}-add-note-button`;
 }

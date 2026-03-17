@@ -83,6 +83,7 @@ export function NoteCard({
         <time
           className="text-xs font-medium text-olive-10"
           data-testid={`${testIdPrefix}-note-date-${note._id}`}
+          dateTime={new Date(note._creationTime).toISOString()}
         >
           {formatDate(note._creationTime)}
         </time>
@@ -114,7 +115,7 @@ export function NoteCard({
             type="button"
             aria-label="Edit note"
             title="Edit"
-            className="ml-auto rounded p-1 text-olive-10 opacity-0 transition-opacity hover:bg-olive-4 hover:text-olive-12 focus-visible:opacity-100 group-hover:opacity-100"
+            className="ml-auto rounded p-1 text-olive-10 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-olive-4 hover:text-olive-12 focus-visible:opacity-100"
             data-testid={`${testIdPrefix}-edit-note-button-${note._id}`}
             onClick={startEditing}
           >
