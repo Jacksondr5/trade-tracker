@@ -23,6 +23,7 @@ import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { buildHierarchyBreadcrumbs } from "~/lib/campaign-trade-plan-navigation";
 import { capitalize, formatCurrency, formatDate } from "~/lib/format";
+import { getTradePlanLinkTestId } from "../../../../../shared/e2e/testIds";
 
 type CampaignStatus = "planning" | "active" | "closed";
 type TradePlanStatus = "idea" | "watching" | "active" | "closed";
@@ -504,7 +505,10 @@ export default function CampaignDetailPageClient({
                   </campaignNameForm.AppField>
                   <div className="flex items-center gap-2">
                     <campaignNameForm.AppForm>
-                      <campaignNameForm.SubmitButton label="Save name" />
+                      <campaignNameForm.SubmitButton
+                        dataTestId="save-campaign-name-button"
+                        label="Save name"
+                      />
                     </campaignNameForm.AppForm>
                     <campaignNameForm.Subscribe
                       selector={(state) => state.isSubmitting}
@@ -689,7 +693,10 @@ export default function CampaignDetailPageClient({
             </thesisForm.AppField>
             <div className="mt-2 flex items-center gap-3">
               <thesisForm.AppForm>
-                <thesisForm.SubmitButton label="Save thesis" />
+                <thesisForm.SubmitButton
+                  dataTestId="save-campaign-thesis-button"
+                  label="Save thesis"
+                />
               </thesisForm.AppForm>
               <thesisForm.Subscribe selector={(state) => state.isSubmitting}>
                 {(isSubmitting) => (
@@ -736,6 +743,7 @@ export default function CampaignDetailPageClient({
           Campaign Notes
         </h2>
         <NotesSection
+          testIdPrefix="campaign"
           notes={campaignNotes}
           onAddNote={async (content, chartUrls) => {
             await addNote({ campaignId, content, chartUrls });
@@ -789,13 +797,18 @@ export default function CampaignDetailPageClient({
             campaign&apos;s thesis.
           </p>
         ) : (
-          <div className="mb-4 space-y-3">
+              <div className="mb-4 space-y-3">
             {linkedTradePlans.map((plan) => (
-              <div key={plan.id} className="rounded border border-olive-6 p-3">
+              <div
+                key={plan.id}
+                className="rounded border border-olive-6 p-3"
+                data-testid={`linked-trade-plan-row-${plan.id}`}
+              >
                 <div className="flex items-center justify-between gap-2">
                   <Link
                     href={`/trade-plans/${plan.id}`}
                     className="min-w-0 flex-1 hover:underline"
+                    data-testid={getTradePlanLinkTestId(plan.name)}
                   >
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-olive-12">
@@ -902,7 +915,10 @@ export default function CampaignDetailPageClient({
               </div>
               <div className="flex items-center gap-2">
                 <tradePlanForm.AppForm>
-                  <tradePlanForm.SubmitButton label="Create trade plan" />
+                  <tradePlanForm.SubmitButton
+                    dataTestId="create-linked-trade-plan-button"
+                    label="Create trade plan"
+                  />
                 </tradePlanForm.AppForm>
                 <tradePlanForm.Subscribe
                   selector={(state) => state.isSubmitting}
@@ -971,7 +987,10 @@ export default function CampaignDetailPageClient({
               </retrospectiveForm.AppField>
               <div className="mt-2 flex items-center gap-3">
                 <retrospectiveForm.AppForm>
-                  <retrospectiveForm.SubmitButton label="Save review" />
+                  <retrospectiveForm.SubmitButton
+                    dataTestId="save-campaign-retrospective-button"
+                    label="Save review"
+                  />
                 </retrospectiveForm.AppForm>
 
                 {retrospectiveSaveState === "saving" && (

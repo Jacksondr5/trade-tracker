@@ -66,6 +66,18 @@ export const E2E_SMOKE_FIXTURES = {
       tradePlan: "standalone" as const,
     },
   ],
+  inboxTrades: {
+    linkedSuggested: {
+      date: Date.parse("2026-02-05T14:30:00.000Z"),
+      fixtureKey: "fcx-suggested-breakout",
+      ticker: "FCX",
+    },
+    standaloneAssigned: {
+      date: Date.parse("2026-02-07T15:00:00.000Z"),
+      fixtureKey: "btc-assigned-retest",
+      ticker: "BTC",
+    },
+  },
 } as const;
 
 export function getCreatedStandaloneTradePlanName(
