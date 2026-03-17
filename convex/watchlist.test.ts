@@ -7,10 +7,14 @@ import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
 
 interface ImportMetaWithGlob extends ImportMeta {
-  glob(pattern: string): Record<string, () => Promise<unknown>>;
+  glob(pattern: string | string[]): Record<string, () => Promise<unknown>>;
 }
 
-const modules = (import.meta as ImportMetaWithGlob).glob("./**/*.*s");
+const modules = (import.meta as ImportMetaWithGlob).glob([
+  "./**/*.{ts,js}",
+  "!./**/*.test.ts",
+  "!./**/*.spec.ts",
+]);
 
 describe("watchlist", () => {
   const ownerA = "owner-a";
