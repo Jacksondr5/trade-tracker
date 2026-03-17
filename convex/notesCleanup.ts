@@ -146,11 +146,15 @@ export const deleteTradeAttachedNotesBatch = internalMutation({
       await ctx.db.delete(note._id);
     }
 
+    const remainingCount = hasMore
+      ? (await summarizeTradeAttachedNotes(ctx, 1)).totalCount
+      : 0;
+
     return {
       deletedCount: notesToDelete.length,
       deletedNoteIds: notesToDelete.map((note) => note._id),
       hasMore,
-      remainingCount: hasMore ? 1 : 0,
+      remainingCount,
     };
   },
 });

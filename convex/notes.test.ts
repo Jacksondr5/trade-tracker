@@ -175,6 +175,36 @@ describe("notes cleanup migration helpers", () => {
     );
   });
 
+
+
+  it("reports the true remaining count after a partial batch", async () => {
+    const tradePlanId = await insertTradePlan({ name: "QQQ plan" });
+    const firstTradeId = await insertTrade({ ticker: "MSFT", tradePlanId });
+    const secondTradeId = await insertTrade({ ticker: "TSLA", tradePlanId });
+
+    await insertNote({
+      content: "first legacy trade note",
+      tradeId: firstTradeId,
+    });
+    await insertNote({
+      content: "second legacy trade note",
+      tradeId: secondTradeId,
+    });
+
+    const batch = await t.mutation(
+      internal.notesCleanup.deleteTradeAttachedNotesBatch,
+      {
+        batchSize: 1,
+      },
+    );
+
+    expect(batch).toMatchObject({
+      deletedCount: 1,
+      hasMore: true,
+      remainingCount: 1,
+    });
+  });
+
   it("rejects invalid batch and sample sizes", async () => {
     await expect(
       t.query(internal.notesCleanup.getTradeAttachedNotesSummary, {
