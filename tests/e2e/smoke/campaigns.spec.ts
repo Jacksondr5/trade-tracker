@@ -9,6 +9,13 @@ import {
   APP_PAGE_TITLES,
   getCampaignRow,
   getCampaignRowByName,
+  getCampaignStatusSelect,
+  getCreateCampaignButton,
+  getCreateLinkedTradePlanButton,
+  getInstrumentSymbolInput,
+  getNameInput,
+  getNewCampaignPageTitle,
+  getThesisTextarea,
 } from "../helpers/selectors";
 
 test("seeded campaign is visible and detail page loads", async ({ page }) => {
@@ -49,15 +56,15 @@ test("seeded campaign is visible and detail page loads", async ({ page }) => {
   await getCampaignRow(page).click();
 
   await expect(page).toHaveURL(/\/campaigns\/[^/]+$/);
-  await expect(page.getByTestId("campaign-status-select")).toHaveValue(
+  await expect(getCampaignStatusSelect(page)).toHaveValue(
     E2E_SMOKE_FIXTURES.campaign.status,
   );
   await page.getByTestId(APP_SHELL_TEST_IDS.editCampaignName).click();
-  await expect(page.getByTestId("name-input")).toHaveValue(
+  await expect(getNameInput(page)).toHaveValue(
     E2E_SMOKE_FIXTURES.campaign.name,
   );
   await page.getByTestId("edit-thesis").click();
-  await expect(page.getByTestId("thesis-textarea")).toHaveValue(
+  await expect(getThesisTextarea(page)).toHaveValue(
     E2E_SMOKE_FIXTURES.campaign.thesis,
   );
 });
@@ -75,29 +82,33 @@ test("campaign lifecycle supports detail mutation, linked trade plan creation, a
   const retrospective = `Retrospective ${timestamp}`;
 
   await page.goto("/campaigns/new");
-  await expect(page.getByTestId("new-campaign-page-title")).toBeVisible();
-  await page.getByTestId("name-input").fill(createdCampaignName);
-  await page.getByTestId("thesis-textarea").fill(`Initial thesis ${timestamp}`);
-  await page.getByTestId("create-campaign-button").click();
+  await expect(getNewCampaignPageTitle(page)).toBeVisible();
+  await getNameInput(page).fill(createdCampaignName);
+  await getThesisTextarea(page).fill(`Initial thesis ${timestamp}`);
+  await getCreateCampaignButton(page).click();
 
   await expect(page).toHaveURL(/\/campaigns\/[^/]+$/);
-  await expect(page.getByTestId("campaign-status-select")).toHaveValue("planning");
+  await expect(page.getByTestId("campaign-status-select")).toHaveValue(
+    "planning",
+  );
   await expect(page.getByTestId("retrospective-textarea")).toHaveCount(0);
 
   await page.getByTestId(APP_SHELL_TEST_IDS.editCampaignName).click();
-  await page.getByTestId("name-input").fill(updatedCampaignName);
+  await getNameInput(page).fill(updatedCampaignName);
   await page.getByTestId("save-campaign-name-button").click();
-  await expect(page.getByTestId(APP_SHELL_TEST_IDS.editCampaignName)).toBeVisible();
+  await expect(
+    page.getByTestId(APP_SHELL_TEST_IDS.editCampaignName),
+  ).toBeVisible();
   await page.getByTestId(APP_SHELL_TEST_IDS.editCampaignName).click();
-  await expect(page.getByTestId("name-input")).toHaveValue(updatedCampaignName);
+  await expect(getNameInput(page)).toHaveValue(updatedCampaignName);
   await page.getByTestId("cancel-edit-campaign-name").click();
 
   await page.getByTestId("edit-thesis").click();
-  await page.getByTestId("thesis-textarea").fill(updatedThesis);
+  await getThesisTextarea(page).fill(updatedThesis);
   await page.getByTestId("save-campaign-thesis-button").click();
   await expect(page.getByTestId("edit-thesis")).toBeVisible();
   await page.getByTestId("edit-thesis").click();
-  await expect(page.getByTestId("thesis-textarea")).toHaveValue(updatedThesis);
+  await expect(getThesisTextarea(page)).toHaveValue(updatedThesis);
   await page.getByTestId("cancel-edit-thesis").click();
 
   await page.getByTestId("campaign-add-note-textarea").fill(campaignNote);
@@ -105,29 +116,31 @@ test("campaign lifecycle supports detail mutation, linked trade plan creation, a
   const campaignNoteRows = page.getByTestId(/^campaign-note-row-/);
   await expect(campaignNoteRows).toHaveCount(1);
   const campaignNoteRow = campaignNoteRows.first();
-  await expect(campaignNoteRow.getByTestId(/^campaign-note-content-/)).toContainText(
-    campaignNote,
-  );
+  await expect(
+    campaignNoteRow.getByTestId(/^campaign-note-content-/),
+  ).toContainText(campaignNote);
   await campaignNoteRow.getByTestId(/^campaign-edit-note-button-/).click();
   await campaignNoteRow
     .getByTestId(/^campaign-edit-note-textarea-/)
     .fill(updatedCampaignNote);
   await campaignNoteRow.getByTestId(/^campaign-save-note-button-/).click();
-  await expect(campaignNoteRow.getByTestId(/^campaign-note-content-/)).toContainText(
-    updatedCampaignNote,
-  );
+  await expect(
+    campaignNoteRow.getByTestId(/^campaign-note-content-/),
+  ).toContainText(updatedCampaignNote);
 
   await page.getByTestId("add-trade-plan-button").click();
-  await page.getByTestId("name-input").fill(createdLinkedPlanName);
-  await page.getByTestId("instrumentSymbol-input").fill("NVDA");
-  await page.getByTestId("create-linked-trade-plan-button").click();
+  await getNameInput(page).fill(createdLinkedPlanName);
+  await getInstrumentSymbolInput(page).fill("NVDA");
+  await getCreateLinkedTradePlanButton(page).click();
 
   const linkedTradePlanLink = page.getByTestId(
     getTradePlanLinkTestId(createdLinkedPlanName),
   );
   await expect(linkedTradePlanLink).toBeVisible();
   const linkedTradePlanHref = await linkedTradePlanLink.getAttribute("href");
-  const linkedTradePlanId = linkedTradePlanHref?.match(/\/trade-plans\/([^/]+)$/)?.[1];
+  const linkedTradePlanId = linkedTradePlanHref?.match(
+    /\/trade-plans\/([^/]+)$/,
+  )?.[1];
 
   if (!linkedTradePlanId) {
     throw new Error("Expected linked trade plan id in campaign detail link.");
@@ -142,8 +155,8 @@ test("campaign lifecycle supports detail mutation, linked trade plan creation, a
     page.getByTestId(`linked-trade-plan-status-${linkedTradePlanId}`),
   ).toHaveValue("active");
 
-  await page.getByTestId("campaign-status-select").selectOption("closed");
-  await expect(page.getByTestId("campaign-status-select")).toHaveValue("closed");
+  await getCampaignStatusSelect(page).selectOption("closed");
+  await expect(getCampaignStatusSelect(page)).toHaveValue("closed");
   await expect(page.getByTestId("retrospective-textarea")).toBeVisible();
 
   await page
@@ -157,7 +170,7 @@ test("campaign lifecycle supports detail mutation, linked trade plan creation, a
   await page.getByTestId("save-campaign-retrospective-button").click();
 
   await page.reload();
-  await expect(page.getByTestId("campaign-status-select")).toHaveValue("closed");
+  await expect(getCampaignStatusSelect(page)).toHaveValue("closed");
   await expect(page.getByTestId("retrospective-textarea")).toHaveValue(
     retrospective,
   );
