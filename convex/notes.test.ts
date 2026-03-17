@@ -2,7 +2,7 @@
 
 import { convexTest } from "convex-test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { internal } from "./_generated/api";
+import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
 
@@ -16,8 +16,9 @@ const modules = (import.meta as ImportMetaWithGlob).glob([
   "!./**/*.spec.ts",
 ]);
 
-describe("notes cleanup migration helpers", () => {
-  const ownerId = "owner-a";
+describe("notes contract", () => {
+  const ownerA = "owner-a";
+  const ownerB = "owner-b";
 
   let t: ReturnType<typeof convexTest>;
 
@@ -25,13 +26,20 @@ describe("notes cleanup migration helpers", () => {
     t = convexTest(schema, modules);
   });
 
-  async function insertCampaign(name: string): Promise<Id<"campaigns">> {
+  function asUser(ownerId: string) {
+    return t.withIdentity({ tokenIdentifier: ownerId });
+  }
+
+  async function insertCampaign(args: {
+    name: string;
+    ownerId: string;
+  }): Promise<Id<"campaigns">> {
     return await t.run(async (ctx) => {
       return await ctx.db.insert("campaigns", {
-        name,
-        ownerId,
+        name: args.name,
+        ownerId: args.ownerId,
         status: "active",
-        thesis: `${name} thesis`,
+        thesis: `${args.name} thesis`,
       });
     });
   }
@@ -39,183 +47,206 @@ describe("notes cleanup migration helpers", () => {
   async function insertTradePlan(args: {
     campaignId?: Id<"campaigns">;
     name: string;
+    ownerId: string;
   }): Promise<Id<"tradePlans">> {
     return await t.run(async (ctx) => {
       return await ctx.db.insert("tradePlans", {
         campaignId: args.campaignId,
         instrumentSymbol: "NVDA",
         name: args.name,
-        ownerId,
+        ownerId: args.ownerId,
         status: "watching",
-      });
-    });
-  }
-
-  async function insertTrade(args: {
-    ticker: string;
-    tradePlanId?: Id<"tradePlans">;
-  }): Promise<Id<"trades">> {
-    return await t.run(async (ctx) => {
-      return await ctx.db.insert("trades", {
-        assetType: "stock",
-        date: Date.now(),
-        direction: "long",
-        ownerId,
-        price: 100,
-        quantity: 1,
-        side: "buy",
-        source: "manual",
-        ticker: args.ticker,
-        tradePlanId: args.tradePlanId,
       });
     });
   }
 
   async function insertNote(args: {
     campaignId?: Id<"campaigns">;
+    chartUrls?: string[];
     content: string;
-    tradeId?: Id<"trades">;
+    evidence?: Array<{
+      contentType?: string;
+      fileName?: string;
+      kind: "chart" | "image";
+      storageId?: Id<"_storage">;
+      url?: string;
+    }>;
+    ownerId: string;
     tradePlanId?: Id<"tradePlans">;
   }): Promise<Id<"notes">> {
     return await t.run(async (ctx) => {
       return await ctx.db.insert("notes", {
         campaignId: args.campaignId,
+        chartUrls: args.chartUrls,
         content: args.content,
-        ownerId,
-        tradeId: args.tradeId,
+        evidence: args.evidence,
+        ownerId: args.ownerId,
         tradePlanId: args.tradePlanId,
       });
     });
   }
 
-  it("summarizes only trade-attached notes", async () => {
-    const campaignId = await insertCampaign("Campaign");
-    const tradePlanId = await insertTradePlan({ campaignId, name: "Plan" });
-    const tradeId = await insertTrade({ ticker: "NVDA", tradePlanId });
-
-    await insertNote({ content: "general note" });
-    await insertNote({ campaignId, content: "campaign note" });
-    const tradeNoteId = await insertNote({
-      content: "legacy trade note",
-      tradeId,
+  it("rejects notes with multiple parents", async () => {
+    const campaignId = await insertCampaign({
+      name: "Campaign",
+      ownerId: ownerA,
+    });
+    const tradePlanId = await insertTradePlan({
+      campaignId,
+      name: "Trade plan",
+      ownerId: ownerA,
     });
 
-    const summary = await t.query(
-      internal.notesCleanup.getTradeAttachedNotesSummary,
-      {},
-    );
-
-    expect(summary.totalCount).toBe(1);
-    expect(summary.sample).toHaveLength(1);
-    expect(summary.sample[0]).toMatchObject({
-      noteId: tradeNoteId,
-      ownerId,
-      tradeId,
-    });
+    await expect(
+      asUser(ownerA).mutation(api.notes.addNote, {
+        campaignId,
+        content: "invalid note",
+        tradePlanId,
+      }),
+    ).rejects.toThrow("A note can only belong to one parent");
   });
 
-  it("deletes legacy trade-attached notes in batches without touching supported notes", async () => {
-    const campaignId = await insertCampaign("Campaign");
-    const tradePlanId = await insertTradePlan({ campaignId, name: "Plan" });
-    const firstTradeId = await insertTrade({ ticker: "NVDA", tradePlanId });
-    const secondTradeId = await insertTrade({ ticker: "AAPL", tradePlanId });
+  it("rejects evidence items without a url or storage id", async () => {
+    await expect(
+      asUser(ownerA).mutation(api.notes.addNote, {
+        content: "invalid evidence note",
+        evidence: [{ kind: "chart" }],
+      }),
+    ).rejects.toThrow(
+      "Each evidence item must include either a storageId or a url",
+    );
+  });
 
-    const firstTradeNoteId = await insertNote({
-      content: "first legacy trade note",
-      tradeId: firstTradeId,
+  it("returns a unified notes feed with context metadata and normalized evidence", async () => {
+    const campaignId = await insertCampaign({
+      name: "Macro Thesis",
+      ownerId: ownerA,
     });
-    const secondTradeNoteId = await insertNote({
-      content: "second legacy trade note",
-      tradeId: secondTradeId,
+    const tradePlanId = await insertTradePlan({
+      campaignId,
+      name: "NVDA Breakout",
+      ownerId: ownerA,
+    });
+    const otherUserCampaignId = await insertCampaign({
+      name: "Other User Campaign",
+      ownerId: ownerB,
+    });
+
+    await insertNote({
+      content: "general note",
+      ownerId: ownerA,
+    });
+    await insertNote({
+      campaignId,
+      chartUrls: ["https://example.com/legacy-chart.png"],
+      content: "campaign note",
+      ownerId: ownerA,
+    });
+    await insertNote({
+      content: "trade plan note",
+      evidence: [
+        {
+          fileName: "setup.png",
+          kind: "image",
+          url: "https://example.com/setup.png",
+        },
+      ],
+      ownerId: ownerA,
+      tradePlanId,
+    });
+    await insertNote({
+      campaignId: otherUserCampaignId,
+      content: "other user note",
+      ownerId: ownerB,
+    });
+
+    const notes = await asUser(ownerA).query(api.notes.getNotesFeed, {});
+
+    expect(notes).toHaveLength(3);
+    expect(notes.map((note) => note.contextKind)).toEqual([
+      "tradePlan",
+      "campaign",
+      "general",
+    ]);
+    expect(notes.map((note) => note.contextLabel)).toEqual([
+      "NVDA Breakout",
+      "Macro Thesis",
+      "General note",
+    ]);
+    expect(notes.map((note) => note.contextHref)).toEqual([
+      `/trade-plans/${tradePlanId}`,
+      `/campaigns/${campaignId}`,
+      null,
+    ]);
+    expect(notes[0]?.evidence).toEqual([
+      {
+        contentType: undefined,
+        fileName: "setup.png",
+        kind: "image",
+        storageId: undefined,
+        url: "https://example.com/setup.png",
+      },
+    ]);
+    expect(notes[0]?.chartUrls).toEqual(["https://example.com/setup.png"]);
+    expect(notes[1]?.evidence).toEqual([
+      {
+        contentType: undefined,
+        fileName: undefined,
+        kind: "chart",
+        storageId: undefined,
+        url: "https://example.com/legacy-chart.png",
+      },
+    ]);
+    expect(notes[1]?.chartUrls).toEqual([
+      "https://example.com/legacy-chart.png",
+    ]);
+  });
+
+  it("filters campaign, trade-plan, and general queries to the supported ownership model", async () => {
+    const campaignId = await insertCampaign({
+      name: "Campaign",
+      ownerId: ownerA,
+    });
+    const tradePlanId = await insertTradePlan({
+      campaignId,
+      name: "Trade plan",
+      ownerId: ownerA,
+    });
+
+    const generalNoteId = await insertNote({
+      content: "general note",
+      ownerId: ownerA,
     });
     const campaignNoteId = await insertNote({
       campaignId,
       content: "campaign note",
+      ownerId: ownerA,
     });
     const tradePlanNoteId = await insertNote({
       content: "trade plan note",
+      ownerId: ownerA,
       tradePlanId,
     });
-    const generalNoteId = await insertNote({ content: "general note" });
 
-    const firstBatch = await t.mutation(
-      internal.notesCleanup.deleteTradeAttachedNotesBatch,
+    const campaignNotes = await asUser(ownerA).query(
+      api.notes.getNotesByCampaign,
       {
-        batchSize: 1,
+        campaignId,
       },
     );
-
-    expect(firstBatch).toEqual({
-      deletedCount: 1,
-      deletedNoteIds: [firstTradeNoteId],
-      hasMore: true,
-      remainingCount: 1,
-    });
-
-    const secondBatch = await t.mutation(
-      internal.notesCleanup.deleteTradeAttachedNotesBatch,
+    const tradePlanNotes = await asUser(ownerA).query(
+      api.notes.getNotesByTradePlan,
       {
-        batchSize: 10,
+        tradePlanId,
       },
     );
-
-    expect(secondBatch).toEqual({
-      deletedCount: 1,
-      deletedNoteIds: [secondTradeNoteId],
-      hasMore: false,
-      remainingCount: 0,
-    });
-
-    const remainingNotes = await t.run(async (ctx) => {
-      return await ctx.db.query("notes").collect();
-    });
-
-    expect(remainingNotes.map((note) => note._id).sort()).toEqual(
-      [campaignNoteId, generalNoteId, tradePlanNoteId].sort(),
-    );
-  });
-
-
-
-  it("reports the true remaining count after a partial batch", async () => {
-    const tradePlanId = await insertTradePlan({ name: "QQQ plan" });
-    const firstTradeId = await insertTrade({ ticker: "MSFT", tradePlanId });
-    const secondTradeId = await insertTrade({ ticker: "TSLA", tradePlanId });
-
-    await insertNote({
-      content: "first legacy trade note",
-      tradeId: firstTradeId,
-    });
-    await insertNote({
-      content: "second legacy trade note",
-      tradeId: secondTradeId,
-    });
-
-    const batch = await t.mutation(
-      internal.notesCleanup.deleteTradeAttachedNotesBatch,
-      {
-        batchSize: 1,
-      },
+    const generalNotes = await asUser(ownerA).query(
+      api.notes.getGeneralNotes,
+      {},
     );
 
-    expect(batch).toMatchObject({
-      deletedCount: 1,
-      hasMore: true,
-      remainingCount: 1,
-    });
-  });
-
-  it("rejects invalid batch and sample sizes", async () => {
-    await expect(
-      t.query(internal.notesCleanup.getTradeAttachedNotesSummary, {
-        sampleSize: 0,
-      }),
-    ).rejects.toThrow("sampleSize must be a positive integer");
-
-    await expect(
-      t.mutation(internal.notesCleanup.deleteTradeAttachedNotesBatch, {
-        batchSize: 0,
-      }),
-    ).rejects.toThrow("batchSize must be a positive integer");
+    expect(campaignNotes.map((note) => note._id)).toEqual([campaignNoteId]);
+    expect(tradePlanNotes.map((note) => note._id)).toEqual([tradePlanNoteId]);
+    expect(generalNotes.map((note) => note._id)).toEqual([generalNoteId]);
   });
 });
