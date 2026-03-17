@@ -8,10 +8,14 @@ import schema from "./schema";
 import { KRAKEN_DEFAULT_ACCOUNT_ID } from "../shared/imports/constants";
 
 interface ImportMetaWithGlob extends ImportMeta {
-  glob(pattern: string): Record<string, () => Promise<unknown>>;
+  glob(pattern: string | string[]): Record<string, () => Promise<unknown>>;
 }
 
-const modules = (import.meta as ImportMetaWithGlob).glob("./**/*.*s");
+const modules = (import.meta as ImportMetaWithGlob).glob([
+  "./**/*.{ts,js}",
+  "!./**/*.test.ts",
+  "!./**/*.spec.ts",
+]);
 
 describe("trades filters", () => {
   const ownerId = "owner-a";

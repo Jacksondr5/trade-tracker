@@ -39,14 +39,55 @@ function normalizePositiveInt(args: {
   return value;
 }
 
-async function listTradeAttachedNotes(
-  ctx: QueryCtx | MutationCtx,
+async function summarizeTradeAttachedNotes(
+  ctx: QueryCtx,
+  sampleSize: number,
 ) {
-  const notes = await ctx.db.query("notes").collect();
+  const sample = [];
+  let totalCount = 0;
 
-  return notes
-    .filter((note) => note.tradeId !== undefined)
-    .sort((a, b) => a._creationTime - b._creationTime);
+  for await (const note of ctx.db.query("notes")) {
+    if (note.tradeId === undefined) {
+      continue;
+    }
+
+    totalCount += 1;
+
+    if (sample.length < sampleSize) {
+      sample.push(note);
+    }
+  }
+
+  return {
+    sample,
+    totalCount,
+  };
+}
+
+async function listTradeAttachedNotesBatch(
+  ctx: MutationCtx,
+  batchSize: number,
+) {
+  const notes = [];
+  let hasMore = false;
+
+  for await (const note of ctx.db.query("notes")) {
+    if (note.tradeId === undefined) {
+      continue;
+    }
+
+    if (notes.length >= batchSize) {
+      hasMore = true;
+      break;
+    }
+
+    notes.push(note);
+  }
+
+  return {
+    hasMore,
+    notes,
+  };
 }
 
 export const getTradeAttachedNotesSummary = internalQuery({
@@ -64,16 +105,17 @@ export const getTradeAttachedNotesSummary = internalQuery({
       name: "sampleSize",
       value: args.sampleSize,
     });
-    const tradeAttachedNotes = await listTradeAttachedNotes(ctx);
+    const { sample: tradeAttachedNotes, totalCount } =
+      await summarizeTradeAttachedNotes(ctx, sampleSize);
 
     return {
-      sample: tradeAttachedNotes.slice(0, sampleSize).map((note) => ({
+      sample: tradeAttachedNotes.map((note) => ({
         createdAt: note._creationTime,
         noteId: note._id,
         ownerId: note.ownerId,
         tradeId: note.tradeId!,
       })),
-      totalCount: tradeAttachedNotes.length,
+      totalCount,
     };
   },
 });
@@ -95,20 +137,20 @@ export const deleteTradeAttachedNotesBatch = internalMutation({
       name: "batchSize",
       value: args.batchSize,
     });
-    const tradeAttachedNotes = await listTradeAttachedNotes(ctx);
-    const notesToDelete = tradeAttachedNotes.slice(0, batchSize);
+    const { hasMore, notes: notesToDelete } = await listTradeAttachedNotesBatch(
+      ctx,
+      batchSize,
+    );
 
     for (const note of notesToDelete) {
       await ctx.db.delete(note._id);
     }
 
-    const remainingCount = tradeAttachedNotes.length - notesToDelete.length;
-
     return {
       deletedCount: notesToDelete.length,
       deletedNoteIds: notesToDelete.map((note) => note._id),
-      hasMore: remainingCount > 0,
-      remainingCount,
+      hasMore,
+      remainingCount: hasMore ? 1 : 0,
     };
   },
 });
