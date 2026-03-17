@@ -1,7 +1,7 @@
 "use client";
 
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
-import NotesSection from "~/components/NotesSection";
+import { NotesSection } from "~/components/notes";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { APP_PAGE_TITLES } from "../../../../shared/e2e/testIds";
@@ -16,9 +16,9 @@ export default function NotesPageClient({
   const updateNote = useMutation(api.notes.updateNote);
 
   return (
-    <div className="mx-auto max-w-4xl p-6">
+    <div className="mx-auto max-w-3xl px-6 py-8">
       <h1
-        className="mb-6 text-2xl font-bold text-slate-12"
+        className="mb-6 text-3xl font-bold text-olive-12"
         data-testid={APP_PAGE_TITLES.notes}
       >
         Notes

@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { MobileHierarchyBreadcrumbs } from "~/components/app-shell/campaign-trade-plan-hierarchy";
 import { useNavigationData } from "~/components/app-shell";
 import { Alert, Badge } from "~/components/ui";
-import NotesSection from "~/components/NotesSection";
+import { NotesSection } from "~/components/notes";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import {
@@ -417,20 +417,25 @@ export default function TradePlanDetailPageClient({
         )}
       </div>
 
-      <NotesSection
-        testIdPrefix="trade-plan"
-        notes={notes}
-        onAddNote={async (content, chartUrls) => {
-          await addNote({ tradePlanId, content, chartUrls });
-        }}
-        onUpdateNote={async (noteId, content, chartUrls) => {
-          await updateNoteM({
-            noteId: noteId as Id<"notes">,
-            content,
-            chartUrls,
-          });
-        }}
-      />
+      <section className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
+        <h2 className="mb-3 text-lg font-semibold text-slate-12">
+          Trade Plan Notes
+        </h2>
+        <NotesSection
+          testIdPrefix="trade-plan"
+          notes={notes}
+          onAddNote={async (content, chartUrls) => {
+            await addNote({ tradePlanId, content, chartUrls });
+          }}
+          onUpdateNote={async (noteId, content, chartUrls) => {
+            await updateNoteM({
+              noteId: noteId as Id<"notes">,
+              content,
+              chartUrls,
+            });
+          }}
+        />
+      </section>
 
       <section className="rounded-lg border border-slate-700 bg-slate-800 p-4">
         <div className="mb-3 flex items-center justify-between">
