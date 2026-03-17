@@ -65,12 +65,20 @@ function normalizeClerkFrontendApiUrl(value: string): string {
   return value.replace(/^https?:\/\//, "").replace(/\/$/, "");
 }
 
-export function getBaseUrl(): string {
+export function getConfiguredBaseUrl(): string | null {
   const configuredBaseUrl =
     process.env.PLAYWRIGHT_BASE_URL?.trim() ||
     dotenvLocal.PLAYWRIGHT_BASE_URL?.trim() ||
     process.env.APP_URL?.trim() ||
     dotenvLocal.APP_URL?.trim();
+
+  return configuredBaseUrl && configuredBaseUrl.length > 0
+    ? configuredBaseUrl
+    : null;
+}
+
+export function getBaseUrl(): string {
+  const configuredBaseUrl = getConfiguredBaseUrl();
 
   if (!configuredBaseUrl || configuredBaseUrl.length === 0) {
     throw new Error(

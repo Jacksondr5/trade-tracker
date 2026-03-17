@@ -46,8 +46,42 @@ export function getTradePlanNameInput(page: Page): Locator {
   return page.getByTestId(APP_SHELL_TEST_IDS.tradePlanNameInput);
 }
 
+export function getNameInput(page: Page): Locator {
+  return page.getByTestId("name-input");
+}
+
+export function getThesisTextarea(page: Page): Locator {
+  return page.getByTestId("thesis-textarea");
+}
+
+export function getInstrumentSymbolInput(page: Page): Locator {
+  return page.getByTestId("instrumentSymbol-input");
+}
+
+export function getCreateTradePlanButton(page: Page): Locator {
+  return page.getByTestId("create-trade-plan-button");
+}
+
+export function getCreateCampaignButton(page: Page): Locator {
+  return page.getByTestId("create-campaign-button");
+}
+
+export function getCreateLinkedTradePlanButton(page: Page): Locator {
+  return page.getByTestId("create-linked-trade-plan-button");
+}
+
+export function getCampaignStatusSelect(page: Page): Locator {
+  return page.getByTestId("campaign-status-select");
+}
+
+export function getNewCampaignPageTitle(page: Page): Locator {
+  return page.getByTestId("new-campaign-page-title");
+}
+
 export function getToggleLocalGroupStandaloneTradePlans(page: Page): Locator {
-  return page.getByTestId(APP_SHELL_TEST_IDS.toggleLocalGroupStandaloneTradePlans);
+  return page.getByTestId(
+    APP_SHELL_TEST_IDS.toggleLocalGroupStandaloneTradePlans,
+  );
 }
 
 export function getOpenCommandPaletteDesktop(page: Page): Locator {

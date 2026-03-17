@@ -17,6 +17,12 @@ import {
   STANDALONE_TRADE_PLAN_LABEL,
 } from "~/lib/campaign-trade-plan-navigation";
 import { formatCurrency } from "~/lib/format";
+import {
+  getInboxTradeAcceptButtonTestId,
+  getInboxTradePortfolioSelectTestId,
+  getInboxTradeRowTestId,
+  getTradeRowTestId,
+} from "../../../../../shared/e2e/testIds";
 
 type TradePlanStatus = "idea" | "watching" | "active" | "closed";
 type SaveState = "idle" | "saving" | "saved";
@@ -248,17 +254,21 @@ export default function TradePlanDetailPageClient({
 
       <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
         <div className="mb-4 space-y-1">
-          <p className="text-xs font-medium tracking-[0.18em] text-slate-11 uppercase">
+          <p
+            className="text-xs font-medium tracking-[0.18em] text-slate-11 uppercase"
+            data-testid="trade-plan-relationship-label"
+          >
             {relationshipLabel}
           </p>
           {tradePlan.campaignId ? (
-            <p className="text-sm text-slate-11">
+            <p className="text-sm text-slate-11" data-testid="trade-plan-campaign-context">
               Campaign:{" "}
               <Link
                 href={
                   linkedCampaign?.href ?? `/campaigns/${tradePlan.campaignId}`
                 }
                 className="text-blue-400 hover:underline"
+                data-testid="trade-plan-campaign-link"
               >
                 {linkedCampaign?.name ?? "View Campaign"}
               </Link>
@@ -291,6 +301,7 @@ export default function TradePlanDetailPageClient({
                 />
                 <button
                   type="button"
+                  data-testid="save-trade-plan-name-button"
                   className="rounded bg-slate-700 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-600"
                   onClick={() => void handleSaveName()}
                   disabled={planNameSaveState === "saving"}
@@ -340,6 +351,7 @@ export default function TradePlanDetailPageClient({
                 />
                 <button
                   type="button"
+                  data-testid="save-trade-plan-symbol-button"
                   className="rounded bg-slate-700 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-600"
                   onClick={() => void handleSaveSymbol()}
                   disabled={instrumentSymbolSaveState === "saving"}
@@ -376,6 +388,7 @@ export default function TradePlanDetailPageClient({
             </label>
             <select
               id="plan-status"
+              data-testid="trade-plan-status-select"
               value={tradePlan.status}
               disabled={isChangingStatus}
               onChange={(e) =>
@@ -405,6 +418,7 @@ export default function TradePlanDetailPageClient({
       </div>
 
       <NotesSection
+        testIdPrefix="trade-plan"
         notes={notes}
         onAddNote={async (content, chartUrls) => {
           await addNote({ tradePlanId, content, chartUrls });
@@ -469,6 +483,10 @@ export default function TradePlanDetailPageClient({
                     <tr
                       key={inboxTrade._id}
                       className="border-b border-slate-700 bg-blue-900/20"
+                      data-testid={getInboxTradeRowTestId(
+                        inboxTrade.ticker ?? "trade",
+                        inboxTrade.externalId ?? inboxTrade._id,
+                      )}
                     >
                       <td className="px-2 py-2 text-slate-11">
                         {inboxTrade.date
@@ -518,6 +536,10 @@ export default function TradePlanDetailPageClient({
                       <td className="px-2 py-2">
                         <div className="flex items-center gap-1">
                           <select
+                            data-testid={getInboxTradePortfolioSelectTestId(
+                              inboxTrade.ticker ?? "trade",
+                              inboxTrade.externalId ?? inboxTrade._id,
+                            )}
                             aria-label={`Portfolio for ${inboxTrade.ticker || "trade"}`}
                             value={portfolioId}
                             onChange={(e) =>
@@ -537,6 +559,10 @@ export default function TradePlanDetailPageClient({
                           </select>
                           <button
                             type="button"
+                            data-testid={getInboxTradeAcceptButtonTestId(
+                              inboxTrade.ticker ?? "trade",
+                              inboxTrade.externalId ?? inboxTrade._id,
+                            )}
                             aria-label={`Accept ${inboxTrade.ticker ?? "trade"} from inbox`}
                             onClick={() =>
                               void handleAcceptInboxTrade(
@@ -562,7 +588,11 @@ export default function TradePlanDetailPageClient({
                   );
                 })}
                 {trades.map((trade) => (
-                  <tr key={trade._id} className="border-b border-slate-700/60">
+                  <tr
+                    key={trade._id}
+                    className="border-b border-slate-700/60"
+                    data-testid={getTradeRowTestId(trade.ticker, trade.date)}
+                  >
                     <td className="px-2 py-2 text-slate-11">
                       {new Date(trade.date).toLocaleDateString("en-US")}
                     </td>

@@ -10,9 +10,16 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useRef, useState } from "react";
 import { z } from "zod";
-import { Alert, Dialog, DialogContent, DialogTitle, useAppForm } from "~/components/ui";
+import {
+  Alert,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  useAppForm,
+} from "~/components/ui";
 import { formatDate } from "~/lib/format";
 
 const noteSchema = z.object({
@@ -24,6 +31,9 @@ interface Note {
   _creationTime: number;
   chartUrls?: string[];
   content: string;
+  contextHref?: string | null;
+  contextKind?: "campaign" | "general" | "tradePlan";
+  contextLabel?: string;
 }
 
 interface NotesSectionProps {
@@ -34,12 +44,16 @@ interface NotesSectionProps {
     content: string,
     chartUrls?: string[],
   ) => Promise<void>;
+  showContext?: boolean;
+  testIdPrefix?: string;
 }
 
 export default function NotesSection({
   notes,
   onAddNote,
   onUpdateNote,
+  showContext = false,
+  testIdPrefix = "notes",
 }: NotesSectionProps) {
   const [addNoteError, setAddNoteError] = useState<string | null>(null);
   const [editNoteError, setEditNoteError] = useState<string | null>(null);
@@ -123,22 +137,37 @@ export default function NotesSection({
   };
 
   return (
-    <section className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
+    <section
+      className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4"
+      data-testid={`${testIdPrefix}-notes-section`}
+    >
       <h2 className="mb-3 text-lg font-semibold text-slate-12">Notes</h2>
 
       {notes.length === 0 ? (
-        <p className="mb-3 text-sm text-slate-11">No notes yet.</p>
+        <p
+          className="mb-3 text-sm text-slate-11"
+          data-testid={`${testIdPrefix}-notes-empty-state`}
+        >
+          No notes yet.
+        </p>
       ) : (
-        <div className="mb-4 space-y-2">
+        <div
+          className="mb-4 space-y-2"
+          data-testid={`${testIdPrefix}-notes-list`}
+        >
           {notes.map((note) => {
             const isEditing = editingNoteId === note._id;
             return (
               <div
                 key={note._id}
                 className="rounded border border-slate-600 p-3"
+                data-testid={`${testIdPrefix}-note-row-${note._id}`}
               >
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="text-xs text-slate-11">
+                  <span
+                    className="text-xs text-slate-11"
+                    data-testid={`${testIdPrefix}-note-date-${note._id}`}
+                  >
                     {formatDate(note._creationTime)}
                   </span>
                   {!isEditing && (
@@ -147,6 +176,7 @@ export default function NotesSection({
                       aria-label="Edit note"
                       title="Edit"
                       className="rounded p-1.5 text-slate-11 hover:bg-slate-700 hover:text-slate-12"
+                      data-testid={`${testIdPrefix}-edit-note-button-${note._id}`}
                       onClick={() => startEditingNote(note)}
                     >
                       <Pencil className="h-4 w-4" />
@@ -156,11 +186,15 @@ export default function NotesSection({
 
                 {isEditing ? (
                   <>
-                    <label htmlFor={`edit-note-${note._id}`} className="sr-only">
+                    <label
+                      htmlFor={`edit-note-${note._id}`}
+                      className="sr-only"
+                    >
                       Edit note content
                     </label>
                     <textarea
                       id={`edit-note-${note._id}`}
+                      data-testid={`${testIdPrefix}-edit-note-textarea-${note._id}`}
                       className="min-h-24 w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12"
                       value={editingNoteContent}
                       onChange={(e) => setEditingNoteContent(e.target.value)}
@@ -175,6 +209,7 @@ export default function NotesSection({
                         aria-label="Save note"
                         title="Save"
                         className="rounded p-1.5 text-green-400 hover:bg-green-900/50 disabled:opacity-50"
+                        data-testid={`${testIdPrefix}-save-note-button-${note._id}`}
                         onClick={() => void handleSaveNote()}
                         disabled={isSavingNote}
                       >
@@ -189,6 +224,7 @@ export default function NotesSection({
                         aria-label="Cancel editing"
                         title="Cancel"
                         className="rounded p-1.5 text-slate-11 hover:bg-slate-700 hover:text-slate-12"
+                        data-testid={`${testIdPrefix}-cancel-note-button-${note._id}`}
                         onClick={() => {
                           setEditingNoteId(null);
                           setEditingNoteContent("");
@@ -200,14 +236,38 @@ export default function NotesSection({
                       </button>
                     </div>
                     {editNoteError && (
-                      <Alert variant="error" className="mt-2" onDismiss={() => setEditNoteError(null)}>
+                      <Alert
+                        variant="error"
+                        className="mt-2"
+                        onDismiss={() => setEditNoteError(null)}
+                      >
                         {editNoteError}
                       </Alert>
                     )}
                   </>
                 ) : (
                   <>
-                    <p className="whitespace-pre-wrap text-sm text-slate-11">
+                    {showContext &&
+                      (note.contextHref ? (
+                        <Link
+                          href={note.contextHref}
+                          className="mb-2 inline-flex text-xs font-medium text-slate-10 hover:text-slate-12 hover:underline"
+                          data-testid={`${testIdPrefix}-note-context-link-${note._id}`}
+                        >
+                          {note.contextLabel ?? note.contextKind ?? "Note"}
+                        </Link>
+                      ) : (
+                        <p
+                          className="mb-2 text-xs font-medium text-slate-10"
+                          data-testid={`${testIdPrefix}-note-context-text-${note._id}`}
+                        >
+                          {note.contextLabel ?? note.contextKind ?? "Note"}
+                        </p>
+                      ))}
+                    <p
+                      className="text-sm whitespace-pre-wrap text-slate-11"
+                      data-testid={`${testIdPrefix}-note-content-${note._id}`}
+                    >
                       {note.content}
                     </p>
                     {note.chartUrls && note.chartUrls.length > 0 && (
@@ -222,7 +282,11 @@ export default function NotesSection({
       )}
 
       {addNoteError && (
-        <Alert variant="error" className="mb-2" onDismiss={() => setAddNoteError(null)}>
+        <Alert
+          variant="error"
+          className="mb-2"
+          onDismiss={() => setAddNoteError(null)}
+        >
           {addNoteError}
         </Alert>
       )}
@@ -234,6 +298,7 @@ export default function NotesSection({
           void noteForm.handleSubmit();
         }}
         className="space-y-2"
+        data-testid={`${testIdPrefix}-add-note-form`}
       >
         <noteForm.AppField name="content">
           {(field) => (
@@ -241,12 +306,14 @@ export default function NotesSection({
               label="Add note"
               placeholder="Add a note"
               rows={4}
+              dataTestId={`${testIdPrefix}-add-note-textarea`}
             />
           )}
         </noteForm.AppField>
         <ChartUrlInputs urls={newChartUrls} onChange={setNewChartUrls} />
         <noteForm.AppForm>
           <noteForm.SubmitButton
+            dataTestId={`${testIdPrefix}-add-note-button`}
             label={isAddingNote ? "Saving..." : "Add Note"}
           />
         </noteForm.AppForm>
@@ -276,7 +343,7 @@ function ChartCarousel({ urls }: { urls: string[] }) {
             <button
               type="button"
               aria-label="Scroll charts left"
-              className="absolute left-0 top-1/2 z-10 -translate-y-1/2 rounded-full bg-slate-900/80 p-1 text-slate-11 opacity-0 transition-opacity hover:text-slate-12 group-hover/carousel:opacity-100 focus:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-11 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+              className="absolute top-1/2 left-0 z-10 -translate-y-1/2 rounded-full bg-slate-900/80 p-1 text-slate-11 opacity-0 transition-opacity group-hover/carousel:opacity-100 hover:text-slate-12 focus:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-slate-11 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 focus-visible:outline-none"
               onClick={() => scroll("left")}
             >
               <ChevronLeft className="h-4 w-4" />
@@ -284,7 +351,7 @@ function ChartCarousel({ urls }: { urls: string[] }) {
             <button
               type="button"
               aria-label="Scroll charts right"
-              className="absolute right-0 top-1/2 z-10 -translate-y-1/2 rounded-full bg-slate-900/80 p-1 text-slate-11 opacity-0 transition-opacity hover:text-slate-12 group-hover/carousel:opacity-100 focus:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-11 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+              className="absolute top-1/2 right-0 z-10 -translate-y-1/2 rounded-full bg-slate-900/80 p-1 text-slate-11 opacity-0 transition-opacity group-hover/carousel:opacity-100 hover:text-slate-12 focus:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-slate-11 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 focus-visible:outline-none"
               onClick={() => scroll("right")}
             >
               <ChevronRight className="h-4 w-4" />
@@ -293,13 +360,13 @@ function ChartCarousel({ urls }: { urls: string[] }) {
         )}
         <div
           ref={scrollRef}
-          className="flex gap-2 overflow-x-auto scrollbar-none"
+          className="scrollbar-none flex gap-2 overflow-x-auto"
         >
           {urls.map((url, i) => (
             <button
               key={i}
               type="button"
-              className="flex-none cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-11 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+              className="flex-none cursor-pointer rounded focus-visible:ring-2 focus-visible:ring-slate-11 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 focus-visible:outline-none"
               onClick={() => setLightboxIndex(i)}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -347,7 +414,12 @@ function ChartLightbox({
   );
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
       <DialogContent
         className="flex max-h-[95dvh] max-w-[95dvw] items-center justify-center border-none bg-transparent p-0 shadow-none [&>button:last-child]:top-2 [&>button:last-child]:right-2 [&>button:last-child]:rounded-full [&>button:last-child]:bg-slate-900/80 [&>button:last-child]:p-2 [&>button:last-child]:opacity-100"
         onKeyDown={handleKeyDown}
@@ -359,7 +431,7 @@ function ChartLightbox({
           <button
             type="button"
             aria-label="Previous chart"
-            className="absolute left-2 top-1/2 z-20 -translate-y-1/2 rounded-full bg-slate-900/80 p-2 text-slate-11 hover:text-slate-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-11 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+            className="absolute top-1/2 left-2 z-20 -translate-y-1/2 rounded-full bg-slate-900/80 p-2 text-slate-11 hover:text-slate-12 focus-visible:ring-2 focus-visible:ring-slate-11 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 focus-visible:outline-none"
             onClick={() => setIndex(index - 1)}
           >
             <ChevronLeft className="h-5 w-5" />
@@ -370,7 +442,7 @@ function ChartLightbox({
           <button
             type="button"
             aria-label="Next chart"
-            className="absolute right-2 top-1/2 z-20 -translate-y-1/2 rounded-full bg-slate-900/80 p-2 text-slate-11 hover:text-slate-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-11 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+            className="absolute top-1/2 right-2 z-20 -translate-y-1/2 rounded-full bg-slate-900/80 p-2 text-slate-11 hover:text-slate-12 focus-visible:ring-2 focus-visible:ring-slate-11 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 focus-visible:outline-none"
             onClick={() => setIndex(index + 1)}
           >
             <ChevronRight className="h-5 w-5" />
@@ -391,8 +463,10 @@ function ChartLightbox({
                 key={i}
                 type="button"
                 aria-label={`Go to chart ${i + 1}`}
-                className={`h-2 w-2 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-11 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
-                  i === index ? "bg-slate-12" : "bg-slate-11/40 hover:bg-slate-11/70"
+                className={`h-2 w-2 rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-slate-11 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 focus-visible:outline-none ${
+                  i === index
+                    ? "bg-slate-12"
+                    : "bg-slate-11/40 hover:bg-slate-11/70"
                 }`}
                 onClick={() => setIndex(i)}
               />

@@ -10,11 +10,13 @@ import { cn } from "~/lib/utils";
 export const FieldTextarea = ({
   label,
   className,
+  dataTestId,
   ...props
 }: Omit<
   TextareaProps,
   "value" | "onChange" | "onBlur" | "aria-invalid" | "dataTestId"
 > & {
+  dataTestId?: string;
   label: string;
 }) => {
   const errorId = React.useId();
@@ -38,7 +40,7 @@ export const FieldTextarea = ({
         aria-invalid={hasError}
         aria-describedby={hasError ? errorId : undefined}
         error={hasError}
-        dataTestId={`${field.name}-textarea`}
+        dataTestId={dataTestId ?? `${field.name}-textarea`}
       />
       {hasError && (
         <FormErrorMessage

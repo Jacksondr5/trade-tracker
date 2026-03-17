@@ -1,20 +1,32 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-import { campaignStatusValidator, tradePlanStatusValidator } from "./lib/statuses";
+import {
+  campaignStatusValidator,
+  tradePlanStatusValidator,
+} from "./lib/statuses";
 
 export default defineSchema({
   notes: defineTable({
     campaignId: v.optional(v.id("campaigns")),
     chartUrls: v.optional(v.array(v.string())),
     content: v.string(),
+    evidence: v.optional(
+      v.array(
+        v.object({
+          contentType: v.optional(v.string()),
+          fileName: v.optional(v.string()),
+          kind: v.union(v.literal("chart"), v.literal("image")),
+          storageId: v.optional(v.id("_storage")),
+          url: v.optional(v.string()),
+        }),
+      ),
+    ),
     ownerId: v.string(),
-    tradeId: v.optional(v.id("trades")),
     tradePlanId: v.optional(v.id("tradePlans")),
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_campaignId", ["ownerId", "campaignId"])
-    .index("by_owner_tradePlanId", ["ownerId", "tradePlanId"])
-    .index("by_owner_tradeId", ["ownerId", "tradeId"]),
+    .index("by_owner_tradePlanId", ["ownerId", "tradePlanId"]),
 
   campaigns: defineTable({
     closedAt: v.optional(v.number()),
