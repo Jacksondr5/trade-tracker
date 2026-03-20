@@ -125,43 +125,43 @@ export function NoteCard({
       </div>
 
       {isEditing ? (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <label htmlFor={`edit-note-${note._id}`} className="sr-only">
             Edit note content
           </label>
           <textarea
             id={`edit-note-${note._id}`}
             data-testid={`${testIdPrefix}-edit-note-textarea-${note._id}`}
-            className="min-h-24 w-full rounded border border-olive-6 bg-olive-3 px-3 py-2 text-sm text-olive-12 focus:ring-1 focus:ring-olive-8 focus:outline-none"
+            className="min-h-20 w-full rounded-sm border-b border-olive-6 bg-transparent px-0 py-1 text-sm text-olive-12 focus:border-olive-8 focus:outline-none"
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
           />
           <EvidenceUrlInputs urls={editChartUrls} onChange={setEditChartUrls} />
-          <div className="flex gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
               aria-label="Save note"
               title="Save"
-              className="rounded p-1.5 text-grass-9 hover:bg-grass-3 disabled:opacity-50"
+              className="rounded p-1 text-grass-9 hover:bg-grass-3 disabled:opacity-50"
               data-testid={`${testIdPrefix}-save-note-button-${note._id}`}
               onClick={() => void handleSave()}
               disabled={isSaving}
             >
               {isSaving ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <Check className="h-4 w-4" />
+                <Check className="h-3.5 w-3.5" />
               )}
             </button>
             <button
               type="button"
               aria-label="Cancel editing"
               title="Cancel"
-              className="rounded p-1.5 text-olive-11 hover:bg-olive-4 hover:text-olive-12"
+              className="rounded p-1 text-olive-10 hover:bg-olive-4 hover:text-olive-12"
               data-testid={`${testIdPrefix}-cancel-note-button-${note._id}`}
               onClick={cancelEditing}
             >
-              <X className="h-4 w-4" />
+              <X className="h-3.5 w-3.5" />
             </button>
           </div>
           {editError && (

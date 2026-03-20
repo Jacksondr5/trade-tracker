@@ -62,7 +62,7 @@ export function NoteComposer({ onAddNote, testIdPrefix }: NoteComposerProps) {
   });
 
   return (
-    <div className="rounded-lg border border-olive-6 bg-olive-3 p-4">
+    <div className="border-l-2 border-olive-8 py-3 pl-4">
       {addNoteError && (
         <Alert
           variant="error"
@@ -79,7 +79,7 @@ export function NoteComposer({ onAddNote, testIdPrefix }: NoteComposerProps) {
           e.stopPropagation();
           void noteForm.handleSubmit();
         }}
-        className="space-y-3"
+        className="space-y-2"
         data-testid={getNoteComposerFormTestId(testIdPrefix)}
       >
         <noteForm.AppField name="content">
@@ -87,7 +87,7 @@ export function NoteComposer({ onAddNote, testIdPrefix }: NoteComposerProps) {
             <field.FieldTextarea
               label="Add note"
               placeholder="Capture a thought, observation, or decision..."
-              rows={3}
+              rows={2}
               dataTestId={getNoteComposerTextareaTestId(testIdPrefix)}
             />
           )}
@@ -98,6 +98,8 @@ export function NoteComposer({ onAddNote, testIdPrefix }: NoteComposerProps) {
             <noteForm.SubmitButton
               dataTestId={getNoteComposerSubmitButtonTestId(testIdPrefix)}
               label={isAddingNote ? "Saving..." : "Add note"}
+              size="sm"
+              variant="outline"
             />
           </noteForm.AppForm>
         </div>
