@@ -82,7 +82,7 @@ export function StrategyEditor({
         },
       }),
       Placeholder.configure({
-        placeholder: "Start writing your trading strategy...",
+        placeholder: "Start writing your trading strategy…",
       }),
       Table.configure({
         resizable: false,
@@ -97,7 +97,7 @@ export function StrategyEditor({
     contentType: "markdown",
     editorProps: {
       attributes: {
-        class: "prose-strategy outline-none min-h-[60vh] px-6 py-4",
+        class: "prose-strategy outline-none min-h-[60vh] px-8 py-6",
       },
     },
     onUpdate: ({ editor }) => {
@@ -108,14 +108,14 @@ export function StrategyEditor({
 
   if (!editor) {
     return (
-      <div className="rounded-lg border border-olive-7 bg-olive-2 p-6 text-sm text-slate-11">
-        Loading editor...
+      <div className="px-8 py-6 text-sm text-olive-11">
+        Loading editor…
       </div>
     );
   }
 
   return (
-    <div className="rounded-lg border border-olive-7 bg-olive-2 focus-within:ring-2 focus-within:ring-blue-8 focus-within:ring-offset-2 focus-within:ring-offset-olive-1">
+    <div className="focus-within:ring-2 focus-within:ring-blue-8 focus-within:ring-offset-2 focus-within:ring-offset-olive-1 rounded-md">
       <EditorContent editor={editor} />
     </div>
   );
