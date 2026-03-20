@@ -392,7 +392,7 @@ export const getGeneralNotes = query({
     const notes = await ctx.db
       .query("notes")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .order("asc")
+      .order("desc")
       .collect();
 
     return await serializeNotes(

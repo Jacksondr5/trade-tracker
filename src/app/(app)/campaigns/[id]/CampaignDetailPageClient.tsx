@@ -18,7 +18,7 @@ import {
   type BadgeProps,
   useAppForm,
 } from "~/components/ui";
-import NotesSection from "~/components/NotesSection";
+import { NotesSection } from "~/components/notes";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { buildHierarchyBreadcrumbs } from "~/lib/campaign-trade-plan-navigation";
@@ -739,10 +739,11 @@ export default function CampaignDetailPageClient({
       </section>
 
       <section className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4">
-        <h2 className="mb-2 text-lg font-semibold text-olive-12">
+        <h2 className="mb-3 text-lg font-semibold text-olive-12">
           Campaign Notes
         </h2>
         <NotesSection
+          defaultShowEvidence
           testIdPrefix="campaign"
           notes={campaignNotes}
           onAddNote={async (content, chartUrls) => {

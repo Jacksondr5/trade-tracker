@@ -6,7 +6,7 @@ import NotesPageClient from "./NotesPageClient";
 export default async function NotesPage() {
   const token = await getConvexTokenOrThrow();
   const preloadedNotes = await preloadQuery(
-    api.notes.getNotesFeed,
+    api.notes.getGeneralNotes,
     {},
     { token },
   );
