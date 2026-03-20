@@ -25,7 +25,7 @@ function EvidenceUrlInputsInner({ urls, onChange }: EvidenceUrlInputsProps) {
             <input
               type="url"
               aria-label={`Chart URL ${i + 1}`}
-              className="flex-1 rounded-sm border-b border-olive-6 bg-transparent px-0 py-1 text-sm text-olive-12 placeholder:text-olive-10 focus:border-olive-8 focus:outline-none"
+              className="flex-1 rounded-md border border-olive-7 bg-transparent px-3 py-1.5 text-sm text-olive-12 placeholder:text-slate-11 focus:ring-2 focus:ring-blue-8 focus:outline-none"
               placeholder="Chart image URL"
               value={url}
               onChange={(e) => updateUrl(i, e.target.value)}

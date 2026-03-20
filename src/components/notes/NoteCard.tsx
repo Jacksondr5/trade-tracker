@@ -132,7 +132,7 @@ export function NoteCard({
           <textarea
             id={`edit-note-${note._id}`}
             data-testid={`${testIdPrefix}-edit-note-textarea-${note._id}`}
-            className="min-h-20 w-full rounded-sm border-b border-olive-6 bg-transparent px-0 py-1 text-sm text-olive-12 focus:border-olive-8 focus:outline-none"
+            className="min-h-20 w-full rounded-md border border-olive-7 bg-transparent px-3 py-2 text-sm text-olive-12 focus:ring-2 focus:ring-blue-8 focus:outline-none"
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
           />
