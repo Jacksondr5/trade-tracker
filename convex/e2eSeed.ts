@@ -378,6 +378,7 @@ export const resetPlaywrightData = internalMutation({
     accountMappingsDeleted: v.number(),
     campaignsDeleted: v.number(),
     inboxTradesDeleted: v.number(),
+    retrospectivesDeleted: v.number(),
     notesDeleted: v.number(),
     portfoliosDeleted: v.number(),
     strategyDocsDeleted: v.number(),
@@ -400,6 +401,10 @@ export const resetPlaywrightData = internalMutation({
       .withIndex("by_owner_status", (q) =>
         q.eq("ownerId", ownerId).eq("status", "pending_review"),
       )
+      .collect();
+    const retrospectives = await ctx.db
+      .query("retrospectives")
+      .withIndex("by_owner_parent", (q) => q.eq("ownerId", ownerId))
       .collect();
     const trades = await ctx.db
       .query("trades")
@@ -435,6 +440,9 @@ export const resetPlaywrightData = internalMutation({
     for (const doc of inboxTrades) {
       await ctx.db.delete(doc._id);
     }
+    for (const doc of retrospectives) {
+      await ctx.db.delete(doc._id);
+    }
     for (const doc of trades) {
       await ctx.db.delete(doc._id);
     }
@@ -460,6 +468,7 @@ export const resetPlaywrightData = internalMutation({
       inboxTradesDeleted: inboxTrades.length,
       notesDeleted: notes.length,
       portfoliosDeleted: portfolios.length,
+      retrospectivesDeleted: retrospectives.length,
       strategyDocsDeleted: strategyDocs.length,
       tradePlansDeleted: tradePlans.length,
       tradesDeleted: trades.length,

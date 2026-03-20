@@ -230,7 +230,11 @@ async function loadCampaignWorkspaceSourceData(
     tradeStatsByPlanId.set(trade.tradePlanId, existing);
   }
 
-  const retrospectiveParentIds = new Set(retrospectives.map((r) => r.parentId));
+  const retrospectiveParentIds = new Set(
+    retrospectives
+      .filter((retrospective) => retrospective.content.trim().length > 0)
+      .map((retrospective) => retrospective.parentId),
+  );
 
   return {
     retrospectiveParentIds,
@@ -319,7 +323,7 @@ async function loadCampaignWorkspaceDetailSourceData(
   }
 
   const retrospectiveParentIds = new Set<Id<"campaigns"> | Id<"tradePlans">>();
-  if (campaignRetrospective) {
+  if (campaignRetrospective?.content.trim()) {
     retrospectiveParentIds.add(campaignRetrospective.parentId);
   }
 

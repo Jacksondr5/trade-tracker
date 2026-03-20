@@ -275,6 +275,36 @@ describe("campaign workspace queries", () => {
     });
   });
 
+  it("does not count blank retrospectives as completed reviews", async () => {
+    const closedAt = Date.UTC(2026, 2, 11);
+    const campaignId = await insertCampaign({
+      closedAt,
+      name: "Blank Review Campaign",
+      ownerId: ownerA,
+      status: "closed",
+    });
+
+    await insertRetrospective({
+      content: "   ",
+      ownerId: ownerA,
+      parentId: campaignId,
+      parentKind: "campaign",
+    });
+
+    const user = asUser(ownerA);
+    const summaries = await user.query(
+      api.campaigns.listCampaignWorkspaceSummaries,
+      { status: "closed" },
+    );
+    const detail = await user.query(api.campaigns.getCampaignWorkspace, {
+      campaignId,
+    });
+
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]?.lifecycle.hasRetrospective).toBe(false);
+    expect(detail?.summary.lifecycle.hasRetrospective).toBe(false);
+  });
+
   it("rolls up mixed linked-plan statuses and linked trade counts without leaking foreign data", async () => {
     const campaignId = await insertCampaign({
       name: "Mixed Campaign",
