@@ -32,7 +32,6 @@ export default defineSchema({
     closedAt: v.optional(v.number()),
     name: v.string(),
     ownerId: v.string(),
-    retrospective: v.optional(v.string()),
     status: campaignStatusValidator,
     thesis: v.string(),
   })
@@ -140,6 +139,14 @@ export default defineSchema({
     .index("by_owner_date", ["ownerId", "date"])
     .index("by_owner_status_tradePlanId", ["ownerId", "status", "tradePlanId"])
     .index("by_owner_status_ticker", ["ownerId", "status", "ticker"]),
+
+  retrospectives: defineTable({
+    content: v.string(),
+    ownerId: v.string(),
+    parentId: v.union(v.id("campaigns"), v.id("tradePlans")),
+    parentKind: v.union(v.literal("campaign"), v.literal("tradePlan")),
+    updatedAt: v.number(),
+  }).index("by_owner_parent", ["ownerId", "parentId"]),
 
   strategyDoc: defineTable({
     content: v.string(),

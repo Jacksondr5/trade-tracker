@@ -20,6 +20,7 @@ import type * as navigation from "../navigation.js";
 import type * as notes from "../notes.js";
 import type * as portfolios from "../portfolios.js";
 import type * as positions from "../positions.js";
+import type * as retrospectives from "../retrospectives.js";
 import type * as strategyDoc from "../strategyDoc.js";
 import type * as tradePlans from "../tradePlans.js";
 import type * as trades from "../trades.js";
@@ -44,6 +45,7 @@ declare const fullApi: ApiFromModules<{
   notes: typeof notes;
   portfolios: typeof portfolios;
   positions: typeof positions;
+  retrospectives: typeof retrospectives;
   strategyDoc: typeof strategyDoc;
   tradePlans: typeof tradePlans;
   trades: typeof trades;

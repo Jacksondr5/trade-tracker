@@ -4,6 +4,7 @@ import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
 import { Check, CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { RetrospectiveSection } from "~/components/RetrospectiveSection";
 import { MobileHierarchyBreadcrumbs } from "~/components/app-shell/campaign-trade-plan-hierarchy";
 import { useNavigationData } from "~/components/app-shell";
 import { Alert, Badge } from "~/components/ui";
@@ -437,6 +438,13 @@ export default function TradePlanDetailPageClient({
           }}
         />
       </section>
+
+      <RetrospectiveSection
+        isClosed={tradePlan.status === "closed"}
+        parentId={tradePlanId}
+        parentKind="tradePlan"
+        testIdPrefix="trade-plan"
+      />
 
       <section className="rounded-lg border border-slate-700 bg-slate-800 p-4">
         <div className="mb-3 flex items-center justify-between">

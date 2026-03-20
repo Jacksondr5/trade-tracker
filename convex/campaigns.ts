@@ -13,7 +13,6 @@ const campaignValidator = v.object({
   closedAt: v.optional(v.number()),
   name: v.string(),
   ownerId: v.string(),
-  retrospective: v.optional(v.string()),
   status: v.union(
     v.literal("active"),
     v.literal("closed"),
@@ -166,7 +165,7 @@ async function loadCampaignWorkspaceSourceData(
   ctx: QueryCtx,
   ownerId: string,
 ) {
-  const [tradePlans, trades, watchedItems] = await Promise.all([
+  const [tradePlans, trades, watchedItems, retrospectives] = await Promise.all([
     ctx.db
       .query("tradePlans")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
@@ -178,6 +177,10 @@ async function loadCampaignWorkspaceSourceData(
     ctx.db
       .query("watchlist")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect(),
+    ctx.db
+      .query("retrospectives")
+      .withIndex("by_owner_parent", (q) => q.eq("ownerId", ownerId))
       .collect(),
   ]);
 
@@ -227,7 +230,10 @@ async function loadCampaignWorkspaceSourceData(
     tradeStatsByPlanId.set(trade.tradePlanId, existing);
   }
 
+  const retrospectiveParentIds = new Set(retrospectives.map((r) => r.parentId));
+
   return {
+    retrospectiveParentIds,
     tradePlansByCampaignId,
     tradeStatsByPlanId,
     watchedCampaignIds,
@@ -240,7 +246,7 @@ async function loadCampaignWorkspaceDetailSourceData(
   ownerId: string,
   campaignId: Id<"campaigns">,
 ) {
-  const [tradePlans, watchedCampaign] = await Promise.all([
+  const [tradePlans, watchedCampaign, campaignRetrospective] = await Promise.all([
     ctx.db
       .query("tradePlans")
       .withIndex("by_owner_campaignId", (q) =>
@@ -253,6 +259,12 @@ async function loadCampaignWorkspaceDetailSourceData(
         q.eq("ownerId", ownerId).eq("campaignId", campaignId),
       )
       .first(),
+    ctx.db
+      .query("retrospectives")
+      .withIndex("by_owner_parent", (q) =>
+        q.eq("ownerId", ownerId).eq("parentId", campaignId),
+      )
+      .unique(),
   ]);
 
   const watchedCampaignIds = new Set<Id<"campaigns">>();
@@ -306,7 +318,13 @@ async function loadCampaignWorkspaceDetailSourceData(
     );
   }
 
+  const retrospectiveParentIds = new Set<Id<"campaigns"> | Id<"tradePlans">>();
+  if (campaignRetrospective) {
+    retrospectiveParentIds.add(campaignRetrospective.parentId);
+  }
+
   return {
+    retrospectiveParentIds,
     tradePlansByCampaignId: new Map([[campaignId, tradePlans]]),
     tradeStatsByPlanId,
     watchedCampaignIds,
@@ -336,7 +354,7 @@ function buildCampaignWorkspaceSummary(
       hasClosedTradePlans: linkedTradePlanRollup.closedCount > 0,
       hasLinkedTradePlans: linkedTradePlanRollup.totalCount > 0,
       hasOpenTradePlans: linkedTradePlanRollup.openCount > 0,
-      hasRetrospective: Boolean(campaign.retrospective?.trim()),
+      hasRetrospective: sourceData.retrospectiveParentIds.has(campaign._id),
       isClosed: campaign.status === "closed",
     },
     linkedTradePlans: linkedTradePlanRollup,
@@ -379,7 +397,6 @@ export const updateCampaign = mutation({
   args: {
     campaignId: v.id("campaigns"),
     name: v.optional(v.string()),
-    retrospective: v.optional(v.string()),
     thesis: v.optional(v.string()),
   },
   returns: v.null(),
@@ -394,7 +411,6 @@ export const updateCampaign = mutation({
     if (updates.name !== undefined) {
       patch.name = validateCampaignName(updates.name);
     }
-    if (updates.retrospective !== undefined) patch.retrospective = updates.retrospective;
     if (updates.thesis !== undefined) patch.thesis = updates.thesis;
 
     await ctx.db.patch(campaignId, patch);

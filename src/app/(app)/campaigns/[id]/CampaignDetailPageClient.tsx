@@ -6,6 +6,7 @@ import { CheckCircle2, Loader2, Pencil, Star } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
+import { RetrospectiveSection } from "~/components/RetrospectiveSection";
 import { WatchToggleButton } from "~/components/WatchToggleButton";
 import { MobileHierarchyBreadcrumbs } from "~/components/app-shell/campaign-trade-plan-hierarchy";
 import { useNavigationData } from "~/components/app-shell";
@@ -62,10 +63,6 @@ const campaignNameSchema = z.object({
 const thesisSchema = z.object({
   thesis: z.string().trim().min(1, "Thesis is required"),
 });
-const retrospectiveSchema = z.object({
-  retrospective: z.string(),
-});
-
 type BadgeVariant = NonNullable<BadgeProps["variant"]>;
 
 function getStatusVariant(status: string): BadgeVariant {
@@ -184,14 +181,6 @@ export default function CampaignDetailPageClient({
   const [thesisError, setThesisError] = useState<string | null>(null);
   const [thesisSaveState, setThesisSaveState] = useState<SaveState>("idle");
 
-  const [retrospectiveInitialized, setRetrospectiveInitialized] =
-    useState(false);
-  const [retrospectiveError, setRetrospectiveError] = useState<string | null>(
-    null,
-  );
-  const [retrospectiveSaveState, setRetrospectiveSaveState] =
-    useState<SaveState>("idle");
-
   const [tradePlanCreateError, setTradePlanCreateError] = useState<
     string | null
   >(null);
@@ -277,43 +266,6 @@ export default function CampaignDetailPageClient({
     },
   });
 
-  const retrospectiveForm = useAppForm({
-    defaultValues: {
-      retrospective: "",
-    },
-    validators: {
-      onChange: ({ value }) => {
-        setRetrospectiveError(null);
-        if (retrospectiveSaveState === "saved") {
-          setRetrospectiveSaveState("idle");
-        }
-        return validateWithSchema(retrospectiveSchema, value);
-      },
-    },
-    onSubmit: async ({ value }) => {
-      setRetrospectiveError(null);
-      setRetrospectiveSaveState("saving");
-
-      try {
-        const parsed = retrospectiveSchema.parse(value);
-        const trimmedRetrospective = parsed.retrospective.trim();
-        await updateCampaign({
-          campaignId,
-          retrospective: trimmedRetrospective,
-        });
-        retrospectiveForm.setFieldValue("retrospective", trimmedRetrospective);
-        setRetrospectiveSaveState("saved");
-      } catch (error) {
-        setRetrospectiveError(
-          error instanceof Error
-            ? error.message
-            : "Failed to save retrospective",
-        );
-        setRetrospectiveSaveState("idle");
-      }
-    },
-  });
-
   const tradePlanForm = useAppForm({
     defaultValues: {
       instrumentSymbol: "",
@@ -360,16 +312,6 @@ export default function CampaignDetailPageClient({
       setThesisInitialized(true);
     }
   }, [campaign, thesisForm, thesisInitialized]);
-
-  useEffect(() => {
-    if (campaign && !retrospectiveInitialized) {
-      retrospectiveForm.setFieldValue(
-        "retrospective",
-        campaign.retrospective || "",
-      );
-      setRetrospectiveInitialized(true);
-    }
-  }, [campaign, retrospectiveForm, retrospectiveInitialized]);
 
   const handleCampaignStatusChange = async (status: CampaignStatus) => {
     setStatusChangeError(null);
@@ -945,73 +887,12 @@ export default function CampaignDetailPageClient({
         )}
       </section>
 
-      <section className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4">
-        <h2 className="mb-3 text-lg font-semibold text-olive-12">
-          Campaign Review
-        </h2>
-
-        {campaign.status !== "closed" ? (
-          <p className="text-sm text-olive-11">
-            Campaign review becomes available when the campaign is closed.
-          </p>
-        ) : (
-          <>
-            {!campaign.retrospective?.trim() && (
-              <p className="mb-3 text-sm text-olive-10">
-                Capture what you learned while it&apos;s fresh.
-              </p>
-            )}
-            {retrospectiveError && (
-              <Alert
-                variant="error"
-                className="mb-2"
-                onDismiss={() => setRetrospectiveError(null)}
-              >
-                {retrospectiveError}
-              </Alert>
-            )}
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                void retrospectiveForm.handleSubmit();
-              }}
-            >
-              <retrospectiveForm.AppField name="retrospective">
-                {(field) => (
-                  <field.FieldTextarea
-                    label="Campaign Review"
-                    rows={8}
-                    placeholder="What worked, what didn't, and what would you do differently?"
-                  />
-                )}
-              </retrospectiveForm.AppField>
-              <div className="mt-2 flex items-center gap-3">
-                <retrospectiveForm.AppForm>
-                  <retrospectiveForm.SubmitButton
-                    dataTestId="save-campaign-retrospective-button"
-                    label="Save review"
-                  />
-                </retrospectiveForm.AppForm>
-
-                {retrospectiveSaveState === "saving" && (
-                  <span className="flex items-center gap-1 text-sm text-olive-11">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Saving...
-                  </span>
-                )}
-
-                {retrospectiveSaveState === "saved" && (
-                  <span className="flex items-center gap-1 text-sm text-grass-9">
-                    <CheckCircle2 className="h-4 w-4" />
-                    Saved
-                  </span>
-                )}
-              </div>
-            </form>
-          </>
-        )}
-      </section>
+      <RetrospectiveSection
+        isClosed={campaign.status === "closed"}
+        parentId={campaignId}
+        parentKind="campaign"
+        testIdPrefix="campaign"
+      />
 
       <section className="rounded-lg border border-olive-6 bg-olive-2 p-4">
         <h2 className="mb-3 text-lg font-semibold text-olive-12">Execution</h2>
