@@ -139,3 +139,39 @@ export function getNoteComposerTextareaTestId(prefix: string): string {
 export function getNoteComposerSubmitButtonTestId(prefix: string): string {
   return `${prefix}-add-note-button`;
 }
+
+export function getNoteRowTestId(prefix: string, noteId: string): string {
+  return `${prefix}-note-row-${noteId}`;
+}
+
+export function getNoteDateTestId(prefix: string, noteId: string): string {
+  return `${prefix}-note-date-${noteId}`;
+}
+
+export function getNoteContextLinkTestId(prefix: string, noteId: string): string {
+  return `${prefix}-note-context-link-${noteId}`;
+}
+
+export function getNoteContextTextTestId(prefix: string, noteId: string): string {
+  return `${prefix}-note-context-text-${noteId}`;
+}
+
+export function getEditNoteButtonTestId(prefix: string, noteId: string): string {
+  return `${prefix}-edit-note-button-${noteId}`;
+}
+
+export function getEditNoteTextareaTestId(prefix: string, noteId: string): string {
+  return `${prefix}-edit-note-textarea-${noteId}`;
+}
+
+export function getSaveNoteButtonTestId(prefix: string, noteId: string): string {
+  return `${prefix}-save-note-button-${noteId}`;
+}
+
+export function getCancelNoteButtonTestId(prefix: string, noteId: string): string {
+  return `${prefix}-cancel-note-button-${noteId}`;
+}
+
+export function getNoteContentTestId(prefix: string, noteId: string): string {
+  return `${prefix}-note-content-${noteId}`;
+}

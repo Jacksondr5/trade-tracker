@@ -3,6 +3,17 @@
 import { Check, Loader2, Pencil, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import {
+  getCancelNoteButtonTestId,
+  getEditNoteButtonTestId,
+  getEditNoteTextareaTestId,
+  getNoteContentTestId,
+  getNoteContextLinkTestId,
+  getNoteContextTextTestId,
+  getNoteDateTestId,
+  getNoteRowTestId,
+  getSaveNoteButtonTestId,
+} from "../../../shared/e2e/testIds";
 import { Alert } from "~/components/ui";
 import { formatDate } from "~/lib/format";
 import { EvidenceCarousel } from "./EvidenceCarousel";
@@ -77,12 +88,12 @@ export function NoteCard({
   return (
     <article
       className="group relative border-l-2 border-olive-6 py-3 pl-4"
-      data-testid={`${testIdPrefix}-note-row-${note._id}`}
+      data-testid={getNoteRowTestId(testIdPrefix, note._id)}
     >
       <div className="mb-1.5 flex items-center gap-2">
         <time
           className="text-xs font-medium text-olive-10"
-          data-testid={`${testIdPrefix}-note-date-${note._id}`}
+          data-testid={getNoteDateTestId(testIdPrefix, note._id)}
           dateTime={new Date(note._creationTime).toISOString()}
         >
           {formatDate(note._creationTime)}
@@ -95,14 +106,14 @@ export function NoteCard({
               <Link
                 href={note.contextHref}
                 className="text-xs font-medium text-olive-10 hover:text-olive-12 hover:underline"
-                data-testid={`${testIdPrefix}-note-context-link-${note._id}`}
+                data-testid={getNoteContextLinkTestId(testIdPrefix, note._id)}
               >
                 {note.contextLabel ?? note.contextKind ?? "Note"}
               </Link>
             ) : (
               <span
                 className="text-xs font-medium text-olive-10"
-                data-testid={`${testIdPrefix}-note-context-text-${note._id}`}
+                data-testid={getNoteContextTextTestId(testIdPrefix, note._id)}
               >
                 {note.contextLabel ?? note.contextKind ?? "Note"}
               </span>
@@ -116,7 +127,7 @@ export function NoteCard({
             aria-label="Edit note"
             title="Edit"
             className="ml-auto rounded p-1 text-olive-10 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-olive-4 hover:text-olive-12 focus-visible:opacity-100"
-            data-testid={`${testIdPrefix}-edit-note-button-${note._id}`}
+            data-testid={getEditNoteButtonTestId(testIdPrefix, note._id)}
             onClick={startEditing}
           >
             <Pencil className="h-3.5 w-3.5" />
@@ -131,7 +142,7 @@ export function NoteCard({
           </label>
           <textarea
             id={`edit-note-${note._id}`}
-            data-testid={`${testIdPrefix}-edit-note-textarea-${note._id}`}
+            data-testid={getEditNoteTextareaTestId(testIdPrefix, note._id)}
             className="min-h-20 w-full rounded-md border border-olive-7 bg-transparent px-3 py-2 text-sm text-olive-12 focus:ring-2 focus:ring-blue-8 focus:outline-none"
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
@@ -148,7 +159,7 @@ export function NoteCard({
                 aria-label="Save note"
                 title="Save"
                 className="rounded p-1 text-grass-9 hover:bg-grass-3 disabled:opacity-50"
-                data-testid={`${testIdPrefix}-save-note-button-${note._id}`}
+                data-testid={getSaveNoteButtonTestId(testIdPrefix, note._id)}
                 onClick={() => void handleSave()}
                 disabled={isSaving}
               >
@@ -161,10 +172,17 @@ export function NoteCard({
               <button
                 type="button"
                 aria-label="Cancel editing"
+                aria-disabled={isSaving}
                 title="Cancel"
-                className="rounded p-1 text-olive-10 hover:bg-olive-4 hover:text-olive-12"
-                data-testid={`${testIdPrefix}-cancel-note-button-${note._id}`}
-                onClick={cancelEditing}
+                className="rounded p-1 text-olive-10 hover:bg-olive-4 hover:text-olive-12 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-olive-10"
+                data-testid={getCancelNoteButtonTestId(testIdPrefix, note._id)}
+                onClick={() => {
+                  if (isSaving) {
+                    return;
+                  }
+                  cancelEditing();
+                }}
+                disabled={isSaving}
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -184,7 +202,7 @@ export function NoteCard({
         <div className="flex gap-4">
           <p
             className="min-w-0 flex-1 text-sm whitespace-pre-wrap text-olive-12"
-            data-testid={`${testIdPrefix}-note-content-${note._id}`}
+            data-testid={getNoteContentTestId(testIdPrefix, note._id)}
           >
             {note.content}
           </p>
