@@ -1,18 +1,11 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { Check, Loader2, Pencil, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { z } from "zod";
-import { Alert, useAppForm } from "~/components/ui";
+import { Alert } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
-
-const retrospectiveSchema = z.object({
-  retrospective: z.string(),
-});
-
-type SaveState = "idle" | "saving" | "saved";
 
 interface RetrospectiveSectionProps {
   isClosed: boolean;
@@ -39,72 +32,88 @@ export function RetrospectiveSection({
     api.retrospectives.upsertRetrospective,
   );
 
-  const [initialized, setInitialized] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [isSaving, setIsSaving] = useState(false);
 
-  const form = useAppForm({
-    defaultValues: {
-      retrospective: "",
-    },
-    validators: {
-      onChange: () => {
-        setError(null);
-        if (saveState === "saved") {
-          setSaveState("idle");
-        }
-        return undefined;
-      },
-    },
-    onSubmit: async ({ value }) => {
-      setError(null);
-      setSaveState("saving");
+  const hasContent = Boolean(retrospective?.content?.trim());
 
-      try {
-        const parsed = retrospectiveSchema.parse(value);
-        const trimmedContent = parsed.retrospective.trim();
-        await upsertRetrospective({
-          content: trimmedContent,
-          parentId,
-          parentKind,
-        });
-        form.setFieldValue("retrospective", trimmedContent);
-        setSaveState("saved");
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to save review",
-        );
-        setSaveState("idle");
-      }
-    },
-  });
+  const startEditing = () => {
+    setIsEditing(true);
+    setEditContent(retrospective?.content ?? "");
+    setError(null);
+  };
 
-  useEffect(() => {
-    if (retrospective !== undefined && !initialized) {
-      form.setFieldValue("retrospective", retrospective?.content ?? "");
-      setInitialized(true);
+  const cancelEditing = () => {
+    setIsEditing(false);
+    setEditContent("");
+    setError(null);
+  };
+
+  const handleSave = async () => {
+    setError(null);
+    setIsSaving(true);
+
+    try {
+      const trimmed = editContent.trim();
+      await upsertRetrospective({
+        content: trimmed,
+        parentId,
+        parentKind,
+      });
+      setIsEditing(false);
+      setEditContent("");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to save review",
+      );
+    } finally {
+      setIsSaving(false);
     }
-  }, [retrospective, form, initialized]);
+  };
+
+  // Auto-enter edit mode when closed with no content yet
+  useEffect(() => {
+    if (isClosed && retrospective !== undefined && !hasContent && !isEditing) {
+      startEditing();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isClosed, retrospective, hasContent]);
 
   const label = parentKindLabels[parentKind];
 
   return (
     <section
-      className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4"
+      className="group mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4"
       data-testid={`${testIdPrefix}-retrospective-section`}
     >
-      <h2 className="mb-3 text-lg font-semibold text-olive-12">
-        {parentKind === "campaign" ? "Campaign" : "Trade Plan"} Review
-      </h2>
+      <div className="mb-2 flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-olive-12">
+          {parentKind === "campaign" ? "Campaign" : "Trade Plan"} Review
+        </h2>
+        {isClosed && hasContent && !isEditing && (
+          <button
+            type="button"
+            aria-label="Edit review"
+            title="Edit"
+            className="rounded p-1 text-olive-10 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-olive-4 hover:text-olive-12 focus-visible:opacity-100"
+            data-testid={`${testIdPrefix}-edit-retrospective-button`}
+            onClick={startEditing}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
 
       {!isClosed ? (
         <p className="text-sm text-olive-11">
           Review becomes available when the {label} is closed.
         </p>
-      ) : (
-        <>
-          {!retrospective?.content?.trim() && (
-            <p className="mb-3 text-sm text-olive-10">
+      ) : isEditing ? (
+        <div className="space-y-1.5">
+          {!hasContent && (
+            <p className="mb-2 text-sm text-olive-10">
               Capture what you learned while it&apos;s fresh.
             </p>
           )}
@@ -117,47 +126,61 @@ export function RetrospectiveSection({
               {error}
             </Alert>
           )}
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              void form.handleSubmit();
-            }}
+          <label
+            htmlFor={`${testIdPrefix}-retrospective-textarea`}
+            className="sr-only"
           >
-            <form.AppField name="retrospective">
-              {(field) => (
-                <field.FieldTextarea
-                  dataTestId={`${testIdPrefix}-retrospective-textarea`}
-                  label={`${parentKind === "campaign" ? "Campaign" : "Trade Plan"} Review`}
-                  rows={8}
-                  placeholder="What worked, what didn't, and what would you do differently?"
-                />
-              )}
-            </form.AppField>
-            <div className="mt-2 flex items-center gap-3">
-              <form.AppForm>
-                <form.SubmitButton
-                  dataTestId={`${testIdPrefix}-save-retrospective-button`}
-                  label="Save review"
-                />
-              </form.AppForm>
-
-              {saveState === "saving" && (
-                <span className="flex items-center gap-1 text-sm text-olive-11">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Saving...
-                </span>
-              )}
-
-              {saveState === "saved" && (
-                <span className="flex items-center gap-1 text-sm text-grass-9">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Saved
-                </span>
+            {parentKind === "campaign" ? "Campaign" : "Trade Plan"} Review
+          </label>
+          <textarea
+            id={`${testIdPrefix}-retrospective-textarea`}
+            data-testid={`${testIdPrefix}-retrospective-textarea`}
+            className="min-h-20 w-full rounded-md border border-olive-7 bg-transparent px-3 py-2 text-sm text-olive-12 focus:ring-2 focus:ring-blue-8 focus:outline-none"
+            rows={8}
+            placeholder="What worked, what didn't, and what would you do differently?"
+            value={editContent}
+            onChange={(e) => setEditContent(e.target.value)}
+          />
+          <div className="flex items-center gap-1.5">
+            <div className="ml-auto flex items-center gap-1.5">
+              <button
+                type="button"
+                aria-label="Save review"
+                title="Save"
+                className="rounded p-1 text-grass-9 hover:bg-grass-3 disabled:opacity-50"
+                data-testid={`${testIdPrefix}-save-retrospective-button`}
+                onClick={() => void handleSave()}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Check className="h-3.5 w-3.5" />
+                )}
+              </button>
+              {hasContent && (
+                <button
+                  type="button"
+                  aria-label="Cancel editing"
+                  title="Cancel"
+                  className="rounded p-1 text-olive-10 hover:bg-olive-4 hover:text-olive-12 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-testid={`${testIdPrefix}-cancel-retrospective-button`}
+                  onClick={() => {
+                    if (isSaving) return;
+                    cancelEditing();
+                  }}
+                  disabled={isSaving}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               )}
             </div>
-          </form>
-        </>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm whitespace-pre-wrap text-olive-12">
+          {retrospective?.content}
+        </p>
       )}
     </section>
   );
