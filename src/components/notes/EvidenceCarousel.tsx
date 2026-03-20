@@ -1,65 +1,44 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "~/components/ui";
 
+const MAX_VISIBLE_THUMBNAILS = 2;
+
 export function EvidenceCarousel({ urls }: { urls: string[] }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
-  const scroll = (direction: "left" | "right") => {
-    if (!scrollRef.current) return;
-    const amount = scrollRef.current.clientWidth * 0.6;
-    scrollRef.current.scrollBy({
-      left: direction === "left" ? -amount : amount,
-      behavior: "smooth",
-    });
-  };
+  const visibleUrls = urls.slice(0, MAX_VISIBLE_THUMBNAILS);
+  const overflowCount = urls.length - MAX_VISIBLE_THUMBNAILS;
 
   return (
     <>
-      <div className="group/carousel relative">
-        {urls.length > 1 && (
-          <>
-            <button
-              type="button"
-              aria-label="Scroll charts left"
-              className="absolute top-1/2 left-0 z-10 -translate-y-1/2 rounded-full bg-olive-1/80 p-1 text-olive-11 opacity-0 transition-opacity hover:text-olive-12 focus:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-olive-8 focus-visible:ring-offset-2 focus-visible:ring-offset-olive-2 focus-visible:outline-none group-hover/carousel:opacity-100"
-              onClick={() => scroll("left")}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              aria-label="Scroll charts right"
-              className="absolute top-1/2 right-0 z-10 -translate-y-1/2 rounded-full bg-olive-1/80 p-1 text-olive-11 opacity-0 transition-opacity hover:text-olive-12 focus:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-olive-8 focus-visible:ring-offset-2 focus-visible:ring-offset-olive-2 focus-visible:outline-none group-hover/carousel:opacity-100"
-              onClick={() => scroll("right")}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </>
+      <div className="flex gap-2">
+        {visibleUrls.map((url, i) => (
+          <button
+            key={i}
+            type="button"
+            className="flex-none cursor-pointer rounded focus-visible:ring-2 focus-visible:ring-olive-8 focus-visible:ring-offset-2 focus-visible:ring-offset-olive-2 focus-visible:outline-none"
+            onClick={() => setLightboxIndex(i)}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={url}
+              alt={`Chart ${i + 1}`}
+              className="h-20 w-20 rounded border border-olive-6 object-cover transition-opacity hover:opacity-80"
+            />
+          </button>
+        ))}
+        {overflowCount > 0 && (
+          <button
+            type="button"
+            className="flex h-20 w-20 flex-none cursor-pointer items-center justify-center rounded border border-olive-6 text-xs text-olive-11 transition-colors hover:bg-olive-4 hover:text-olive-12 focus-visible:ring-2 focus-visible:ring-olive-8 focus-visible:ring-offset-2 focus-visible:ring-offset-olive-2 focus-visible:outline-none"
+            onClick={() => setLightboxIndex(MAX_VISIBLE_THUMBNAILS)}
+          >
+            +{overflowCount} more
+          </button>
         )}
-        <div
-          ref={scrollRef}
-          className="scrollbar-none flex gap-2 overflow-x-auto"
-        >
-          {urls.map((url, i) => (
-            <button
-              key={i}
-              type="button"
-              className="flex-none cursor-pointer rounded focus-visible:ring-2 focus-visible:ring-olive-8 focus-visible:ring-offset-2 focus-visible:ring-offset-olive-2 focus-visible:outline-none"
-              onClick={() => setLightboxIndex(i)}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={url}
-                alt={`Chart ${i + 1}`}
-                className="h-24 rounded border border-olive-6 object-cover transition-opacity hover:opacity-80"
-              />
-            </button>
-          ))}
-        </div>
       </div>
 
       {lightboxIndex !== null && (
