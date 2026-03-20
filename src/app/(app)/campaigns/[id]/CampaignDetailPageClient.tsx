@@ -461,6 +461,7 @@ export default function CampaignDetailPageClient({
                               disabled={isSubmitting}
                               onClick={() => {
                                 if (isSubmitting) return;
+                                setCampaignNameError(null);
                                 setIsEditingName(false);
                                 campaignNameForm.setFieldValue(
                                   "name",
@@ -495,7 +496,7 @@ export default function CampaignDetailPageClient({
                   type="button"
                   aria-label="Edit campaign name"
                   title="Edit"
-                  className="rounded p-1 text-olive-10 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-olive-4 hover:text-olive-12 focus-visible:opacity-100"
+                  className="rounded p-1 text-olive-10 opacity-100 transition-opacity hover:bg-olive-4 hover:text-olive-12 focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100"
                   data-testid="edit-campaign-name"
                   onClick={() => setIsEditingName(true)}
                 >
@@ -600,7 +601,7 @@ export default function CampaignDetailPageClient({
               type="button"
               aria-label="Edit thesis"
               title="Edit"
-              className="rounded p-1 text-olive-10 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-olive-4 hover:text-olive-12 focus-visible:opacity-100"
+              className="rounded p-1 text-olive-10 opacity-100 transition-opacity hover:bg-olive-4 hover:text-olive-12 focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100"
               data-testid="edit-thesis"
               onClick={() => setIsEditingThesis(true)}
             >
