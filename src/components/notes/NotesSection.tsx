@@ -5,6 +5,7 @@ import { NoteTimeline } from "./NoteTimeline";
 import type { NotesSectionProps } from "./types";
 
 export default function NotesSection({
+  defaultShowEvidence = false,
   notes,
   onAddNote,
   onUpdateNote,
@@ -16,7 +17,11 @@ export default function NotesSection({
       className="space-y-4"
       data-testid={`${testIdPrefix}-notes-section`}
     >
-      <NoteComposer onAddNote={onAddNote} testIdPrefix={testIdPrefix} />
+      <NoteComposer
+        defaultShowEvidence={defaultShowEvidence}
+        onAddNote={onAddNote}
+        testIdPrefix={testIdPrefix}
+      />
       <NoteTimeline
         notes={notes}
         onUpdateNote={onUpdateNote}

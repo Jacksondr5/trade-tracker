@@ -138,31 +138,37 @@ export function NoteCard({
           />
           <EvidenceUrlInputs urls={editChartUrls} onChange={setEditChartUrls} />
           <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              aria-label="Save note"
-              title="Save"
-              className="rounded p-1 text-grass-9 hover:bg-grass-3 disabled:opacity-50"
-              data-testid={`${testIdPrefix}-save-note-button-${note._id}`}
-              onClick={() => void handleSave()}
-              disabled={isSaving}
-            >
-              {isSaving ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Check className="h-3.5 w-3.5" />
-              )}
-            </button>
-            <button
-              type="button"
-              aria-label="Cancel editing"
-              title="Cancel"
-              className="rounded p-1 text-olive-10 hover:bg-olive-4 hover:text-olive-12"
-              data-testid={`${testIdPrefix}-cancel-note-button-${note._id}`}
-              onClick={cancelEditing}
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+            <EvidenceUrlInputs.AddButton
+              urls={editChartUrls}
+              onChange={setEditChartUrls}
+            />
+            <div className="ml-auto flex items-center gap-1.5">
+              <button
+                type="button"
+                aria-label="Save note"
+                title="Save"
+                className="rounded p-1 text-grass-9 hover:bg-grass-3 disabled:opacity-50"
+                data-testid={`${testIdPrefix}-save-note-button-${note._id}`}
+                onClick={() => void handleSave()}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Check className="h-3.5 w-3.5" />
+                )}
+              </button>
+              <button
+                type="button"
+                aria-label="Cancel editing"
+                title="Cancel"
+                className="rounded p-1 text-olive-10 hover:bg-olive-4 hover:text-olive-12"
+                data-testid={`${testIdPrefix}-cancel-note-button-${note._id}`}
+                onClick={cancelEditing}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
           {editError && (
             <Alert

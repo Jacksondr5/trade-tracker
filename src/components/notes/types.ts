@@ -9,6 +9,7 @@ export interface Note {
 }
 
 export interface NotesSectionProps {
+  defaultShowEvidence?: boolean;
   notes: Note[];
   onAddNote: (content: string, chartUrls?: string[]) => Promise<void>;
   onUpdateNote: (

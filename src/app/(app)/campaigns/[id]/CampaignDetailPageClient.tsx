@@ -743,6 +743,7 @@ export default function CampaignDetailPageClient({
           Campaign Notes
         </h2>
         <NotesSection
+          defaultShowEvidence
           testIdPrefix="campaign"
           notes={campaignNotes}
           onAddNote={async (content, chartUrls) => {

@@ -2,31 +2,19 @@
 
 import { LineChart, Trash2 } from "lucide-react";
 
-export function EvidenceUrlInputs({
-  urls,
-  onChange,
-}: {
+interface EvidenceUrlInputsProps {
   urls: string[];
   onChange: (urls: string[]) => void;
-}) {
-  const addUrl = () => onChange([...urls, ""]);
+}
+
+function EvidenceUrlInputsInner({ urls, onChange }: EvidenceUrlInputsProps) {
   const removeUrl = (index: number) =>
     onChange(urls.filter((_, i) => i !== index));
   const updateUrl = (index: number, value: string) =>
     onChange(urls.map((u, i) => (i === index ? value : u)));
 
   if (urls.length === 0) {
-    return (
-      <button
-        type="button"
-        aria-label="Add chart image"
-        title="Add chart image"
-        className="rounded p-1 text-olive-10 hover:bg-olive-4 hover:text-olive-12"
-        onClick={addUrl}
-      >
-        <LineChart className="h-3.5 w-3.5" />
-      </button>
-    );
+    return null;
   }
 
   return (
@@ -68,15 +56,24 @@ export function EvidenceUrlInputs({
           )}
         </div>
       ))}
-      <button
-        type="button"
-        aria-label="Add chart image"
-        title="Add chart image"
-        className="rounded p-1 text-olive-10 hover:bg-olive-4 hover:text-olive-12"
-        onClick={addUrl}
-      >
-        <LineChart className="h-3.5 w-3.5" />
-      </button>
     </div>
   );
 }
+
+function AddButton({ urls, onChange }: EvidenceUrlInputsProps) {
+  return (
+    <button
+      type="button"
+      aria-label="Add chart image"
+      title="Add chart image"
+      className="rounded p-1 text-olive-10 hover:bg-olive-4 hover:text-olive-12"
+      onClick={() => onChange([...urls, ""])}
+    >
+      <LineChart className="h-3.5 w-3.5" />
+    </button>
+  );
+}
+
+export const EvidenceUrlInputs = Object.assign(EvidenceUrlInputsInner, {
+  AddButton,
+});

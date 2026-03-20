@@ -422,6 +422,7 @@ export default function TradePlanDetailPageClient({
           Trade Plan Notes
         </h2>
         <NotesSection
+          defaultShowEvidence
           testIdPrefix="trade-plan"
           notes={notes}
           onAddNote={async (content, chartUrls) => {

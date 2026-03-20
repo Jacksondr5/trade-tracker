@@ -19,14 +19,21 @@ function normalizeUrls(urls: string[]) {
 }
 
 interface NoteComposerProps {
+  defaultShowEvidence?: boolean;
   onAddNote: (content: string, chartUrls?: string[]) => Promise<void>;
   testIdPrefix: string;
 }
 
-export function NoteComposer({ onAddNote, testIdPrefix }: NoteComposerProps) {
+export function NoteComposer({
+  defaultShowEvidence = false,
+  onAddNote,
+  testIdPrefix,
+}: NoteComposerProps) {
   const [addNoteError, setAddNoteError] = useState<string | null>(null);
   const [isAddingNote, setIsAddingNote] = useState(false);
-  const [chartUrls, setChartUrls] = useState<string[]>([]);
+  const [chartUrls, setChartUrls] = useState<string[]>(
+    defaultShowEvidence ? [""] : [],
+  );
 
   const noteForm = useAppForm({
     defaultValues: {
@@ -50,7 +57,7 @@ export function NoteComposer({ onAddNote, testIdPrefix }: NoteComposerProps) {
         const urls = normalizeUrls(chartUrls);
         await onAddNote(parsed.content, urls.length > 0 ? urls : undefined);
         formApi.reset();
-        setChartUrls([]);
+        setChartUrls(defaultShowEvidence ? [""] : []);
       } catch (error) {
         setAddNoteError(
           error instanceof Error ? error.message : "Failed to add note",
@@ -93,7 +100,11 @@ export function NoteComposer({ onAddNote, testIdPrefix }: NoteComposerProps) {
           )}
         </noteForm.AppField>
         <EvidenceUrlInputs urls={chartUrls} onChange={setChartUrls} />
-        <div className="flex justify-end">
+        <div className="flex items-center justify-between">
+          <EvidenceUrlInputs.AddButton
+            urls={chartUrls}
+            onChange={setChartUrls}
+          />
           <noteForm.AppForm>
             <noteForm.SubmitButton
               dataTestId={getNoteComposerSubmitButtonTestId(testIdPrefix)}
