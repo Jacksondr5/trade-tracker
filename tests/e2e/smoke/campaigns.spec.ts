@@ -91,7 +91,9 @@ test("campaign lifecycle supports detail mutation, linked trade plan creation, a
   await expect(page.getByTestId("campaign-status-select")).toHaveValue(
     "planning",
   );
-  await expect(page.getByTestId("retrospective-textarea")).toHaveCount(0);
+  await expect(
+    page.getByTestId("campaign-retrospective-textarea"),
+  ).toHaveCount(0);
 
   await page.getByTestId(APP_SHELL_TEST_IDS.editCampaignName).click();
   await getNameInput(page).fill(updatedCampaignName);
@@ -157,7 +159,9 @@ test("campaign lifecycle supports detail mutation, linked trade plan creation, a
 
   await getCampaignStatusSelect(page).selectOption("closed");
   await expect(getCampaignStatusSelect(page)).toHaveValue("closed");
-  await expect(page.getByTestId("retrospective-textarea")).toBeVisible();
+  await expect(
+    page.getByTestId("campaign-retrospective-textarea"),
+  ).toBeVisible();
 
   await page
     .getByTestId(`linked-trade-plan-status-${linkedTradePlanId}`)
@@ -166,13 +170,15 @@ test("campaign lifecycle supports detail mutation, linked trade plan creation, a
     page.getByTestId(`linked-trade-plan-status-${linkedTradePlanId}`),
   ).toHaveValue("closed");
 
-  await page.getByTestId("retrospective-textarea").fill(retrospective);
-  await page.getByTestId("save-campaign-retrospective-button").click();
+  await page
+    .getByTestId("campaign-retrospective-textarea")
+    .fill(retrospective);
+  await page.getByTestId("campaign-save-retrospective-button").click();
 
   await page.reload();
   await expect(getCampaignStatusSelect(page)).toHaveValue("closed");
-  await expect(page.getByTestId("retrospective-textarea")).toHaveValue(
-    retrospective,
-  );
+  // After save + reload, content is in read mode — verify text is visible
+  const retroSection = page.getByTestId("campaign-retrospective-section");
+  await expect(retroSection).toContainText(retrospective);
   await expect(linkedTradePlanLink).toBeVisible();
 });
