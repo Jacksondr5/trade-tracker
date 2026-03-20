@@ -50,10 +50,10 @@ export default function StrategyPageClient({
 
   // Sync showEditor when doc loads with content
   useEffect(() => {
-    if (doc?.content && !showEditor) {
+    if (doc?.content) {
       setShowEditor(true);
     }
-  }, [doc?.content, showEditor]);
+  }, [doc?.content]);
 
   const flushPendingSave = useCallback(
     async (updateState = true) => {
