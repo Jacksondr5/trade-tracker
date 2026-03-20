@@ -39,6 +39,14 @@ export const NAVIGATION_SECTION_TEST_IDS = {
   writing: "nav-section-writing",
 } as const;
 
+export const STRATEGY_TEST_IDS = {
+  editor: "strategy-editor",
+  emptyState: "strategy-empty-state",
+  emptyStateCta: "strategy-empty-state-cta",
+  lastUpdated: "strategy-last-updated",
+  saveStatus: "strategy-save-status",
+} as const;
+
 export const APP_SHELL_TEST_IDS = {
   editCampaignName: "edit-campaign-name",
   tradePlanNameInput: "trade-plan-name-input",
