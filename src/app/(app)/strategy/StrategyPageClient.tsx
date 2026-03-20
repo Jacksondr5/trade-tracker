@@ -154,9 +154,6 @@ export default function StrategyPageClient({
             )}
           </div>
         </div>
-        <p className="mt-1 text-sm text-olive-11">
-          Your formal operating document for rules, allocations, and frameworks.
-        </p>
         {doc?.updatedAt && (
           <p
             className="mt-1 text-xs text-olive-11"
@@ -214,13 +211,6 @@ export default function StrategyPageClient({
           className="overflow-hidden rounded-lg border border-olive-6 bg-olive-2"
           data-testid={STRATEGY_TEST_IDS.editor}
         >
-          {/* Document top rule */}
-          <div className="border-b border-olive-6 px-8 py-3">
-            <span className="text-xs font-medium uppercase tracking-wide text-olive-11">
-              Strategy Document
-            </span>
-          </div>
-          {/* Editor body */}
           <div className="px-2 py-2">
             <StrategyEditor
               initialContent={doc?.content ?? ""}
