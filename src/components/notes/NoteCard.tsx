@@ -181,17 +181,19 @@ export function NoteCard({
           )}
         </div>
       ) : (
-        <>
+        <div className="flex gap-4">
           <p
-            className="text-sm whitespace-pre-wrap text-olive-12"
+            className="min-w-0 flex-1 text-sm whitespace-pre-wrap text-olive-12"
             data-testid={`${testIdPrefix}-note-content-${note._id}`}
           >
             {note.content}
           </p>
           {note.chartUrls && note.chartUrls.length > 0 && (
-            <EvidenceCarousel urls={note.chartUrls} />
+            <div className="flex-none">
+              <EvidenceCarousel urls={note.chartUrls} />
+            </div>
           )}
-        </>
+        </div>
       )}
     </article>
   );

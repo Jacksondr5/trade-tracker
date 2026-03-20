@@ -19,7 +19,7 @@ export function EvidenceCarousel({ urls }: { urls: string[] }) {
 
   return (
     <>
-      <div className="group/carousel relative mt-3">
+      <div className="group/carousel relative">
         {urls.length > 1 && (
           <>
             <button
