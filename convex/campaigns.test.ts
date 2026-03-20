@@ -34,7 +34,6 @@ describe("campaign workspace queries", () => {
     closedAt?: number;
     name: string;
     ownerId: string;
-    retrospective?: string;
     status: "active" | "closed" | "planning";
     thesis?: string;
   }): Promise<Id<"campaigns">> {
@@ -43,9 +42,25 @@ describe("campaign workspace queries", () => {
         closedAt: args.closedAt,
         name: args.name,
         ownerId: args.ownerId,
-        retrospective: args.retrospective,
         status: args.status,
         thesis: args.thesis ?? `${args.name} thesis`,
+      });
+    });
+  }
+
+  async function insertRetrospective(args: {
+    content: string;
+    ownerId: string;
+    parentId: Id<"campaigns"> | Id<"tradePlans">;
+    parentKind: "campaign" | "tradePlan";
+  }): Promise<Id<"retrospectives">> {
+    return await t.run(async (ctx) => {
+      return await ctx.db.insert("retrospectives", {
+        content: args.content,
+        ownerId: args.ownerId,
+        parentId: args.parentId,
+        parentKind: args.parentKind,
+        updatedAt: Date.now(),
       });
     });
   }
@@ -166,8 +181,13 @@ describe("campaign workspace queries", () => {
       closedAt,
       name: "Finished Campaign",
       ownerId: ownerA,
-      retrospective: "Documented what worked",
       status: "closed",
+    });
+    await insertRetrospective({
+      content: "Documented what worked",
+      ownerId: ownerA,
+      parentId: campaignId,
+      parentKind: "campaign",
     });
     const linkedTradePlanId = await insertTradePlan({
       campaignId,
@@ -253,6 +273,36 @@ describe("campaign workspace queries", () => {
       ],
       summary: summaries[0],
     });
+  });
+
+  it("does not count blank retrospectives as completed reviews", async () => {
+    const closedAt = Date.UTC(2026, 2, 11);
+    const campaignId = await insertCampaign({
+      closedAt,
+      name: "Blank Review Campaign",
+      ownerId: ownerA,
+      status: "closed",
+    });
+
+    await insertRetrospective({
+      content: "   ",
+      ownerId: ownerA,
+      parentId: campaignId,
+      parentKind: "campaign",
+    });
+
+    const user = asUser(ownerA);
+    const summaries = await user.query(
+      api.campaigns.listCampaignWorkspaceSummaries,
+      { status: "closed" },
+    );
+    const detail = await user.query(api.campaigns.getCampaignWorkspace, {
+      campaignId,
+    });
+
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]?.lifecycle.hasRetrospective).toBe(false);
+    expect(detail?.summary.lifecycle.hasRetrospective).toBe(false);
   });
 
   it("rolls up mixed linked-plan statuses and linked trade counts without leaking foreign data", async () => {

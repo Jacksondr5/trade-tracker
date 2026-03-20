@@ -2,10 +2,11 @@
 
 import { ConvexError } from "convex/values";
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
-import { CheckCircle2, Loader2, Pencil, Star } from "lucide-react";
+import { Check, Loader2, Pencil, Star, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
+import { RetrospectiveSection } from "~/components/RetrospectiveSection";
 import { WatchToggleButton } from "~/components/WatchToggleButton";
 import { MobileHierarchyBreadcrumbs } from "~/components/app-shell/campaign-trade-plan-hierarchy";
 import { useNavigationData } from "~/components/app-shell";
@@ -27,7 +28,6 @@ import { getTradePlanLinkTestId } from "../../../../../shared/e2e/testIds";
 
 type CampaignStatus = "planning" | "active" | "closed";
 type TradePlanStatus = "idea" | "watching" | "active" | "closed";
-type SaveState = "idle" | "saving" | "saved";
 
 const campaignStatusOptions: Array<{
   label: string;
@@ -62,10 +62,6 @@ const campaignNameSchema = z.object({
 const thesisSchema = z.object({
   thesis: z.string().trim().min(1, "Thesis is required"),
 });
-const retrospectiveSchema = z.object({
-  retrospective: z.string(),
-});
-
 type BadgeVariant = NonNullable<BadgeProps["variant"]>;
 
 function getStatusVariant(status: string): BadgeVariant {
@@ -177,20 +173,8 @@ export default function CampaignDetailPageClient({
   const [campaignNameError, setCampaignNameError] = useState<string | null>(
     null,
   );
-  const [campaignNameSaveState, setCampaignNameSaveState] =
-    useState<SaveState>("idle");
-
   const [thesisInitialized, setThesisInitialized] = useState(false);
   const [thesisError, setThesisError] = useState<string | null>(null);
-  const [thesisSaveState, setThesisSaveState] = useState<SaveState>("idle");
-
-  const [retrospectiveInitialized, setRetrospectiveInitialized] =
-    useState(false);
-  const [retrospectiveError, setRetrospectiveError] = useState<string | null>(
-    null,
-  );
-  const [retrospectiveSaveState, setRetrospectiveSaveState] =
-    useState<SaveState>("idle");
 
   const [tradePlanCreateError, setTradePlanCreateError] = useState<
     string | null
@@ -216,7 +200,6 @@ export default function CampaignDetailPageClient({
     },
     onSubmit: async ({ value }) => {
       setCampaignNameError(null);
-      setCampaignNameSaveState("saving");
 
       try {
         const parsed = campaignNameSchema.parse(value);
@@ -225,7 +208,6 @@ export default function CampaignDetailPageClient({
           name: parsed.name,
         });
         campaignNameForm.setFieldValue("name", parsed.name);
-        setCampaignNameSaveState("idle");
         setIsEditingName(false);
       } catch (error) {
         setCampaignNameError(
@@ -237,7 +219,6 @@ export default function CampaignDetailPageClient({
               ? error.message
               : "Failed to save campaign name",
         );
-        setCampaignNameSaveState("idle");
       }
     },
   });
@@ -249,15 +230,11 @@ export default function CampaignDetailPageClient({
     validators: {
       onChange: ({ value }) => {
         setThesisError(null);
-        if (thesisSaveState === "saved") {
-          setThesisSaveState("idle");
-        }
         return validateWithSchema(thesisSchema, value);
       },
     },
     onSubmit: async ({ value }) => {
       setThesisError(null);
-      setThesisSaveState("saving");
 
       try {
         const parsed = thesisSchema.parse(value);
@@ -266,50 +243,11 @@ export default function CampaignDetailPageClient({
           thesis: parsed.thesis,
         });
         thesisForm.setFieldValue("thesis", parsed.thesis);
-        setThesisSaveState("idle");
         setIsEditingThesis(false);
       } catch (error) {
         setThesisError(
           error instanceof Error ? error.message : "Failed to save thesis",
         );
-        setThesisSaveState("idle");
-      }
-    },
-  });
-
-  const retrospectiveForm = useAppForm({
-    defaultValues: {
-      retrospective: "",
-    },
-    validators: {
-      onChange: ({ value }) => {
-        setRetrospectiveError(null);
-        if (retrospectiveSaveState === "saved") {
-          setRetrospectiveSaveState("idle");
-        }
-        return validateWithSchema(retrospectiveSchema, value);
-      },
-    },
-    onSubmit: async ({ value }) => {
-      setRetrospectiveError(null);
-      setRetrospectiveSaveState("saving");
-
-      try {
-        const parsed = retrospectiveSchema.parse(value);
-        const trimmedRetrospective = parsed.retrospective.trim();
-        await updateCampaign({
-          campaignId,
-          retrospective: trimmedRetrospective,
-        });
-        retrospectiveForm.setFieldValue("retrospective", trimmedRetrospective);
-        setRetrospectiveSaveState("saved");
-      } catch (error) {
-        setRetrospectiveError(
-          error instanceof Error
-            ? error.message
-            : "Failed to save retrospective",
-        );
-        setRetrospectiveSaveState("idle");
       }
     },
   });
@@ -360,16 +298,6 @@ export default function CampaignDetailPageClient({
       setThesisInitialized(true);
     }
   }, [campaign, thesisForm, thesisInitialized]);
-
-  useEffect(() => {
-    if (campaign && !retrospectiveInitialized) {
-      retrospectiveForm.setFieldValue(
-        "retrospective",
-        campaign.retrospective || "",
-      );
-      setRetrospectiveInitialized(true);
-    }
-  }, [campaign, retrospectiveForm, retrospectiveInitialized]);
 
   const handleCampaignStatusChange = async (status: CampaignStatus) => {
     setStatusChangeError(null);
@@ -485,14 +413,14 @@ export default function CampaignDetailPageClient({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             {isEditingName ? (
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <form
                   onSubmit={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
                     void campaignNameForm.handleSubmit();
                   }}
-                  className="space-y-2"
+                  className="space-y-1.5"
                 >
                   <campaignNameForm.AppField name="name">
                     {(field) => (
@@ -503,34 +431,50 @@ export default function CampaignDetailPageClient({
                       />
                     )}
                   </campaignNameForm.AppField>
-                  <div className="flex items-center gap-2">
-                    <campaignNameForm.AppForm>
-                      <campaignNameForm.SubmitButton
-                        dataTestId="save-campaign-name-button"
-                        label="Save name"
-                      />
-                    </campaignNameForm.AppForm>
-                    <campaignNameForm.Subscribe
-                      selector={(state) => state.isSubmitting}
-                    >
-                      {(isSubmitting) => (
-                        <Button
-                          dataTestId="cancel-edit-campaign-name"
-                          type="button"
-                          variant="outline"
-                          disabled={isSubmitting}
-                          onClick={() => {
-                            setIsEditingName(false);
-                            campaignNameForm.setFieldValue(
-                              "name",
-                              campaign.name,
-                            );
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                      )}
-                    </campaignNameForm.Subscribe>
+                  <div className="flex items-center gap-1.5">
+                    <div className="ml-auto flex items-center gap-1.5">
+                      <campaignNameForm.Subscribe
+                        selector={(state) => state.isSubmitting}
+                      >
+                        {(isSubmitting) => (
+                          <>
+                            <button
+                              type="submit"
+                              aria-label="Save name"
+                              title="Save"
+                              className="rounded p-1 text-grass-9 hover:bg-grass-3 disabled:opacity-50"
+                              data-testid="save-campaign-name-button"
+                              disabled={isSubmitting}
+                            >
+                              {isSubmitting ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Check className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Cancel editing"
+                              title="Cancel"
+                              className="rounded p-1 text-olive-10 hover:bg-olive-4 hover:text-olive-12 disabled:cursor-not-allowed disabled:opacity-50"
+                              data-testid="cancel-edit-campaign-name"
+                              disabled={isSubmitting}
+                              onClick={() => {
+                                if (isSubmitting) return;
+                                setCampaignNameError(null);
+                                setIsEditingName(false);
+                                campaignNameForm.setFieldValue(
+                                  "name",
+                                  campaign.name,
+                                );
+                              }}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </campaignNameForm.Subscribe>
+                    </div>
                   </div>
                 </form>
                 {campaignNameError && (
@@ -542,28 +486,22 @@ export default function CampaignDetailPageClient({
                     {campaignNameError}
                   </Alert>
                 )}
-                {campaignNameSaveState === "saving" && (
-                  <span className="mt-2 flex items-center gap-1 text-sm text-olive-11">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Saving...
-                  </span>
-                )}
               </div>
             ) : (
-              <div className="flex items-center gap-2">
+              <div className="group flex items-center gap-2">
                 <h1 className="text-2xl font-bold text-olive-12 md:text-3xl">
                   {campaign.name}
                 </h1>
-                <Button
-                  dataTestId="edit-campaign-name"
+                <button
                   type="button"
-                  variant="ghost"
-                  size="icon"
                   aria-label="Edit campaign name"
+                  title="Edit"
+                  className="rounded p-1 text-olive-10 opacity-100 transition-opacity hover:bg-olive-4 hover:text-olive-12 focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100"
+                  data-testid="edit-campaign-name"
                   onClick={() => setIsEditingName(true)}
                 >
-                  <Pencil className="h-4 w-4" />
-                </Button>
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
               </div>
             )}
           </div>
@@ -655,20 +593,20 @@ export default function CampaignDetailPageClient({
         )}
       </div>
 
-      <section className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4">
+      <section className="group mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4">
         <div className="mb-2 flex items-center gap-2">
           <h2 className="text-lg font-semibold text-olive-12">Thesis</h2>
           {!isEditingThesis && (
-            <Button
-              dataTestId="edit-thesis"
+            <button
               type="button"
-              variant="ghost"
-              size="icon"
               aria-label="Edit thesis"
+              title="Edit"
+              className="rounded p-1 text-olive-10 opacity-100 transition-opacity hover:bg-olive-4 hover:text-olive-12 focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100"
+              data-testid="edit-thesis"
               onClick={() => setIsEditingThesis(true)}
             >
-              <Pencil className="h-4 w-4" />
-            </Button>
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
           )}
         </div>
         {thesisError && (
@@ -681,56 +619,64 @@ export default function CampaignDetailPageClient({
           </Alert>
         )}
         {isEditingThesis ? (
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              void thesisForm.handleSubmit();
-            }}
-          >
-            <thesisForm.AppField name="thesis">
-              {(field) => <field.FieldTextarea label="Thesis" rows={6} />}
-            </thesisForm.AppField>
-            <div className="mt-2 flex items-center gap-3">
-              <thesisForm.AppForm>
-                <thesisForm.SubmitButton
-                  dataTestId="save-campaign-thesis-button"
-                  label="Save thesis"
-                />
-              </thesisForm.AppForm>
-              <thesisForm.Subscribe selector={(state) => state.isSubmitting}>
-                {(isSubmitting) => (
-                  <Button
-                    dataTestId="cancel-edit-thesis"
-                    type="button"
-                    variant="outline"
-                    disabled={isSubmitting}
-                    onClick={() => {
-                      setIsEditingThesis(false);
-                      thesisForm.setFieldValue("thesis", campaign.thesis);
-                      setThesisError(null);
-                    }}
+          <div className="space-y-1.5">
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void thesisForm.handleSubmit();
+              }}
+            >
+              <thesisForm.AppField name="thesis">
+                {(field) => <field.FieldTextarea label="Thesis" rows={6} />}
+              </thesisForm.AppField>
+              <div className="mt-1.5 flex items-center gap-1.5">
+                <div className="ml-auto flex items-center gap-1.5">
+                  <thesisForm.Subscribe
+                    selector={(state) => state.isSubmitting}
                   >
-                    Cancel
-                  </Button>
-                )}
-              </thesisForm.Subscribe>
-
-              {thesisSaveState === "saving" && (
-                <span className="flex items-center gap-1 text-sm text-olive-11">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Saving...
-                </span>
-              )}
-
-              {thesisSaveState === "saved" && (
-                <span className="flex items-center gap-1 text-sm text-grass-9">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Saved
-                </span>
-              )}
-            </div>
-          </form>
+                    {(isSubmitting) => (
+                      <>
+                        <button
+                          type="submit"
+                          aria-label="Save thesis"
+                          title="Save"
+                          className="rounded p-1 text-grass-9 hover:bg-grass-3 disabled:opacity-50"
+                          data-testid="save-campaign-thesis-button"
+                          disabled={isSubmitting}
+                        >
+                          {isSubmitting ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Check className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Cancel editing"
+                          title="Cancel"
+                          className="rounded p-1 text-olive-10 hover:bg-olive-4 hover:text-olive-12 disabled:cursor-not-allowed disabled:opacity-50"
+                          data-testid="cancel-edit-thesis"
+                          disabled={isSubmitting}
+                          onClick={() => {
+                            if (isSubmitting) return;
+                            setIsEditingThesis(false);
+                            thesisForm.setFieldValue(
+                              "thesis",
+                              campaign.thesis,
+                            );
+                            setThesisError(null);
+                          }}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </>
+                    )}
+                  </thesisForm.Subscribe>
+                </div>
+              </div>
+            </form>
+          </div>
         ) : (
           <p className="text-sm whitespace-pre-wrap text-olive-11">
             {campaign.thesis || "No thesis written yet."}
@@ -945,73 +891,12 @@ export default function CampaignDetailPageClient({
         )}
       </section>
 
-      <section className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4">
-        <h2 className="mb-3 text-lg font-semibold text-olive-12">
-          Campaign Review
-        </h2>
-
-        {campaign.status !== "closed" ? (
-          <p className="text-sm text-olive-11">
-            Campaign review becomes available when the campaign is closed.
-          </p>
-        ) : (
-          <>
-            {!campaign.retrospective?.trim() && (
-              <p className="mb-3 text-sm text-olive-10">
-                Capture what you learned while it&apos;s fresh.
-              </p>
-            )}
-            {retrospectiveError && (
-              <Alert
-                variant="error"
-                className="mb-2"
-                onDismiss={() => setRetrospectiveError(null)}
-              >
-                {retrospectiveError}
-              </Alert>
-            )}
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                void retrospectiveForm.handleSubmit();
-              }}
-            >
-              <retrospectiveForm.AppField name="retrospective">
-                {(field) => (
-                  <field.FieldTextarea
-                    label="Campaign Review"
-                    rows={8}
-                    placeholder="What worked, what didn't, and what would you do differently?"
-                  />
-                )}
-              </retrospectiveForm.AppField>
-              <div className="mt-2 flex items-center gap-3">
-                <retrospectiveForm.AppForm>
-                  <retrospectiveForm.SubmitButton
-                    dataTestId="save-campaign-retrospective-button"
-                    label="Save review"
-                  />
-                </retrospectiveForm.AppForm>
-
-                {retrospectiveSaveState === "saving" && (
-                  <span className="flex items-center gap-1 text-sm text-olive-11">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Saving...
-                  </span>
-                )}
-
-                {retrospectiveSaveState === "saved" && (
-                  <span className="flex items-center gap-1 text-sm text-grass-9">
-                    <CheckCircle2 className="h-4 w-4" />
-                    Saved
-                  </span>
-                )}
-              </div>
-            </form>
-          </>
-        )}
-      </section>
+      <RetrospectiveSection
+        isClosed={campaign.status === "closed"}
+        parentId={campaignId}
+        parentKind="campaign"
+        testIdPrefix="campaign"
+      />
 
       <section className="rounded-lg border border-olive-6 bg-olive-2 p-4">
         <h2 className="mb-3 text-lg font-semibold text-olive-12">Execution</h2>

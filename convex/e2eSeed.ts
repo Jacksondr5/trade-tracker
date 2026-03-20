@@ -51,7 +51,6 @@ async function upsertCampaign(ctx: MutationCtx, ownerId: string) {
     await ctx.db.patch(existingCampaign._id, {
       closedAt: undefined,
       name: E2E_SMOKE_FIXTURES.campaign.name,
-      retrospective: undefined,
       status: E2E_SMOKE_FIXTURES.campaign.status,
       thesis: E2E_SMOKE_FIXTURES.campaign.thesis,
     });
@@ -63,7 +62,6 @@ async function upsertCampaign(ctx: MutationCtx, ownerId: string) {
     closedAt: undefined,
     name: E2E_SMOKE_FIXTURES.campaign.name,
     ownerId,
-    retrospective: undefined,
     status: E2E_SMOKE_FIXTURES.campaign.status,
     thesis: E2E_SMOKE_FIXTURES.campaign.thesis,
   });
@@ -91,23 +89,48 @@ async function upsertAuxiliaryCampaign(
   const patch = {
     closedAt: args.fixture.status === "closed" ? closedAt : undefined,
     name: args.fixture.name,
-    retrospective:
-      "retrospective" in args.fixture ? args.fixture.retrospective : undefined,
     status: args.fixture.status,
     thesis: args.fixture.thesis,
   };
 
+  let campaign;
   if (existingCampaign) {
     await ctx.db.patch(existingCampaign._id, patch);
-    return (await ctx.db.get(existingCampaign._id))!;
+    campaign = (await ctx.db.get(existingCampaign._id))!;
+  } else {
+    const campaignId = await ctx.db.insert("campaigns", {
+      ...patch,
+      ownerId: args.ownerId,
+    });
+    campaign = (await ctx.db.get(campaignId))!;
   }
 
-  const campaignId = await ctx.db.insert("campaigns", {
-    ...patch,
-    ownerId: args.ownerId,
-  });
+  // Upsert retrospective if fixture provides one
+  if ("retrospective" in args.fixture && args.fixture.retrospective) {
+    const existingRetro = await ctx.db
+      .query("retrospectives")
+      .withIndex("by_owner_parent", (q) =>
+        q.eq("ownerId", args.ownerId).eq("parentId", campaign._id),
+      )
+      .unique();
 
-  return (await ctx.db.get(campaignId))!;
+    if (existingRetro) {
+      await ctx.db.patch(existingRetro._id, {
+        content: args.fixture.retrospective,
+        updatedAt: Date.now(),
+      });
+    } else {
+      await ctx.db.insert("retrospectives", {
+        content: args.fixture.retrospective,
+        ownerId: args.ownerId,
+        parentId: campaign._id,
+        parentKind: "campaign",
+        updatedAt: Date.now(),
+      });
+    }
+  }
+
+  return campaign;
 }
 
 async function upsertTradePlan(
@@ -355,6 +378,7 @@ export const resetPlaywrightData = internalMutation({
     accountMappingsDeleted: v.number(),
     campaignsDeleted: v.number(),
     inboxTradesDeleted: v.number(),
+    retrospectivesDeleted: v.number(),
     notesDeleted: v.number(),
     portfoliosDeleted: v.number(),
     strategyDocsDeleted: v.number(),
@@ -377,6 +401,10 @@ export const resetPlaywrightData = internalMutation({
       .withIndex("by_owner_status", (q) =>
         q.eq("ownerId", ownerId).eq("status", "pending_review"),
       )
+      .collect();
+    const retrospectives = await ctx.db
+      .query("retrospectives")
+      .withIndex("by_owner_parent", (q) => q.eq("ownerId", ownerId))
       .collect();
     const trades = await ctx.db
       .query("trades")
@@ -412,6 +440,9 @@ export const resetPlaywrightData = internalMutation({
     for (const doc of inboxTrades) {
       await ctx.db.delete(doc._id);
     }
+    for (const doc of retrospectives) {
+      await ctx.db.delete(doc._id);
+    }
     for (const doc of trades) {
       await ctx.db.delete(doc._id);
     }
@@ -437,6 +468,7 @@ export const resetPlaywrightData = internalMutation({
       inboxTradesDeleted: inboxTrades.length,
       notesDeleted: notes.length,
       portfoliosDeleted: portfolios.length,
+      retrospectivesDeleted: retrospectives.length,
       strategyDocsDeleted: strategyDocs.length,
       tradePlansDeleted: tradePlans.length,
       tradesDeleted: trades.length,

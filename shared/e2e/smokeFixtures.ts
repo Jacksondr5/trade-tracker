@@ -14,7 +14,7 @@ export const E2E_SMOKE_FIXTURES = {
   closedCampaign: {
     name: "E2E Closed Review",
     retrospective:
-      "Synthetic closed campaign used to verify lifecycle filtering on the campaigns collection page.",
+      "Synthetic retrospective for closed campaign lifecycle verification.",
     status: "closed" as const,
     thesis:
       "Synthetic closed campaign used to verify lifecycle filtering on the campaigns collection page.",
