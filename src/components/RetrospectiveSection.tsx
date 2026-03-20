@@ -135,11 +135,15 @@ export function RetrospectiveSection({
           <textarea
             id={`${testIdPrefix}-retrospective-textarea`}
             data-testid={`${testIdPrefix}-retrospective-textarea`}
-            className="min-h-20 w-full rounded-md border border-olive-7 bg-transparent px-3 py-2 text-sm text-olive-12 focus:ring-2 focus:ring-blue-8 focus:outline-none"
+            className="min-h-20 w-full rounded-md border border-olive-7 bg-transparent px-3 py-2 text-sm text-olive-12 focus:ring-2 focus:ring-blue-8 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
             rows={8}
             placeholder="What worked, what didn't, and what would you do differently?"
             value={editContent}
-            onChange={(e) => setEditContent(e.target.value)}
+            onChange={(e) => {
+              if (isSaving) return;
+              setEditContent(e.target.value);
+            }}
+            disabled={isSaving}
           />
           <div className="flex items-center gap-1.5">
             <div className="ml-auto flex items-center gap-1.5">
