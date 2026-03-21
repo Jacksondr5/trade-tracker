@@ -24,17 +24,19 @@ test("strategy page shows empty state and supports document creation", async ({
 
   const proseMirror = page.getByTestId(STRATEGY_TEST_IDS.editorInput);
   const saveStatus = page.getByTestId(STRATEGY_TEST_IDS.saveStatus);
+  const lastUpdated = page.getByTestId(STRATEGY_TEST_IDS.lastUpdated);
+  const lastUpdatedBefore = (await lastUpdated.textContent())?.trim() ?? "";
   await expect(proseMirror).toBeVisible();
   await proseMirror.click();
   await proseMirror.pressSequentially(strategyContent, { delay: 10 });
 
   await expect
-    .poll(async () => (await saveStatus.textContent())?.trim() ?? "", {
+    .poll(async () => (await lastUpdated.textContent())?.trim() ?? "", {
       timeout: 10_000,
     })
-    .toMatch(/Saving|Saved/);
+    .not.toBe(lastUpdatedBefore);
   await expect(saveStatus).toContainText("Saved", { timeout: 10_000 });
-  await expect(page.getByTestId(STRATEGY_TEST_IDS.lastUpdated)).toBeVisible();
+  await expect(lastUpdated).toBeVisible();
 
   // Reload and verify persistence
   await page.reload();

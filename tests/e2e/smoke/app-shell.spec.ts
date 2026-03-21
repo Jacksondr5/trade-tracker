@@ -76,9 +76,7 @@ test("mobile navigation drawer reaches hierarchy destinations", async ({
   await getCampaignRow(page).click();
   await expect(page).toHaveURL(/\/campaigns\/[^/]+$/);
 
-  await expect(
-    page.getByTestId(APP_SHELL_TEST_IDS.openNavigationDrawer),
-  ).toBeVisible();
+  await expect(getOpenNavigationDrawer(page)).toBeVisible();
   await getOpenNavigationDrawer(page).click();
 
   const drawer = getMobileNavigationDrawer(page);
