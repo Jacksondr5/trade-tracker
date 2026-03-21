@@ -17,6 +17,9 @@ import {
   getCreateTradePlanButton,
   getInstrumentSymbolInput,
   getNameInput,
+  getNewTradePlanIdFromListPage,
+  getOnlyLinkedTradePlanIdFromCampaignDetail,
+  getSeededStandaloneTradePlanId,
   getStandaloneTradePlanCard,
   getStandaloneTradePlanLink,
   getThesisTextarea,
@@ -27,10 +30,14 @@ test("seeded standalone trade plan and hierarchy render", async ({ page }) => {
   await waitForAuthenticatedApp(page, APP_PAGE_TITLES.tradePlans);
 
   await expect(getStandaloneTradePlanLink(page)).toBeVisible();
+  const standaloneTradePlanId = await getSeededStandaloneTradePlanId(page);
 
   await getStandaloneTradePlanLink(page).click();
 
-  await expect(page).toHaveURL(/\/trade-plans\/[^/]+$/);
+  await expect(page).toHaveURL(
+    new RegExp(`/trade-plans/${standaloneTradePlanId}$`),
+  );
+
   await expect(
     page.getByTestId(APP_SHELL_TEST_IDS.tradePlanNameInput),
   ).toHaveValue(E2E_SMOKE_FIXTURES.standaloneTradePlan.name);
@@ -47,18 +54,19 @@ test("standalone trade plans can be created from the list page", async ({
   page,
 }) => {
   const createdPlanName = `${E2E_SMOKE_FIXTURES.createdStandaloneTradePlan.name} ${Date.now()}`;
-  const createdTradePlanCard = getStandaloneTradePlanCard(
-    page,
-    createdPlanName,
-  );
 
   await page.goto("/trade-plans");
   await waitForAuthenticatedApp(page, APP_PAGE_TITLES.tradePlans);
   const standaloneTradePlanCards = page.getByTestId(
     /^standalone-trade-plan-card-/,
   );
+  const tradePlanLinks = page.getByTestId(/^trade-plan-link-/);
   const initialCardCount = await standaloneTradePlanCards.count();
-  await expect(createdTradePlanCard).toHaveCount(0);
+  const initialHrefs = new Set(
+    (await tradePlanLinks.evaluateAll((elements) =>
+      elements.map((element) => element.getAttribute("href")).filter(Boolean),
+    )) as string[],
+  );
 
   await getNameInput(page).fill(createdPlanName);
   await getInstrumentSymbolInput(page).fill(
@@ -67,7 +75,15 @@ test("standalone trade plans can be created from the list page", async ({
   await getCreateTradePlanButton(page).click();
 
   await expect(standaloneTradePlanCards).toHaveCount(initialCardCount + 1);
-  await expect(createdTradePlanCard).toContainText(createdPlanName);
+
+  const createdTradePlanId = await getNewTradePlanIdFromListPage(
+    page,
+    initialHrefs,
+  );
+
+  await expect(
+    getStandaloneTradePlanCard(page, createdTradePlanId),
+  ).toContainText(createdPlanName);
 });
 
 test("trade plan workspace covers standalone and linked detail flows", async ({
@@ -89,10 +105,20 @@ test("trade plan workspace covers standalone and linked detail flows", async ({
 
   await getNameInput(page).fill(standalonePlanName);
   await getInstrumentSymbolInput(page).fill("SOL");
+  const tradePlanLinks = page.getByTestId(/^trade-plan-link-/);
+  const initialStandaloneHrefs = new Set(
+    (await tradePlanLinks.evaluateAll((elements) =>
+      elements.map((element) => element.getAttribute("href")).filter(Boolean),
+    )) as string[],
+  );
   await getCreateTradePlanButton(page).click();
 
+  const standaloneTradePlanId = await getNewTradePlanIdFromListPage(
+    page,
+    initialStandaloneHrefs,
+  );
   const createdStandalonePlanLink = page.getByTestId(
-    getTradePlanLinkTestId(standalonePlanName),
+    getTradePlanLinkTestId(standaloneTradePlanId),
   );
   await expect(createdStandalonePlanLink).toBeVisible();
   await createdStandalonePlanLink.click();
@@ -166,8 +192,10 @@ test("trade plan workspace covers standalone and linked detail flows", async ({
   await getInstrumentSymbolInput(page).fill("INTC");
   await getCreateLinkedTradePlanButton(page).click();
 
+  const linkedTradePlanId =
+    await getOnlyLinkedTradePlanIdFromCampaignDetail(page);
   const linkedPlanLink = page.getByTestId(
-    getTradePlanLinkTestId(linkedPlanName),
+    getTradePlanLinkTestId(linkedTradePlanId),
   );
   await expect(linkedPlanLink).toBeVisible();
   await linkedPlanLink.click();
@@ -216,9 +244,19 @@ test("trade plan detail accepts seeded inbox trades locally", async ({
 
   await getNameInput(page).fill(standalonePlanName);
   await getInstrumentSymbolInput(page).fill("SOL");
+  const inboxTradePlanLinks = page.getByTestId(/^trade-plan-link-/);
+  const initialInboxStandaloneHrefs = new Set(
+    (await inboxTradePlanLinks.evaluateAll((elements) =>
+      elements.map((element) => element.getAttribute("href")).filter(Boolean),
+    )) as string[],
+  );
   await getCreateTradePlanButton(page).click();
 
-  await page.getByTestId(getTradePlanLinkTestId(standalonePlanName)).click();
+  const standaloneTradePlanId = await getNewTradePlanIdFromListPage(
+    page,
+    initialInboxStandaloneHrefs,
+  );
+  await page.getByTestId(getTradePlanLinkTestId(standaloneTradePlanId)).click();
   await page
     .getByTestId("trade-plan-symbol-input")
     .fill(standaloneUpdatedSymbol);
@@ -238,12 +276,13 @@ test("trade plan detail accepts seeded inbox trades locally", async ({
   await getNameInput(page).fill(linkedPlanName);
   await getInstrumentSymbolInput(page).fill("INTC");
   await getCreateLinkedTradePlanButton(page).click();
-  await page.getByTestId(getTradePlanLinkTestId(linkedPlanName)).click();
+  const linkedPlanId = await getOnlyLinkedTradePlanIdFromCampaignDetail(page);
+  await page.getByTestId(getTradePlanLinkTestId(linkedPlanId)).click();
   await page.getByTestId("trade-plan-symbol-input").fill(linkedUpdatedSymbol);
   await page.getByTestId("save-trade-plan-symbol-button").click();
 
-  const linkedPlanId = page.url().match(/\/trade-plans\/([^/]+)$/)?.[1];
-  if (!linkedPlanId) {
+  const linkedPlanIdFromUrl = page.url().match(/\/trade-plans\/([^/]+)$/)?.[1];
+  if (!linkedPlanIdFromUrl) {
     throw new Error("Expected linked trade plan id in detail route.");
   }
 
@@ -252,7 +291,7 @@ test("trade plan detail accepts seeded inbox trades locally", async ({
     linkedSuggestedExternalId: string;
     standaloneAssignedExternalId: string;
   }>("e2eSeed:seedTradePlanInboxScenarios", {
-    linkedTradePlanId: linkedPlanId,
+    linkedTradePlanId: linkedPlanIdFromUrl,
     scope,
     standaloneTradePlanId: standalonePlanId,
   });

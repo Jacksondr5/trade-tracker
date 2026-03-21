@@ -5,7 +5,11 @@ import TradePlansPageClient from "./TradePlansPageClient";
 
 export default async function TradePlansPage() {
   const token = await getConvexTokenOrThrow();
-  const preloadedTradePlans = await preloadQuery(api.tradePlans.listTradePlans, {}, { token });
+  const preloadedTradePlans = await preloadQuery(
+    api.tradePlans.listTradePlanWorkspaceSummaries,
+    {},
+    { token },
+  );
 
   return <TradePlansPageClient preloadedTradePlans={preloadedTradePlans} />;
 }

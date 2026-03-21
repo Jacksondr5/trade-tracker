@@ -1,3 +1,4 @@
+import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 import { E2E_SMOKE_FIXTURES } from "../../../shared/e2e/smokeFixtures";
 import {
@@ -11,7 +12,6 @@ import {
   getLocalHierarchyItemTestId,
   getLocalHierarchyWatchToggleTestId,
   getStandaloneTradePlanCardTestId,
-  getTradePlanLinkTestId,
   getTradeRowTestId,
 } from "../../../shared/e2e/testIds";
 
@@ -101,20 +101,86 @@ export function getCampaignRowByName(page: Page, name: string): Locator {
 }
 
 export function getStandaloneTradePlanLink(page: Page): Locator {
-  return page.getByTestId(
-    getTradePlanLinkTestId(E2E_SMOKE_FIXTURES.standaloneTradePlan.name),
-  );
+  return page
+    .getByTestId(/^standalone-trade-plan-card-/)
+    .filter({ hasText: E2E_SMOKE_FIXTURES.standaloneTradePlan.name })
+    .getByTestId(/^trade-plan-link-/);
 }
 
-export function getStandaloneTradePlanCard(page: Page, name: string): Locator {
-  return page.getByTestId(getStandaloneTradePlanCardTestId(name));
+export async function getSeededStandaloneTradePlanId(
+  page: Page,
+): Promise<string> {
+  return getTradePlanIdFromHref(getStandaloneTradePlanLink(page));
 }
 
-export function getCreatedTradePlanCard(page: Page): Locator {
-  return getStandaloneTradePlanCard(
-    page,
-    E2E_SMOKE_FIXTURES.createdStandaloneTradePlan.name,
-  );
+async function getTradePlanIdFromHref(locator: Locator): Promise<string> {
+  const href = await locator.getAttribute("href");
+  const tradePlanId = href?.match(/\/trade-plans\/([^/]+)$/)?.[1];
+
+  if (!tradePlanId) {
+    throw new Error("Expected trade plan id in link href.");
+  }
+
+  return tradePlanId;
+}
+
+export async function getNewTradePlanIdFromListPage(
+  page: Page,
+  previousHrefs: Set<string>,
+): Promise<string> {
+  let createdHref: string | null = null;
+
+  await expect
+    .poll(async () => {
+      const hrefs = (await page
+        .getByTestId(/^trade-plan-link-/)
+        .evaluateAll(
+          (elements, priorHrefs) =>
+            elements
+              .map((element) => element.getAttribute("href"))
+              .filter(
+                (href): href is string =>
+                  Boolean(href) && !priorHrefs.includes(href),
+              ),
+          Array.from(previousHrefs),
+        )) as string[];
+
+      createdHref = hrefs[0] ?? null;
+      return createdHref;
+    })
+    .not.toBeNull();
+
+  if (!createdHref) {
+    throw new Error("Expected a new trade plan link after creation.");
+  }
+
+  const createdTradePlanId = createdHref.match(/\/trade-plans\/([^/]+)$/)?.[1];
+  if (!createdTradePlanId) {
+    throw new Error("Expected created trade plan id in list link.");
+  }
+
+  return createdTradePlanId;
+}
+
+export async function getOnlyLinkedTradePlanIdFromCampaignDetail(
+  page: Page,
+): Promise<string> {
+  const linkedTradePlanRows = page.getByTestId(/^linked-trade-plan-row-/);
+  await expect(linkedTradePlanRows).toHaveCount(1);
+
+  const linkedTradePlanRowTestId = await linkedTradePlanRows
+    .first()
+    .getAttribute("data-testid");
+
+  if (!linkedTradePlanRowTestId) {
+    throw new Error("Expected data-testid on linked trade plan row.");
+  }
+
+  return linkedTradePlanRowTestId.replace("linked-trade-plan-row-", "");
+}
+
+export function getStandaloneTradePlanCard(page: Page, id: string): Locator {
+  return page.getByTestId(getStandaloneTradePlanCardTestId(id));
 }
 
 export function getLinkedTradeRow(page: Page): Locator {

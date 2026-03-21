@@ -20,6 +20,7 @@ import { STANDALONE_TRADE_PLANS_LABEL } from "~/lib/campaign-trade-plan-navigati
 import { capitalize } from "~/lib/format";
 import {
   APP_PAGE_TITLES,
+  getCloseTradePlanButtonTestId,
   getStandaloneTradePlanCardTestId,
   getTradePlanLinkTestId,
 } from "../../../../shared/e2e/testIds";
@@ -32,7 +33,9 @@ const createTradePlanSchema = z.object({
 export default function TradePlansPageClient({
   preloadedTradePlans,
 }: {
-  preloadedTradePlans: Preloaded<typeof api.tradePlans.listTradePlans>;
+  preloadedTradePlans: Preloaded<
+    typeof api.tradePlans.listTradePlanWorkspaceSummaries
+  >;
 }) {
   const tradePlans = usePreloadedQuery(preloadedTradePlans);
   const createTradePlan = useMutation(api.tradePlans.createTradePlan);
@@ -48,7 +51,9 @@ export default function TradePlansPageClient({
     () => new Map(),
   );
 
-  const standalonePlans = tradePlans.filter((plan) => !plan.campaignId);
+  const standalonePlans = tradePlans.filter(
+    (plan) => plan.relationship.kind === "standalone",
+  );
   const linkedPlanCount = tradePlans.length - standalonePlans.length;
 
   const form = useAppForm({
@@ -209,14 +214,14 @@ export default function TradePlansPageClient({
             <div className="space-y-3">
               {standalonePlans.map((plan) => (
                 <div
-                  key={plan._id}
-                  data-testid={getStandaloneTradePlanCardTestId(plan.name)}
+                  key={plan.id}
+                  data-testid={getStandaloneTradePlanCardTestId(plan.id)}
                   className="rounded-lg border border-olive-6 bg-olive-3/50 p-3 transition-colors hover:border-olive-7 hover:bg-olive-3"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <Link
-                      href={`/trade-plans/${plan._id}`}
-                      data-testid={getTradePlanLinkTestId(plan.name)}
+                      href={`/trade-plans/${plan.id}`}
+                      data-testid={getTradePlanLinkTestId(plan.id)}
                       className="min-w-0 flex-1 hover:underline"
                     >
                       <p className="font-semibold text-olive-12">{plan.name}</p>
@@ -228,24 +233,24 @@ export default function TradePlansPageClient({
                       <Badge variant="neutral">{capitalize(plan.status)}</Badge>
                       {plan.status !== "closed" && (
                         <Button
-                          dataTestId={`close-plan-${plan._id}`}
+                          dataTestId={getCloseTradePlanButtonTestId(plan.id)}
                           variant="secondary"
                           className="border border-olive-6 bg-olive-3 text-olive-12 hover:bg-olive-4"
                           onClick={() => {
-                            void handleClosePlan(plan._id);
+                            void handleClosePlan(plan.id);
                           }}
-                          disabled={pendingCloseIds.has(plan._id)}
+                          disabled={pendingCloseIds.has(plan.id)}
                         >
-                          {pendingCloseIds.has(plan._id)
+                          {pendingCloseIds.has(plan.id)
                             ? "Closing..."
                             : "Close"}
                         </Button>
                       )}
                     </div>
                   </div>
-                  {closeErrors.has(plan._id) ? (
+                  {closeErrors.has(plan.id) ? (
                     <Alert variant="error" className="mt-3">
-                      {closeErrors.get(plan._id)}
+                      {closeErrors.get(plan.id)}
                     </Alert>
                   ) : null}
                 </div>
