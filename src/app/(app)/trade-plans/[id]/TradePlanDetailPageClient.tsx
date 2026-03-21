@@ -30,31 +30,20 @@ type SaveState = "idle" | "saving" | "saved";
 
 export default function TradePlanDetailPageClient({
   tradePlanId,
-  preloadedTradePlan,
-  preloadedNotes,
-  preloadedTrades,
-  preloadedAccountMappings,
-  preloadedInboxTradesForPlan,
-  preloadedPortfolios,
+  preloadedTradePlanWorkspace,
 }: {
   tradePlanId: Id<"tradePlans">;
-  preloadedTradePlan: Preloaded<typeof api.tradePlans.getTradePlan>;
-  preloadedNotes: Preloaded<typeof api.notes.getNotesByTradePlan>;
-  preloadedTrades: Preloaded<typeof api.trades.listTradesByTradePlan>;
-  preloadedAccountMappings: Preloaded<
-    typeof api.accountMappings.listAccountMappings
+  preloadedTradePlanWorkspace: Preloaded<
+    typeof api.tradePlans.getTradePlanWorkspace
   >;
-  preloadedInboxTradesForPlan: Preloaded<
-    typeof api.imports.listInboxTradesForTradePlan
-  >;
-  preloadedPortfolios: Preloaded<typeof api.portfolios.listPortfolios>;
 }) {
-  const tradePlan = usePreloadedQuery(preloadedTradePlan);
-  const notes = usePreloadedQuery(preloadedNotes);
-  const trades = usePreloadedQuery(preloadedTrades);
-  const accountMappings = usePreloadedQuery(preloadedAccountMappings);
-  const inboxTradesForPlan = usePreloadedQuery(preloadedInboxTradesForPlan);
-  const portfolios = usePreloadedQuery(preloadedPortfolios);
+  const workspace = usePreloadedQuery(preloadedTradePlanWorkspace);
+  const tradePlan = workspace?.tradePlan ?? null;
+  const notes = workspace?.notes ?? [];
+  const trades = workspace?.trades ?? [];
+  const accountMappings = workspace?.accountMappings ?? [];
+  const inboxTradesForPlan = workspace?.inboxTrades ?? [];
+  const portfolios = workspace?.portfolios ?? [];
   const { hierarchy } = useNavigationData();
 
   const addNote = useMutation(api.notes.addNote);

@@ -46,7 +46,7 @@ The trade-plan detail page in `src/app/(app)/trade-plans/[id]/TradePlanDetailPag
 - shared notes section
 - a basic trades table with inline pending-inbox acceptance
 
-The backend model is ahead of the UI. `convex/schema.ts` and `convex/tradePlans.ts` already define fields for `rationale`, `entryConditions`, `targetConditions`, `exitConditions`, `instrumentNotes`, `instrumentType`, `invalidatedAt`, and `sortOrder`, but the main trade-plan UI does not surface them yet.
+The backend model is ahead of the UI. `convex/schema.ts` and `convex/tradePlans.ts` already define fields beyond the current trade-plan surface, but the first-pass workspace contract intentionally narrows the tactical field set to `rationale`, `entryConditions`, `targetConditions`, and `exitConditions`. The main trade-plan UI does not surface those fields yet.
 
 The current backend also contains a guard in `convex/tradePlans.ts` that blocks reopening or activating a linked trade plan when its parent campaign is closed. This breakdown assumes that guard should be removed as part of the trade-plan workspace effort so campaign closure does not overconstrain tactical work.
 
@@ -177,8 +177,8 @@ Give a single implementation owner the full trade-plan detail surface: page comp
 - Improve visibility of plan name, instrument, lifecycle state, relationship state, parent campaign context, and page-level actions
 - Add page-level watch/focus treatment if the workspace data contract supports it
 - Reorder the major detail-page sections so the tactical plan reads as a coherent working surface
-- Surface and edit `rationale`, `entryConditions`, `targetConditions`, `exitConditions`, and `instrumentNotes`
-- Decide whether `instrumentType` and `invalidatedAt` belong in the main tactical section or a closely related lifecycle sub-section
+- Surface and edit `rationale`, `entryConditions`, `targetConditions`, and `exitConditions`
+- Keep `instrumentNotes`, `instrumentType`, and `invalidatedAt` out of the first-pass detail rebuild unless a later contract explicitly reintroduces them
 - Move the touched editing flows onto the shared form system where practical instead of continuing with route-local raw inputs
 - Redesign the trade/execution section on trade-plan detail
 - Improve summary context for linked trades and pending inbox matches

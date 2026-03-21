@@ -1,6 +1,8 @@
-import { mutation, query } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import { mutation, query, type QueryCtx } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
 import { assertOwner, requireUser } from "./lib/auth";
+import { tradeValidator } from "./lib/tradeValidator";
 
 const tradePlanStatusValidator = v.union(
   v.literal("active"),
@@ -27,6 +29,411 @@ const tradePlanValidator = v.object({
   status: tradePlanStatusValidator,
   targetConditions: v.optional(v.string()),
 });
+
+const nullableNumberValidator = v.union(v.number(), v.null());
+
+const parentCampaignContextValidator = v.object({
+  href: v.string(),
+  id: v.id("campaigns"),
+  name: v.string(),
+});
+
+const tradePlanWorkspaceRelationshipValidator = v.object({
+  kind: v.union(v.literal("linked"), v.literal("standalone")),
+  parentCampaign: v.union(parentCampaignContextValidator, v.null()),
+});
+
+const tradePlanWorkspaceExecutionValidator = v.object({
+  latestTradeDate: nullableNumberValidator,
+  pendingAssignedCount: v.number(),
+  pendingSuggestedCount: v.number(),
+  totalPendingCount: v.number(),
+  tradeCount: v.number(),
+});
+
+const tradePlanWorkspaceLifecycleValidator = v.object({
+  closedAt: nullableNumberValidator,
+  isClosed: v.boolean(),
+});
+
+const tradePlanWorkspaceSummaryValidator = v.object({
+  createdAt: v.number(),
+  execution: tradePlanWorkspaceExecutionValidator,
+  id: v.id("tradePlans"),
+  instrumentSymbol: v.string(),
+  isWatched: v.boolean(),
+  lifecycle: tradePlanWorkspaceLifecycleValidator,
+  name: v.string(),
+  relationship: tradePlanWorkspaceRelationshipValidator,
+  status: tradePlanStatusValidator,
+});
+
+const tradePlanWorkspaceEditorValidator = v.object({
+  campaignId: v.union(v.id("campaigns"), v.null()),
+  closedAt: nullableNumberValidator,
+  entryConditions: v.union(v.string(), v.null()),
+  exitConditions: v.union(v.string(), v.null()),
+  id: v.id("tradePlans"),
+  instrumentSymbol: v.string(),
+  name: v.string(),
+  rationale: v.union(v.string(), v.null()),
+  status: tradePlanStatusValidator,
+  targetConditions: v.union(v.string(), v.null()),
+});
+
+const noteEvidenceValidator = v.object({
+  contentType: v.optional(v.string()),
+  fileName: v.optional(v.string()),
+  kind: v.union(v.literal("chart"), v.literal("image")),
+  storageId: v.optional(v.id("_storage")),
+  url: v.union(v.string(), v.null()),
+});
+
+const tradePlanWorkspaceNoteValidator = v.object({
+  _creationTime: v.number(),
+  _id: v.id("notes"),
+  campaignId: v.optional(v.id("campaigns")),
+  chartUrls: v.optional(v.array(v.string())),
+  content: v.string(),
+  contextHref: v.union(v.string(), v.null()),
+  contextKind: v.literal("tradePlan"),
+  contextLabel: v.string(),
+  evidence: v.optional(v.array(noteEvidenceValidator)),
+  ownerId: v.string(),
+  tradePlanId: v.optional(v.id("tradePlans")),
+});
+
+const mappingSourceValidator = v.union(v.literal("ibkr"), v.literal("kraken"));
+
+const tradePlanWorkspaceAccountMappingValidator = v.object({
+  _creationTime: v.number(),
+  _id: v.id("accountMappings"),
+  accountId: v.string(),
+  friendlyName: v.string(),
+  ownerId: v.string(),
+  source: mappingSourceValidator,
+});
+
+const tradePlanWorkspacePortfolioValidator = v.object({
+  _creationTime: v.number(),
+  _id: v.id("portfolios"),
+  name: v.string(),
+  ownerId: v.string(),
+});
+
+const inboxTradeValidator = v.object({
+  _creationTime: v.number(),
+  _id: v.id("inboxTrades"),
+  assetType: v.optional(v.union(v.literal("crypto"), v.literal("stock"))),
+  brokerageAccountId: v.optional(v.string()),
+  date: v.optional(v.number()),
+  direction: v.optional(v.union(v.literal("long"), v.literal("short"))),
+  externalId: v.optional(v.string()),
+  fees: v.optional(v.number()),
+  notes: v.optional(v.string()),
+  orderType: v.optional(v.string()),
+  ownerId: v.string(),
+  portfolioId: v.optional(v.id("portfolios")),
+  price: v.optional(v.number()),
+  quantity: v.optional(v.number()),
+  side: v.optional(v.union(v.literal("buy"), v.literal("sell"))),
+  source: mappingSourceValidator,
+  status: v.literal("pending_review"),
+  taxes: v.optional(v.number()),
+  ticker: v.optional(v.string()),
+  tradePlanId: v.optional(v.id("tradePlans")),
+  validationErrors: v.array(v.string()),
+  validationWarnings: v.array(v.string()),
+});
+
+const tradePlanWorkspaceInboxTradeValidator = v.object({
+  inboxTrade: inboxTradeValidator,
+  matchType: v.union(v.literal("assigned"), v.literal("suggested")),
+});
+
+const tradePlanWorkspaceDetailValidator = v.union(
+  v.object({
+    accountMappings: v.array(tradePlanWorkspaceAccountMappingValidator),
+    inboxTrades: v.array(tradePlanWorkspaceInboxTradeValidator),
+    notes: v.array(tradePlanWorkspaceNoteValidator),
+    portfolios: v.array(tradePlanWorkspacePortfolioValidator),
+    summary: tradePlanWorkspaceSummaryValidator,
+    tradePlan: tradePlanWorkspaceEditorValidator,
+    trades: v.array(tradeValidator),
+  }),
+  v.null(),
+);
+
+type CampaignDoc = Doc<"campaigns">;
+type TradePlanDoc = Doc<"tradePlans">;
+type InboxTradeDoc = Doc<"inboxTrades">;
+type NoteDoc = Doc<"notes">;
+
+function buildCampaignHref(campaignId: Id<"campaigns">): string {
+  return `/campaigns/${campaignId}`;
+}
+
+function buildTradePlanHref(tradePlanId: Id<"tradePlans">): string {
+  return `/trade-plans/${tradePlanId}`;
+}
+
+function normalizeOptionalText(value: string | undefined): string | null {
+  return value ?? null;
+}
+
+function createEmptyTradeExecutionStats() {
+  return {
+    latestTradeDate: null as number | null,
+    tradeCount: 0,
+  };
+}
+
+function createEmptyPendingStats() {
+  return {
+    pendingAssignedCount: 0,
+    pendingSuggestedCount: 0,
+  };
+}
+
+function createParentCampaignContext(
+  campaign: CampaignDoc | null,
+): { href: string; id: Id<"campaigns">; name: string } | null {
+  if (campaign === null) {
+    return null;
+  }
+
+  return {
+    href: buildCampaignHref(campaign._id),
+    id: campaign._id,
+    name: campaign.name,
+  };
+}
+
+function buildTradePlanWorkspaceSummary(
+  tradePlan: TradePlanDoc,
+  sourceData: {
+    campaignById: Map<Id<"campaigns">, CampaignDoc>;
+    pendingStatsByPlanId: Map<
+      Id<"tradePlans">,
+      { pendingAssignedCount: number; pendingSuggestedCount: number }
+    >;
+    suggestedPendingCountBySymbol: Map<string, number>;
+    tradeStatsByPlanId: Map<
+      Id<"tradePlans">,
+      { latestTradeDate: number | null; tradeCount: number }
+    >;
+    watchedTradePlanIds: Set<Id<"tradePlans">>;
+  },
+) {
+  const parentCampaign =
+    tradePlan.campaignId !== undefined
+      ? sourceData.campaignById.get(tradePlan.campaignId) ?? null
+      : null;
+  const tradeStats =
+    sourceData.tradeStatsByPlanId.get(tradePlan._id) ??
+    createEmptyTradeExecutionStats();
+  const pendingStats =
+    sourceData.pendingStatsByPlanId.get(tradePlan._id) ??
+    createEmptyPendingStats();
+  const pendingSuggestedCount =
+    pendingStats.pendingSuggestedCount > 0
+      ? pendingStats.pendingSuggestedCount
+      : (sourceData.suggestedPendingCountBySymbol.get(
+          tradePlan.instrumentSymbol.toUpperCase(),
+        ) ?? 0);
+
+  return {
+    createdAt: tradePlan._creationTime,
+    execution: {
+      latestTradeDate: tradeStats.latestTradeDate,
+      pendingAssignedCount: pendingStats.pendingAssignedCount,
+      pendingSuggestedCount,
+      totalPendingCount:
+        pendingStats.pendingAssignedCount + pendingSuggestedCount,
+      tradeCount: tradeStats.tradeCount,
+    },
+    id: tradePlan._id,
+    instrumentSymbol: tradePlan.instrumentSymbol,
+    isWatched: sourceData.watchedTradePlanIds.has(tradePlan._id),
+    lifecycle: {
+      closedAt: tradePlan.closedAt ?? null,
+      isClosed: tradePlan.status === "closed",
+    },
+    name: tradePlan.name,
+    relationship: {
+      kind: tradePlan.campaignId ? ("linked" as const) : ("standalone" as const),
+      parentCampaign: createParentCampaignContext(parentCampaign),
+    },
+    status: tradePlan.status,
+  };
+}
+
+function sortPendingInboxTrades(a: InboxTradeDoc, b: InboxTradeDoc): number {
+  return (b.date ?? b._creationTime) - (a.date ?? a._creationTime);
+}
+
+async function resolveTradePlanNoteEvidence(ctx: QueryCtx, note: NoteDoc) {
+  const evidence = new Map<
+    string,
+    {
+      contentType?: string;
+      fileName?: string;
+      kind: "chart" | "image";
+      storageId?: Id<"_storage">;
+      url: string | null;
+    }
+  >();
+
+  for (const chartUrl of note.chartUrls ?? []) {
+    evidence.set(`legacy:${chartUrl}`, {
+      kind: "chart",
+      url: chartUrl,
+    });
+  }
+
+  for (const item of note.evidence ?? []) {
+    const resolvedUrl =
+      item.url ??
+      (item.storageId ? await ctx.storage.getUrl(item.storageId) : null);
+    const key = item.storageId
+      ? `storage:${item.storageId}`
+      : `url:${resolvedUrl ?? item.kind}`;
+
+    evidence.set(key, {
+      contentType: item.contentType,
+      fileName: item.fileName,
+      kind: item.kind,
+      storageId: item.storageId,
+      url: resolvedUrl,
+    });
+  }
+
+  const normalizedEvidence = Array.from(evidence.values());
+  const chartUrls = normalizedEvidence
+    .map((item) => item.url)
+    .filter((url): url is string => Boolean(url));
+
+  return {
+    chartUrls: chartUrls.length > 0 ? chartUrls : undefined,
+    evidence: normalizedEvidence.length > 0 ? normalizedEvidence : undefined,
+  };
+}
+
+async function serializeTradePlanNotes(
+  ctx: QueryCtx,
+  tradePlan: TradePlanDoc,
+  notes: NoteDoc[],
+) {
+  return await Promise.all(
+    notes.map(async (note) => {
+      const { chartUrls, evidence } = await resolveTradePlanNoteEvidence(
+        ctx,
+        note,
+      );
+
+      return {
+        _creationTime: note._creationTime,
+        _id: note._id,
+        campaignId: note.campaignId,
+        chartUrls,
+        content: note.content,
+        contextHref: buildTradePlanHref(tradePlan._id),
+        contextKind: "tradePlan" as const,
+        contextLabel: tradePlan.name,
+        evidence,
+        ownerId: note.ownerId,
+        tradePlanId: note.tradePlanId,
+      };
+    }),
+  );
+}
+
+async function loadTradePlanWorkspaceSourceData(
+  ctx: QueryCtx,
+  ownerId: string,
+) {
+  const [campaigns, trades, watchedItems, inboxTrades] = await Promise.all([
+    ctx.db
+      .query("campaigns")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect(),
+    ctx.db
+      .query("trades")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect(),
+    ctx.db
+      .query("watchlist")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect(),
+    ctx.db
+      .query("inboxTrades")
+      .withIndex("by_owner_status", (q) =>
+        q.eq("ownerId", ownerId).eq("status", "pending_review"),
+      )
+      .collect(),
+  ]);
+
+  const campaignById = new Map(campaigns.map((campaign) => [campaign._id, campaign]));
+  const watchedTradePlanIds = new Set<Id<"tradePlans">>();
+  for (const watchedItem of watchedItems) {
+    if (watchedItem.itemType === "tradePlan" && watchedItem.tradePlanId) {
+      watchedTradePlanIds.add(watchedItem.tradePlanId);
+    }
+  }
+
+  const tradeStatsByPlanId = new Map<
+    Id<"tradePlans">,
+    { latestTradeDate: number | null; tradeCount: number }
+  >();
+  for (const trade of trades) {
+    if (!trade.tradePlanId) {
+      continue;
+    }
+
+    const existing =
+      tradeStatsByPlanId.get(trade.tradePlanId) ??
+      createEmptyTradeExecutionStats();
+    existing.tradeCount += 1;
+    existing.latestTradeDate =
+      existing.latestTradeDate === null || trade.date > existing.latestTradeDate
+        ? trade.date
+        : existing.latestTradeDate;
+    tradeStatsByPlanId.set(trade.tradePlanId, existing);
+  }
+
+  const suggestedPendingCountBySymbol = new Map<string, number>();
+  const pendingStatsByPlanId = new Map<
+    Id<"tradePlans">,
+    { pendingAssignedCount: number; pendingSuggestedCount: number }
+  >();
+  for (const inboxTrade of inboxTrades) {
+    if (inboxTrade.tradePlanId) {
+      const existing =
+        pendingStatsByPlanId.get(inboxTrade.tradePlanId) ??
+        createEmptyPendingStats();
+      existing.pendingAssignedCount += 1;
+      pendingStatsByPlanId.set(inboxTrade.tradePlanId, existing);
+      continue;
+    }
+
+    if (!inboxTrade.ticker) {
+      continue;
+    }
+
+    suggestedPendingCountBySymbol.set(
+      inboxTrade.ticker,
+      (suggestedPendingCountBySymbol.get(inboxTrade.ticker) ?? 0) + 1,
+    );
+  }
+
+  return {
+    campaignById,
+    pendingStatsByPlanId,
+    suggestedPendingCountBySymbol,
+    tradeStatsByPlanId,
+    watchedTradePlanIds,
+  };
+}
 
 function sortTradePlansByOrderThenNewest(
   a: {
@@ -194,6 +601,146 @@ export const getTradePlan = query({
     const tradePlan = await ctx.db.get(args.tradePlanId);
     if (!tradePlan || tradePlan.ownerId !== ownerId) return null;
     return tradePlan;
+  },
+});
+
+export const listTradePlanWorkspaceSummaries = query({
+  args: {
+    status: v.optional(tradePlanStatusValidator),
+  },
+  returns: v.array(tradePlanWorkspaceSummaryValidator),
+  handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const tradePlans =
+      args.status === undefined
+        ? await ctx.db
+            .query("tradePlans")
+            .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+            .collect()
+        : await ctx.db
+            .query("tradePlans")
+            .withIndex("by_owner_status", (q) =>
+              q.eq("ownerId", ownerId).eq("status", args.status!),
+            )
+            .collect();
+
+    const sourceData = await loadTradePlanWorkspaceSourceData(ctx, ownerId);
+
+    return tradePlans
+      .sort(sortTradePlansByOrderThenNewest)
+      .map((tradePlan) => buildTradePlanWorkspaceSummary(tradePlan, sourceData));
+  },
+});
+
+export const getTradePlanWorkspace = query({
+  args: { tradePlanId: v.id("tradePlans") },
+  returns: tradePlanWorkspaceDetailValidator,
+  handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const tradePlan = await ctx.db.get(args.tradePlanId);
+    if (!tradePlan || tradePlan.ownerId !== ownerId) {
+      return null;
+    }
+
+    const [
+      sourceData,
+      notes,
+      trades,
+      accountMappings,
+      portfolios,
+      assignedInboxTrades,
+      suggestedInboxTrades,
+    ] = await Promise.all([
+      loadTradePlanWorkspaceSourceData(ctx, ownerId),
+      ctx.db
+        .query("notes")
+        .withIndex("by_owner_tradePlanId", (q) =>
+          q.eq("ownerId", ownerId).eq("tradePlanId", args.tradePlanId),
+        )
+        .order("asc")
+        .collect(),
+      ctx.db
+        .query("trades")
+        .withIndex("by_owner_tradePlanId", (q) =>
+          q.eq("ownerId", ownerId).eq("tradePlanId", args.tradePlanId),
+        )
+        .collect(),
+      ctx.db
+        .query("accountMappings")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .collect(),
+      ctx.db
+        .query("portfolios")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .order("desc")
+        .collect(),
+      ctx.db
+        .query("inboxTrades")
+        .withIndex("by_owner_status_tradePlanId", (q) =>
+          q
+            .eq("ownerId", ownerId)
+            .eq("status", "pending_review")
+            .eq("tradePlanId", args.tradePlanId),
+        )
+        .collect(),
+      ctx.db
+        .query("inboxTrades")
+        .withIndex("by_owner_status_ticker", (q) =>
+          q
+            .eq("ownerId", ownerId)
+            .eq("status", "pending_review")
+            .eq("ticker", tradePlan.instrumentSymbol.toUpperCase()),
+        )
+        .collect(),
+    ]);
+
+    const summary = buildTradePlanWorkspaceSummary(tradePlan, sourceData);
+    const serializedNotes = await serializeTradePlanNotes(ctx, tradePlan, notes);
+
+    const sortedTrades = trades.sort((a, b) => b.date - a.date);
+    const sortedAccountMappings = [...accountMappings].sort(
+      (a, b) =>
+        a.source.localeCompare(b.source) ||
+        a.accountId.localeCompare(b.accountId) ||
+        a.friendlyName.localeCompare(b.friendlyName),
+    );
+
+    const inboxTrades = [
+      ...assignedInboxTrades
+        .sort(sortPendingInboxTrades)
+        .map((inboxTrade) => ({
+          inboxTrade,
+          matchType: "assigned" as const,
+        })),
+      ...suggestedInboxTrades
+        .filter((inboxTrade) => inboxTrade.tradePlanId === undefined)
+        .sort(sortPendingInboxTrades)
+        .map((inboxTrade) => ({
+          inboxTrade,
+          matchType: "suggested" as const,
+        })),
+    ];
+
+    return {
+      accountMappings: sortedAccountMappings,
+      inboxTrades,
+      notes: serializedNotes,
+      portfolios,
+      summary,
+      tradePlan: {
+        campaignId: tradePlan.campaignId ?? null,
+        closedAt: tradePlan.closedAt ?? null,
+        entryConditions: normalizeOptionalText(tradePlan.entryConditions),
+        exitConditions: normalizeOptionalText(tradePlan.exitConditions),
+        id: tradePlan._id,
+        instrumentSymbol: tradePlan.instrumentSymbol,
+        name: tradePlan.name,
+        rationale: normalizeOptionalText(tradePlan.rationale),
+        status: tradePlan.status,
+        targetConditions: normalizeOptionalText(tradePlan.targetConditions),
+      },
+      trades: sortedTrades,
+    };
   },
 });
 
