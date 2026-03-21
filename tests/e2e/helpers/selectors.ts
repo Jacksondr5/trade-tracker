@@ -6,6 +6,7 @@ import {
   APP_SHELL_TEST_IDS,
   NAVIGATION_SECTION_TEST_IDS,
   NAVIGATION_TEST_IDS,
+  TRADE_PLANS_INDEX_TEST_IDS,
   getCommandPaletteItemTestId,
   getCampaignRowTestId,
   getLocalHierarchyCampaignChildrenToggleTestId,
@@ -98,6 +99,20 @@ export function getCampaignRow(page: Page): Locator {
 
 export function getCampaignRowByName(page: Page, name: string): Locator {
   return page.getByTestId(getCampaignRowTestId(name));
+}
+
+export function getCreateFormToggle(page: Page): Locator {
+  return page.getByTestId(TRADE_PLANS_INDEX_TEST_IDS.createFormToggle);
+}
+
+export async function openTradePlanCreateForm(page: Page): Promise<void> {
+  const formSection = page.getByTestId(
+    TRADE_PLANS_INDEX_TEST_IDS.createFormSection,
+  );
+  if (!(await formSection.isVisible())) {
+    await getCreateFormToggle(page).click();
+    await expect(formSection).toBeVisible();
+  }
 }
 
 export function getStandaloneTradePlanLink(page: Page): Locator {

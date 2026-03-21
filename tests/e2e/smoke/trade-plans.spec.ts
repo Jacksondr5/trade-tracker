@@ -23,6 +23,7 @@ import {
   getStandaloneTradePlanCard,
   getStandaloneTradePlanLink,
   getThesisTextarea,
+  openTradePlanCreateForm,
 } from "../helpers/selectors";
 
 test("seeded standalone trade plan and hierarchy render", async ({ page }) => {
@@ -68,6 +69,7 @@ test("standalone trade plans can be created from the list page", async ({
     )) as string[],
   );
 
+  await openTradePlanCreateForm(page);
   await getNameInput(page).fill(createdPlanName);
   await getInstrumentSymbolInput(page).fill(
     E2E_SMOKE_FIXTURES.createdStandaloneTradePlan.instrumentSymbol,
@@ -103,14 +105,16 @@ test("trade plan workspace covers standalone and linked detail flows", async ({
   await page.goto("/trade-plans");
   await waitForAuthenticatedApp(page, APP_PAGE_TITLES.tradePlans);
 
-  await getNameInput(page).fill(standalonePlanName);
-  await getInstrumentSymbolInput(page).fill("SOL");
   const tradePlanLinks = page.getByTestId(/^trade-plan-link-/);
   const initialStandaloneHrefs = new Set(
     (await tradePlanLinks.evaluateAll((elements) =>
       elements.map((element) => element.getAttribute("href")).filter(Boolean),
     )) as string[],
   );
+
+  await openTradePlanCreateForm(page);
+  await getNameInput(page).fill(standalonePlanName);
+  await getInstrumentSymbolInput(page).fill("SOL");
   await getCreateTradePlanButton(page).click();
 
   const standaloneTradePlanId = await getNewTradePlanIdFromListPage(
@@ -242,14 +246,16 @@ test("trade plan detail accepts seeded inbox trades locally", async ({
   await page.goto("/trade-plans");
   await waitForAuthenticatedApp(page, APP_PAGE_TITLES.tradePlans);
 
-  await getNameInput(page).fill(standalonePlanName);
-  await getInstrumentSymbolInput(page).fill("SOL");
   const inboxTradePlanLinks = page.getByTestId(/^trade-plan-link-/);
   const initialInboxStandaloneHrefs = new Set(
     (await inboxTradePlanLinks.evaluateAll((elements) =>
       elements.map((element) => element.getAttribute("href")).filter(Boolean),
     )) as string[],
   );
+
+  await openTradePlanCreateForm(page);
+  await getNameInput(page).fill(standalonePlanName);
+  await getInstrumentSymbolInput(page).fill("SOL");
   await getCreateTradePlanButton(page).click();
 
   const standaloneTradePlanId = await getNewTradePlanIdFromListPage(

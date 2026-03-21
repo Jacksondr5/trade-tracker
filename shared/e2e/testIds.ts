@@ -73,6 +73,25 @@ export function getCampaignRowTestId(name: string): string {
   return `campaign-row-${normalizeSegment(name)}`;
 }
 
+export const TRADE_PLANS_INDEX_TEST_IDS = {
+  createFormToggle: "trade-plans-create-form-toggle",
+  createFormSection: "trade-plans-create-form-section",
+  emptyState: "trade-plans-empty-state",
+  emptyStateCta: "trade-plans-empty-state-cta",
+  filterAll: "trade-plans-filter-all",
+  filterLinked: "trade-plans-filter-linked",
+  filterStandalone: "trade-plans-filter-standalone",
+  planList: "trade-plans-list",
+  statusFilterSelect: "trade-plans-status-filter",
+  summaryTotal: "trade-plans-summary-total",
+  summaryActive: "trade-plans-summary-active",
+  summaryPending: "trade-plans-summary-pending",
+} as const;
+
+export function getTradePlanRowTestId(id: string): string {
+  return `trade-plan-row-${normalizeSegment(id)}`;
+}
+
 export function getStandaloneTradePlanCardTestId(id: string): string {
   return `standalone-trade-plan-card-${normalizeSegment(id)}`;
 }
