@@ -422,17 +422,13 @@ function TradePlanRow({
 
   return (
     <div
-      data-testid={getTradePlanRowTestId(plan.id)}
+      data-testid={
+        isLinked
+          ? getTradePlanRowTestId(plan.id)
+          : getStandaloneTradePlanCardTestId(plan.id)
+      }
       className="rounded-lg border border-olive-6 bg-olive-2 p-3 transition-colors hover:border-olive-7 hover:bg-olive-3/50"
     >
-      {/* Legacy test ID for backwards compat with e2e targeting standalone cards */}
-      {!isLinked && (
-        <span
-          data-testid={getStandaloneTradePlanCardTestId(plan.id)}
-          className="hidden"
-          aria-hidden="true"
-        />
-      )}
       <div className="flex items-center justify-between gap-3">
         <Link
           href={`/trade-plans/${plan.id}`}
