@@ -755,7 +755,7 @@ export default function CampaignDetailPageClient({
                   <Link
                     href={`/trade-plans/${plan.id}`}
                     className="min-w-0 flex-1 hover:underline"
-                    data-testid={getTradePlanLinkTestId(plan.name)}
+                    data-testid={getTradePlanLinkTestId(plan.id)}
                   >
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-olive-12">

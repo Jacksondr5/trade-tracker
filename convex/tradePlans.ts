@@ -348,44 +348,22 @@ async function serializeTradePlanNotes(
   );
 }
 
-async function loadTradePlanWorkspaceSourceData(
-  ctx: QueryCtx,
-  ownerId: string,
-) {
-  const [campaigns, trades, watchedItems, inboxTrades] = await Promise.all([
-    ctx.db
-      .query("campaigns")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect(),
-    ctx.db
-      .query("trades")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect(),
-    ctx.db
-      .query("watchlist")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect(),
-    ctx.db
-      .query("inboxTrades")
-      .withIndex("by_owner_status", (q) =>
-        q.eq("ownerId", ownerId).eq("status", "pending_review"),
-      )
-      .collect(),
-  ]);
-
-  const campaignById = new Map(campaigns.map((campaign) => [campaign._id, campaign]));
-  const watchedTradePlanIds = new Set<Id<"tradePlans">>();
-  for (const watchedItem of watchedItems) {
-    if (watchedItem.itemType === "tradePlan" && watchedItem.tradePlanId) {
-      watchedTradePlanIds.add(watchedItem.tradePlanId);
-    }
-  }
+function buildTradePlanWorkspaceSourceData(args: {
+  campaigns: CampaignDoc[];
+  inboxTrades: InboxTradeDoc[];
+  trades: Doc<"trades">[];
+  watchedTradePlanIds: Iterable<Id<"tradePlans">>;
+}) {
+  const campaignById = new Map(
+    args.campaigns.map((campaign) => [campaign._id, campaign]),
+  );
+  const watchedTradePlanIds = new Set(args.watchedTradePlanIds);
 
   const tradeStatsByPlanId = new Map<
     Id<"tradePlans">,
     { latestTradeDate: number | null; tradeCount: number }
   >();
-  for (const trade of trades) {
+  for (const trade of args.trades) {
     if (!trade.tradePlanId) {
       continue;
     }
@@ -406,7 +384,7 @@ async function loadTradePlanWorkspaceSourceData(
     Id<"tradePlans">,
     { pendingAssignedCount: number; pendingSuggestedCount: number }
   >();
-  for (const inboxTrade of inboxTrades) {
+  for (const inboxTrade of args.inboxTrades) {
     if (inboxTrade.tradePlanId) {
       const existing =
         pendingStatsByPlanId.get(inboxTrade.tradePlanId) ??
@@ -433,6 +411,96 @@ async function loadTradePlanWorkspaceSourceData(
     tradeStatsByPlanId,
     watchedTradePlanIds,
   };
+}
+
+async function loadTradePlanWorkspaceSourceData(
+  ctx: QueryCtx,
+  ownerId: string,
+) {
+  const [campaigns, trades, watchedItems, inboxTrades] = await Promise.all([
+    ctx.db
+      .query("campaigns")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect(),
+    ctx.db
+      .query("trades")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect(),
+    ctx.db
+      .query("watchlist")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect(),
+    ctx.db
+      .query("inboxTrades")
+      .withIndex("by_owner_status", (q) =>
+        q.eq("ownerId", ownerId).eq("status", "pending_review"),
+      )
+      .collect(),
+  ]);
+
+  return buildTradePlanWorkspaceSourceData({
+    campaigns,
+    inboxTrades,
+    trades,
+    watchedTradePlanIds: watchedItems
+      .filter(
+        (watchedItem) =>
+          watchedItem.itemType === "tradePlan" && watchedItem.tradePlanId !== undefined,
+      )
+      .map((watchedItem) => watchedItem.tradePlanId as Id<"tradePlans">),
+  });
+}
+
+async function loadTradePlanWorkspaceSourceDataForPlan(
+  ctx: QueryCtx,
+  ownerId: string,
+  tradePlan: TradePlanDoc,
+) {
+  const [campaigns, trades, watchlistItems, assignedInboxTrades, suggestedInboxTrades] =
+    await Promise.all([
+      tradePlan.campaignId ? [await ctx.db.get(tradePlan.campaignId)] : [],
+      ctx.db
+        .query("trades")
+        .withIndex("by_owner_tradePlanId", (q) =>
+          q.eq("ownerId", ownerId).eq("tradePlanId", tradePlan._id),
+        )
+        .collect(),
+      ctx.db
+        .query("watchlist")
+        .withIndex("by_owner_tradePlanId", (q) =>
+          q.eq("ownerId", ownerId).eq("tradePlanId", tradePlan._id),
+        )
+        .collect(),
+      ctx.db
+        .query("inboxTrades")
+        .withIndex("by_owner_status_tradePlanId", (q) =>
+          q
+            .eq("ownerId", ownerId)
+            .eq("status", "pending_review")
+            .eq("tradePlanId", tradePlan._id),
+        )
+        .collect(),
+      ctx.db
+        .query("inboxTrades")
+        .withIndex("by_owner_status_ticker", (q) =>
+          q
+            .eq("ownerId", ownerId)
+            .eq("status", "pending_review")
+            .eq("ticker", tradePlan.instrumentSymbol.toUpperCase()),
+        )
+        .collect(),
+    ]);
+
+  return buildTradePlanWorkspaceSourceData({
+    campaigns: campaigns.filter((campaign): campaign is CampaignDoc => Boolean(campaign)),
+    inboxTrades: [
+      ...assignedInboxTrades,
+      ...suggestedInboxTrades.filter((inboxTrade) => inboxTrade.tradePlanId === undefined),
+    ],
+    trades,
+    watchedTradePlanIds:
+      watchlistItems.length > 0 ? [tradePlan._id] : [],
+  });
 }
 
 function sortTradePlansByOrderThenNewest(
@@ -651,7 +719,7 @@ export const getTradePlanWorkspace = query({
       assignedInboxTrades,
       suggestedInboxTrades,
     ] = await Promise.all([
-      loadTradePlanWorkspaceSourceData(ctx, ownerId),
+      loadTradePlanWorkspaceSourceDataForPlan(ctx, ownerId, tradePlan),
       ctx.db
         .query("notes")
         .withIndex("by_owner_tradePlanId", (q) =>

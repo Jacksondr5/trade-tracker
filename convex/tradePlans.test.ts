@@ -413,6 +413,84 @@ describe("trade plan workspace queries", () => {
     ).toEqual(["assigned", "suggested"]);
   });
 
+  it("keeps detail workspace rollups scoped to the requested plan", async () => {
+    const campaignId = await insertCampaign({
+      name: "Growth",
+      ownerId: ownerA,
+      status: "active",
+    });
+    const requestedPlanId = await insertTradePlan({
+      campaignId,
+      instrumentSymbol: "NVDA",
+      name: "NVDA detail",
+      ownerId: ownerA,
+      status: "active",
+    });
+    const otherPlanId = await insertTradePlan({
+      instrumentSymbol: "AMD",
+      name: "AMD noise",
+      ownerId: ownerA,
+      status: "watching",
+    });
+
+    await insertTrade({
+      date: 400,
+      ownerId: ownerA,
+      ticker: "NVDA",
+      tradePlanId: requestedPlanId,
+    });
+    await insertTrade({
+      date: 999,
+      ownerId: ownerA,
+      ticker: "AMD",
+      tradePlanId: otherPlanId,
+    });
+    await insertInboxTrade({
+      date: 500,
+      ownerId: ownerA,
+      ticker: "NVDA",
+      tradePlanId: requestedPlanId,
+    });
+    await insertInboxTrade({
+      date: 450,
+      ownerId: ownerA,
+      ticker: "NVDA",
+    });
+    await insertInboxTrade({
+      date: 600,
+      ownerId: ownerA,
+      ticker: "AMD",
+      tradePlanId: otherPlanId,
+    });
+    await insertWatch(requestedPlanId, ownerA);
+    await insertWatch(otherPlanId, ownerA);
+
+    const detail = await asUser(ownerA).query(
+      api.tradePlans.getTradePlanWorkspace,
+      { tradePlanId: requestedPlanId },
+    );
+
+    expect(detail).not.toBeNull();
+    expect(detail?.summary).toMatchObject({
+      id: requestedPlanId,
+      execution: {
+        latestTradeDate: 400,
+        pendingAssignedCount: 1,
+        pendingSuggestedCount: 1,
+        totalPendingCount: 2,
+        tradeCount: 1,
+      },
+      isWatched: true,
+      relationship: {
+        kind: "linked",
+        parentCampaign: {
+          id: campaignId,
+          name: "Growth",
+        },
+      },
+    });
+  });
+
   it("returns null when the workspace trade plan is missing or belongs to another owner", async () => {
     const ownerBPlanId = await insertTradePlan({
       instrumentSymbol: "BTC",

@@ -102,19 +102,12 @@ export function getCampaignRowByName(page: Page, name: string): Locator {
 
 export function getStandaloneTradePlanLink(page: Page): Locator {
   return page.getByTestId(
-    getTradePlanLinkTestId(E2E_SMOKE_FIXTURES.standaloneTradePlan.name),
+    getTradePlanLinkTestId(E2E_SMOKE_FIXTURES.standaloneTradePlan.id),
   );
 }
 
-export function getStandaloneTradePlanCard(page: Page, name: string): Locator {
-  return page.getByTestId(getStandaloneTradePlanCardTestId(name));
-}
-
-export function getCreatedTradePlanCard(page: Page): Locator {
-  return getStandaloneTradePlanCard(
-    page,
-    E2E_SMOKE_FIXTURES.createdStandaloneTradePlan.name,
-  );
+export function getStandaloneTradePlanCard(page: Page, id: string): Locator {
+  return page.getByTestId(getStandaloneTradePlanCardTestId(id));
 }
 
 export function getLinkedTradeRow(page: Page): Locator {

@@ -73,12 +73,16 @@ export function getCampaignRowTestId(name: string): string {
   return `campaign-row-${normalizeSegment(name)}`;
 }
 
-export function getStandaloneTradePlanCardTestId(name: string): string {
-  return `standalone-trade-plan-card-${normalizeSegment(name)}`;
+export function getStandaloneTradePlanCardTestId(id: string): string {
+  return `standalone-trade-plan-card-${normalizeSegment(id)}`;
 }
 
-export function getTradePlanLinkTestId(name: string): string {
-  return `trade-plan-link-${normalizeSegment(name)}`;
+export function getTradePlanLinkTestId(id: string): string {
+  return `trade-plan-link-${normalizeSegment(id)}`;
+}
+
+export function getCloseTradePlanButtonTestId(id: string): string {
+  return `close-trade-plan-${normalizeSegment(id)}`;
 }
 
 export function getTradeRowTestId(

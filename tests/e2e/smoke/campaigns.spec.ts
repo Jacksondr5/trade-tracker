@@ -135,16 +135,31 @@ test("campaign lifecycle supports detail mutation, linked trade plan creation, a
   await getInstrumentSymbolInput(page).fill("NVDA");
   await getCreateLinkedTradePlanButton(page).click();
 
+  const linkedTradePlanRows = page.getByTestId(/^linked-trade-plan-row-/);
+  await expect(linkedTradePlanRows).toHaveCount(1);
+
+  const linkedTradePlanRowTestId = await linkedTradePlanRows.first().getAttribute(
+    "data-testid",
+  );
+
+  if (!linkedTradePlanRowTestId) {
+    throw new Error("Expected data-testid on linked trade plan row.");
+  }
+
+  const linkedTradePlanId = linkedTradePlanRowTestId.replace(
+    "linked-trade-plan-row-",
+    "",
+  );
   const linkedTradePlanLink = page.getByTestId(
-    getTradePlanLinkTestId(createdLinkedPlanName),
+    getTradePlanLinkTestId(linkedTradePlanId),
   );
   await expect(linkedTradePlanLink).toBeVisible();
   const linkedTradePlanHref = await linkedTradePlanLink.getAttribute("href");
-  const linkedTradePlanId = linkedTradePlanHref?.match(
+  const linkedTradePlanIdFromHref = linkedTradePlanHref?.match(
     /\/trade-plans\/([^/]+)$/,
   )?.[1];
 
-  if (!linkedTradePlanId) {
+  if (linkedTradePlanIdFromHref !== linkedTradePlanId) {
     throw new Error("Expected linked trade plan id in campaign detail link.");
   }
   await expect(

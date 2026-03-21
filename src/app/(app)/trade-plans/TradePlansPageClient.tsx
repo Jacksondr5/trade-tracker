@@ -20,6 +20,7 @@ import { STANDALONE_TRADE_PLANS_LABEL } from "~/lib/campaign-trade-plan-navigati
 import { capitalize } from "~/lib/format";
 import {
   APP_PAGE_TITLES,
+  getCloseTradePlanButtonTestId,
   getStandaloneTradePlanCardTestId,
   getTradePlanLinkTestId,
 } from "../../../../shared/e2e/testIds";
@@ -214,13 +215,13 @@ export default function TradePlansPageClient({
               {standalonePlans.map((plan) => (
                 <div
                   key={plan.id}
-                  data-testid={getStandaloneTradePlanCardTestId(plan.name)}
+                  data-testid={getStandaloneTradePlanCardTestId(plan.id)}
                   className="rounded-lg border border-olive-6 bg-olive-3/50 p-3 transition-colors hover:border-olive-7 hover:bg-olive-3"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <Link
                       href={`/trade-plans/${plan.id}`}
-                      data-testid={getTradePlanLinkTestId(plan.name)}
+                      data-testid={getTradePlanLinkTestId(plan.id)}
                       className="min-w-0 flex-1 hover:underline"
                     >
                       <p className="font-semibold text-olive-12">{plan.name}</p>
@@ -232,7 +233,7 @@ export default function TradePlansPageClient({
                       <Badge variant="neutral">{capitalize(plan.status)}</Badge>
                       {plan.status !== "closed" && (
                         <Button
-                          dataTestId={`close-plan-${plan.id}`}
+                          dataTestId={getCloseTradePlanButtonTestId(plan.id)}
                           variant="secondary"
                           className="border border-olive-6 bg-olive-3 text-olive-12 hover:bg-olive-4"
                           onClick={() => {
