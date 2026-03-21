@@ -60,6 +60,34 @@ export function getTradePlanNameInput(page: Page): Locator {
   return page.getByTestId(APP_SHELL_TEST_IDS.tradePlanNameInput);
 }
 
+export function getTradePlanNameDisplay(page: Page): Locator {
+  return page.getByTestId("trade-plan-name");
+}
+
+export function getTradePlanNameEditButton(page: Page): Locator {
+  return page.getByTestId("trade-plan-name-edit-button");
+}
+
+export function getTradePlanNameSaveButton(page: Page): Locator {
+  return page.getByTestId("trade-plan-name-save-button");
+}
+
+export function getTradePlanSymbolDisplay(page: Page): Locator {
+  return page.getByTestId("trade-plan-symbol");
+}
+
+export function getTradePlanSymbolEditButton(page: Page): Locator {
+  return page.getByTestId("trade-plan-symbol-edit-button");
+}
+
+export function getTradePlanSymbolInput(page: Page): Locator {
+  return page.getByTestId("trade-plan-symbol-input");
+}
+
+export function getTradePlanSymbolSaveButton(page: Page): Locator {
+  return page.getByTestId("trade-plan-symbol-save-button");
+}
+
 export function getNameInput(page: Page): Locator {
   return page.getByTestId("name-input");
 }
