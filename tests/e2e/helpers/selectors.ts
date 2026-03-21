@@ -128,20 +128,27 @@ export async function getNewTradePlanIdFromListPage(
   page: Page,
   previousHrefs: Set<string>,
 ): Promise<string> {
-  const createdHref = (
-    (await page
-      .getByTestId(/^trade-plan-link-/)
-      .evaluateAll(
-        (elements, priorHrefs) =>
-          elements
-            .map((element) => element.getAttribute("href"))
-            .filter(
-              (href): href is string =>
-                Boolean(href) && !priorHrefs.includes(href),
-            ),
-        Array.from(previousHrefs),
-      )) as string[]
-  )[0];
+  let createdHref: string | null = null;
+
+  await expect
+    .poll(async () => {
+      const hrefs = (await page
+        .getByTestId(/^trade-plan-link-/)
+        .evaluateAll(
+          (elements, priorHrefs) =>
+            elements
+              .map((element) => element.getAttribute("href"))
+              .filter(
+                (href): href is string =>
+                  Boolean(href) && !priorHrefs.includes(href),
+              ),
+          Array.from(previousHrefs),
+        )) as string[];
+
+      createdHref = hrefs[0] ?? null;
+      return createdHref;
+    })
+    .not.toBeNull();
 
   if (!createdHref) {
     throw new Error("Expected a new trade plan link after creation.");
