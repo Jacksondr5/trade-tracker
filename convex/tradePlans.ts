@@ -598,10 +598,14 @@ export const createTradePlan = mutation({
 export const updateTradePlan = mutation({
   args: {
     campaignId: v.optional(v.union(v.id("campaigns"), v.null())),
+    entryConditions: v.optional(v.union(v.string(), v.null())),
+    exitConditions: v.optional(v.union(v.string(), v.null())),
     instrumentSymbol: v.optional(v.string()),
     invalidatedAt: v.optional(v.union(v.number(), v.null())),
     name: v.optional(v.string()),
+    rationale: v.optional(v.union(v.string(), v.null())),
     sortOrder: v.optional(v.union(v.number(), v.null())),
+    targetConditions: v.optional(v.union(v.string(), v.null())),
     tradePlanId: v.id("tradePlans"),
   },
   returns: v.null(),
@@ -623,15 +627,29 @@ export const updateTradePlan = mutation({
       patch.campaignId =
         updates.campaignId === null ? undefined : updates.campaignId;
     }
+    if (updates.entryConditions !== undefined)
+      patch.entryConditions =
+        updates.entryConditions === null ? undefined : updates.entryConditions;
+    if (updates.exitConditions !== undefined)
+      patch.exitConditions =
+        updates.exitConditions === null ? undefined : updates.exitConditions;
     if (updates.instrumentSymbol !== undefined)
       patch.instrumentSymbol = updates.instrumentSymbol.trim().toUpperCase();
     if (updates.invalidatedAt !== undefined)
       patch.invalidatedAt =
         updates.invalidatedAt === null ? undefined : updates.invalidatedAt;
     if (updates.name !== undefined) patch.name = updates.name;
+    if (updates.rationale !== undefined)
+      patch.rationale =
+        updates.rationale === null ? undefined : updates.rationale;
     if (updates.sortOrder !== undefined)
       patch.sortOrder =
         updates.sortOrder === null ? undefined : updates.sortOrder;
+    if (updates.targetConditions !== undefined)
+      patch.targetConditions =
+        updates.targetConditions === null
+          ? undefined
+          : updates.targetConditions;
     await ctx.db.patch(tradePlanId, patch);
 
     return null;

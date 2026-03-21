@@ -1,10 +1,18 @@
 "use client";
 
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
-import { Check, CheckCircle2, Loader2 } from "lucide-react";
+import {
+  Check,
+  CheckCircle2,
+  Loader2,
+  Pencil,
+  Save,
+  X,
+} from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RetrospectiveSection } from "~/components/RetrospectiveSection";
+import { WatchToggleButton } from "~/components/WatchToggleButton";
 import { MobileHierarchyBreadcrumbs } from "~/components/app-shell/campaign-trade-plan-hierarchy";
 import { useNavigationData } from "~/components/app-shell";
 import { Alert, Badge } from "~/components/ui";
@@ -28,6 +36,323 @@ import {
 type TradePlanStatus = "idea" | "watching" | "active" | "closed";
 type SaveState = "idle" | "saving" | "saved";
 
+const STATUS_BADGE_VARIANT: Record<
+  TradePlanStatus,
+  "neutral" | "warning" | "success"
+> = {
+  idea: "neutral",
+  watching: "warning",
+  active: "success",
+  closed: "neutral",
+};
+
+function StatusBadge({ status }: { status: TradePlanStatus }) {
+  return (
+    <Badge
+      variant={STATUS_BADGE_VARIANT[status]}
+      data-testid="trade-plan-status-badge"
+    >
+      {status.charAt(0).toUpperCase() + status.slice(1)}
+    </Badge>
+  );
+}
+
+// --- Inline editable field ---
+
+function InlineEditableField({
+  dataTestId,
+  label,
+  maxLength,
+  onSave,
+  value,
+}: {
+  dataTestId: string;
+  label: string;
+  maxLength?: number;
+  onSave: (value: string) => Promise<void>;
+  value: string;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isEditing) {
+      setDraft(value);
+    }
+  }, [value, isEditing]);
+
+  useEffect(() => {
+    if (isEditing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [isEditing]);
+
+  const handleSave = async () => {
+    const trimmed = draft.trim();
+    if (!trimmed) {
+      setError(`${label} is required`);
+      return;
+    }
+    setError(null);
+    setSaveState("saving");
+    try {
+      await onSave(trimmed);
+      setSaveState("saved");
+      setIsEditing(false);
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : `Failed to save ${label.toLowerCase()}`,
+      );
+      setSaveState("idle");
+    }
+  };
+
+  const handleCancel = () => {
+    setDraft(value);
+    setError(null);
+    setIsEditing(false);
+    setSaveState("idle");
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void handleSave();
+    } else if (e.key === "Escape") {
+      handleCancel();
+    }
+  };
+
+  if (!isEditing) {
+    return (
+      <div className="group flex items-center gap-2">
+        <span data-testid={dataTestId}>{value}</span>
+        <button
+          type="button"
+          data-testid={`${dataTestId}-edit-button`}
+          aria-label={`Edit ${label}`}
+          onClick={() => setIsEditing(true)}
+          className="rounded p-1 text-olive-10 opacity-0 transition-opacity hover:bg-olive-4 hover:text-olive-12 group-hover:opacity-100"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+        {saveState === "saved" && (
+          <span className="flex items-center gap-1 text-xs text-grass-11">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-1.5">
+        <input
+          ref={inputRef}
+          data-testid={`${dataTestId}-input`}
+          maxLength={maxLength}
+          className="rounded-md border border-olive-7 bg-transparent px-2 py-1 text-sm text-olive-12 focus:ring-2 focus:ring-blue-8 focus:outline-none"
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setError(null);
+          }}
+          onKeyDown={handleKeyDown}
+        />
+        <button
+          type="button"
+          data-testid={`${dataTestId}-save-button`}
+          aria-label={`Save ${label}`}
+          onClick={() => void handleSave()}
+          disabled={saveState === "saving"}
+          className="rounded p-1 text-grass-11 hover:bg-grass-3 disabled:opacity-50"
+        >
+          {saveState === "saving" ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Check className="h-4 w-4" />
+          )}
+        </button>
+        <button
+          type="button"
+          data-testid={`${dataTestId}-cancel-button`}
+          aria-label="Cancel editing"
+          onClick={handleCancel}
+          className="rounded p-1 text-olive-10 hover:bg-olive-4 hover:text-olive-12"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      {error && <p className="text-xs text-red-11">{error}</p>}
+    </div>
+  );
+}
+
+// --- Tactical field editor ---
+
+function TacticalField({
+  dataTestId,
+  label,
+  onSave,
+  placeholder,
+  value,
+}: {
+  dataTestId: string;
+  label: string;
+  onSave: (value: string | null) => Promise<void>;
+  placeholder: string;
+  value: string | null;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [error, setError] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!isEditing) {
+      setDraft(value ?? "");
+    }
+  }, [value, isEditing]);
+
+  useEffect(() => {
+    if (isEditing) {
+      textareaRef.current?.focus();
+    }
+  }, [isEditing]);
+
+  const handleSave = async () => {
+    setError(null);
+    setSaveState("saving");
+    try {
+      const trimmed = draft.trim();
+      await onSave(trimmed || null);
+      setSaveState("saved");
+      setIsEditing(false);
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : `Failed to save ${label.toLowerCase()}`,
+      );
+      setSaveState("idle");
+    }
+  };
+
+  const handleCancel = () => {
+    setDraft(value ?? "");
+    setError(null);
+    setIsEditing(false);
+    setSaveState("idle");
+  };
+
+  if (!isEditing) {
+    return (
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <h4
+            className="text-xs font-medium uppercase tracking-wide text-olive-11"
+            data-testid={`${dataTestId}-label`}
+          >
+            {label}
+          </h4>
+          <div className="flex items-center gap-1">
+            {saveState === "saved" && (
+              <span className="text-xs text-grass-11">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              </span>
+            )}
+            <button
+              type="button"
+              data-testid={`${dataTestId}-edit-button`}
+              aria-label={`Edit ${label}`}
+              onClick={() => setIsEditing(true)}
+              className="rounded p-1 text-olive-10 hover:bg-olive-4 hover:text-olive-12"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+        {value ? (
+          <p
+            className="whitespace-pre-wrap text-sm text-olive-12"
+            data-testid={`${dataTestId}-content`}
+          >
+            {value}
+          </p>
+        ) : (
+          <p
+            className="text-sm italic text-olive-11"
+            data-testid={`${dataTestId}-empty`}
+          >
+            {placeholder}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <h4
+          className="text-xs font-medium uppercase tracking-wide text-olive-11"
+          data-testid={`${dataTestId}-label`}
+        >
+          {label}
+        </h4>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            data-testid={`${dataTestId}-save-button`}
+            aria-label={`Save ${label}`}
+            onClick={() => void handleSave()}
+            disabled={saveState === "saving"}
+            className="rounded p-1 text-grass-11 hover:bg-grass-3 disabled:opacity-50"
+          >
+            {saveState === "saving" ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Save className="h-3.5 w-3.5" />
+            )}
+          </button>
+          <button
+            type="button"
+            data-testid={`${dataTestId}-cancel-button`}
+            aria-label="Cancel editing"
+            onClick={handleCancel}
+            className="rounded p-1 text-olive-10 hover:bg-olive-4 hover:text-olive-12"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+      <textarea
+        ref={textareaRef}
+        data-testid={`${dataTestId}-textarea`}
+        className="min-h-[80px] w-full resize-y rounded-md border border-olive-7 bg-transparent px-3 py-2 text-sm text-olive-12 placeholder:text-olive-9 focus:ring-2 focus:ring-blue-8 focus:outline-none"
+        placeholder={placeholder}
+        value={draft}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          setError(null);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") handleCancel();
+        }}
+      />
+      {error && <p className="text-xs text-red-11">{error}</p>}
+    </div>
+  );
+}
+
 export default function TradePlanDetailPageClient({
   tradePlanId,
   preloadedTradePlanWorkspace,
@@ -39,6 +364,7 @@ export default function TradePlanDetailPageClient({
 }) {
   const workspace = usePreloadedQuery(preloadedTradePlanWorkspace);
   const tradePlan = workspace?.tradePlan ?? null;
+  const summary = workspace?.summary ?? null;
   const notes = workspace?.notes ?? [];
   const trades = workspace?.trades ?? [];
   const accountMappings = workspace?.accountMappings ?? [];
@@ -53,6 +379,8 @@ export default function TradePlanDetailPageClient({
     api.tradePlans.updateTradePlanStatus,
   );
   const acceptTrade = useMutation(api.imports.acceptTrade);
+  const watchItem = useMutation(api.watchlist.watchItem);
+  const unwatchItem = useMutation(api.watchlist.unwatchItem);
 
   const [pendingPortfolioIds, setPendingPortfolioIds] = useState<
     Record<string, string>
@@ -66,26 +394,14 @@ export default function TradePlanDetailPageClient({
     return map;
   }, [accountMappings]);
 
-  const [planName, setPlanName] = useState("");
-  const [planNameInitialized, setPlanNameInitialized] = useState(false);
-  const [planNameError, setPlanNameError] = useState<string | null>(null);
-  const [planNameSaveState, setPlanNameSaveState] = useState<SaveState>("idle");
-
-  const [instrumentSymbol, setInstrumentSymbol] = useState("");
-  const [instrumentSymbolInitialized, setInstrumentSymbolInitialized] =
-    useState(false);
-  const [instrumentSymbolError, setInstrumentSymbolError] = useState<
-    string | null
-  >(null);
-  const [instrumentSymbolSaveState, setInstrumentSymbolSaveState] =
-    useState<SaveState>("idle");
-
   const [statusError, setStatusError] = useState<string | null>(null);
   const [isChangingStatus, setIsChangingStatus] = useState(false);
   const [inboxAcceptError, setInboxAcceptError] = useState<string | null>(null);
   const [acceptingInboxTradeIds, setAcceptingInboxTradeIds] = useState<
     Set<string>
   >(new Set());
+  const [watchLoading, setWatchLoading] = useState(false);
+
   const breadcrumbs = buildHierarchyBreadcrumbs(hierarchy, {
     kind: "tradePlan",
     tradePlanId,
@@ -95,66 +411,29 @@ export default function TradePlanDetailPageClient({
     [hierarchy, tradePlanId],
   );
   const linkedCampaign = navigationTradePlan?.parentCampaign ?? null;
-  const relationshipLabel =
-    linkedCampaign !== null || tradePlan?.campaignId
-      ? LINKED_TRADE_PLAN_LABEL
-      : STANDALONE_TRADE_PLAN_LABEL;
+  const isLinked = linkedCampaign !== null || tradePlan?.campaignId !== null;
+  const relationshipLabel = isLinked
+    ? LINKED_TRADE_PLAN_LABEL
+    : STANDALONE_TRADE_PLAN_LABEL;
 
-  useEffect(() => {
-    if (tradePlan && !planNameInitialized) {
-      setPlanName(tradePlan.name);
-      setPlanNameInitialized(true);
-    }
-  }, [tradePlan, planNameInitialized]);
+  const isWatched = summary?.isWatched ?? false;
 
-  useEffect(() => {
-    if (tradePlan && !instrumentSymbolInitialized) {
-      setInstrumentSymbol(tradePlan.instrumentSymbol);
-      setInstrumentSymbolInitialized(true);
-    }
-  }, [tradePlan, instrumentSymbolInitialized]);
-
-  const handleSaveName = async () => {
-    setPlanNameError(null);
-    setPlanNameSaveState("saving");
-    const trimmed = planName.trim();
-    if (!trimmed) {
-      setPlanNameError("Name is required");
-      setPlanNameSaveState("idle");
-      return;
-    }
+  const handleToggleWatch = useCallback(async () => {
+    setWatchLoading(true);
     try {
-      await updateTradePlan({ tradePlanId, name: trimmed });
-      setPlanName(trimmed);
-      setPlanNameSaveState("saved");
-    } catch (error) {
-      setPlanNameError(
-        error instanceof Error ? error.message : "Failed to save name",
-      );
-      setPlanNameSaveState("idle");
+      if (isWatched) {
+        await unwatchItem({
+          item: { itemType: "tradePlan", tradePlanId },
+        });
+      } else {
+        await watchItem({
+          item: { itemType: "tradePlan", tradePlanId },
+        });
+      }
+    } finally {
+      setWatchLoading(false);
     }
-  };
-
-  const handleSaveSymbol = async () => {
-    setInstrumentSymbolError(null);
-    setInstrumentSymbolSaveState("saving");
-    const trimmed = instrumentSymbol.trim().toUpperCase();
-    if (!trimmed) {
-      setInstrumentSymbolError("Symbol is required");
-      setInstrumentSymbolSaveState("idle");
-      return;
-    }
-    try {
-      await updateTradePlan({ tradePlanId, instrumentSymbol: trimmed });
-      setInstrumentSymbol(trimmed);
-      setInstrumentSymbolSaveState("saved");
-    } catch (error) {
-      setInstrumentSymbolError(
-        error instanceof Error ? error.message : "Failed to save symbol",
-      );
-      setInstrumentSymbolSaveState("idle");
-    }
-  };
+  }, [isWatched, tradePlanId, watchItem, unwatchItem]);
 
   const handleStatusChange = async (status: TradePlanStatus) => {
     setStatusError(null);
@@ -208,20 +487,28 @@ export default function TradePlanDetailPageClient({
 
   if (tradePlan === null) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="mx-auto max-w-5xl px-6 py-8">
         <p className="text-olive-11">Trade plan not found.</p>
         <Link
           href="/trade-plans"
-          className="mt-4 inline-block text-blue-400 hover:underline"
+          className="mt-4 inline-block text-sm text-blue-9 hover:underline"
         >
-          Back to trade plans
+          &larr; Back to trade plans
         </Link>
       </div>
     );
   }
 
+  const assignedInboxTrades = inboxTradesForPlan.filter(
+    (t) => t.matchType === "assigned",
+  );
+  const suggestedInboxTrades = inboxTradesForPlan.filter(
+    (t) => t.matchType === "suggested",
+  );
+
   return (
-    <div className="container mx-auto max-w-5xl px-4 py-8">
+    <div className="mx-auto max-w-5xl px-6 py-8">
+      {/* Breadcrumbs */}
       {breadcrumbs !== null ? (
         <MobileHierarchyBreadcrumbs breadcrumbs={breadcrumbs} />
       ) : (
@@ -242,149 +529,97 @@ export default function TradePlanDetailPageClient({
         &larr; Back to Trade Plans
       </Link>
 
-      <div className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4">
-        <div className="mb-4 space-y-1">
-          <p
-            className="text-xs font-medium tracking-[0.18em] text-olive-11 uppercase"
-            data-testid="trade-plan-relationship-label"
-          >
-            {relationshipLabel}
-          </p>
-          {tradePlan.campaignId ? (
-            <p className="text-sm text-olive-11" data-testid="trade-plan-campaign-context">
-              Campaign:{" "}
-              <Link
-                href={
-                  linkedCampaign?.href ?? `/campaigns/${tradePlan.campaignId}`
-                }
-                className="text-blue-400 hover:underline"
-                data-testid="trade-plan-campaign-link"
+      {/* === Section 1: Relationship & Identity Header === */}
+      <header className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4">
+        {/* Top row: relationship label + watch + status */}
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span
+              className="text-xs font-medium uppercase tracking-[0.18em] text-olive-11"
+              data-testid="trade-plan-relationship-label"
+            >
+              {relationshipLabel}
+            </span>
+            {tradePlan.campaignId ? (
+              <span
+                className="text-xs text-olive-11"
+                data-testid="trade-plan-campaign-context"
               >
-                {linkedCampaign?.name ?? "View Campaign"}
-              </Link>
-            </p>
-          ) : null}
+                &middot;{" "}
+                <Link
+                  href={
+                    linkedCampaign?.href ??
+                    `/campaigns/${tradePlan.campaignId}`
+                  }
+                  className="text-blue-9 hover:underline"
+                  data-testid="trade-plan-campaign-link"
+                >
+                  {linkedCampaign?.name ?? "View Campaign"}
+                </Link>
+              </span>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2">
+            <WatchToggleButton
+              dataTestId="trade-plan-watch-toggle"
+              isWatched={isWatched}
+              itemName={tradePlan.name}
+              onClick={() => void handleToggleWatch()}
+              disabled={watchLoading}
+            />
+            <StatusBadge status={tradePlan.status} />
+          </div>
         </div>
 
-        <div className="mb-2 flex items-start justify-between gap-3">
-          <div className="flex-1 space-y-3">
-            <div>
-              <label
-                htmlFor="plan-name"
-                className="mb-1 block text-xs tracking-wide text-olive-11 uppercase"
-              >
-                Plan Name
-              </label>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <input
-                  id="plan-name"
-                  data-testid="trade-plan-name-input"
-                  maxLength={120}
-                  className="w-full rounded border border-olive-6 bg-olive-3 px-3 py-2 text-xl font-bold text-olive-12"
-                  value={planName}
-                  onChange={(e) => {
-                    setPlanName(e.target.value);
-                    setPlanNameError(null);
-                    if (planNameSaveState === "saved")
-                      setPlanNameSaveState("idle");
-                  }}
-                />
-                <button
-                  type="button"
-                  data-testid="save-trade-plan-name-button"
-                  className="rounded bg-olive-4 px-3 py-1.5 text-sm text-olive-12 hover:bg-olive-5"
-                  onClick={() => void handleSaveName()}
-                  disabled={planNameSaveState === "saving"}
-                >
-                  Save Name
-                </button>
-              </div>
-              {planNameError && (
-                <Alert variant="error" className="mt-2">
-                  {planNameError}
-                </Alert>
-              )}
-              {planNameSaveState === "saving" && (
-                <span className="mt-2 flex items-center gap-1 text-sm text-olive-11">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Saving...
-                </span>
-              )}
-              {planNameSaveState === "saved" && (
-                <span className="mt-2 flex items-center gap-1 text-sm text-green-400">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Saved
-                </span>
-              )}
-            </div>
+        {/* Plan name */}
+        <div className="mb-2">
+          <h1 className="text-2xl font-bold text-olive-12 md:text-3xl">
+            <InlineEditableField
+              dataTestId="trade-plan-name"
+              label="Plan Name"
+              maxLength={120}
+              value={tradePlan.name}
+              onSave={async (name) => {
+                await updateTradePlan({ tradePlanId, name });
+              }}
+            />
+          </h1>
+        </div>
 
-            <div>
-              <label
-                htmlFor="plan-symbol"
-                className="mb-1 block text-xs tracking-wide text-olive-11 uppercase"
-              >
-                Instrument Symbol
-              </label>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <input
-                  id="plan-symbol"
-                  data-testid="trade-plan-symbol-input"
-                  maxLength={20}
-                  className="w-full rounded border border-olive-6 bg-olive-3 px-3 py-2 text-olive-12 sm:w-40"
-                  value={instrumentSymbol}
-                  onChange={(e) => {
-                    setInstrumentSymbol(e.target.value);
-                    setInstrumentSymbolError(null);
-                    if (instrumentSymbolSaveState === "saved")
-                      setInstrumentSymbolSaveState("idle");
-                  }}
-                />
-                <button
-                  type="button"
-                  data-testid="save-trade-plan-symbol-button"
-                  className="rounded bg-olive-4 px-3 py-1.5 text-sm text-olive-12 hover:bg-olive-5"
-                  onClick={() => void handleSaveSymbol()}
-                  disabled={instrumentSymbolSaveState === "saving"}
-                >
-                  Save Symbol
-                </button>
-              </div>
-              {instrumentSymbolError && (
-                <Alert variant="error" className="mt-2">
-                  {instrumentSymbolError}
-                </Alert>
-              )}
-              {instrumentSymbolSaveState === "saving" && (
-                <span className="mt-2 flex items-center gap-1 text-sm text-olive-11">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Saving...
-                </span>
-              )}
-              {instrumentSymbolSaveState === "saved" && (
-                <span className="mt-2 flex items-center gap-1 text-sm text-green-400">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Saved
-                </span>
-              )}
-            </div>
+        {/* Symbol + Status row */}
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium uppercase tracking-wide text-olive-11">
+              Symbol
+            </span>
+            <span className="font-semibold text-olive-12">
+              <InlineEditableField
+                dataTestId="trade-plan-symbol"
+                label="Instrument Symbol"
+                maxLength={20}
+                value={tradePlan.instrumentSymbol}
+                onSave={async (symbol) => {
+                  await updateTradePlan({
+                    tradePlanId,
+                    instrumentSymbol: symbol,
+                  });
+                }}
+              />
+            </span>
           </div>
 
-          <div className="w-44">
-            <label
-              htmlFor="plan-status"
-              className="mb-1 block text-xs tracking-wide text-olive-11 uppercase"
-            >
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium uppercase tracking-wide text-olive-11">
               Status
-            </label>
+            </span>
             <select
-              id="plan-status"
               data-testid="trade-plan-status-select"
               value={tradePlan.status}
               disabled={isChangingStatus}
               onChange={(e) =>
                 void handleStatusChange(e.target.value as TradePlanStatus)
               }
-              className="h-9 w-full rounded-md border border-olive-6 bg-olive-3 px-3 py-1 text-sm text-olive-12 focus:ring-1 focus:ring-olive-7 focus:outline-none"
+              className="h-8 rounded-md border border-olive-7 bg-transparent px-2 py-1 text-sm text-olive-12 focus:ring-2 focus:ring-blue-8 focus:outline-none disabled:opacity-50"
             >
               <option value="idea">Idea</option>
               <option value="watching">Watching</option>
@@ -392,25 +627,291 @@ export default function TradePlanDetailPageClient({
               <option value="closed">Closed</option>
             </select>
           </div>
-        </div>
 
-        {tradePlan.status === "closed" && tradePlan.closedAt && (
-          <p className="text-xs text-olive-11">
-            Closed {new Date(tradePlan.closedAt).toLocaleDateString("en-US")}
-          </p>
-        )}
+          {tradePlan.status === "closed" && tradePlan.closedAt && (
+            <span
+              className="text-xs text-olive-11"
+              data-testid="trade-plan-closed-date"
+            >
+              Closed{" "}
+              {new Date(tradePlan.closedAt).toLocaleDateString("en-US")}
+            </span>
+          )}
+        </div>
 
         {statusError && (
           <Alert variant="error" className="mt-3">
             {statusError}
           </Alert>
         )}
-      </div>
+      </header>
 
-      <section className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4">
-        <h2 className="mb-3 text-lg font-semibold text-olive-12">
-          Trade Plan Notes
+      {/* === Section 2: Tactical Plan === */}
+      <section
+        className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4"
+        data-testid="trade-plan-tactical-section"
+      >
+        <h2 className="mb-4 text-lg font-semibold text-olive-12">
+          Tactical Plan
         </h2>
+        <div className="space-y-5">
+          <TacticalField
+            dataTestId="trade-plan-rationale"
+            label="Rationale"
+            placeholder="Why this trade? What is the thesis?"
+            value={tradePlan.rationale}
+            onSave={async (val) => {
+              await updateTradePlan({ tradePlanId, rationale: val });
+            }}
+          />
+          <TacticalField
+            dataTestId="trade-plan-entry-conditions"
+            label="Entry Conditions"
+            placeholder="What conditions must be met to enter?"
+            value={tradePlan.entryConditions}
+            onSave={async (val) => {
+              await updateTradePlan({ tradePlanId, entryConditions: val });
+            }}
+          />
+          <TacticalField
+            dataTestId="trade-plan-target-conditions"
+            label="Target Conditions"
+            placeholder="What does success look like? Price targets, milestones."
+            value={tradePlan.targetConditions}
+            onSave={async (val) => {
+              await updateTradePlan({ tradePlanId, targetConditions: val });
+            }}
+          />
+          <TacticalField
+            dataTestId="trade-plan-exit-conditions"
+            label="Exit Conditions"
+            placeholder="When should the position be closed? Stop-loss, time, invalidation."
+            value={tradePlan.exitConditions}
+            onSave={async (val) => {
+              await updateTradePlan({ tradePlanId, exitConditions: val });
+            }}
+          />
+        </div>
+      </section>
+
+      {/* === Section 3: Execution Context === */}
+      <section
+        className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4"
+        data-testid="trade-plan-execution-section"
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <h2
+            className="text-lg font-semibold text-olive-12"
+            data-testid="trade-plan-trades-section-title"
+          >
+            Execution
+          </h2>
+          {summary && (
+            <span className="text-xs text-olive-11">
+              {summary.execution.tradeCount}{" "}
+              {summary.execution.tradeCount === 1 ? "trade" : "trades"}
+              {summary.execution.totalPendingCount > 0 && (
+                <> &middot; {summary.execution.totalPendingCount} pending</>
+              )}
+            </span>
+          )}
+        </div>
+
+        {inboxAcceptError && (
+          <Alert
+            variant="error"
+            className="mb-3"
+            onDismiss={() => setInboxAcceptError(null)}
+          >
+            {inboxAcceptError}
+          </Alert>
+        )}
+
+        {/* Pending inbox trades - assigned */}
+        {assignedInboxTrades.length > 0 && (
+          <div className="mb-4">
+            <h3
+              className="mb-2 text-xs font-medium uppercase tracking-wide text-olive-11"
+              data-testid="trade-plan-assigned-pending-title"
+            >
+              Pending &mdash; Assigned
+            </h3>
+            <div className="overflow-x-auto rounded-md border border-slate-6 bg-slate-2">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-6 text-left text-xs font-medium text-slate-11">
+                    <th className="px-3 py-2">Date</th>
+                    <th className="px-3 py-2">Ticker</th>
+                    <th className="px-3 py-2">Account</th>
+                    <th className="px-3 py-2">Side</th>
+                    <th className="px-3 py-2">Qty</th>
+                    <th className="px-3 py-2">Price</th>
+                    <th className="px-3 py-2">Portfolio / Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {assignedInboxTrades.map(({ inboxTrade }) => (
+                    <InboxTradeRow
+                      key={inboxTrade._id}
+                      inboxTrade={inboxTrade}
+                      matchType="assigned"
+                      accountNameByAccountId={accountNameByAccountId}
+                      portfolios={portfolios}
+                      portfolioId={
+                        pendingPortfolioIds[inboxTrade._id] ?? ""
+                      }
+                      onPortfolioChange={(val) =>
+                        setPendingPortfolioIds((prev) => ({
+                          ...prev,
+                          [inboxTrade._id]: val,
+                        }))
+                      }
+                      onAccept={(portfolioId) =>
+                        void handleAcceptInboxTrade(
+                          inboxTrade._id,
+                          portfolioId,
+                        )
+                      }
+                      isAccepting={acceptingInboxTradeIds.has(inboxTrade._id)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Pending inbox trades - suggested */}
+        {suggestedInboxTrades.length > 0 && (
+          <div className="mb-4">
+            <h3
+              className="mb-2 text-xs font-medium uppercase tracking-wide text-olive-11"
+              data-testid="trade-plan-suggested-pending-title"
+            >
+              Pending &mdash; Symbol Matches
+            </h3>
+            <div className="overflow-x-auto rounded-md border border-slate-6 bg-slate-2">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-6 text-left text-xs font-medium text-slate-11">
+                    <th className="px-3 py-2">Date</th>
+                    <th className="px-3 py-2">Ticker</th>
+                    <th className="px-3 py-2">Account</th>
+                    <th className="px-3 py-2">Side</th>
+                    <th className="px-3 py-2">Qty</th>
+                    <th className="px-3 py-2">Price</th>
+                    <th className="px-3 py-2">Portfolio / Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {suggestedInboxTrades.map(({ inboxTrade }) => (
+                    <InboxTradeRow
+                      key={inboxTrade._id}
+                      inboxTrade={inboxTrade}
+                      matchType="suggested"
+                      accountNameByAccountId={accountNameByAccountId}
+                      portfolios={portfolios}
+                      portfolioId={
+                        pendingPortfolioIds[inboxTrade._id] ?? ""
+                      }
+                      onPortfolioChange={(val) =>
+                        setPendingPortfolioIds((prev) => ({
+                          ...prev,
+                          [inboxTrade._id]: val,
+                        }))
+                      }
+                      onAccept={(portfolioId) =>
+                        void handleAcceptInboxTrade(
+                          inboxTrade._id,
+                          portfolioId,
+                        )
+                      }
+                      isAccepting={acceptingInboxTradeIds.has(inboxTrade._id)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Accepted trades */}
+        {trades.length > 0 ? (
+          <div>
+            <h3
+              className="mb-2 text-xs font-medium uppercase tracking-wide text-olive-11"
+              data-testid="trade-plan-linked-trades-title"
+            >
+              Linked Trades
+            </h3>
+            <div className="overflow-x-auto rounded-md border border-slate-6 bg-slate-2">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-6 text-left text-xs font-medium text-slate-11">
+                    <th className="px-3 py-2">Date</th>
+                    <th className="px-3 py-2">Ticker</th>
+                    <th className="px-3 py-2">Account</th>
+                    <th className="px-3 py-2">Side</th>
+                    <th className="px-3 py-2">Qty</th>
+                    <th className="px-3 py-2">Price</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trades.map((trade) => (
+                    <tr
+                      key={trade._id}
+                      className="border-b border-slate-6/60"
+                      data-testid={getTradeRowTestId(
+                        trade.ticker,
+                        trade.date,
+                      )}
+                    >
+                      <td className="px-3 py-2 text-slate-11">
+                        {new Date(trade.date).toLocaleDateString("en-US")}
+                      </td>
+                      <td className="px-3 py-2 font-medium text-slate-12">
+                        {trade.ticker}
+                      </td>
+                      <td className="px-3 py-2 text-slate-11">
+                        {trade.brokerageAccountId
+                          ? (accountNameByAccountId.get(
+                              trade.brokerageAccountId,
+                            ) ?? trade.brokerageAccountId)
+                          : "\u2014"}
+                      </td>
+                      <td className="px-3 py-2">
+                        <Badge
+                          variant={
+                            trade.side === "buy" ? "success" : "danger"
+                          }
+                        >
+                          {trade.side}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-2 tabular-nums text-slate-11">
+                        {trade.quantity}
+                      </td>
+                      <td className="px-3 py-2 tabular-nums text-slate-11">
+                        {formatCurrency(trade.price)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          inboxTradesForPlan.length === 0 && (
+            <p className="text-sm text-olive-11">
+              No trades linked to this plan yet.
+            </p>
+          )
+        )}
+      </section>
+
+      {/* === Section 4: Notes === */}
+      <section className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4">
+        <h2 className="mb-3 text-lg font-semibold text-olive-12">Notes</h2>
         <NotesSection
           defaultShowEvidence
           testIdPrefix="trade-plan"
@@ -428,200 +929,135 @@ export default function TradePlanDetailPageClient({
         />
       </section>
 
+      {/* === Section 5: Retrospective === */}
       <RetrospectiveSection
         isClosed={tradePlan.status === "closed"}
         parentId={tradePlanId}
         parentKind="tradePlan"
         testIdPrefix="trade-plan"
       />
-
-      <section className="rounded-lg border border-slate-6 bg-slate-2 p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h2
-            className="text-lg font-semibold text-slate-12"
-            data-testid="trade-plan-trades-section-title"
-          >
-            Trades
-          </h2>
-          <Link
-            href="/trades/new"
-            className="rounded bg-slate-4 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-5"
-          >
-            Add Trade
-          </Link>
-        </div>
-
-        {inboxAcceptError && (
-          <Alert
-            variant="error"
-            className="mb-3"
-            onDismiss={() => setInboxAcceptError(null)}
-          >
-            {inboxAcceptError}
-          </Alert>
-        )}
-
-        {trades.length === 0 && inboxTradesForPlan.length === 0 ? (
-          <p className="text-sm text-slate-11">
-            No trades linked to this plan yet.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-6 text-left text-slate-11">
-                  <th className="px-2 py-2">Date</th>
-                  <th className="px-2 py-2">Ticker</th>
-                  <th className="px-2 py-2">Account</th>
-                  <th className="px-2 py-2">Side</th>
-                  <th className="px-2 py-2">Qty</th>
-                  <th className="px-2 py-2">Price</th>
-                  <th className="px-2 py-2">Portfolio / Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {inboxTradesForPlan.map(({ inboxTrade, matchType }) => {
-                  const portfolioId = pendingPortfolioIds[inboxTrade._id] ?? "";
-                  return (
-                    <tr
-                      key={inboxTrade._id}
-                      className="border-b border-slate-6 bg-blue-900/20"
-                      data-testid={getInboxTradeRowTestId(
-                        inboxTrade.ticker ?? "trade",
-                        inboxTrade.externalId ?? inboxTrade._id,
-                      )}
-                    >
-                      <td className="px-2 py-2 text-slate-11">
-                        {inboxTrade.date
-                          ? new Date(inboxTrade.date).toLocaleDateString(
-                              "en-US",
-                            )
-                          : "---"}
-                      </td>
-                      <td className="px-2 py-2 text-slate-12">
-                        {inboxTrade.ticker ?? "---"}{" "}
-                        <Badge
-                          variant={
-                            matchType === "suggested" ? "info" : "neutral"
-                          }
-                        >
-                          {matchType === "suggested" ? "Suggested" : "Pending"}
-                        </Badge>
-                      </td>
-                      <td className="px-2 py-2 text-slate-11">
-                        {accountNameByAccountId.get(
-                          inboxTrade.brokerageAccountId ?? "",
-                        ) ??
-                          inboxTrade.brokerageAccountId ??
-                          "---"}
-                      </td>
-                      <td className="px-2 py-2 text-slate-11">
-                        <Badge
-                          variant={
-                            inboxTrade.side === "buy"
-                              ? "success"
-                              : inboxTrade.side === "sell"
-                                ? "danger"
-                                : "neutral"
-                          }
-                        >
-                          {inboxTrade.side ?? "---"}
-                        </Badge>
-                      </td>
-                      <td className="px-2 py-2 text-slate-11">
-                        {inboxTrade.quantity ?? "---"}
-                      </td>
-                      <td className="px-2 py-2 text-slate-11">
-                        {inboxTrade.price !== undefined
-                          ? formatCurrency(inboxTrade.price)
-                          : "---"}
-                      </td>
-                      <td className="px-2 py-2">
-                        <div className="flex items-center gap-1">
-                          <select
-                            data-testid={getInboxTradePortfolioSelectTestId(
-                              inboxTrade.ticker ?? "trade",
-                              inboxTrade.externalId ?? inboxTrade._id,
-                            )}
-                            aria-label={`Portfolio for ${inboxTrade.ticker || "trade"}`}
-                            value={portfolioId}
-                            onChange={(e) =>
-                              setPendingPortfolioIds((prev) => ({
-                                ...prev,
-                                [inboxTrade._id]: e.target.value,
-                              }))
-                            }
-                            className="h-7 rounded border border-slate-6 bg-slate-3 px-1 text-xs text-slate-12"
-                          >
-                            <option value="">No portfolio</option>
-                            {portfolios?.map((p) => (
-                              <option key={p._id} value={p._id}>
-                                {p.name}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            type="button"
-                            data-testid={getInboxTradeAcceptButtonTestId(
-                              inboxTrade.ticker ?? "trade",
-                              inboxTrade.externalId ?? inboxTrade._id,
-                            )}
-                            aria-label={`Accept ${inboxTrade.ticker ?? "trade"} from inbox`}
-                            onClick={() =>
-                              void handleAcceptInboxTrade(
-                                inboxTrade._id,
-                                portfolioId,
-                              )
-                            }
-                            className="rounded p-1.5 text-green-400 hover:bg-green-900/50 disabled:opacity-50"
-                            title="Accept"
-                            disabled={acceptingInboxTradeIds.has(
-                              inboxTrade._id,
-                            )}
-                          >
-                            {acceptingInboxTradeIds.has(inboxTrade._id) ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Check className="h-4 w-4" />
-                            )}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {trades.map((trade) => (
-                  <tr
-                    key={trade._id}
-                    className="border-b border-slate-6/60"
-                    data-testid={getTradeRowTestId(trade.ticker, trade.date)}
-                  >
-                    <td className="px-2 py-2 text-slate-11">
-                      {new Date(trade.date).toLocaleDateString("en-US")}
-                    </td>
-                    <td className="px-2 py-2 text-slate-12">{trade.ticker}</td>
-                    <td className="px-2 py-2 text-slate-11">
-                      {trade.brokerageAccountId
-                        ? (accountNameByAccountId.get(
-                            trade.brokerageAccountId,
-                          ) ?? trade.brokerageAccountId)
-                        : "\u2014"}
-                    </td>
-                    <td className="px-2 py-2 text-slate-11">{trade.side}</td>
-                    <td className="px-2 py-2 text-slate-11">
-                      {trade.quantity}
-                    </td>
-                    <td className="px-2 py-2 text-slate-11">
-                      {formatCurrency(trade.price)}
-                    </td>
-                    <td className="px-2 py-2 text-slate-11">—</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
     </div>
+  );
+}
+
+// --- Inbox Trade Row Component ---
+
+function InboxTradeRow({
+  accountNameByAccountId,
+  inboxTrade,
+  isAccepting,
+  matchType,
+  onAccept,
+  onPortfolioChange,
+  portfolioId,
+  portfolios,
+}: {
+  accountNameByAccountId: Map<string, string>;
+  inboxTrade: {
+    _id: Id<"inboxTrades">;
+    brokerageAccountId?: string;
+    date?: number;
+    externalId?: string;
+    price?: number;
+    quantity?: number;
+    side?: "buy" | "sell";
+    ticker?: string;
+  };
+  isAccepting: boolean;
+  matchType: "assigned" | "suggested";
+  onAccept: (portfolioId: string) => void;
+  onPortfolioChange: (value: string) => void;
+  portfolioId: string;
+  portfolios: Array<{ _id: Id<"portfolios">; name: string }>;
+}) {
+  return (
+    <tr
+      className={
+        matchType === "assigned"
+          ? "border-b border-slate-6 bg-amber-2/50"
+          : "border-b border-slate-6 bg-blue-2/30"
+      }
+      data-testid={getInboxTradeRowTestId(
+        inboxTrade.ticker ?? "trade",
+        inboxTrade.externalId ?? inboxTrade._id,
+      )}
+    >
+      <td className="px-3 py-2 text-slate-11">
+        {inboxTrade.date
+          ? new Date(inboxTrade.date).toLocaleDateString("en-US")
+          : "---"}
+      </td>
+      <td className="px-3 py-2 text-slate-12">
+        {inboxTrade.ticker ?? "---"}{" "}
+        <Badge variant={matchType === "suggested" ? "info" : "warning"}>
+          {matchType === "suggested" ? "Suggested" : "Pending"}
+        </Badge>
+      </td>
+      <td className="px-3 py-2 text-slate-11">
+        {accountNameByAccountId.get(inboxTrade.brokerageAccountId ?? "") ??
+          inboxTrade.brokerageAccountId ??
+          "---"}
+      </td>
+      <td className="px-3 py-2">
+        <Badge
+          variant={
+            inboxTrade.side === "buy"
+              ? "success"
+              : inboxTrade.side === "sell"
+                ? "danger"
+                : "neutral"
+          }
+        >
+          {inboxTrade.side ?? "---"}
+        </Badge>
+      </td>
+      <td className="px-3 py-2 tabular-nums text-slate-11">
+        {inboxTrade.quantity ?? "---"}
+      </td>
+      <td className="px-3 py-2 tabular-nums text-slate-11">
+        {inboxTrade.price !== undefined
+          ? formatCurrency(inboxTrade.price)
+          : "---"}
+      </td>
+      <td className="px-3 py-2">
+        <div className="flex items-center gap-1">
+          <select
+            data-testid={getInboxTradePortfolioSelectTestId(
+              inboxTrade.ticker ?? "trade",
+              inboxTrade.externalId ?? inboxTrade._id,
+            )}
+            aria-label={`Portfolio for ${inboxTrade.ticker || "trade"}`}
+            value={portfolioId}
+            onChange={(e) => onPortfolioChange(e.target.value)}
+            className="h-7 rounded border border-slate-6 bg-transparent px-1 text-xs text-slate-12"
+          >
+            <option value="">No portfolio</option>
+            {portfolios?.map((p) => (
+              <option key={p._id} value={p._id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            data-testid={getInboxTradeAcceptButtonTestId(
+              inboxTrade.ticker ?? "trade",
+              inboxTrade.externalId ?? inboxTrade._id,
+            )}
+            aria-label={`Accept ${inboxTrade.ticker ?? "trade"} from inbox`}
+            onClick={() => onAccept(portfolioId)}
+            className="rounded p-1.5 text-grass-11 hover:bg-grass-3 disabled:opacity-50"
+            title="Accept"
+            disabled={isAccepting}
+          >
+            {isAccepting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Check className="h-4 w-4" />
+            )}
+          </button>
+        </div>
+      </td>
+    </tr>
   );
 }
