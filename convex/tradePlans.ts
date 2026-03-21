@@ -676,20 +676,6 @@ export const updateTradePlanStatus = mutation({
       );
     }
 
-    if (tradePlan.campaignId && args.status !== "closed") {
-      const campaign = assertOwner(
-        await ctx.db.get(tradePlan.campaignId),
-        ownerId,
-        "Linked campaign not found",
-      );
-
-      if (campaign.status === "closed") {
-        throw new ConvexError(
-          "Cannot reopen or activate a trade plan linked to a closed campaign",
-        );
-      }
-    }
-
     const patch: Record<string, unknown> = {
       status: args.status,
     };

@@ -1,6 +1,11 @@
 "use client";
 
-import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
+import {
+  Preloaded,
+  useMutation,
+  usePreloadedQuery,
+  useQuery,
+} from "convex/react";
 import {
   Check,
   CheckCircle2,
@@ -391,6 +396,28 @@ export default function TradePlanDetailPageClient({
   const watchItem = useMutation(api.watchlist.watchItem);
   const unwatchItem = useMutation(api.watchlist.unwatchItem);
 
+  const campaigns = useQuery(api.campaigns.listCampaigns) ?? [];
+  const [relationshipError, setRelationshipError] = useState<string | null>(
+    null,
+  );
+  const [isChangingRelationship, setIsChangingRelationship] = useState(false);
+
+  const handleCampaignChange = async (
+    campaignId: Id<"campaigns"> | null,
+  ) => {
+    setRelationshipError(null);
+    setIsChangingRelationship(true);
+    try {
+      await updateTradePlan({ tradePlanId, campaignId });
+    } catch (error) {
+      setRelationshipError(
+        error instanceof Error ? error.message : "Failed to update campaign",
+      );
+    } finally {
+      setIsChangingRelationship(false);
+    }
+  };
+
   const [pendingPortfolioIds, setPendingPortfolioIds] = useState<
     Record<string, string>
   >({});
@@ -641,6 +668,49 @@ export default function TradePlanDetailPageClient({
           </div>
         </div>
 
+        {/* Row 3: Relationship management */}
+        <div className="mt-3 flex items-center gap-2 border-t border-olive-6 pt-3">
+          <label
+            htmlFor={TRADE_PLAN_DETAIL_TEST_IDS.campaignSelect}
+            className="text-xs font-medium text-olive-11"
+          >
+            Campaign
+          </label>
+          <select
+            id={TRADE_PLAN_DETAIL_TEST_IDS.campaignSelect}
+            data-testid={TRADE_PLAN_DETAIL_TEST_IDS.campaignSelect}
+            aria-label="Link to campaign"
+            value={tradePlan.campaignId ?? ""}
+            disabled={isChangingRelationship}
+            onChange={(e) => {
+              const value = e.target.value;
+              void handleCampaignChange(
+                value ? (value as Id<"campaigns">) : null,
+              );
+            }}
+            className="h-8 rounded-md border border-olive-7 bg-transparent px-2 py-1 text-sm text-olive-12 focus:ring-2 focus:ring-blue-8 focus:outline-none disabled:opacity-50"
+          >
+            <option value="">Standalone (no campaign)</option>
+            {campaigns.map((campaign) => (
+              <option key={campaign._id} value={campaign._id}>
+                {campaign.name}
+              </option>
+            ))}
+          </select>
+          {tradePlan.campaignId && (
+            <button
+              type="button"
+              data-testid={TRADE_PLAN_DETAIL_TEST_IDS.unlinkButton}
+              aria-label="Unlink from campaign"
+              disabled={isChangingRelationship}
+              onClick={() => void handleCampaignChange(null)}
+              className="rounded p-1 text-xs text-olive-10 hover:bg-olive-4 hover:text-olive-12 disabled:opacity-50"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+
         {statusError && (
           <Alert variant="error" className="mt-3">
             {statusError}
@@ -649,6 +719,11 @@ export default function TradePlanDetailPageClient({
         {watchError && (
           <Alert variant="error" className="mt-3">
             {watchError}
+          </Alert>
+        )}
+        {relationshipError && (
+          <Alert variant="error" className="mt-3">
+            {relationshipError}
           </Alert>
         )}
       </header>

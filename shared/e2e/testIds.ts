@@ -67,11 +67,13 @@ export const APP_SHELL_TEST_IDS = {
 export const TRADE_PLAN_DETAIL_TEST_IDS = {
   backLink: "trade-plan-back-link",
   backLinkDesktop: "trade-plan-back-link-desktop",
-  relationshipLabel: "trade-plan-relationship-label",
   campaignContext: "trade-plan-campaign-context",
   campaignLink: "trade-plan-campaign-link",
+  campaignSelect: "trade-plan-campaign-select",
+  relationshipLabel: "trade-plan-relationship-label",
   statusSelect: "trade-plan-status-select",
   tacticalSection: "trade-plan-tactical-section",
+  unlinkButton: "trade-plan-unlink-button",
 } as const;
 
 type CommandPaletteScope =
