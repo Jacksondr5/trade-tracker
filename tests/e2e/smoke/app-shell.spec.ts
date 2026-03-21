@@ -1,11 +1,20 @@
 import { expect, test } from "@playwright/test";
-import { APP_SHELL_TEST_IDS } from "../../../shared/e2e/testIds";
+import {
+  APP_SHELL_TEST_IDS,
+  NAVIGATION_TEST_IDS,
+  getLocalHierarchyItemTestId,
+} from "../../../shared/e2e/testIds";
+import { E2E_SMOKE_FIXTURES } from "../../../shared/e2e/smokeFixtures";
 import { waitForAuthenticatedApp } from "../helpers/app";
 import {
   APP_PAGE_TITLES,
+  getCampaignRow,
   getNavigationLink,
   getNavigationSection,
+  getMobileNavigationDrawer,
+  getOpenNavigationDrawer,
   getPageTitle,
+  getTradePlanNameDisplay,
 } from "../helpers/selectors";
 
 test("authenticated users are redirected from the entry page to dashboard", async ({
@@ -55,4 +64,38 @@ test("authenticated app shell renders primary navigation", async ({ page }) => {
     await expect(page).toHaveURL(new RegExp(`${expectedPath}$`));
     await expect(getPageTitle(page, pageKey)).toBeVisible();
   }
+});
+
+test("mobile navigation drawer reaches hierarchy destinations", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/campaigns");
+  await waitForAuthenticatedApp(page, APP_PAGE_TITLES.campaigns);
+
+  await getCampaignRow(page).click();
+  await expect(page).toHaveURL(/\/campaigns\/[^/]+$/);
+
+  await expect(
+    page.getByTestId(APP_SHELL_TEST_IDS.openNavigationDrawer),
+  ).toBeVisible();
+  await getOpenNavigationDrawer(page).click();
+
+  const drawer = getMobileNavigationDrawer(page);
+  const linkedTradePlanLink = drawer.getByTestId(
+    getLocalHierarchyItemTestId(
+      "campaign-trade-plan",
+      E2E_SMOKE_FIXTURES.linkedTradePlan.name,
+    ),
+  );
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByTestId(NAVIGATION_TEST_IDS.notes)).toBeVisible();
+  await expect(linkedTradePlanLink).toBeVisible();
+
+  await linkedTradePlanLink.click();
+  await expect(page).toHaveURL(/\/trade-plans\/[^/]+$/);
+  await expect(getTradePlanNameDisplay(page)).toHaveText(
+    E2E_SMOKE_FIXTURES.linkedTradePlan.name,
+  );
+  await expect(drawer).toHaveCount(0);
 });

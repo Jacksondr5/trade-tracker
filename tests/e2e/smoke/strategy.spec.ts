@@ -23,13 +23,18 @@ test("strategy page shows empty state and supports document creation", async ({
   await expect(editorLocator).toBeVisible();
 
   const proseMirror = page.getByTestId(STRATEGY_TEST_IDS.editorInput);
+  const saveStatus = page.getByTestId(STRATEGY_TEST_IDS.saveStatus);
   await expect(proseMirror).toBeVisible();
   await proseMirror.click();
   await proseMirror.pressSequentially(strategyContent, { delay: 10 });
 
-  // Wait for autosave to complete
-  const saveStatus = page.getByTestId(STRATEGY_TEST_IDS.saveStatus);
+  await expect
+    .poll(async () => (await saveStatus.textContent())?.trim() ?? "", {
+      timeout: 10_000,
+    })
+    .toMatch(/Saving|Saved/);
   await expect(saveStatus).toContainText("Saved", { timeout: 10_000 });
+  await expect(page.getByTestId(STRATEGY_TEST_IDS.lastUpdated)).toBeVisible();
 
   // Reload and verify persistence
   await page.reload();

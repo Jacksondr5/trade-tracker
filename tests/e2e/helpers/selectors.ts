@@ -134,6 +134,14 @@ export function getOpenCommandPaletteDesktop(page: Page): Locator {
   return page.getByTestId(APP_SHELL_TEST_IDS.openCommandPaletteDesktop);
 }
 
+export function getOpenNavigationDrawer(page: Page): Locator {
+  return page.getByTestId(APP_SHELL_TEST_IDS.openNavigationDrawer);
+}
+
+export function getMobileNavigationDrawer(page: Page): Locator {
+  return page.getByTestId(APP_SHELL_TEST_IDS.mobileNavigationDrawer);
+}
+
 export function getCommandPaletteInput(page: Page): Locator {
   return page.getByTestId(APP_SHELL_TEST_IDS.commandPaletteInput);
 }
