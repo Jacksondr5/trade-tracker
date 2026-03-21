@@ -313,6 +313,7 @@ export default function TradePlansPageClient({
         </div>
         <select
           data-testid={TRADE_PLANS_INDEX_TEST_IDS.statusFilterSelect}
+          aria-label="Filter by status"
           className="rounded-md border border-olive-6 bg-olive-2 px-2.5 py-1.5 text-sm text-olive-12 focus:outline-none focus:ring-1 focus:ring-blue-8"
           value={statusFilter}
           onChange={(e) =>
@@ -395,6 +396,7 @@ function FilterTab({
     <button
       type="button"
       data-testid={dataTestId}
+      aria-pressed={active}
       className={`px-3 py-1.5 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md ${
         active
           ? "bg-blue-3 text-blue-12"
