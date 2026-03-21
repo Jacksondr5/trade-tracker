@@ -209,7 +209,7 @@ export default function TradePlanDetailPageClient({
   if (tradePlan === null) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <p className="text-slate-11">Trade plan not found.</p>
+        <p className="text-olive-11">Trade plan not found.</p>
         <Link
           href="/trade-plans"
           className="mt-4 inline-block text-blue-400 hover:underline"
@@ -228,7 +228,7 @@ export default function TradePlanDetailPageClient({
         <Link
           href="/trade-plans"
           data-testid="trade-plan-back-link"
-          className="mb-2 inline-block text-sm text-slate-11 hover:text-slate-12 md:hidden"
+          className="mb-2 inline-block text-sm text-olive-11 hover:text-olive-12 md:hidden"
         >
           &larr; Back to Trade Plans
         </Link>
@@ -237,21 +237,21 @@ export default function TradePlanDetailPageClient({
       <Link
         href="/trade-plans"
         data-testid="trade-plan-back-link-desktop"
-        className="mb-2 hidden text-sm text-slate-11 hover:text-slate-12 md:inline-block"
+        className="mb-2 hidden text-sm text-olive-11 hover:text-olive-12 md:inline-block"
       >
         &larr; Back to Trade Plans
       </Link>
 
-      <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
+      <div className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4">
         <div className="mb-4 space-y-1">
           <p
-            className="text-xs font-medium tracking-[0.18em] text-slate-11 uppercase"
+            className="text-xs font-medium tracking-[0.18em] text-olive-11 uppercase"
             data-testid="trade-plan-relationship-label"
           >
             {relationshipLabel}
           </p>
           {tradePlan.campaignId ? (
-            <p className="text-sm text-slate-11" data-testid="trade-plan-campaign-context">
+            <p className="text-sm text-olive-11" data-testid="trade-plan-campaign-context">
               Campaign:{" "}
               <Link
                 href={
@@ -271,7 +271,7 @@ export default function TradePlanDetailPageClient({
             <div>
               <label
                 htmlFor="plan-name"
-                className="mb-1 block text-xs tracking-wide text-slate-11 uppercase"
+                className="mb-1 block text-xs tracking-wide text-olive-11 uppercase"
               >
                 Plan Name
               </label>
@@ -280,7 +280,7 @@ export default function TradePlanDetailPageClient({
                   id="plan-name"
                   data-testid="trade-plan-name-input"
                   maxLength={120}
-                  className="w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-xl font-bold text-slate-12"
+                  className="w-full rounded border border-olive-6 bg-olive-3 px-3 py-2 text-xl font-bold text-olive-12"
                   value={planName}
                   onChange={(e) => {
                     setPlanName(e.target.value);
@@ -292,7 +292,7 @@ export default function TradePlanDetailPageClient({
                 <button
                   type="button"
                   data-testid="save-trade-plan-name-button"
-                  className="rounded bg-slate-700 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-600"
+                  className="rounded bg-olive-4 px-3 py-1.5 text-sm text-olive-12 hover:bg-olive-5"
                   onClick={() => void handleSaveName()}
                   disabled={planNameSaveState === "saving"}
                 >
@@ -305,7 +305,7 @@ export default function TradePlanDetailPageClient({
                 </Alert>
               )}
               {planNameSaveState === "saving" && (
-                <span className="mt-2 flex items-center gap-1 text-sm text-slate-11">
+                <span className="mt-2 flex items-center gap-1 text-sm text-olive-11">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Saving...
                 </span>
@@ -321,7 +321,7 @@ export default function TradePlanDetailPageClient({
             <div>
               <label
                 htmlFor="plan-symbol"
-                className="mb-1 block text-xs tracking-wide text-slate-11 uppercase"
+                className="mb-1 block text-xs tracking-wide text-olive-11 uppercase"
               >
                 Instrument Symbol
               </label>
@@ -330,7 +330,7 @@ export default function TradePlanDetailPageClient({
                   id="plan-symbol"
                   data-testid="trade-plan-symbol-input"
                   maxLength={20}
-                  className="w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-12 sm:w-40"
+                  className="w-full rounded border border-olive-6 bg-olive-3 px-3 py-2 text-olive-12 sm:w-40"
                   value={instrumentSymbol}
                   onChange={(e) => {
                     setInstrumentSymbol(e.target.value);
@@ -342,7 +342,7 @@ export default function TradePlanDetailPageClient({
                 <button
                   type="button"
                   data-testid="save-trade-plan-symbol-button"
-                  className="rounded bg-slate-700 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-600"
+                  className="rounded bg-olive-4 px-3 py-1.5 text-sm text-olive-12 hover:bg-olive-5"
                   onClick={() => void handleSaveSymbol()}
                   disabled={instrumentSymbolSaveState === "saving"}
                 >
@@ -355,7 +355,7 @@ export default function TradePlanDetailPageClient({
                 </Alert>
               )}
               {instrumentSymbolSaveState === "saving" && (
-                <span className="mt-2 flex items-center gap-1 text-sm text-slate-11">
+                <span className="mt-2 flex items-center gap-1 text-sm text-olive-11">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Saving...
                 </span>
@@ -372,7 +372,7 @@ export default function TradePlanDetailPageClient({
           <div className="w-44">
             <label
               htmlFor="plan-status"
-              className="mb-1 block text-xs tracking-wide text-slate-11 uppercase"
+              className="mb-1 block text-xs tracking-wide text-olive-11 uppercase"
             >
               Status
             </label>
@@ -384,7 +384,7 @@ export default function TradePlanDetailPageClient({
               onChange={(e) =>
                 void handleStatusChange(e.target.value as TradePlanStatus)
               }
-              className="h-9 w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-1 text-sm text-slate-12 focus:ring-1 focus:ring-slate-500 focus:outline-none"
+              className="h-9 w-full rounded-md border border-olive-6 bg-olive-3 px-3 py-1 text-sm text-olive-12 focus:ring-1 focus:ring-olive-7 focus:outline-none"
             >
               <option value="idea">Idea</option>
               <option value="watching">Watching</option>
@@ -395,7 +395,7 @@ export default function TradePlanDetailPageClient({
         </div>
 
         {tradePlan.status === "closed" && tradePlan.closedAt && (
-          <p className="text-xs text-slate-11">
+          <p className="text-xs text-olive-11">
             Closed {new Date(tradePlan.closedAt).toLocaleDateString("en-US")}
           </p>
         )}
@@ -407,8 +407,8 @@ export default function TradePlanDetailPageClient({
         )}
       </div>
 
-      <section className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
-        <h2 className="mb-3 text-lg font-semibold text-slate-12">
+      <section className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4">
+        <h2 className="mb-3 text-lg font-semibold text-olive-12">
           Trade Plan Notes
         </h2>
         <NotesSection
@@ -435,7 +435,7 @@ export default function TradePlanDetailPageClient({
         testIdPrefix="trade-plan"
       />
 
-      <section className="rounded-lg border border-slate-700 bg-slate-800 p-4">
+      <section className="rounded-lg border border-slate-6 bg-slate-2 p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2
             className="text-lg font-semibold text-slate-12"
@@ -445,7 +445,7 @@ export default function TradePlanDetailPageClient({
           </h2>
           <Link
             href="/trades/new"
-            className="rounded bg-slate-700 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-600"
+            className="rounded bg-slate-4 px-3 py-1.5 text-sm text-slate-12 hover:bg-slate-5"
           >
             Add Trade
           </Link>
@@ -469,7 +469,7 @@ export default function TradePlanDetailPageClient({
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-700 text-left text-slate-11">
+                <tr className="border-b border-slate-6 text-left text-slate-11">
                   <th className="px-2 py-2">Date</th>
                   <th className="px-2 py-2">Ticker</th>
                   <th className="px-2 py-2">Account</th>
@@ -485,7 +485,7 @@ export default function TradePlanDetailPageClient({
                   return (
                     <tr
                       key={inboxTrade._id}
-                      className="border-b border-slate-700 bg-blue-900/20"
+                      className="border-b border-slate-6 bg-blue-900/20"
                       data-testid={getInboxTradeRowTestId(
                         inboxTrade.ticker ?? "trade",
                         inboxTrade.externalId ?? inboxTrade._id,
@@ -551,7 +551,7 @@ export default function TradePlanDetailPageClient({
                                 [inboxTrade._id]: e.target.value,
                               }))
                             }
-                            className="h-7 rounded border border-slate-600 bg-slate-700 px-1 text-xs text-slate-12"
+                            className="h-7 rounded border border-slate-6 bg-slate-3 px-1 text-xs text-slate-12"
                           >
                             <option value="">No portfolio</option>
                             {portfolios?.map((p) => (
@@ -593,7 +593,7 @@ export default function TradePlanDetailPageClient({
                 {trades.map((trade) => (
                   <tr
                     key={trade._id}
-                    className="border-b border-slate-700/60"
+                    className="border-b border-slate-6/60"
                     data-testid={getTradeRowTestId(trade.ticker, trade.date)}
                   >
                     <td className="px-2 py-2 text-slate-11">

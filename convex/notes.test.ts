@@ -249,4 +249,78 @@ describe("notes contract", () => {
     expect(tradePlanNotes.map((note) => note._id)).toEqual([tradePlanNoteId]);
     expect(generalNotes.map((note) => note._id)).toEqual([generalNoteId]);
   });
+
+  describe("updateNote", () => {
+    it("updates content for the owner's note", async () => {
+      const noteId = await insertNote({
+        content: "original content",
+        ownerId: ownerA,
+      });
+
+      await asUser(ownerA).mutation(api.notes.updateNote, {
+        content: "updated content",
+        noteId,
+      });
+
+      const notes = await asUser(ownerA).query(api.notes.getNotesFeed, {});
+      expect(notes).toHaveLength(1);
+      expect(notes[0]?.content).toBe("updated content");
+    });
+
+    it("rejects updates from a non-owner", async () => {
+      const noteId = await insertNote({
+        content: "owner A note",
+        ownerId: ownerA,
+      });
+
+      await expect(
+        asUser(ownerB).mutation(api.notes.updateNote, {
+          content: "hijacked",
+          noteId,
+        }),
+      ).rejects.toThrow("Note not found");
+    });
+
+    it("rejects empty content", async () => {
+      const noteId = await insertNote({
+        content: "valid note",
+        ownerId: ownerA,
+      });
+
+      await expect(
+        asUser(ownerA).mutation(api.notes.updateNote, {
+          content: "   ",
+          noteId,
+        }),
+      ).rejects.toThrow("Note content is required");
+    });
+
+    it("updates evidence on an existing note", async () => {
+      const noteId = await insertNote({
+        content: "note with evidence",
+        ownerId: ownerA,
+      });
+
+      await asUser(ownerA).mutation(api.notes.updateNote, {
+        evidence: [
+          {
+            kind: "chart",
+            url: "https://example.com/chart.png",
+          },
+        ],
+        noteId,
+      });
+
+      const notes = await asUser(ownerA).query(api.notes.getNotesFeed, {});
+      expect(notes[0]?.evidence).toEqual([
+        {
+          contentType: undefined,
+          fileName: undefined,
+          kind: "chart",
+          storageId: undefined,
+          url: "https://example.com/chart.png",
+        },
+      ]);
+    });
+  });
 });

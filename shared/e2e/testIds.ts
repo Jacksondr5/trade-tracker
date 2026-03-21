@@ -41,6 +41,7 @@ export const NAVIGATION_SECTION_TEST_IDS = {
 
 export const STRATEGY_TEST_IDS = {
   editor: "strategy-editor",
+  editorInput: "strategy-editor-input",
   emptyState: "strategy-empty-state",
   emptyStateCta: "strategy-empty-state-cta",
   lastUpdated: "strategy-last-updated",
@@ -184,30 +185,68 @@ export function getNoteDateTestId(prefix: string, noteId: string): string {
   return `${prefix}-note-date-${noteId}`;
 }
 
-export function getNoteContextLinkTestId(prefix: string, noteId: string): string {
+export function getNoteContextLinkTestId(
+  prefix: string,
+  noteId: string,
+): string {
   return `${prefix}-note-context-link-${noteId}`;
 }
 
-export function getNoteContextTextTestId(prefix: string, noteId: string): string {
+export function getNoteContextTextTestId(
+  prefix: string,
+  noteId: string,
+): string {
   return `${prefix}-note-context-text-${noteId}`;
 }
 
-export function getEditNoteButtonTestId(prefix: string, noteId: string): string {
+export function getEditNoteButtonTestId(
+  prefix: string,
+  noteId: string,
+): string {
   return `${prefix}-edit-note-button-${noteId}`;
 }
 
-export function getEditNoteTextareaTestId(prefix: string, noteId: string): string {
+export function getEditNoteTextareaTestId(
+  prefix: string,
+  noteId: string,
+): string {
   return `${prefix}-edit-note-textarea-${noteId}`;
 }
 
-export function getSaveNoteButtonTestId(prefix: string, noteId: string): string {
+export function getSaveNoteButtonTestId(
+  prefix: string,
+  noteId: string,
+): string {
   return `${prefix}-save-note-button-${noteId}`;
 }
 
-export function getCancelNoteButtonTestId(prefix: string, noteId: string): string {
+export function getCancelNoteButtonTestId(
+  prefix: string,
+  noteId: string,
+): string {
   return `${prefix}-cancel-note-button-${noteId}`;
 }
 
 export function getNoteContentTestId(prefix: string, noteId: string): string {
   return `${prefix}-note-content-${noteId}`;
+}
+
+export function getRetrospectiveSectionTestId(prefix: string): string {
+  return `${prefix}-retrospective-section`;
+}
+
+export function getRetrospectiveTextareaTestId(prefix: string): string {
+  return `${prefix}-retrospective-textarea`;
+}
+
+export function getSaveRetrospectiveButtonTestId(prefix: string): string {
+  return `${prefix}-save-retrospective-button`;
+}
+
+export function getCancelRetrospectiveButtonTestId(prefix: string): string {
+  return `${prefix}-cancel-retrospective-button`;
+}
+
+export function getEditRetrospectiveButtonTestId(prefix: string): string {
+  return `${prefix}-edit-retrospective-button`;
 }
