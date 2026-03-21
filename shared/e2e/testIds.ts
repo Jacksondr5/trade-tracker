@@ -51,10 +51,27 @@ export const STRATEGY_TEST_IDS = {
 export const APP_SHELL_TEST_IDS = {
   editCampaignName: "edit-campaign-name",
   tradePlanNameInput: "trade-plan-name-input",
+  tradePlanName: "trade-plan-name",
+  tradePlanNameEditButton: "trade-plan-name-edit-button",
+  tradePlanNameSaveButton: "trade-plan-name-save-button",
+  tradePlanSymbol: "trade-plan-symbol",
+  tradePlanSymbolEditButton: "trade-plan-symbol-edit-button",
+  tradePlanSymbolInput: "trade-plan-symbol-input",
+  tradePlanSymbolSaveButton: "trade-plan-symbol-save-button",
   toggleLocalGroupStandaloneTradePlans:
     "toggle-local-group-standalone-trade-plans",
   openCommandPaletteDesktop: "open-command-palette-desktop",
   commandPaletteInput: "command-palette-input",
+} as const;
+
+export const TRADE_PLAN_DETAIL_TEST_IDS = {
+  backLink: "trade-plan-back-link",
+  backLinkDesktop: "trade-plan-back-link-desktop",
+  relationshipLabel: "trade-plan-relationship-label",
+  campaignContext: "trade-plan-campaign-context",
+  campaignLink: "trade-plan-campaign-link",
+  statusSelect: "trade-plan-status-select",
+  tacticalSection: "trade-plan-tactical-section",
 } as const;
 
 type CommandPaletteScope =

@@ -20,7 +20,7 @@ import {
   getSeededWatchlistLinkedTradePlanWatchToggle,
   getSeededWatchlistStandaloneTradePlanLink,
   getToggleLocalGroupStandaloneTradePlans,
-  getTradePlanNameInput,
+  getTradePlanNameDisplay,
 } from "../helpers/selectors";
 
 async function ensureLinkedTradePlanNotInWatchlist(page: Page) {
@@ -58,7 +58,7 @@ test("local hierarchy supports campaign, linked trade plan, and standalone trade
 
   await getSeededHierarchyLinkedTradePlanLink(page).click();
   await expect(page).toHaveURL(/\/trade-plans\/[^/]+$/);
-  await expect(getTradePlanNameInput(page)).toHaveValue(
+  await expect(getTradePlanNameDisplay(page)).toHaveText(
     E2E_SMOKE_FIXTURES.linkedTradePlan.name,
   );
 
@@ -67,7 +67,7 @@ test("local hierarchy supports campaign, linked trade plan, and standalone trade
 
   await getSeededHierarchyStandaloneTradePlanLink(page).click();
   await expect(page).toHaveURL(/\/trade-plans\/[^/]+$/);
-  await expect(getTradePlanNameInput(page)).toHaveValue(
+  await expect(getTradePlanNameDisplay(page)).toHaveText(
     E2E_SMOKE_FIXTURES.standaloneTradePlan.name,
   );
 });
@@ -94,7 +94,7 @@ test("command palette jumps to watched campaigns and trade plans coherently", as
   await expect(getSeededCommandPaletteLinkedTradePlanItem(page)).toBeVisible();
   await getSeededCommandPaletteLinkedTradePlanItem(page).click();
   await expect(page).toHaveURL(/\/trade-plans\/[^/]+$/);
-  await expect(getTradePlanNameInput(page)).toHaveValue(
+  await expect(getTradePlanNameDisplay(page)).toHaveText(
     E2E_SMOKE_FIXTURES.linkedTradePlan.name,
   );
 
@@ -107,7 +107,7 @@ test("command palette jumps to watched campaigns and trade plans coherently", as
   ).toBeVisible();
   await getSeededCommandPaletteWatchlistStandaloneTradePlanItem(page).click();
   await expect(page).toHaveURL(/\/trade-plans\/[^/]+$/);
-  await expect(getTradePlanNameInput(page)).toHaveValue(
+  await expect(getTradePlanNameDisplay(page)).toHaveText(
     E2E_SMOKE_FIXTURES.standaloneTradePlan.name,
   );
 });
@@ -134,7 +134,7 @@ test("watchlist toggles stay in sync between hierarchy and command palette", asy
   await expect(getSeededCommandPaletteLinkedTradePlanItem(page)).toHaveCount(0);
 
   await getSeededCommandPaletteWatchlistLinkedTradePlanItem(page).click();
-  await expect(getTradePlanNameInput(page)).toHaveValue(
+  await expect(getTradePlanNameDisplay(page)).toHaveText(
     E2E_SMOKE_FIXTURES.linkedTradePlan.name,
   );
   await expect(getSeededWatchlistLinkedTradePlanLink(page)).toBeVisible();

@@ -529,6 +529,94 @@ describe("trade plan workspace queries", () => {
     });
   });
 
+  describe("updateTradePlan tactical fields", () => {
+    it("saves and retrieves rationale, entryConditions, targetConditions, and exitConditions", async () => {
+      const tradePlanId = await insertTradePlan({
+        instrumentSymbol: "SPY",
+        name: "SPY Momentum",
+        ownerId: ownerA,
+        status: "active",
+      });
+
+      await asUser(ownerA).mutation(api.tradePlans.updateTradePlan, {
+        tradePlanId,
+        rationale: "Strong relative strength vs peers",
+        entryConditions: "Break above 520 with volume",
+        targetConditions: "540 extension target",
+        exitConditions: "Close below 510 on daily",
+      });
+
+      const detail = await asUser(ownerA).query(
+        api.tradePlans.getTradePlanWorkspace,
+        { tradePlanId },
+      );
+
+      expect(detail?.tradePlan).toMatchObject({
+        rationale: "Strong relative strength vs peers",
+        entryConditions: "Break above 520 with volume",
+        targetConditions: "540 extension target",
+        exitConditions: "Close below 510 on daily",
+      });
+    });
+
+    it("clears tactical fields when set to null", async () => {
+      const tradePlanId = await insertTradePlan({
+        entryConditions: "Initial entry",
+        exitConditions: "Initial exit",
+        instrumentSymbol: "QQQ",
+        name: "QQQ Plan",
+        ownerId: ownerA,
+        rationale: "Initial rationale",
+        status: "idea",
+        targetConditions: "Initial target",
+      });
+
+      await asUser(ownerA).mutation(api.tradePlans.updateTradePlan, {
+        tradePlanId,
+        rationale: null,
+        entryConditions: null,
+        targetConditions: null,
+        exitConditions: null,
+      });
+
+      const detail = await asUser(ownerA).query(
+        api.tradePlans.getTradePlanWorkspace,
+        { tradePlanId },
+      );
+
+      expect(detail?.tradePlan).toMatchObject({
+        rationale: null,
+        entryConditions: null,
+        targetConditions: null,
+        exitConditions: null,
+      });
+    });
+
+    it("updates a single tactical field without affecting others", async () => {
+      const tradePlanId = await insertTradePlan({
+        entryConditions: "Original entry",
+        instrumentSymbol: "AAPL",
+        name: "AAPL Plan",
+        ownerId: ownerA,
+        rationale: "Original rationale",
+        status: "watching",
+      });
+
+      await asUser(ownerA).mutation(api.tradePlans.updateTradePlan, {
+        tradePlanId,
+        rationale: "Updated rationale",
+      });
+
+      const detail = await asUser(ownerA).query(
+        api.tradePlans.getTradePlanWorkspace,
+        { tradePlanId },
+      );
+
+      expect(detail?.tradePlan?.rationale).toBe("Updated rationale");
+      expect(detail?.tradePlan?.entryConditions).toBe("Original entry");
+    });
+  });
+
   it("returns null when the workspace trade plan is missing or belongs to another owner", async () => {
     const ownerBPlanId = await insertTradePlan({
       instrumentSymbol: "BTC",
