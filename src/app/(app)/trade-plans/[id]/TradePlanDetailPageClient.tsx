@@ -1,6 +1,11 @@
 "use client";
 
-import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
+import {
+  Preloaded,
+  useMutation,
+  usePreloadedQuery,
+  useQuery,
+} from "convex/react";
 import {
   Check,
   CheckCircle2,
@@ -391,6 +396,30 @@ export default function TradePlanDetailPageClient({
   const watchItem = useMutation(api.watchlist.watchItem);
   const unwatchItem = useMutation(api.watchlist.unwatchItem);
 
+  const campaigns = useQuery(api.campaigns.listCampaigns) ?? [];
+  const [relationshipError, setRelationshipError] = useState<string | null>(
+    null,
+  );
+  const [isChangingRelationship, setIsChangingRelationship] = useState(false);
+  const [isEditingCampaign, setIsEditingCampaign] = useState(false);
+
+  const handleCampaignChange = async (
+    campaignId: Id<"campaigns"> | null,
+  ) => {
+    setRelationshipError(null);
+    setIsChangingRelationship(true);
+    try {
+      await updateTradePlan({ tradePlanId, campaignId });
+      setIsEditingCampaign(false);
+    } catch (error) {
+      setRelationshipError(
+        error instanceof Error ? error.message : "Failed to update campaign",
+      );
+    } finally {
+      setIsChangingRelationship(false);
+    }
+  };
+
   const [pendingPortfolioIds, setPendingPortfolioIds] = useState<
     Record<string, string>
   >({});
@@ -577,31 +606,103 @@ export default function TradePlanDetailPageClient({
 
         {/* Row 2: Relationship context + status/watch controls */}
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span
-              className="text-xs font-medium uppercase tracking-[0.18em] text-olive-11"
-              data-testid={TRADE_PLAN_DETAIL_TEST_IDS.relationshipLabel}
-            >
-              {relationshipLabel}
-            </span>
-            {tradePlan.campaignId ? (
-              <span
-                className="text-xs text-olive-11"
-                data-testid={TRADE_PLAN_DETAIL_TEST_IDS.campaignContext}
-              >
-                &middot;{" "}
-                <Link
-                  href={
-                    linkedCampaign?.href ??
-                    `/campaigns/${tradePlan.campaignId}`
-                  }
-                  className="text-blue-9 hover:underline"
-                  data-testid={TRADE_PLAN_DETAIL_TEST_IDS.campaignLink}
+          <div className="group flex items-center gap-2">
+            {isEditingCampaign ? (
+              <>
+                <select
+                  data-testid={TRADE_PLAN_DETAIL_TEST_IDS.campaignSelect}
+                  aria-label="Link to campaign"
+                  value={tradePlan.campaignId ?? ""}
+                  disabled={isChangingRelationship}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    void handleCampaignChange(
+                      value ? (value as Id<"campaigns">) : null,
+                    );
+                  }}
+                  className="h-7 rounded-md border border-olive-7 bg-transparent px-2 py-0.5 text-xs text-olive-12 focus:ring-2 focus:ring-blue-8 focus:outline-none disabled:opacity-50"
                 >
-                  {linkedCampaign?.name ?? "View Campaign"}
-                </Link>
-              </span>
-            ) : null}
+                  <option value="">Standalone (no campaign)</option>
+                  {campaigns.map((campaign) => (
+                    <option key={campaign._id} value={campaign._id}>
+                      {campaign.name}
+                    </option>
+                  ))}
+                </select>
+                {tradePlan.campaignId && (
+                  <button
+                    type="button"
+                    data-testid={TRADE_PLAN_DETAIL_TEST_IDS.unlinkButton}
+                    aria-label="Unlink from campaign"
+                    disabled={isChangingRelationship}
+                    onClick={() => void handleCampaignChange(null)}
+                    className="rounded p-1 text-olive-10 hover:bg-olive-4 hover:text-olive-12 disabled:opacity-50"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  aria-label="Cancel editing campaign"
+                  onClick={() => setIsEditingCampaign(false)}
+                  className="rounded p-1 text-olive-10 hover:bg-olive-4 hover:text-olive-12"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </>
+            ) : isLinked ? (
+              <>
+                <span
+                  className="text-xs font-medium uppercase tracking-[0.18em] text-olive-11"
+                  data-testid={TRADE_PLAN_DETAIL_TEST_IDS.relationshipLabel}
+                >
+                  {relationshipLabel}
+                </span>
+                <span
+                  className="text-xs text-olive-11"
+                  data-testid={TRADE_PLAN_DETAIL_TEST_IDS.campaignContext}
+                >
+                  &middot;{" "}
+                  <Link
+                    href={
+                      linkedCampaign?.href ??
+                      `/campaigns/${tradePlan.campaignId}`
+                    }
+                    className="text-blue-9 hover:underline"
+                    data-testid={TRADE_PLAN_DETAIL_TEST_IDS.campaignLink}
+                  >
+                    {linkedCampaign?.name ?? "View Campaign"}
+                  </Link>
+                </span>
+                <button
+                  type="button"
+                  data-testid={TRADE_PLAN_DETAIL_TEST_IDS.campaignSelect}
+                  aria-label="Change campaign"
+                  onClick={() => setIsEditingCampaign(true)}
+                  className="rounded p-1 text-olive-10 opacity-0 transition-opacity hover:bg-olive-4 hover:text-olive-12 group-hover:opacity-100"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              </>
+            ) : (
+              <>
+                <span
+                  className="text-xs font-medium uppercase tracking-[0.18em] text-olive-11"
+                  data-testid={TRADE_PLAN_DETAIL_TEST_IDS.relationshipLabel}
+                >
+                  {relationshipLabel}
+                </span>
+                <button
+                  type="button"
+                  data-testid={TRADE_PLAN_DETAIL_TEST_IDS.campaignSelect}
+                  aria-label="Link to campaign"
+                  onClick={() => setIsEditingCampaign(true)}
+                  className="rounded px-2 py-0.5 text-xs text-blue-9 hover:bg-olive-4 hover:text-blue-11"
+                >
+                  Link to campaign
+                </button>
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
@@ -649,6 +750,11 @@ export default function TradePlanDetailPageClient({
         {watchError && (
           <Alert variant="error" className="mt-3">
             {watchError}
+          </Alert>
+        )}
+        {relationshipError && (
+          <Alert variant="error" className="mt-3">
+            {relationshipError}
           </Alert>
         )}
       </header>
