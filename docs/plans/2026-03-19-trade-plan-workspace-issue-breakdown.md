@@ -255,9 +255,9 @@ Do not reopen campaign detail as a primary editing surface for this project. Any
 Recommended sequencing notes:
 
 - Issues 1 and 2 are the strongest prerequisites. They reduce churn everywhere else.
-- Issue 3 can land before the full detail redesign once the data contract is stable.
-- Issue 4 now intentionally gives one implementation owner the full detail-page outcome, reducing handoff churn across header, tactical fields, and execution context.
-- Issue 5 should follow the core detail composition and data contract so reparenting/unlinking does not force a second redesign of the header and page states.
+- Land Issue 3 before the full detail redesign once the data contract is stable.
+- With one implementation owner, Issue 4 intentionally covers the full detail-page outcome, reducing handoff churn across header, tactical fields, and execution context.
+- After the core detail composition and data contract settle, Issue 5 should follow so reparenting or unlinking does not force a second redesign of the header and page states.
 
 ## Explicit Dependency Map
 
