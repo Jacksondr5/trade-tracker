@@ -19,7 +19,6 @@ import type { Id } from "~/convex/_generated/dataModel";
 import { capitalize, formatDate } from "~/lib/format";
 import {
   APP_PAGE_TITLES,
-  getCloseTradePlanButtonTestId,
   getStandaloneTradePlanCardTestId,
   getTradePlanLinkTestId,
   getTradePlanRowTestId,
@@ -81,10 +80,6 @@ export default function TradePlansPageClient({
 }) {
   const tradePlans = usePreloadedQuery(preloadedTradePlans);
   const createTradePlan = useMutation(api.tradePlans.createTradePlan);
-  const updateTradePlanStatus = useMutation(
-    api.tradePlans.updateTradePlanStatus,
-  );
-
   const [error, setError] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [relationshipFilter, setRelationshipFilter] =
@@ -92,12 +87,6 @@ export default function TradePlansPageClient({
   const [statusFilter, setStatusFilter] = useState<TradePlanStatus | "all">(
     "all",
   );
-  const [pendingCloseIds, setPendingCloseIds] = useState<Set<Id<"tradePlans">>>(
-    () => new Set(),
-  );
-  const [closeErrors, setCloseErrors] = useState<
-    Map<Id<"tradePlans">, string>
-  >(() => new Map());
 
   const filteredPlans = useMemo(() => {
     let plans = tradePlans as TradePlanSummary[];
@@ -152,41 +141,6 @@ export default function TradePlansPageClient({
       }
     },
   });
-
-  const handleClosePlan = async (tradePlanId: Id<"tradePlans">) => {
-    setCloseErrors((current) => {
-      const next = new Map(current);
-      next.delete(tradePlanId);
-      return next;
-    });
-    setPendingCloseIds((current) => {
-      const next = new Set(current);
-      next.add(tradePlanId);
-      return next;
-    });
-
-    try {
-      await updateTradePlanStatus({
-        status: "closed",
-        tradePlanId,
-      });
-    } catch (err) {
-      setCloseErrors((current) => {
-        const next = new Map(current);
-        next.set(
-          tradePlanId,
-          err instanceof Error ? err.message : "Failed to close trade plan",
-        );
-        return next;
-      });
-    } finally {
-      setPendingCloseIds((current) => {
-        const next = new Set(current);
-        next.delete(tradePlanId);
-        return next;
-      });
-    }
-  };
 
   return (
     <div className="container mx-auto max-w-5xl px-6 py-8">
@@ -367,13 +321,7 @@ export default function TradePlansPageClient({
           data-testid={TRADE_PLANS_INDEX_TEST_IDS.planList}
         >
           {filteredPlans.map((plan) => (
-            <TradePlanRow
-              key={plan.id}
-              plan={plan}
-              isPendingClose={pendingCloseIds.has(plan.id)}
-              closeError={closeErrors.get(plan.id) ?? null}
-              onClose={handleClosePlan}
-            />
+            <TradePlanRow key={plan.id} plan={plan} />
           ))}
         </div>
       )}
@@ -409,17 +357,7 @@ function FilterTab({
   );
 }
 
-function TradePlanRow({
-  plan,
-  isPendingClose,
-  closeError,
-  onClose,
-}: {
-  plan: TradePlanSummary;
-  isPendingClose: boolean;
-  closeError: string | null;
-  onClose: (id: Id<"tradePlans">) => void;
-}) {
+function TradePlanRow({ plan }: { plan: TradePlanSummary }) {
   const isLinked = plan.relationship.kind === "linked";
 
   return (
@@ -480,30 +418,10 @@ function TradePlanRow({
             )}
           </div>
         </Link>
-        <div className="flex shrink-0 items-center gap-2">
-          <Badge variant={STATUS_BADGE_VARIANT[plan.status]}>
-            {capitalize(plan.status)}
-          </Badge>
-          {plan.status !== "closed" && (
-            <Button
-              dataTestId={getCloseTradePlanButtonTestId(plan.id)}
-              variant="secondary"
-              className="border border-olive-6 bg-olive-3 text-olive-12 hover:bg-olive-4"
-              onClick={() => {
-                onClose(plan.id);
-              }}
-              disabled={isPendingClose}
-            >
-              {isPendingClose ? "Closing..." : "Close"}
-            </Button>
-          )}
-        </div>
+        <Badge variant={STATUS_BADGE_VARIANT[plan.status]}>
+          {capitalize(plan.status)}
+        </Badge>
       </div>
-      {closeError && (
-        <Alert variant="error" className="mt-3">
-          {closeError}
-        </Alert>
-      )}
     </div>
   );
 }
