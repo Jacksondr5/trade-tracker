@@ -91,6 +91,20 @@ function InlineEditableField({
     }
   }, [isEditing]);
 
+  useEffect(() => {
+    if (saveState !== "saved" || isEditing) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setSaveState("idle");
+    }, 2000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [isEditing, saveState]);
+
   const handleSave = async () => {
     const trimmed = draft.trim();
     if (!trimmed) {
@@ -227,6 +241,20 @@ function TacticalField({
       textareaRef.current?.focus();
     }
   }, [isEditing]);
+
+  useEffect(() => {
+    if (saveState !== "saved" || isEditing) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setSaveState("idle");
+    }, 2000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [isEditing, saveState]);
 
   const handleSave = async () => {
     setError(null);
@@ -401,6 +429,7 @@ export default function TradePlanDetailPageClient({
     Set<string>
   >(new Set());
   const [watchLoading, setWatchLoading] = useState(false);
+  const [watchError, setWatchError] = useState<string | null>(null);
 
   const breadcrumbs = buildHierarchyBreadcrumbs(hierarchy, {
     kind: "tradePlan",
@@ -420,6 +449,7 @@ export default function TradePlanDetailPageClient({
 
   const handleToggleWatch = useCallback(async () => {
     setWatchLoading(true);
+    setWatchError(null);
     try {
       if (isWatched) {
         await unwatchItem({
@@ -430,6 +460,10 @@ export default function TradePlanDetailPageClient({
           item: { itemType: "tradePlan", tradePlanId },
         });
       }
+    } catch (error) {
+      setWatchError(
+        error instanceof Error ? error.message : "Failed to update watchlist",
+      );
     } finally {
       setWatchLoading(false);
     }
@@ -642,6 +676,11 @@ export default function TradePlanDetailPageClient({
         {statusError && (
           <Alert variant="error" className="mt-3">
             {statusError}
+          </Alert>
+        )}
+        {watchError && (
+          <Alert variant="error" className="mt-3">
+            {watchError}
           </Alert>
         )}
       </header>
