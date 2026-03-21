@@ -61,31 +61,31 @@ export function getTradePlanNameInput(page: Page): Locator {
 }
 
 export function getTradePlanNameDisplay(page: Page): Locator {
-  return page.getByTestId("trade-plan-name");
+  return page.getByTestId(APP_SHELL_TEST_IDS.tradePlanName);
 }
 
 export function getTradePlanNameEditButton(page: Page): Locator {
-  return page.getByTestId("trade-plan-name-edit-button");
+  return page.getByTestId(APP_SHELL_TEST_IDS.tradePlanNameEditButton);
 }
 
 export function getTradePlanNameSaveButton(page: Page): Locator {
-  return page.getByTestId("trade-plan-name-save-button");
+  return page.getByTestId(APP_SHELL_TEST_IDS.tradePlanNameSaveButton);
 }
 
 export function getTradePlanSymbolDisplay(page: Page): Locator {
-  return page.getByTestId("trade-plan-symbol");
+  return page.getByTestId(APP_SHELL_TEST_IDS.tradePlanSymbol);
 }
 
 export function getTradePlanSymbolEditButton(page: Page): Locator {
-  return page.getByTestId("trade-plan-symbol-edit-button");
+  return page.getByTestId(APP_SHELL_TEST_IDS.tradePlanSymbolEditButton);
 }
 
 export function getTradePlanSymbolInput(page: Page): Locator {
-  return page.getByTestId("trade-plan-symbol-input");
+  return page.getByTestId(APP_SHELL_TEST_IDS.tradePlanSymbolInput);
 }
 
 export function getTradePlanSymbolSaveButton(page: Page): Locator {
-  return page.getByTestId("trade-plan-symbol-save-button");
+  return page.getByTestId(APP_SHELL_TEST_IDS.tradePlanSymbolSaveButton);
 }
 
 export function getNameInput(page: Page): Locator {

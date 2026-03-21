@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  TRADE_PLAN_DETAIL_TEST_IDS,
   getInboxTradeAcceptButtonTestId,
   getInboxTradeRowTestId,
   getTradePlanLinkTestId,
@@ -52,7 +53,7 @@ test("seeded standalone trade plan and hierarchy render", async ({ page }) => {
   await expect(getTradePlanSymbolDisplay(page)).toHaveText(
     E2E_SMOKE_FIXTURES.standaloneTradePlan.instrumentSymbol,
   );
-  await expect(page.getByTestId("trade-plan-back-link-desktop")).toBeVisible();
+  await expect(page.getByTestId(TRADE_PLAN_DETAIL_TEST_IDS.backLinkDesktop)).toBeVisible();
   await expect(
     page.getByTestId("trade-plan-trades-section-title"),
   ).toBeVisible();
@@ -134,10 +135,10 @@ test("trade plan workspace covers standalone and linked detail flows", async ({
   await expect(createdStandalonePlanLink).toBeVisible();
   await createdStandalonePlanLink.click();
 
-  await expect(page.getByTestId("trade-plan-relationship-label")).toContainText(
+  await expect(page.getByTestId(TRADE_PLAN_DETAIL_TEST_IDS.relationshipLabel)).toContainText(
     "Standalone",
   );
-  await expect(page.getByTestId("trade-plan-campaign-context")).toHaveCount(0);
+  await expect(page.getByTestId(TRADE_PLAN_DETAIL_TEST_IDS.campaignContext)).toHaveCount(0);
 
   await getTradePlanNameEditButton(page).click();
   await getTradePlanNameInput(page).fill(standaloneUpdatedName);
@@ -145,8 +146,8 @@ test("trade plan workspace covers standalone and linked detail flows", async ({
   await getTradePlanSymbolEditButton(page).click();
   await getTradePlanSymbolInput(page).fill(standaloneUpdatedSymbol);
   await getTradePlanSymbolSaveButton(page).click();
-  await page.getByTestId("trade-plan-status-select").selectOption("active");
-  await expect(page.getByTestId("trade-plan-status-select")).toHaveValue(
+  await page.getByTestId(TRADE_PLAN_DETAIL_TEST_IDS.statusSelect).selectOption("active");
+  await expect(page.getByTestId(TRADE_PLAN_DETAIL_TEST_IDS.statusSelect)).toHaveValue(
     "active",
   );
 
@@ -209,10 +210,10 @@ test("trade plan workspace covers standalone and linked detail flows", async ({
   await expect(linkedPlanLink).toBeVisible();
   await linkedPlanLink.click();
 
-  await expect(page.getByTestId("trade-plan-relationship-label")).toContainText(
+  await expect(page.getByTestId(TRADE_PLAN_DETAIL_TEST_IDS.relationshipLabel)).toContainText(
     "Linked",
   );
-  await expect(page.getByTestId("trade-plan-campaign-link")).toContainText(
+  await expect(page.getByTestId(TRADE_PLAN_DETAIL_TEST_IDS.campaignLink)).toContainText(
     linkedCampaignName,
   );
 
@@ -222,11 +223,11 @@ test("trade plan workspace covers standalone and linked detail flows", async ({
   await getTradePlanSymbolEditButton(page).click();
   await getTradePlanSymbolInput(page).fill(linkedUpdatedSymbol);
   await getTradePlanSymbolSaveButton(page).click();
-  await expect(page.getByTestId("trade-plan-campaign-link")).toContainText(
+  await expect(page.getByTestId(TRADE_PLAN_DETAIL_TEST_IDS.campaignLink)).toContainText(
     linkedCampaignName,
   );
 
-  await expect(page.getByTestId("trade-plan-status-select")).toHaveValue(
+  await expect(page.getByTestId(TRADE_PLAN_DETAIL_TEST_IDS.statusSelect)).toHaveValue(
     "idea",
   );
 });
@@ -334,7 +335,7 @@ test("trade plan detail accepts seeded inbox trades locally", async ({
   ).toBeVisible();
 
   await page.goto(`/trade-plans/${standalonePlanId}`);
-  await expect(page.getByTestId("trade-plan-relationship-label")).toContainText(
+  await expect(page.getByTestId(TRADE_PLAN_DETAIL_TEST_IDS.relationshipLabel)).toContainText(
     "Standalone",
   );
   const standaloneInboxRow = page.getByTestId(

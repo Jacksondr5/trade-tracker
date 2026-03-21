@@ -27,6 +27,8 @@ import {
 } from "~/lib/campaign-trade-plan-navigation";
 import { formatCurrency } from "~/lib/format";
 import {
+  APP_SHELL_TEST_IDS,
+  TRADE_PLAN_DETAIL_TEST_IDS,
   getInboxTradeAcceptButtonTestId,
   getInboxTradePortfolioSelectTestId,
   getInboxTradeRowTestId,
@@ -527,7 +529,7 @@ export default function TradePlanDetailPageClient({
       ) : (
         <Link
           href="/trade-plans"
-          data-testid="trade-plan-back-link"
+          data-testid={TRADE_PLAN_DETAIL_TEST_IDS.backLink}
           className="mb-2 inline-block text-sm text-olive-11 hover:text-olive-12 md:hidden"
         >
           &larr; Back to Trade Plans
@@ -536,7 +538,7 @@ export default function TradePlanDetailPageClient({
 
       <Link
         href="/trade-plans"
-        data-testid="trade-plan-back-link-desktop"
+        data-testid={TRADE_PLAN_DETAIL_TEST_IDS.backLinkDesktop}
         className="mb-2 hidden text-sm text-olive-11 hover:text-olive-12 md:inline-block"
       >
         &larr; Back to Trade Plans
@@ -548,7 +550,7 @@ export default function TradePlanDetailPageClient({
         <div className="mb-2 flex flex-wrap items-baseline gap-x-3">
           <h1 className="text-2xl font-bold text-olive-12 md:text-3xl">
             <InlineEditableField
-              dataTestId="trade-plan-name"
+              dataTestId={APP_SHELL_TEST_IDS.tradePlanName}
               label="Plan Name"
               maxLength={120}
               value={tradePlan.name}
@@ -559,7 +561,7 @@ export default function TradePlanDetailPageClient({
           </h1>
           <span className="font-semibold text-olive-11">
             <InlineEditableField
-              dataTestId="trade-plan-symbol"
+              dataTestId={APP_SHELL_TEST_IDS.tradePlanSymbol}
               label="Instrument Symbol"
               maxLength={20}
               value={tradePlan.instrumentSymbol}
@@ -578,14 +580,14 @@ export default function TradePlanDetailPageClient({
           <div className="flex items-center gap-2">
             <span
               className="text-xs font-medium uppercase tracking-[0.18em] text-olive-11"
-              data-testid="trade-plan-relationship-label"
+              data-testid={TRADE_PLAN_DETAIL_TEST_IDS.relationshipLabel}
             >
               {relationshipLabel}
             </span>
             {tradePlan.campaignId ? (
               <span
                 className="text-xs text-olive-11"
-                data-testid="trade-plan-campaign-context"
+                data-testid={TRADE_PLAN_DETAIL_TEST_IDS.campaignContext}
               >
                 &middot;{" "}
                 <Link
@@ -594,7 +596,7 @@ export default function TradePlanDetailPageClient({
                     `/campaigns/${tradePlan.campaignId}`
                   }
                   className="text-blue-9 hover:underline"
-                  data-testid="trade-plan-campaign-link"
+                  data-testid={TRADE_PLAN_DETAIL_TEST_IDS.campaignLink}
                 >
                   {linkedCampaign?.name ?? "View Campaign"}
                 </Link>
@@ -604,7 +606,8 @@ export default function TradePlanDetailPageClient({
 
           <div className="flex items-center gap-3">
             <select
-              data-testid="trade-plan-status-select"
+              data-testid={TRADE_PLAN_DETAIL_TEST_IDS.statusSelect}
+              aria-label="Trade plan status"
               value={tradePlan.status}
               disabled={isChangingStatus}
               onChange={(e) =>
@@ -653,7 +656,7 @@ export default function TradePlanDetailPageClient({
       {/* === Section 2: Tactical Plan === */}
       <section
         className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4"
-        data-testid="trade-plan-tactical-section"
+        data-testid={TRADE_PLAN_DETAIL_TEST_IDS.tacticalSection}
       >
         <h2 className="mb-4 text-lg font-semibold text-olive-12">
           Tactical Plan
