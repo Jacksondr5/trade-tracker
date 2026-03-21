@@ -36,27 +36,6 @@ import {
 type TradePlanStatus = "idea" | "watching" | "active" | "closed";
 type SaveState = "idle" | "saving" | "saved";
 
-const STATUS_BADGE_VARIANT: Record<
-  TradePlanStatus,
-  "neutral" | "warning" | "success"
-> = {
-  idea: "neutral",
-  watching: "warning",
-  active: "success",
-  closed: "neutral",
-};
-
-function StatusBadge({ status }: { status: TradePlanStatus }) {
-  return (
-    <Badge
-      variant={STATUS_BADGE_VARIANT[status]}
-      data-testid="trade-plan-status-badge"
-    >
-      {status.charAt(0).toUpperCase() + status.slice(1)}
-    </Badge>
-  );
-}
-
 // --- Inline editable field ---
 
 function InlineEditableField({
@@ -565,8 +544,37 @@ export default function TradePlanDetailPageClient({
 
       {/* === Section 1: Relationship & Identity Header === */}
       <header className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4">
-        {/* Top row: relationship label + watch + status */}
-        <div className="mb-3 flex items-center justify-between">
+        {/* Row 1: Title + Symbol */}
+        <div className="mb-2 flex flex-wrap items-baseline gap-x-3">
+          <h1 className="text-2xl font-bold text-olive-12 md:text-3xl">
+            <InlineEditableField
+              dataTestId="trade-plan-name"
+              label="Plan Name"
+              maxLength={120}
+              value={tradePlan.name}
+              onSave={async (name) => {
+                await updateTradePlan({ tradePlanId, name });
+              }}
+            />
+          </h1>
+          <span className="font-semibold text-olive-11">
+            <InlineEditableField
+              dataTestId="trade-plan-symbol"
+              label="Instrument Symbol"
+              maxLength={20}
+              value={tradePlan.instrumentSymbol}
+              onSave={async (symbol) => {
+                await updateTradePlan({
+                  tradePlanId,
+                  instrumentSymbol: symbol,
+                });
+              }}
+            />
+          </span>
+        </div>
+
+        {/* Row 2: Relationship context + status/watch controls */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span
               className="text-xs font-medium uppercase tracking-[0.18em] text-olive-11"
@@ -593,59 +601,8 @@ export default function TradePlanDetailPageClient({
               </span>
             ) : null}
           </div>
-          <div className="flex items-center gap-2">
-            <WatchToggleButton
-              dataTestId="trade-plan-watch-toggle"
-              isWatched={isWatched}
-              itemName={tradePlan.name}
-              onClick={() => void handleToggleWatch()}
-              disabled={watchLoading}
-            />
-            <StatusBadge status={tradePlan.status} />
-          </div>
-        </div>
 
-        {/* Plan name */}
-        <div className="mb-2">
-          <h1 className="text-2xl font-bold text-olive-12 md:text-3xl">
-            <InlineEditableField
-              dataTestId="trade-plan-name"
-              label="Plan Name"
-              maxLength={120}
-              value={tradePlan.name}
-              onSave={async (name) => {
-                await updateTradePlan({ tradePlanId, name });
-              }}
-            />
-          </h1>
-        </div>
-
-        {/* Symbol + Status row */}
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide text-olive-11">
-              Symbol
-            </span>
-            <span className="font-semibold text-olive-12">
-              <InlineEditableField
-                dataTestId="trade-plan-symbol"
-                label="Instrument Symbol"
-                maxLength={20}
-                value={tradePlan.instrumentSymbol}
-                onSave={async (symbol) => {
-                  await updateTradePlan({
-                    tradePlanId,
-                    instrumentSymbol: symbol,
-                  });
-                }}
-              />
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide text-olive-11">
-              Status
-            </span>
+          <div className="flex items-center gap-3">
             <select
               data-testid="trade-plan-status-select"
               value={tradePlan.status}
@@ -660,17 +617,25 @@ export default function TradePlanDetailPageClient({
               <option value="active">Active</option>
               <option value="closed">Closed</option>
             </select>
-          </div>
 
-          {tradePlan.status === "closed" && tradePlan.closedAt && (
-            <span
-              className="text-xs text-olive-11"
-              data-testid="trade-plan-closed-date"
-            >
-              Closed{" "}
-              {new Date(tradePlan.closedAt).toLocaleDateString("en-US")}
-            </span>
-          )}
+            {tradePlan.status === "closed" && tradePlan.closedAt && (
+              <span
+                className="text-xs text-olive-11"
+                data-testid="trade-plan-closed-date"
+              >
+                Closed{" "}
+                {new Date(tradePlan.closedAt).toLocaleDateString("en-US")}
+              </span>
+            )}
+
+            <WatchToggleButton
+              dataTestId="trade-plan-watch-toggle"
+              isWatched={isWatched}
+              itemName={tradePlan.name}
+              onClick={() => void handleToggleWatch()}
+              disabled={watchLoading}
+            />
+          </div>
         </div>
 
         {statusError && (
@@ -733,7 +698,27 @@ export default function TradePlanDetailPageClient({
         </div>
       </section>
 
-      {/* === Section 3: Execution Context === */}
+      {/* === Section 3: Notes === */}
+      <section className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4">
+        <h2 className="mb-3 text-lg font-semibold text-olive-12">Notes</h2>
+        <NotesSection
+          defaultShowEvidence
+          testIdPrefix="trade-plan"
+          notes={notes}
+          onAddNote={async (content, chartUrls) => {
+            await addNote({ tradePlanId, content, chartUrls });
+          }}
+          onUpdateNote={async (noteId, content, chartUrls) => {
+            await updateNoteM({
+              noteId: noteId as Id<"notes">,
+              content,
+              chartUrls,
+            });
+          }}
+        />
+      </section>
+
+      {/* === Section 4: Execution Context === */}
       <section
         className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4"
         data-testid="trade-plan-execution-section"
@@ -946,26 +931,6 @@ export default function TradePlanDetailPageClient({
             </p>
           )
         )}
-      </section>
-
-      {/* === Section 4: Notes === */}
-      <section className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4">
-        <h2 className="mb-3 text-lg font-semibold text-olive-12">Notes</h2>
-        <NotesSection
-          defaultShowEvidence
-          testIdPrefix="trade-plan"
-          notes={notes}
-          onAddNote={async (content, chartUrls) => {
-            await addNote({ tradePlanId, content, chartUrls });
-          }}
-          onUpdateNote={async (noteId, content, chartUrls) => {
-            await updateNoteM({
-              noteId: noteId as Id<"notes">,
-              content,
-              chartUrls,
-            });
-          }}
-        />
       </section>
 
       {/* === Section 5: Retrospective === */}
