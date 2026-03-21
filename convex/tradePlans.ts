@@ -407,9 +407,10 @@ function buildTradePlanWorkspaceSourceData(args: {
       continue;
     }
 
+    const normalizedTicker = inboxTrade.ticker.toUpperCase();
     suggestedPendingCountBySymbol.set(
-      inboxTrade.ticker,
-      (suggestedPendingCountBySymbol.get(inboxTrade.ticker) ?? 0) + 1,
+      normalizedTicker,
+      (suggestedPendingCountBySymbol.get(normalizedTicker) ?? 0) + 1,
     );
   }
 
@@ -787,18 +788,17 @@ export const getTradePlanWorkspace = query({
     );
 
     const inboxTrades = [
-      ...assignedInboxTrades.sort(sortPendingInboxTrades).map((inboxTrade) => ({
+      ...assignedInboxTrades.map((inboxTrade) => ({
         inboxTrade,
         matchType: "assigned" as const,
       })),
       ...suggestedInboxTrades
         .filter((inboxTrade) => inboxTrade.tradePlanId === undefined)
-        .sort(sortPendingInboxTrades)
         .map((inboxTrade) => ({
           inboxTrade,
           matchType: "suggested" as const,
         })),
-    ];
+    ].sort((a, b) => sortPendingInboxTrades(a.inboxTrade, b.inboxTrade));
 
     return {
       accountMappings: sortedAccountMappings,
