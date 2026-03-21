@@ -319,6 +319,7 @@ async function resolveTradePlanNoteEvidence(ctx: QueryCtx, note: NoteDoc) {
 
   const normalizedEvidence = Array.from(evidence.values());
   const chartUrls = normalizedEvidence
+    .filter((item) => item.kind === "chart")
     .map((item) => item.url)
     .filter((url): url is string => Boolean(url));
 

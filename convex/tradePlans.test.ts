@@ -126,13 +126,22 @@ describe("trade plan workspace queries", () => {
   }
 
   async function insertNote(args: {
+    chartUrls?: string[];
     content: string;
+    evidence?: Array<{
+      contentType?: string;
+      fileName?: string;
+      kind: "chart" | "image";
+      url?: string;
+    }>;
     ownerId: string;
     tradePlanId: Id<"tradePlans">;
   }): Promise<Id<"notes">> {
     return await t.run(async (ctx) => {
       return await ctx.db.insert("notes", {
+        chartUrls: args.chartUrls,
         content: args.content,
+        evidence: args.evidence,
         ownerId: args.ownerId,
         tradePlanId: args.tradePlanId,
       });
@@ -319,7 +328,18 @@ describe("trade plan workspace queries", () => {
       targetConditions: "Tag extension level",
     });
     await insertNote({
+      chartUrls: ["https://example.com/legacy-chart.png"],
       content: "Initial plan note",
+      evidence: [
+        {
+          kind: "chart",
+          url: "https://example.com/setup-chart.png",
+        },
+        {
+          kind: "image",
+          url: "https://example.com/journal-image.png",
+        },
+      ],
       ownerId: ownerA,
       tradePlanId,
     });
@@ -389,10 +409,28 @@ describe("trade plan workspace queries", () => {
     });
     expect(detail?.notes).toHaveLength(1);
     expect(detail?.notes[0]).toMatchObject({
+      chartUrls: [
+        "https://example.com/legacy-chart.png",
+        "https://example.com/setup-chart.png",
+      ],
       content: "Initial plan note",
       contextHref: `/trade-plans/${tradePlanId}`,
       contextKind: "tradePlan",
       contextLabel: "NVDA momentum",
+      evidence: [
+        {
+          kind: "chart",
+          url: "https://example.com/legacy-chart.png",
+        },
+        {
+          kind: "chart",
+          url: "https://example.com/setup-chart.png",
+        },
+        {
+          kind: "image",
+          url: "https://example.com/journal-image.png",
+        },
+      ],
     });
     expect(detail?.trades).toHaveLength(1);
     expect(detail?.trades[0]).toMatchObject({
