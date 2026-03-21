@@ -1,5 +1,4 @@
 import { expect, test } from "@playwright/test";
-import type { Page } from "@playwright/test";
 import {
   APP_SHELL_TEST_IDS,
   getInboxTradeAcceptButtonTestId,
@@ -18,65 +17,27 @@ import {
   getCreateTradePlanButton,
   getInstrumentSymbolInput,
   getNameInput,
+  getNewTradePlanIdFromListPage,
+  getOnlyLinkedTradePlanIdFromCampaignDetail,
+  getSeededStandaloneTradePlanId,
   getStandaloneTradePlanCard,
   getStandaloneTradePlanLink,
   getThesisTextarea,
 } from "../helpers/selectors";
-
-async function getNewTradePlanIdFromListPage(
-  page: Page,
-  previousHrefs: Set<string>,
-) {
-  const createdHref = (
-    (await page.getByTestId(/^trade-plan-link-/).evaluateAll(
-      (elements, priorHrefs) =>
-        elements
-          .map((element) => element.getAttribute("href"))
-          .filter(
-            (href): href is string => Boolean(href) && !priorHrefs.includes(href),
-          ),
-      Array.from(previousHrefs),
-    )) as string[]
-  )[0];
-
-  if (!createdHref) {
-    throw new Error("Expected a new trade plan link after creation.");
-  }
-
-  const createdTradePlanId = createdHref.match(/\/trade-plans\/([^/]+)$/)?.[1];
-  if (!createdTradePlanId) {
-    throw new Error("Expected created trade plan id in list link.");
-  }
-
-  return createdTradePlanId;
-}
-
-async function getOnlyLinkedTradePlanIdFromCampaignDetail(
-  page: Page,
-) {
-  const linkedTradePlanRows = page.getByTestId(/^linked-trade-plan-row-/);
-  await expect(linkedTradePlanRows).toHaveCount(1);
-
-  const linkedTradePlanRowTestId = await linkedTradePlanRows
-    .first()
-    .getAttribute("data-testid");
-
-  if (!linkedTradePlanRowTestId) {
-    throw new Error("Expected data-testid on linked trade plan row.");
-  }
-
-  return linkedTradePlanRowTestId.replace("linked-trade-plan-row-", "");
-}
 
 test("seeded standalone trade plan and hierarchy render", async ({ page }) => {
   await page.goto("/trade-plans");
   await waitForAuthenticatedApp(page, APP_PAGE_TITLES.tradePlans);
 
   await expect(getStandaloneTradePlanLink(page)).toBeVisible();
+  const standaloneTradePlanId = await getSeededStandaloneTradePlanId(page);
 
   await getStandaloneTradePlanLink(page).click();
 
-  await expect(page).toHaveURL(/\/trade-plans\/[^/]+$/);
+  await expect(page).toHaveURL(
+    new RegExp(`/trade-plans/${standaloneTradePlanId}$`),
+  );
+
   await expect(
     page.getByTestId(APP_SHELL_TEST_IDS.tradePlanNameInput),
   ).toHaveValue(E2E_SMOKE_FIXTURES.standaloneTradePlan.name);
@@ -120,9 +81,9 @@ test("standalone trade plans can be created from the list page", async ({
     initialHrefs,
   );
 
-  await expect(getStandaloneTradePlanCard(page, createdTradePlanId)).toContainText(
-    createdPlanName,
-  );
+  await expect(
+    getStandaloneTradePlanCard(page, createdTradePlanId),
+  ).toContainText(createdPlanName);
 });
 
 test("trade plan workspace covers standalone and linked detail flows", async ({
@@ -231,9 +192,8 @@ test("trade plan workspace covers standalone and linked detail flows", async ({
   await getInstrumentSymbolInput(page).fill("INTC");
   await getCreateLinkedTradePlanButton(page).click();
 
-  const linkedTradePlanId = await getOnlyLinkedTradePlanIdFromCampaignDetail(
-    page,
-  );
+  const linkedTradePlanId =
+    await getOnlyLinkedTradePlanIdFromCampaignDetail(page);
   const linkedPlanLink = page.getByTestId(
     getTradePlanLinkTestId(linkedTradePlanId),
   );

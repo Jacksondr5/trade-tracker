@@ -29,6 +29,7 @@ export const E2E_SMOKE_FIXTURES = {
     name: "E2E Core Portfolio",
   },
   standaloneTradePlan: {
+    id: "seeded-standalone-trade-plan",
     instrumentSymbol: "BTC",
     name: "E2E BTC Mean Reversion",
     sortOrder: 20,

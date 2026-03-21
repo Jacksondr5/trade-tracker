@@ -15,6 +15,7 @@ import {
   getInstrumentSymbolInput,
   getNameInput,
   getNewCampaignPageTitle,
+  getOnlyLinkedTradePlanIdFromCampaignDetail,
   getThesisTextarea,
 } from "../helpers/selectors";
 
@@ -91,9 +92,9 @@ test("campaign lifecycle supports detail mutation, linked trade plan creation, a
   await expect(page.getByTestId("campaign-status-select")).toHaveValue(
     "planning",
   );
-  await expect(
-    page.getByTestId("campaign-retrospective-textarea"),
-  ).toHaveCount(0);
+  await expect(page.getByTestId("campaign-retrospective-textarea")).toHaveCount(
+    0,
+  );
 
   await page.getByTestId(APP_SHELL_TEST_IDS.editCampaignName).click();
   await getNameInput(page).fill(updatedCampaignName);
@@ -135,21 +136,8 @@ test("campaign lifecycle supports detail mutation, linked trade plan creation, a
   await getInstrumentSymbolInput(page).fill("NVDA");
   await getCreateLinkedTradePlanButton(page).click();
 
-  const linkedTradePlanRows = page.getByTestId(/^linked-trade-plan-row-/);
-  await expect(linkedTradePlanRows).toHaveCount(1);
-
-  const linkedTradePlanRowTestId = await linkedTradePlanRows.first().getAttribute(
-    "data-testid",
-  );
-
-  if (!linkedTradePlanRowTestId) {
-    throw new Error("Expected data-testid on linked trade plan row.");
-  }
-
-  const linkedTradePlanId = linkedTradePlanRowTestId.replace(
-    "linked-trade-plan-row-",
-    "",
-  );
+  const linkedTradePlanId =
+    await getOnlyLinkedTradePlanIdFromCampaignDetail(page);
   const linkedTradePlanLink = page.getByTestId(
     getTradePlanLinkTestId(linkedTradePlanId),
   );
@@ -185,9 +173,7 @@ test("campaign lifecycle supports detail mutation, linked trade plan creation, a
     page.getByTestId(`linked-trade-plan-status-${linkedTradePlanId}`),
   ).toHaveValue("closed");
 
-  await page
-    .getByTestId("campaign-retrospective-textarea")
-    .fill(retrospective);
+  await page.getByTestId("campaign-retrospective-textarea").fill(retrospective);
   await page.getByTestId("campaign-save-retrospective-button").click();
 
   await page.reload();
