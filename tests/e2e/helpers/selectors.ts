@@ -11,6 +11,11 @@ import {
   getLocalHierarchyCampaignChildrenToggleTestId,
   getLocalHierarchyItemTestId,
   getLocalHierarchyWatchToggleTestId,
+  getRetrospectiveSectionTestId,
+  getRetrospectiveTextareaTestId,
+  getSaveRetrospectiveButtonTestId,
+  getCancelRetrospectiveButtonTestId,
+  getEditRetrospectiveButtonTestId,
   getStandaloneTradePlanCardTestId,
   getTradeRowTestId,
 } from "../../../shared/e2e/testIds";
@@ -313,4 +318,39 @@ export function getSeededCommandPaletteLinkedTradePlanItem(
       E2E_SMOKE_FIXTURES.linkedTradePlan.name,
     ),
   );
+}
+
+export function getRetrospectiveSection(
+  page: Page,
+  prefix: string,
+): Locator {
+  return page.getByTestId(getRetrospectiveSectionTestId(prefix));
+}
+
+export function getRetrospectiveTextarea(
+  page: Page,
+  prefix: string,
+): Locator {
+  return page.getByTestId(getRetrospectiveTextareaTestId(prefix));
+}
+
+export function getSaveRetrospectiveButton(
+  page: Page,
+  prefix: string,
+): Locator {
+  return page.getByTestId(getSaveRetrospectiveButtonTestId(prefix));
+}
+
+export function getCancelRetrospectiveButton(
+  page: Page,
+  prefix: string,
+): Locator {
+  return page.getByTestId(getCancelRetrospectiveButtonTestId(prefix));
+}
+
+export function getEditRetrospectiveButton(
+  page: Page,
+  prefix: string,
+): Locator {
+  return page.getByTestId(getEditRetrospectiveButtonTestId(prefix));
 }

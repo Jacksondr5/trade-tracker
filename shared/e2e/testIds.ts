@@ -187,3 +187,23 @@ export function getCancelNoteButtonTestId(prefix: string, noteId: string): strin
 export function getNoteContentTestId(prefix: string, noteId: string): string {
   return `${prefix}-note-content-${noteId}`;
 }
+
+export function getRetrospectiveSectionTestId(prefix: string): string {
+  return `${prefix}-retrospective-section`;
+}
+
+export function getRetrospectiveTextareaTestId(prefix: string): string {
+  return `${prefix}-retrospective-textarea`;
+}
+
+export function getSaveRetrospectiveButtonTestId(prefix: string): string {
+  return `${prefix}-save-retrospective-button`;
+}
+
+export function getCancelRetrospectiveButtonTestId(prefix: string): string {
+  return `${prefix}-cancel-retrospective-button`;
+}
+
+export function getEditRetrospectiveButtonTestId(prefix: string): string {
+  return `${prefix}-edit-retrospective-button`;
+}
