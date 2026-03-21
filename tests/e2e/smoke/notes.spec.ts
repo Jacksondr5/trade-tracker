@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { waitForAuthenticatedApp } from "../helpers/app";
-import { APP_PAGE_TITLES, getPageTitle } from "../helpers/selectors";
+import {
+  APP_PAGE_TITLES,
+  getPageTitle,
+  NOTES_SELECTORS,
+} from "../helpers/selectors";
 
 test("notes page loads and supports add and edit workflow", async ({
   page,
@@ -14,29 +18,28 @@ test("notes page loads and supports add and edit workflow", async ({
   await expect(getPageTitle(page, "notes")).toBeVisible();
 
   // Add a general note
-  await page.getByTestId("notes-add-note-textarea").fill(noteContent);
-  await page.getByTestId("notes-add-note-button").click();
+  await page.getByTestId(NOTES_SELECTORS.addNoteTextarea).fill(noteContent);
+  await page.getByTestId(NOTES_SELECTORS.addNoteButton).click();
 
   const noteRows = page.getByTestId(/^notes-note-row-/);
   await expect(noteRows.first()).toBeVisible();
   const noteRow = noteRows.first();
-  await expect(noteRow.getByTestId(/^notes-note-content-/)).toContainText(
-    noteContent,
-  );
-
-  // Edit the note
   const noteRowTestId = await noteRow.getAttribute("data-testid");
   if (!noteRowTestId) {
     throw new Error("Expected data-testid on note row.");
   }
   const noteId = noteRowTestId.replace("notes-note-row-", "");
-
-  await page.getByTestId(`notes-edit-note-button-${noteId}`).click();
-  await page
-    .getByTestId(`notes-edit-note-textarea-${noteId}`)
-    .fill(updatedNoteContent);
-  await page.getByTestId(`notes-save-note-button-${noteId}`).click();
   await expect(
-    page.getByTestId(`notes-note-content-${noteId}`),
+    noteRow.getByTestId(NOTES_SELECTORS.noteContent(noteId)),
+  ).toContainText(noteContent);
+
+  // Edit the note
+  await page.getByTestId(NOTES_SELECTORS.editNoteButton(noteId)).click();
+  await page
+    .getByTestId(NOTES_SELECTORS.editNoteTextarea(noteId))
+    .fill(updatedNoteContent);
+  await page.getByTestId(NOTES_SELECTORS.saveNoteButton(noteId)).click();
+  await expect(
+    page.getByTestId(NOTES_SELECTORS.noteContent(noteId)),
   ).toContainText(updatedNoteContent);
 });

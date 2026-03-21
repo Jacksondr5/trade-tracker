@@ -18,6 +18,13 @@ import {
   getEditRetrospectiveButtonTestId,
   getStandaloneTradePlanCardTestId,
   getTradeRowTestId,
+  getNoteComposerTextareaTestId,
+  getNoteComposerSubmitButtonTestId,
+  getNoteRowTestId,
+  getNoteContentTestId,
+  getEditNoteButtonTestId,
+  getEditNoteTextareaTestId,
+  getSaveNoteButtonTestId,
 } from "../../../shared/e2e/testIds";
 
 export { APP_PAGE_TITLES, NAVIGATION_SECTION_TEST_IDS, NAVIGATION_TEST_IDS };
@@ -320,17 +327,11 @@ export function getSeededCommandPaletteLinkedTradePlanItem(
   );
 }
 
-export function getRetrospectiveSection(
-  page: Page,
-  prefix: string,
-): Locator {
+export function getRetrospectiveSection(page: Page, prefix: string): Locator {
   return page.getByTestId(getRetrospectiveSectionTestId(prefix));
 }
 
-export function getRetrospectiveTextarea(
-  page: Page,
-  prefix: string,
-): Locator {
+export function getRetrospectiveTextarea(page: Page, prefix: string): Locator {
   return page.getByTestId(getRetrospectiveTextareaTestId(prefix));
 }
 
@@ -347,6 +348,17 @@ export function getCancelRetrospectiveButton(
 ): Locator {
   return page.getByTestId(getCancelRetrospectiveButtonTestId(prefix));
 }
+
+export const NOTES_SELECTORS = {
+  addNoteTextarea: getNoteComposerTextareaTestId("notes"),
+  addNoteButton: getNoteComposerSubmitButtonTestId("notes"),
+  noteRow: (noteId: string) => getNoteRowTestId("notes", noteId),
+  noteContent: (noteId: string) => getNoteContentTestId("notes", noteId),
+  editNoteButton: (noteId: string) => getEditNoteButtonTestId("notes", noteId),
+  editNoteTextarea: (noteId: string) =>
+    getEditNoteTextareaTestId("notes", noteId),
+  saveNoteButton: (noteId: string) => getSaveNoteButtonTestId("notes", noteId),
+} as const;
 
 export function getEditRetrospectiveButton(
   page: Page,

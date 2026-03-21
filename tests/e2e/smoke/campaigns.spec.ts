@@ -2,6 +2,12 @@ import { expect, test } from "@playwright/test";
 import {
   APP_SHELL_TEST_IDS,
   getTradePlanLinkTestId,
+  getNoteComposerTextareaTestId,
+  getNoteComposerSubmitButtonTestId,
+  getNoteContentTestId,
+  getEditNoteButtonTestId,
+  getEditNoteTextareaTestId,
+  getSaveNoteButtonTestId,
 } from "../../../shared/e2e/testIds";
 import { E2E_SMOKE_FIXTURES } from "../../../shared/e2e/smokeFixtures";
 import { waitForAuthenticatedApp } from "../helpers/app";
@@ -115,21 +121,40 @@ test("campaign lifecycle supports detail mutation, linked trade plan creation, a
   await expect(getThesisTextarea(page)).toHaveValue(updatedThesis);
   await page.getByTestId("cancel-edit-thesis").click();
 
-  await page.getByTestId("campaign-add-note-textarea").fill(campaignNote);
-  await page.getByTestId("campaign-add-note-button").click();
+  await page
+    .getByTestId(getNoteComposerTextareaTestId("campaign"))
+    .fill(campaignNote);
+  await page.getByTestId(getNoteComposerSubmitButtonTestId("campaign")).click();
   const campaignNoteRows = page.getByTestId(/^campaign-note-row-/);
   await expect(campaignNoteRows).toHaveCount(1);
   const campaignNoteRow = campaignNoteRows.first();
+  const campaignNoteRowTestId =
+    await campaignNoteRow.getAttribute("data-testid");
+  if (!campaignNoteRowTestId) {
+    throw new Error("Expected data-testid on campaign note row.");
+  }
+  const campaignNoteId = campaignNoteRowTestId.replace(
+    "campaign-note-row-",
+    "",
+  );
   await expect(
-    campaignNoteRow.getByTestId(/^campaign-note-content-/),
+    campaignNoteRow.getByTestId(
+      getNoteContentTestId("campaign", campaignNoteId),
+    ),
   ).toContainText(campaignNote);
-  await campaignNoteRow.getByTestId(/^campaign-edit-note-button-/).click();
   await campaignNoteRow
-    .getByTestId(/^campaign-edit-note-textarea-/)
+    .getByTestId(getEditNoteButtonTestId("campaign", campaignNoteId))
+    .click();
+  await campaignNoteRow
+    .getByTestId(getEditNoteTextareaTestId("campaign", campaignNoteId))
     .fill(updatedCampaignNote);
-  await campaignNoteRow.getByTestId(/^campaign-save-note-button-/).click();
+  await campaignNoteRow
+    .getByTestId(getSaveNoteButtonTestId("campaign", campaignNoteId))
+    .click();
   await expect(
-    campaignNoteRow.getByTestId(/^campaign-note-content-/),
+    campaignNoteRow.getByTestId(
+      getNoteContentTestId("campaign", campaignNoteId),
+    ),
   ).toContainText(updatedCampaignNote);
 
   await page.getByTestId("add-trade-plan-button").click();

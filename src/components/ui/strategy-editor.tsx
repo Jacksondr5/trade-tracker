@@ -12,6 +12,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "@tiptap/markdown";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { useEffect, useRef } from "react";
+import { STRATEGY_TEST_IDS } from "../../../shared/e2e/testIds";
 
 // Input rules for markdown-style links and images
 const MarkdownShortcuts = Extension.create({
@@ -41,11 +42,7 @@ const MarkdownShortcuts = Extension.create({
           if (!text || !url) return;
           const { tr, schema } = state;
           const linkMark = schema.marks.link.create({ href: url });
-          tr.replaceWith(
-            range.from,
-            range.to,
-            schema.text(text, [linkMark]),
-          );
+          tr.replaceWith(range.from, range.to, schema.text(text, [linkMark]));
         },
       }),
     ];
@@ -98,6 +95,7 @@ export function StrategyEditor({
     editorProps: {
       attributes: {
         class: "prose-strategy outline-none min-h-[60vh] px-8 py-6",
+        "data-testid": STRATEGY_TEST_IDS.editorInput,
       },
     },
     onUpdate: ({ editor }) => {
@@ -108,14 +106,12 @@ export function StrategyEditor({
 
   if (!editor) {
     return (
-      <div className="px-8 py-6 text-sm text-olive-11">
-        Loading editor…
-      </div>
+      <div className="px-8 py-6 text-sm text-olive-11">Loading editor…</div>
     );
   }
 
   return (
-    <div className="focus-within:ring-2 focus-within:ring-blue-8 focus-within:ring-offset-2 focus-within:ring-offset-olive-1 rounded-md">
+    <div className="rounded-md focus-within:ring-2 focus-within:ring-blue-8 focus-within:ring-offset-2 focus-within:ring-offset-olive-1">
       <EditorContent editor={editor} />
     </div>
   );
