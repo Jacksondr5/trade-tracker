@@ -76,6 +76,7 @@ export function getCampaignRowTestId(name: string): string {
 export const TRADE_PLANS_INDEX_TEST_IDS = {
   createFormToggle: "trade-plans-create-form-toggle",
   createFormSection: "trade-plans-create-form-section",
+  createSubmitButton: "trade-plans-create-submit-button",
   emptyState: "trade-plans-empty-state",
   emptyStateCta: "trade-plans-empty-state-cta",
   filterAll: "trade-plans-filter-all",
@@ -87,6 +88,10 @@ export const TRADE_PLANS_INDEX_TEST_IDS = {
   summaryActive: "trade-plans-summary-active",
   summaryPending: "trade-plans-summary-pending",
 } as const;
+
+export function getTradePlansStatusTestId(status: string): string {
+  return `trade-plans-status-${normalizeSegment(status)}`;
+}
 
 export function getTradePlanRowTestId(id: string): string {
   return `trade-plan-row-${normalizeSegment(id)}`;

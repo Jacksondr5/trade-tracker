@@ -22,6 +22,7 @@ import {
   getStandaloneTradePlanCardTestId,
   getTradePlanLinkTestId,
   getTradePlanRowTestId,
+  getTradePlansStatusTestId,
   TRADE_PLANS_INDEX_TEST_IDS,
 } from "../../../../shared/e2e/testIds";
 
@@ -158,6 +159,8 @@ export default function TradePlansPageClient({
           </p>
         </div>
         <Button
+          aria-controls={TRADE_PLANS_INDEX_TEST_IDS.createFormSection}
+          aria-expanded={showCreateForm}
           dataTestId={TRADE_PLANS_INDEX_TEST_IDS.createFormToggle}
           variant="default"
           onClick={() => setShowCreateForm((prev) => !prev)}
@@ -169,6 +172,7 @@ export default function TradePlansPageClient({
       {/* Create form (collapsible) */}
       {showCreateForm && (
         <Card
+          id={TRADE_PLANS_INDEX_TEST_IDS.createFormSection}
           className="mb-6 border-olive-6 bg-olive-2"
           data-testid={TRADE_PLANS_INDEX_TEST_IDS.createFormSection}
         >
@@ -207,7 +211,7 @@ export default function TradePlansPageClient({
               </form.AppField>
               <form.AppForm>
                 <form.SubmitButton
-                  dataTestId="create-trade-plan-button"
+                  dataTestId={TRADE_PLANS_INDEX_TEST_IDS.createSubmitButton}
                   label="Create"
                 />
               </form.AppForm>
@@ -232,20 +236,32 @@ export default function TradePlansPageClient({
           <span className="font-medium text-olive-12">{stats.active}</span>{" "}
           active
         </div>
-        {stats.pending > 0 && (
-          <div
-            className="text-sm text-amber-11"
-            data-testid={TRADE_PLANS_INDEX_TEST_IDS.summaryPending}
+        <div
+          className={
+            stats.pending > 0 ? "text-sm text-amber-11" : "text-sm text-olive-11"
+          }
+          data-testid={TRADE_PLANS_INDEX_TEST_IDS.summaryPending}
+        >
+          <span
+            className={
+              stats.pending > 0
+                ? "font-medium text-amber-12"
+                : "font-medium text-olive-12"
+            }
           >
-            <span className="font-medium text-amber-12">{stats.pending}</span>{" "}
-            pending
-          </div>
-        )}
+            {stats.pending}
+          </span>{" "}
+          pending
+        </div>
       </div>
 
       {/* Filter toolbar */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="flex rounded-md border border-olive-6">
+        <div
+          aria-label="Filter by relationship"
+          role="group"
+          className="flex rounded-md border border-olive-6"
+        >
           <FilterTab
             active={relationshipFilter === "all"}
             dataTestId={TRADE_PLANS_INDEX_TEST_IDS.filterAll}
@@ -266,6 +282,8 @@ export default function TradePlansPageClient({
           />
         </div>
         <div
+          aria-label="Filter by status"
+          role="group"
           className="flex rounded-md border border-olive-6"
           data-testid={TRADE_PLANS_INDEX_TEST_IDS.statusFilterSelect}
         >
@@ -281,7 +299,7 @@ export default function TradePlansPageClient({
             <FilterTab
               key={option.value}
               active={statusFilter === option.value}
-              dataTestId={`trade-plans-status-${option.value}`}
+              dataTestId={getTradePlansStatusTestId(option.value)}
               label={option.label}
               onClick={() => setStatusFilter(option.value)}
             />
@@ -391,9 +409,10 @@ function TradePlanRow({ plan }: { plan: TradePlanSummary }) {
             </span>
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-olive-11">
-            {isLinked && plan.relationship.parentCampaign ? (
+            {isLinked ? (
               <span className="truncate">
-                {plan.relationship.parentCampaign.name}
+                {plan.relationship.parentCampaign?.name ??
+                  "Linked (missing campaign metadata)"}
               </span>
             ) : (
               <span>Standalone</span>
