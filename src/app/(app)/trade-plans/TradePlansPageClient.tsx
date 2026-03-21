@@ -265,21 +265,28 @@ export default function TradePlansPageClient({
             onClick={() => setRelationshipFilter("standalone")}
           />
         </div>
-        <select
+        <div
+          className="flex rounded-md border border-olive-6"
           data-testid={TRADE_PLANS_INDEX_TEST_IDS.statusFilterSelect}
-          aria-label="Filter by status"
-          className="rounded-md border border-olive-6 bg-olive-2 px-2.5 py-1.5 text-sm text-olive-12 focus:outline-none focus:ring-1 focus:ring-blue-8"
-          value={statusFilter}
-          onChange={(e) =>
-            setStatusFilter(e.target.value as TradePlanStatus | "all")
-          }
         >
-          <option value="all">All statuses</option>
-          <option value="idea">Idea</option>
-          <option value="watching">Watching</option>
-          <option value="active">Active</option>
-          <option value="closed">Closed</option>
-        </select>
+          {(
+            [
+              { value: "all", label: "All" },
+              { value: "idea", label: "Idea" },
+              { value: "watching", label: "Watching" },
+              { value: "active", label: "Active" },
+              { value: "closed", label: "Closed" },
+            ] as const
+          ).map((option) => (
+            <FilterTab
+              key={option.value}
+              active={statusFilter === option.value}
+              dataTestId={`trade-plans-status-${option.value}`}
+              label={option.label}
+              onClick={() => setStatusFilter(option.value)}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Plan list */}
