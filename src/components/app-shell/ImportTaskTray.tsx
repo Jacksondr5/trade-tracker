@@ -9,7 +9,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "~/lib/utils";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
@@ -60,18 +60,27 @@ function TaskStatusIcon({ status }: { status: ImportTask["status"] }) {
 function TaskCard({ task }: { task: ImportTask }) {
   const dismissTask = useMutation(api.importTasks.dismissImportTask);
   const retryTask = useMutation(api.importTasks.retryImportTask);
+  const [retryError, setRetryError] = useState<string | null>(null);
 
   const label = task.mode === "create" ? "New trade plan" : "Follow-up import";
   const preview = task.pastedText.slice(0, 60).trim();
   const canDismiss = task.status === "done" || task.status === "error";
 
   const handleRetry = async () => {
-    await retryTask({ taskId: task._id });
-    runImportExtraction({
-      taskId: task._id,
-      mode: task.mode,
-      pastedText: task.pastedText,
-    });
+    setRetryError(null);
+
+    try {
+      await retryTask({ taskId: task._id });
+      runImportExtraction({
+        taskId: task._id,
+        mode: task.mode,
+        pastedText: task.pastedText,
+      });
+    } catch (error) {
+      setRetryError(
+        error instanceof Error ? error.message : "Failed to retry import",
+      );
+    }
   };
 
   return (
@@ -116,6 +125,7 @@ function TaskCard({ task }: { task: ImportTask }) {
             <p className="text-xs text-red-9">
               {task.error ?? "Extraction failed"}
             </p>
+            {retryError && <p className="text-xs text-red-9">{retryError}</p>}
             <button
               type="button"
               data-testid={getImportTaskRetryTestId(task._id)}

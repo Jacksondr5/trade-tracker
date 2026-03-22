@@ -26,3 +26,8 @@ The campaign filter now uses a pulsing pending outline that would likely be usef
 - Reason deferred: The current nit is valid, but fixing it cleanly needs a schema/query shape decision (for example, adding an explicit non-dismissed flag/index or an archival path) rather than a last-minute index guess on an optional timestamp field.
 - PR comment: https://github.com/Jacksondr5/trade-tracker/pull/83#pullrequestreview-3988467262
 - Suggested next step: Decide whether import task visibility should be modeled with a durable boolean/state column or archival flow, then add the matching indexed query path and migrate the tray to it.
+
+## [2026-03-22 15:39 EDT] Jacksondr5/trade-tracker PR #83 — Recover abandoned browser-owned import tasks
+- Reason deferred: This is a valid resilience concern, but the safe fix is a broader architecture change spanning durable server-owned execution or resumable pending-task handling with heartbeat/TTL semantics; that is larger than this review batch and would be risky to partially land here.
+- PR comment: https://github.com/Jacksondr5/trade-tracker/pull/83#discussion_r2971971247
+- Suggested next step: Design a server-owned import execution/recovery path (or explicit heartbeat + stale-task reaper), then update create/retry/list flows together so orphaned pending tasks can be surfaced, retried, or failed deterministically.

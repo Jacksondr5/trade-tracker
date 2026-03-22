@@ -31,16 +31,24 @@ const importTaskValidator = v.object({
   tradePlanId: v.optional(v.id("tradePlans")),
 });
 
+const nonEmptyString = z.string().trim().min(1);
+const nullableNonEmptyString = z
+  .string()
+  .nullable()
+  .refine((value) => value === null || value.trim().length > 0, {
+    message: "cannot be empty",
+  });
+
 const createImportTaskDataSchema = z
   .object({
-    entryConditions: z.string(),
-    exitConditions: z.string(),
-    instrumentNotes: z.string().nullable(),
-    instrumentSymbol: z.string(),
-    instrumentType: z.string().nullable(),
-    name: z.string(),
-    rationale: z.string(),
-    targetConditions: z.string(),
+    entryConditions: nonEmptyString,
+    exitConditions: nonEmptyString,
+    instrumentNotes: nullableNonEmptyString,
+    instrumentSymbol: nonEmptyString,
+    instrumentType: nullableNonEmptyString,
+    name: nonEmptyString,
+    rationale: nonEmptyString,
+    targetConditions: nonEmptyString,
   })
   .strict();
 
@@ -57,14 +65,21 @@ const followUpImportTaskDataSchema = z
     fieldUpdates: z.array(
       z
         .object({
-          appendText: z.string(),
+          appendText: nonEmptyString,
           field: z.enum(allowedFollowUpFields),
         })
         .strict(),
     ),
-    noteContent: z.string(),
+    noteContent: z.string().trim(),
     suggestClose: z.boolean(),
   })
+  .refine(
+    (data) =>
+      data.suggestClose ||
+      data.fieldUpdates.length > 0 ||
+      data.noteContent.length > 0,
+    "Follow-up import must make at least one meaningful change",
+  )
   .strict();
 
 export const createImportTask = mutation({
@@ -278,6 +293,7 @@ export const retryImportTask = mutation({
     }
 
     await ctx.db.patch(args.taskId, {
+      dismissedAt: undefined,
       error: undefined,
       extractedData: undefined,
       status: "pending",
