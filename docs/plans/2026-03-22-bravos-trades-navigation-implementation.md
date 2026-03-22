@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Extend shared trade-plan category contracts
+## Task 1: Extend shared trade-plan category contracts
 
 **Files:**
 
@@ -28,7 +28,7 @@
 3. Update shared labels and breadcrumb helpers to understand Bravos placement.
 4. Extend unit tests to cover Bravos categorization and breadcrumb output.
 
-### Task 2: Render the Bravos group in navigation surfaces
+## Task 2: Render the Bravos group in navigation surfaces
 
 **Files:**
 
@@ -46,7 +46,7 @@
 3. Keep command-palette trade-plan search working while labeling Bravos context correctly.
 4. Extend component tests for the new group and context labels.
 
-### Task 3: Add a Bravos filter to the trade-plans index
+## Task 3: Add a Bravos filter to the trade-plans index
 
 **Files:**
 
@@ -61,7 +61,7 @@
 3. Add the new stable test id for the filter button.
 4. Verify trade-plan summary tests cover Bravos relationships.
 
-### Task 4: Validate the change set
+## Task 4: Validate the change set
 
 **Files:**
 

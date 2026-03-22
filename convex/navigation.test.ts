@@ -260,6 +260,9 @@ describe("navigation hierarchy", () => {
       name: "Alpha Open Campaign",
       status: "planning",
     });
+    expect(
+      hierarchy.campaigns[1].tradePlans.some((tp) => tp.id === bravosLinkedId),
+    ).toBe(false);
 
     expect(hierarchy.standaloneTradePlans).toMatchObject([
       {
