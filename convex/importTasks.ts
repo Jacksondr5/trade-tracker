@@ -79,8 +79,16 @@ export const createImportTask = mutation({
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
 
-    if (args.mode === "follow-up" && !args.tradePlanId) {
-      throw new ConvexError("tradePlanId is required for follow-up imports");
+    if (args.mode === "follow-up") {
+      if (!args.tradePlanId) {
+        throw new ConvexError("tradePlanId is required for follow-up imports");
+      }
+
+      assertOwner(
+        await ctx.db.get(args.tradePlanId),
+        ownerId,
+        "Trade plan not found",
+      );
     }
 
     return await ctx.db.insert("importTasks", {
@@ -163,15 +171,17 @@ export const completeImportTask = mutation({
       );
 
       const planPatch: Record<string, unknown> = {};
+      const updateDate = new Date(task._creationTime).toISOString().slice(0, 10);
       for (const update of data.fieldUpdates) {
         const field = update.field as keyof typeof tradePlan;
         const currentValue =
           (planPatch[update.field] as string | undefined) ??
           (tradePlan[field] as string | undefined) ??
           "";
+        const appendedValue = `[${updateDate}] ${update.appendText}`;
         planPatch[update.field] = currentValue
-          ? `${currentValue}\n${update.appendText}`
-          : update.appendText;
+          ? `${currentValue}\n${appendedValue}`
+          : appendedValue;
       }
       if (data.suggestClose && tradePlan.status !== "closed") {
         planPatch.status = "closed";

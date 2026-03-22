@@ -63,6 +63,7 @@ function TaskCard({ task }: { task: ImportTask }) {
 
   const label = task.mode === "create" ? "New trade plan" : "Follow-up import";
   const preview = task.pastedText.slice(0, 60).trim();
+  const canDismiss = task.status === "done" || task.status === "error";
 
   const handleRetry = async () => {
     await retryTask({ taskId: task._id });
@@ -84,15 +85,19 @@ function TaskCard({ task }: { task: ImportTask }) {
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs font-medium text-olive-12">{label}</span>
-          <button
-            type="button"
-            aria-label="Dismiss"
-            data-testid={getImportTaskDismissTestId(task._id)}
-            className="rounded p-0.5 text-olive-10 hover:bg-olive-4 hover:text-olive-12"
-            onClick={() => void dismissTask({ taskId: task._id })}
-          >
-            <X className="h-3 w-3" />
-          </button>
+          {canDismiss && (
+            <button
+              type="button"
+              aria-label="Dismiss"
+              data-testid={getImportTaskDismissTestId(task._id)}
+              className="rounded p-0.5 text-olive-10 hover:bg-olive-4 hover:text-olive-12"
+              onClick={() => {
+                void dismissTask({ taskId: task._id }).catch(console.error);
+              }}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
         </div>
         <p className="truncate text-xs text-olive-11">{preview}...</p>
 
