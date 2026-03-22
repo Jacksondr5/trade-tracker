@@ -19,6 +19,7 @@ import {
 } from "~/lib/campaign-trade-plan-navigation";
 import { cn } from "~/lib/utils";
 import { APP_SHELL_TEST_IDS } from "../../../shared/e2e/testIds";
+import { ImportTaskTray } from "./ImportTaskTray";
 import { CampaignTradePlanHierarchyNavigation } from "./campaign-trade-plan-hierarchy";
 import {
   appNavigationSections,
@@ -163,7 +164,8 @@ function DesktopSidebar({
         </div>
         <NavigationSections pathname={pathname} />
       </div>
-      <div className="flex justify-end border-t border-olive-6 px-4 py-4">
+      <div className="flex items-center justify-end gap-3 border-t border-olive-6 px-4 py-4">
+        <ImportTaskTray />
         <UserButton
           appearance={{
             elements: {
@@ -204,6 +206,7 @@ function MobileTopBar({
         </p>
       </div>
       <div className="flex items-center gap-2">
+        <ImportTaskTray compact />
         <CommandPaletteTrigger compact onOpen={onOpenCommandPalette} />
         <UserButton
           appearance={{

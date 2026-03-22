@@ -121,6 +121,7 @@ export default function CampaignDetailPageClient({
   const workspaceSummary = campaignWorkspace?.summary ?? null;
 
   const addNote = useMutation(api.notes.addNote);
+  const deleteNoteMutation = useMutation(api.notes.deleteNote);
   const updateNote = useMutation(api.notes.updateNote);
   const createTradePlan = useMutation(api.tradePlans.createTradePlan);
   const updateTradePlanStatus = useMutation(
@@ -694,6 +695,9 @@ export default function CampaignDetailPageClient({
           notes={campaignNotes}
           onAddNote={async (content, chartUrls) => {
             await addNote({ campaignId, content, chartUrls });
+          }}
+          onDeleteNote={async (noteId) => {
+            await deleteNoteMutation({ noteId: noteId as Id<"notes"> });
           }}
           onUpdateNote={async (noteId, content, chartUrls) => {
             await updateNote({

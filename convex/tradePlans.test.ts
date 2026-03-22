@@ -404,6 +404,7 @@ describe("trade plan workspace queries", () => {
       instrumentSymbol: "NVDA",
       name: "NVDA momentum",
       rationale: "Lead AI name with relative strength",
+      sourceUrl: null,
       status: "active",
       targetConditions: "Tag extension level",
     });

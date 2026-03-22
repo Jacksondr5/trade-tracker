@@ -39,6 +39,7 @@ import {
   getInboxTradeRowTestId,
   getTradeRowTestId,
 } from "../../../../../shared/e2e/testIds";
+import { ImportPostDialog } from "../ImportPostDialog";
 
 type TradePlanStatus = "idea" | "watching" | "active" | "closed";
 type SaveState = "idle" | "saving" | "saved";
@@ -387,6 +388,7 @@ export default function TradePlanDetailPageClient({
   const { hierarchy } = useNavigationData();
 
   const addNote = useMutation(api.notes.addNote);
+  const deleteNoteMutation = useMutation(api.notes.deleteNote);
   const updateNoteM = useMutation(api.notes.updateNote);
   const updateTradePlan = useMutation(api.tradePlans.updateTradePlan);
   const updateTradePlanStatus = useMutation(
@@ -440,6 +442,7 @@ export default function TradePlanDetailPageClient({
   >(new Set());
   const [watchLoading, setWatchLoading] = useState(false);
   const [watchError, setWatchError] = useState<string | null>(null);
+  const [showImportDialog, setShowImportDialog] = useState(false);
 
   const breadcrumbs = buildHierarchyBreadcrumbs(hierarchy, {
     kind: "tradePlan",
@@ -764,9 +767,19 @@ export default function TradePlanDetailPageClient({
         className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4"
         data-testid={TRADE_PLAN_DETAIL_TEST_IDS.tacticalSection}
       >
-        <h2 className="mb-4 text-lg font-semibold text-olive-12">
-          Tactical Plan
-        </h2>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-olive-12">
+            Tactical Plan
+          </h2>
+          <button
+            type="button"
+            data-testid={TRADE_PLAN_DETAIL_TEST_IDS.importFollowUpButton}
+            onClick={() => setShowImportDialog(true)}
+            className="rounded-md border border-olive-7 px-3 py-1.5 text-xs font-medium text-olive-12 hover:bg-olive-4"
+          >
+            Import follow-up
+          </button>
+        </div>
         <div className="space-y-5">
           <TacticalField
             dataTestId="trade-plan-rationale"
@@ -816,6 +829,9 @@ export default function TradePlanDetailPageClient({
           notes={notes}
           onAddNote={async (content, chartUrls) => {
             await addNote({ tradePlanId, content, chartUrls });
+          }}
+          onDeleteNote={async (noteId) => {
+            await deleteNoteMutation({ noteId: noteId as Id<"notes"> });
           }}
           onUpdateNote={async (noteId, content, chartUrls) => {
             await updateNoteM({
@@ -1048,6 +1064,13 @@ export default function TradePlanDetailPageClient({
         parentId={tradePlanId}
         parentKind="tradePlan"
         testIdPrefix="trade-plan"
+      />
+
+      <ImportPostDialog
+        mode="follow-up"
+        open={showImportDialog}
+        onOpenChange={setShowImportDialog}
+        tradePlanId={tradePlanId}
       />
     </div>
   );

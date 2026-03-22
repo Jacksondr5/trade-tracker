@@ -5,6 +5,7 @@ import type { Note } from "./types";
 
 interface NoteTimelineProps {
   notes: Note[];
+  onDeleteNote: (noteId: string) => Promise<void>;
   onUpdateNote: (
     noteId: string,
     content: string,
@@ -16,6 +17,7 @@ interface NoteTimelineProps {
 
 export function NoteTimeline({
   notes,
+  onDeleteNote,
   onUpdateNote,
   showContext,
   testIdPrefix,
@@ -40,6 +42,7 @@ export function NoteTimeline({
         <NoteCard
           key={note._id}
           note={note}
+          onDeleteNote={onDeleteNote}
           onUpdateNote={onUpdateNote}
           showContext={showContext}
           testIdPrefix={testIdPrefix}

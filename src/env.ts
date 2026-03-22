@@ -10,6 +10,7 @@ export const env = createEnv({
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
+    VERCEL_GATEWAY_API_KEY: z.string(),
   },
 
   /**
@@ -27,6 +28,7 @@ export const env = createEnv({
    */
   runtimeEnv: {
     CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
+    VERCEL_GATEWAY_API_KEY: process.env.VERCEL_GATEWAY_API_KEY,
     NEXT_PUBLIC_CLERK_FRONTEND_API_URL:
       process.env.NEXT_PUBLIC_CLERK_FRONTEND_API_URL,
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:

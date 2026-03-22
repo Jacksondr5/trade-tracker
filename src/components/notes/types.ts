@@ -12,6 +12,7 @@ export interface NotesSectionProps {
   defaultShowEvidence?: boolean;
   notes: Note[];
   onAddNote: (content: string, chartUrls?: string[]) => Promise<void>;
+  onDeleteNote: (noteId: string) => Promise<void>;
   onUpdateNote: (
     noteId: string,
     content: string,

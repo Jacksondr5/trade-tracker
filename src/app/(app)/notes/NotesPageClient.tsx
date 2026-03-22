@@ -13,6 +13,7 @@ export default function NotesPageClient({
 }) {
   const notes = usePreloadedQuery(preloadedNotes);
   const addNote = useMutation(api.notes.addNote);
+  const deleteNoteMutation = useMutation(api.notes.deleteNote);
   const updateNote = useMutation(api.notes.updateNote);
 
   return (
@@ -27,6 +28,9 @@ export default function NotesPageClient({
         notes={notes}
         onAddNote={async (content, chartUrls) => {
           await addNote({ content, chartUrls });
+        }}
+        onDeleteNote={async (noteId) => {
+          await deleteNoteMutation({ noteId: noteId as Id<"notes"> });
         }}
         onUpdateNote={async (noteId, content, chartUrls) => {
           await updateNote({

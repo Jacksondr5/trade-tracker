@@ -26,6 +26,7 @@ const tradePlanValidator = v.object({
   ownerId: v.string(),
   rationale: v.optional(v.string()),
   sortOrder: v.optional(v.number()),
+  sourceUrl: v.optional(v.string()),
   status: tradePlanStatusValidator,
   targetConditions: v.optional(v.string()),
 });
@@ -77,6 +78,7 @@ const tradePlanWorkspaceEditorValidator = v.object({
   instrumentSymbol: v.string(),
   name: v.string(),
   rationale: v.union(v.string(), v.null()),
+  sourceUrl: v.union(v.string(), v.null()),
   status: tradePlanStatusValidator,
   targetConditions: v.union(v.string(), v.null()),
 });
@@ -568,10 +570,17 @@ function isValidStatusTransition(
 export const createTradePlan = mutation({
   args: {
     campaignId: v.optional(v.id("campaigns")),
+    entryConditions: v.optional(v.string()),
+    exitConditions: v.optional(v.string()),
+    instrumentNotes: v.optional(v.string()),
     instrumentSymbol: v.string(),
+    instrumentType: v.optional(v.string()),
     name: v.string(),
+    rationale: v.optional(v.string()),
     sortOrder: v.optional(v.number()),
+    sourceUrl: v.optional(v.string()),
     status: v.optional(tradePlanStatusValidator),
+    targetConditions: v.optional(v.string()),
   },
   returns: v.id("tradePlans"),
   handler: async (ctx, args) => {
@@ -586,11 +595,18 @@ export const createTradePlan = mutation({
     return await ctx.db.insert("tradePlans", {
       campaignId: args.campaignId,
       closedAt: status === "closed" ? Date.now() : undefined,
+      entryConditions: args.entryConditions,
+      exitConditions: args.exitConditions,
+      instrumentNotes: args.instrumentNotes,
       instrumentSymbol: args.instrumentSymbol.trim().toUpperCase(),
+      instrumentType: args.instrumentType,
       name: args.name,
       ownerId,
+      rationale: args.rationale,
       sortOrder: args.sortOrder,
+      sourceUrl: args.sourceUrl,
       status,
+      targetConditions: args.targetConditions,
     });
   },
 });
@@ -605,6 +621,7 @@ export const updateTradePlan = mutation({
     name: v.optional(v.string()),
     rationale: v.optional(v.union(v.string(), v.null())),
     sortOrder: v.optional(v.union(v.number(), v.null())),
+    sourceUrl: v.optional(v.union(v.string(), v.null())),
     targetConditions: v.optional(v.union(v.string(), v.null())),
     tradePlanId: v.id("tradePlans"),
   },
@@ -645,6 +662,9 @@ export const updateTradePlan = mutation({
     if (updates.sortOrder !== undefined)
       patch.sortOrder =
         updates.sortOrder === null ? undefined : updates.sortOrder;
+    if (updates.sourceUrl !== undefined)
+      patch.sourceUrl =
+        updates.sourceUrl === null ? undefined : updates.sourceUrl;
     if (updates.targetConditions !== undefined)
       patch.targetConditions =
         updates.targetConditions === null
@@ -820,6 +840,7 @@ export const getTradePlanWorkspace = query({
         instrumentSymbol: tradePlan.instrumentSymbol,
         name: tradePlan.name,
         rationale: normalizeOptionalText(tradePlan.rationale),
+        sourceUrl: normalizeOptionalText(tradePlan.sourceUrl),
         status: tradePlan.status,
         targetConditions: normalizeOptionalText(tradePlan.targetConditions),
       },

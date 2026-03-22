@@ -331,6 +331,20 @@ export const updateNote = mutation({
   },
 });
 
+export const deleteNote = mutation({
+  args: {
+    noteId: v.id("notes"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const note = await ctx.db.get(args.noteId);
+    assertOwner(note, ownerId, "Note not found");
+    await ctx.db.delete(args.noteId);
+    return null;
+  },
+});
+
 export const generateEvidenceUploadUrl = mutation({
   args: {},
   returns: v.string(),
