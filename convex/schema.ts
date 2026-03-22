@@ -21,6 +21,7 @@ export default defineSchema({
   importTasks: defineTable({
     chartUrls: v.optional(v.array(v.string())),
     createdTradePlanId: v.optional(v.id("tradePlans")),
+    dismissedAt: v.optional(v.number()),
     error: v.optional(v.string()),
     extractedData: v.optional(v.string()),
     mode: importTaskModeValidator,

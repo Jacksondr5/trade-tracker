@@ -106,7 +106,12 @@ Rules:
 - Do NOT invent information that is not in the post
 - Do NOT include notes like "no additional information beyond...".  If there is sparse information, just include that without commentary.`;
 
-const FOLLOW_UP_SYSTEM_PROMPT = `You are a trade recommendation parser. You extract structured updates from follow-up posts on existing trades.
+function getCurrentDateString() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function buildFollowUpSystemPrompt(currentDate: string) {
+  return `You are a trade recommendation parser. You extract structured updates from follow-up posts on existing trades.
 
 Follow-up posts include actions like: increase exposure, take partial profits, raise/lower stops, adjust targets, or close the position.
 
@@ -126,16 +131,19 @@ Rules for fieldUpdates — BE VERY CONSERVATIVE:
 - Examples of real field updates: stop loss moved, new price target added, exit condition changed
 - Examples of things that are NOT field updates: adding to position, taking partial profits, restating thesis, commentary on price action
 - Date format: "YYYY-MM-DD:" prefix followed by the update
-- If the post includes a date, use that date; otherwise use today's date
+- If the post includes a date, use that date; otherwise use ${currentDate}
+- When you generate appendText, use the exact same date value consistently across all field updates in this response
 
 Rules for suggestClose:
 - Set to true ONLY if the post indicates a full exit or position close
 - Partial profit-taking is NOT a close — only set suggestClose for complete exits`;
+}
 
 export async function extractInitiatePost(
   text: string,
 ): Promise<
-  { success: true; data: InitiatePostResult } | { success: false; error: string }
+  | { success: true; data: InitiatePostResult }
+  | { success: false; error: string }
 > {
   try {
     const result = await generateText({
@@ -164,9 +172,10 @@ export async function extractFollowUpPost(
   | { success: false; error: string }
 > {
   try {
+    const currentDate = getCurrentDateString();
     const result = await generateText({
       model: gateway("openai/gpt-5-nano"),
-      system: FOLLOW_UP_SYSTEM_PROMPT,
+      system: buildFollowUpSystemPrompt(currentDate),
       prompt: text,
       output: Output.object({ schema: followUpPostSchema }),
     });

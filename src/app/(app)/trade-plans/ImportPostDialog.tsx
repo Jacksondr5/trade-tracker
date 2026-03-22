@@ -34,6 +34,7 @@ export function ImportPostDialog({
   const [sourceUrl, setSourceUrl] = useState("");
   const [chartUrls, setChartUrls] = useState<string[]>([""]);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const createImportTask = useMutation(api.importTasks.createImportTask);
 
@@ -42,6 +43,7 @@ export function ImportPostDialog({
     setSourceUrl("");
     setChartUrls([""]);
     setSubmitError(null);
+    setIsSubmitting(false);
   }, []);
 
   const handleOpenChange = useCallback(
@@ -55,12 +57,11 @@ export function ImportPostDialog({
   );
 
   const handleImport = async () => {
-    if (!pastedText.trim()) return;
+    if (!pastedText.trim() || isSubmitting) return;
 
     setSubmitError(null);
-    const normalizedUrls = chartUrls
-      .map((u) => u.trim())
-      .filter(Boolean);
+    setIsSubmitting(true);
+    const normalizedUrls = chartUrls.map((u) => u.trim()).filter(Boolean);
 
     try {
       const taskId = await createImportTask({
@@ -82,6 +83,8 @@ export function ImportPostDialog({
       setSubmitError(
         error instanceof Error ? error.message : "Failed to queue import",
       );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -129,8 +132,7 @@ export function ImportPostDialog({
                 htmlFor="import-source-url"
                 className="mb-1 block text-sm font-medium text-olive-12"
               >
-                Source URL{" "}
-                <span className="text-olive-11">(optional)</span>
+                Source URL <span className="text-olive-11">(optional)</span>
               </label>
               <input
                 id="import-source-url"
@@ -148,8 +150,7 @@ export function ImportPostDialog({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-olive-12">
-                Chart images{" "}
-                <span className="text-olive-11">(optional)</span>
+                Chart images <span className="text-olive-11">(optional)</span>
               </label>
               <button
                 type="button"
@@ -187,9 +188,7 @@ export function ImportPostDialog({
               </div>
             ))}
             {chartUrls.filter((u) => u.trim()).length > 0 && (
-              <EvidenceCarousel
-                urls={chartUrls.filter((u) => u.trim())}
-              />
+              <EvidenceCarousel urls={chartUrls.filter((u) => u.trim())} />
             )}
           </div>
 
@@ -204,11 +203,11 @@ export function ImportPostDialog({
           <button
             type="button"
             data-testid={IMPORT_POST_DIALOG_TEST_IDS.processButton}
-            disabled={!pastedText.trim()}
+            disabled={!pastedText.trim() || isSubmitting}
             onClick={() => void handleImport()}
             className="rounded-md bg-blue-9 px-4 py-2 text-sm font-medium text-white hover:bg-blue-10 disabled:opacity-50"
           >
-            Import
+            {isSubmitting ? "Importing..." : "Import"}
           </button>
         </div>
       </DialogContent>

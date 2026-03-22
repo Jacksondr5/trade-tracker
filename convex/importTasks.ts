@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
+import { z } from "zod";
 import { assertOwner, requireUser } from "./lib/auth";
 
 const importTaskModeValidator = v.union(
@@ -19,6 +20,7 @@ const importTaskValidator = v.object({
   _id: v.id("importTasks"),
   chartUrls: v.optional(v.array(v.string())),
   createdTradePlanId: v.optional(v.id("tradePlans")),
+  dismissedAt: v.optional(v.number()),
   error: v.optional(v.string()),
   extractedData: v.optional(v.string()),
   mode: importTaskModeValidator,
@@ -28,6 +30,42 @@ const importTaskValidator = v.object({
   status: importTaskStatusValidator,
   tradePlanId: v.optional(v.id("tradePlans")),
 });
+
+const createImportTaskDataSchema = z
+  .object({
+    entryConditions: z.string(),
+    exitConditions: z.string(),
+    instrumentNotes: z.string().nullable(),
+    instrumentSymbol: z.string(),
+    instrumentType: z.string().nullable(),
+    name: z.string(),
+    rationale: z.string(),
+    targetConditions: z.string(),
+  })
+  .strict();
+
+const allowedFollowUpFields = [
+  "entryConditions",
+  "exitConditions",
+  "targetConditions",
+  "rationale",
+  "instrumentNotes",
+] as const;
+
+const followUpImportTaskDataSchema = z
+  .object({
+    fieldUpdates: z.array(
+      z
+        .object({
+          appendText: z.string(),
+          field: z.enum(allowedFollowUpFields),
+        })
+        .strict(),
+    ),
+    noteContent: z.string(),
+    suggestClose: z.boolean(),
+  })
+  .strict();
 
 export const createImportTask = mutation({
   args: {
@@ -72,24 +110,15 @@ export const completeImportTask = mutation({
     );
 
     if (task.status !== "pending" && task.status !== "processing") {
-      throw new ConvexError(
-        `Cannot complete task in status: ${task.status}`,
-      );
+      throw new ConvexError(`Cannot complete task in status: ${task.status}`);
     }
 
     const chartUrls = task.chartUrls?.filter(Boolean);
 
     if (task.mode === "create") {
-      const data = JSON.parse(args.extractedData) as {
-        entryConditions: string;
-        exitConditions: string;
-        instrumentNotes: string | null;
-        instrumentSymbol: string;
-        instrumentType: string | null;
-        name: string;
-        rationale: string;
-        targetConditions: string;
-      };
+      const data = createImportTaskDataSchema.parse(
+        JSON.parse(args.extractedData),
+      );
 
       const tradePlanId = await ctx.db.insert("tradePlans", {
         entryConditions: data.entryConditions,
@@ -119,14 +148,9 @@ export const completeImportTask = mutation({
         status: "done",
       });
     } else {
-      const data = JSON.parse(args.extractedData) as {
-        fieldUpdates: Array<{
-          appendText: string;
-          field: string;
-        }>;
-        noteContent: string;
-        suggestClose: boolean;
-      };
+      const data = followUpImportTaskDataSchema.parse(
+        JSON.parse(args.extractedData),
+      );
 
       if (!task.tradePlanId) {
         throw new ConvexError("Follow-up task missing tradePlanId");
@@ -202,13 +226,19 @@ export const dismissImportTask = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
-    assertOwner(
+    const task = assertOwner(
       await ctx.db.get(args.taskId),
       ownerId,
       "Import task not found",
     );
 
-    await ctx.db.delete(args.taskId);
+    if (task.status === "pending" || task.status === "processing") {
+      throw new ConvexError("Cannot dismiss an active import");
+    }
+
+    await ctx.db.patch(args.taskId, {
+      dismissedAt: Date.now(),
+    });
     return null;
   },
 });
@@ -251,6 +281,6 @@ export const listImportTasks = query({
       .order("desc")
       .collect();
 
-    return tasks;
+    return tasks.filter((task) => task.dismissedAt === undefined);
   },
 });
