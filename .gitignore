@@ -51,3 +51,6 @@ data/
 /playwright/.auth/
 /output/playwright/
 /.playwright-cli/
+
+# Worktrees
+.claude/worktrees/
