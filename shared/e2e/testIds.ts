@@ -261,6 +261,13 @@ export function getDeleteNoteButtonTestId(
   return `${prefix}-delete-note-button-${noteId}`;
 }
 
+export function getDeleteNoteButtonTooltipTestId(
+  prefix: string,
+  noteId: string,
+): string {
+  return `${prefix}-delete-note-tooltip-${noteId}`;
+}
+
 export function getEditNoteButtonTestId(
   prefix: string,
   noteId: string,

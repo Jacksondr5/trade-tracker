@@ -24,6 +24,8 @@ import {
   getNoteComposerSubmitButtonTestId,
   getNoteRowTestId,
   getNoteContentTestId,
+  getDeleteNoteButtonTestId,
+  getDeleteNoteButtonTooltipTestId,
   getEditNoteButtonTestId,
   getEditNoteTextareaTestId,
   getSaveNoteButtonTestId,
@@ -410,6 +412,10 @@ export const NOTES_SELECTORS = {
   addNoteButton: getNoteComposerSubmitButtonTestId("notes"),
   noteRow: (noteId: string) => getNoteRowTestId("notes", noteId),
   noteContent: (noteId: string) => getNoteContentTestId("notes", noteId),
+  deleteNoteButton: (noteId: string) =>
+    getDeleteNoteButtonTestId("notes", noteId),
+  deleteNoteTooltip: (noteId: string) =>
+    getDeleteNoteButtonTooltipTestId("notes", noteId),
   editNoteButton: (noteId: string) => getEditNoteButtonTestId("notes", noteId),
   editNoteTextarea: (noteId: string) =>
     getEditNoteTextareaTestId("notes", noteId),

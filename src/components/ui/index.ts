@@ -6,6 +6,7 @@ export {
   buttonVariants,
   type ButtonProps,
 } from "./button";
+export { ConfirmDeleteButton } from "./confirm-delete-button";
 export {
   Command,
   CommandDialog,

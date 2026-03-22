@@ -1,11 +1,12 @@
 "use client";
 
-import { Check, Loader2, Pencil, Trash2, X } from "lucide-react";
+import { Check, Loader2, Pencil, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import {
   getCancelNoteButtonTestId,
   getDeleteNoteButtonTestId,
+  getDeleteNoteButtonTooltipTestId,
   getEditNoteButtonTestId,
   getEditNoteTextareaTestId,
   getNoteContentTestId,
@@ -15,7 +16,7 @@ import {
   getNoteRowTestId,
   getSaveNoteButtonTestId,
 } from "../../../shared/e2e/testIds";
-import { Alert } from "~/components/ui";
+import { Alert, ConfirmDeleteButton } from "~/components/ui";
 import { formatDate } from "~/lib/format";
 import { EvidenceCarousel } from "./EvidenceCarousel";
 import { EvidenceUrlInputs } from "./EvidenceUrlInputs";
@@ -138,14 +139,14 @@ export function NoteCard({
             >
               <Pencil className="h-3.5 w-3.5" />
             </button>
-            <button
-              type="button"
-              aria-label="Delete note"
-              title="Delete"
-              className="rounded p-1 text-olive-10 hover:bg-olive-4 hover:text-red-9 disabled:opacity-50"
-              data-testid={getDeleteNoteButtonTestId(testIdPrefix, note._id)}
-              disabled={isDeleting}
-              onClick={async () => {
+            <ConfirmDeleteButton
+              dataTestId={getDeleteNoteButtonTestId(testIdPrefix, note._id)}
+              tooltipTestId={getDeleteNoteButtonTooltipTestId(
+                testIdPrefix,
+                note._id,
+              )}
+              isDeleting={isDeleting}
+              onConfirm={async () => {
                 setIsDeleting(true);
                 setDeleteError(null);
                 try {
@@ -160,13 +161,7 @@ export function NoteCard({
                   setIsDeleting(false);
                 }
               }}
-            >
-              {isDeleting ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Trash2 className="h-3.5 w-3.5" />
-              )}
-            </button>
+            />
           </div>
         )}
       </div>
