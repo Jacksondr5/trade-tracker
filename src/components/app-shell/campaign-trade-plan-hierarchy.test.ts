@@ -3,6 +3,7 @@ import type { Id } from "~/convex/_generated/dataModel";
 import {
   defaultPersistedLocalHierarchyState,
   getActiveHierarchyContext,
+  isBravosGroupExpanded,
   isCampaignRowExpanded,
   isStandaloneGroupExpanded,
   supportsDesktopLocalHierarchy,
@@ -14,8 +15,26 @@ const campaignBetaId = "campaign_beta" as Id<"campaigns">;
 const linkedTradePlanId = "tradeplan_linked" as Id<"tradePlans">;
 const watchedTradePlanId = "tradeplan_watched" as Id<"tradePlans">;
 const standaloneTradePlanId = "tradeplan_standalone" as Id<"tradePlans">;
+const bravosTradePlanId = "tradeplan_bravos" as Id<"tradePlans">;
 
 const hierarchy: CampaignTradePlanHierarchy = {
+  bravosTradePlans: [
+    {
+      href: `/trade-plans/${bravosTradePlanId}`,
+      id: bravosTradePlanId,
+      instrumentSymbol: "QQQ",
+      isWatched: false,
+      itemType: "tradePlan",
+      name: "Bravos Plan",
+      navigationCategory: "bravos",
+      parentCampaign: {
+        href: `/campaigns/${campaignAlphaId}`,
+        id: campaignAlphaId,
+        name: "Alpha",
+      },
+      status: "active",
+    },
+  ],
   campaigns: [
     {
       defaultExpanded: false,
@@ -33,6 +52,7 @@ const hierarchy: CampaignTradePlanHierarchy = {
           isWatched: false,
           itemType: "tradePlan",
           name: "Linked Plan",
+          navigationCategory: "linked",
           parentCampaign: {
             href: `/campaigns/${campaignAlphaId}`,
             id: campaignAlphaId,
@@ -58,6 +78,7 @@ const hierarchy: CampaignTradePlanHierarchy = {
           isWatched: true,
           itemType: "tradePlan",
           name: "Watched Child",
+          navigationCategory: "linked",
           parentCampaign: {
             href: `/campaigns/${campaignBetaId}`,
             id: campaignBetaId,
@@ -76,6 +97,7 @@ const hierarchy: CampaignTradePlanHierarchy = {
       isWatched: false,
       itemType: "tradePlan",
       name: "Standalone",
+      navigationCategory: "standalone",
       parentCampaign: null,
       status: "active",
     },
@@ -89,6 +111,7 @@ describe("campaign trade plan hierarchy helpers", () => {
       getActiveHierarchyContext(`/trade-plans/${linkedTradePlanId}`, hierarchy),
     ).toEqual({
       activeCampaignId: campaignAlphaId,
+      isBravosTradePlanActive: false,
       activeItemId: linkedTradePlanId,
       activeItemType: "tradePlan",
       isStandaloneTradePlanActive: false,
@@ -98,12 +121,29 @@ describe("campaign trade plan hierarchy helpers", () => {
 
   it("treats unmatched trade-plan detail routes as standalone", () => {
     expect(
-      getActiveHierarchyContext(`/trade-plans/${standaloneTradePlanId}`, hierarchy),
+      getActiveHierarchyContext(
+        `/trade-plans/${standaloneTradePlanId}`,
+        hierarchy,
+      ),
     ).toEqual({
       activeCampaignId: null,
+      isBravosTradePlanActive: false,
       activeItemId: standaloneTradePlanId,
       activeItemType: "tradePlan",
       isStandaloneTradePlanActive: true,
+      routeSection: "trade-plans",
+    });
+  });
+
+  it("treats Bravos trade-plan detail routes as a dedicated local group", () => {
+    expect(
+      getActiveHierarchyContext(`/trade-plans/${bravosTradePlanId}`, hierarchy),
+    ).toEqual({
+      activeCampaignId: null,
+      isBravosTradePlanActive: true,
+      activeItemId: bravosTradePlanId,
+      activeItemType: "tradePlan",
+      isStandaloneTradePlanActive: false,
       routeSection: "trade-plans",
     });
   });
@@ -117,10 +157,16 @@ describe("campaign trade plan hierarchy helpers", () => {
       },
     };
 
-    expect(isCampaignRowExpanded(hierarchy.campaigns[0], persistedState, campaignAlphaId)).toBe(
-      false,
-    );
-    expect(isCampaignRowExpanded(hierarchy.campaigns[1], persistedState, null)).toBe(false);
+    expect(
+      isCampaignRowExpanded(
+        hierarchy.campaigns[0],
+        persistedState,
+        campaignAlphaId,
+      ),
+    ).toBe(false);
+    expect(
+      isCampaignRowExpanded(hierarchy.campaigns[1], persistedState, null),
+    ).toBe(false);
   });
 
   it("opens active and watched-child campaigns by default until the user overrides them", () => {
@@ -132,7 +178,11 @@ describe("campaign trade plan hierarchy helpers", () => {
       ),
     ).toBe(true);
     expect(
-      isCampaignRowExpanded(hierarchy.campaigns[1], defaultPersistedLocalHierarchyState, null),
+      isCampaignRowExpanded(
+        hierarchy.campaigns[1],
+        defaultPersistedLocalHierarchyState,
+        null,
+      ),
     ).toBe(true);
   });
 
@@ -143,20 +193,26 @@ describe("campaign trade plan hierarchy helpers", () => {
   });
 
   it("keeps the standalone group closed by default away from standalone routes", () => {
-    expect(isStandaloneGroupExpanded(defaultPersistedLocalHierarchyState)).toBe(false);
+    expect(isStandaloneGroupExpanded(defaultPersistedLocalHierarchyState)).toBe(
+      false,
+    );
+  });
+
+  it("opens the Bravos group by default for active Bravos routes", () => {
+    expect(
+      isBravosGroupExpanded(defaultPersistedLocalHierarchyState, true),
+    ).toBe(true);
   });
 
   it("respects an explicit standalone-group expansion preference", () => {
     expect(
-      isStandaloneGroupExpanded(
-        {
-          ...defaultPersistedLocalHierarchyState,
-          groups: {
-            ...defaultPersistedLocalHierarchyState.groups,
-            standaloneTradePlans: true,
-          },
+      isStandaloneGroupExpanded({
+        ...defaultPersistedLocalHierarchyState,
+        groups: {
+          ...defaultPersistedLocalHierarchyState.groups,
+          standaloneTradePlans: true,
         },
-      ),
+      }),
     ).toBe(true);
   });
 

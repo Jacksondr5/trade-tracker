@@ -40,7 +40,11 @@ const parentCampaignContextValidator = v.object({
 });
 
 const tradePlanWorkspaceRelationshipValidator = v.object({
-  kind: v.union(v.literal("linked"), v.literal("standalone")),
+  kind: v.union(
+    v.literal("bravos"),
+    v.literal("linked"),
+    v.literal("standalone"),
+  ),
   parentCampaign: v.union(parentCampaignContextValidator, v.null()),
 });
 
@@ -263,9 +267,12 @@ function buildTradePlanWorkspaceSummary(
     },
     name: tradePlan.name,
     relationship: {
-      kind: tradePlan.campaignId
-        ? ("linked" as const)
-        : ("standalone" as const),
+      kind:
+        tradePlan.sourceUrl !== undefined
+          ? ("bravos" as const)
+          : tradePlan.campaignId
+            ? ("linked" as const)
+            : ("standalone" as const),
       parentCampaign: createParentCampaignContext(parentCampaign),
     },
     status: tradePlan.status,

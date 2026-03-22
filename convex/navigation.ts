@@ -2,7 +2,10 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { query } from "./_generated/server";
 import { Infer, v } from "convex/values";
 import { requireUser } from "./lib/auth";
-import { campaignStatusValidator, tradePlanStatusValidator } from "./lib/statuses";
+import {
+  campaignStatusValidator,
+  tradePlanStatusValidator,
+} from "./lib/statuses";
 
 const parentCampaignContextValidator = v.object({
   href: v.string(),
@@ -26,6 +29,11 @@ const tradePlanNavigationItemValidator = v.object({
   isWatched: v.boolean(),
   itemType: v.literal("tradePlan"),
   name: v.string(),
+  navigationCategory: v.union(
+    v.literal("bravos"),
+    v.literal("linked"),
+    v.literal("standalone"),
+  ),
   parentCampaign: v.union(parentCampaignContextValidator, v.null()),
   status: tradePlanStatusValidator,
 });
@@ -42,6 +50,7 @@ const campaignHierarchyRowValidator = v.object({
 });
 
 const navigationHierarchyValidator = v.object({
+  bravosTradePlans: v.array(tradePlanNavigationItemValidator),
   campaigns: v.array(campaignHierarchyRowValidator),
   standaloneTradePlans: v.array(tradePlanNavigationItemValidator),
   watchlist: v.array(
@@ -73,7 +82,10 @@ function compareText(a: string, b: string): number {
 }
 
 function getNavigationBucket(
-  item: Pick<CampaignNavigationItem | TradePlanNavigationItem, "isWatched" | "status">,
+  item: Pick<
+    CampaignNavigationItem | TradePlanNavigationItem,
+    "isWatched" | "status"
+  >,
 ): number {
   if (item.isWatched) {
     return 0;
@@ -179,7 +191,7 @@ function buildTradePlanNavigationItem(
 ): TradePlanNavigationItem {
   const parentCampaign =
     tradePlan.campaignId !== undefined
-      ? campaignById.get(tradePlan.campaignId) ?? null
+      ? (campaignById.get(tradePlan.campaignId) ?? null)
       : null;
 
   return {
@@ -189,6 +201,12 @@ function buildTradePlanNavigationItem(
     isWatched: watchedTradePlanIds.has(tradePlan._id),
     itemType: "tradePlan",
     name: tradePlan.name,
+    navigationCategory:
+      tradePlan.sourceUrl !== undefined
+        ? "bravos"
+        : parentCampaign === null
+          ? "standalone"
+          : "linked",
     parentCampaign:
       parentCampaign === null
         ? null
@@ -222,14 +240,21 @@ export const getCampaignTradePlanHierarchy = query({
         .collect(),
     ]);
 
-    const campaignById = new Map(campaigns.map((campaign) => [campaign._id, campaign]));
-    const tradePlanById = new Map(tradePlans.map((tradePlan) => [tradePlan._id, tradePlan]));
+    const campaignById = new Map(
+      campaigns.map((campaign) => [campaign._id, campaign]),
+    );
+    const tradePlanById = new Map(
+      tradePlans.map((tradePlan) => [tradePlan._id, tradePlan]),
+    );
 
     const watchedCampaignIds = new Set<Id<"campaigns">>();
     const watchedTradePlanIds = new Set<Id<"tradePlans">>();
 
     for (const watchedItem of watchedItems) {
-      if (watchedItem.itemType === "campaign" && watchedItem.campaignId !== undefined) {
+      if (
+        watchedItem.itemType === "campaign" &&
+        watchedItem.campaignId !== undefined
+      ) {
         if (campaignById.has(watchedItem.campaignId)) {
           watchedCampaignIds.add(watchedItem.campaignId);
         }
@@ -249,6 +274,7 @@ export const getCampaignTradePlanHierarchy = query({
       Id<"campaigns">,
       Array<TradePlanNavigationItem>
     >();
+    const bravosTradePlans: Array<TradePlanNavigationItem> = [];
     const standaloneTradePlans: Array<TradePlanNavigationItem> = [];
     const watchlistTradePlans: Array<TradePlanNavigationItem> = [];
 
@@ -263,6 +289,11 @@ export const getCampaignTradePlanHierarchy = query({
         watchlistTradePlans.push(tradePlanItem);
       }
 
+      if (tradePlanItem.navigationCategory === "bravos") {
+        bravosTradePlans.push(tradePlanItem);
+        continue;
+      }
+
       if (tradePlanItem.parentCampaign === null) {
         standaloneTradePlans.push(tradePlanItem);
         continue;
@@ -271,23 +302,33 @@ export const getCampaignTradePlanHierarchy = query({
       const siblingTradePlans =
         childTradePlansByCampaign.get(tradePlanItem.parentCampaign.id) ?? [];
       siblingTradePlans.push(tradePlanItem);
-      childTradePlansByCampaign.set(tradePlanItem.parentCampaign.id, siblingTradePlans);
+      childTradePlansByCampaign.set(
+        tradePlanItem.parentCampaign.id,
+        siblingTradePlans,
+      );
     }
 
     const watchlistCampaigns: Array<CampaignNavigationItem> = [];
     const campaignRows = campaigns
       .map((campaign) => {
-        const campaignItem = buildCampaignNavigationItem(campaign, watchedCampaignIds);
+        const campaignItem = buildCampaignNavigationItem(
+          campaign,
+          watchedCampaignIds,
+        );
         if (campaignItem.isWatched) {
           watchlistCampaigns.push(campaignItem);
         }
 
         const childTradePlans =
-          childTradePlansByCampaign.get(campaign._id)?.sort(compareTradePlanItems) ?? [];
+          childTradePlansByCampaign
+            .get(campaign._id)
+            ?.sort(compareTradePlanItems) ?? [];
 
         return {
           ...campaignItem,
-          defaultExpanded: childTradePlans.some((tradePlan) => tradePlan.isWatched),
+          defaultExpanded: childTradePlans.some(
+            (tradePlan) => tradePlan.isWatched,
+          ),
           tradePlans: childTradePlans,
         };
       })
@@ -298,6 +339,7 @@ export const getCampaignTradePlanHierarchy = query({
     );
 
     return {
+      bravosTradePlans: bravosTradePlans.sort(compareTradePlanItems),
       campaigns: campaignRows,
       standaloneTradePlans: standaloneTradePlans.sort(compareTradePlanItems),
       watchlist,

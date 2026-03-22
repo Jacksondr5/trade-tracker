@@ -7,6 +7,19 @@ import {
 } from "./command-palette";
 
 const hierarchy: CommandPaletteHierarchy = {
+  bravosTradePlans: [
+    {
+      href: "/trade-plans/plan-4",
+      id: "plan-4",
+      instrumentSymbol: "QQQ",
+      isWatched: false,
+      itemType: "tradePlan",
+      name: "Bravos Breakout",
+      navigationCategory: "bravos",
+      parentCampaign: null,
+      status: "active",
+    },
+  ],
   watchlist: [
     {
       href: "/campaigns/campaign-1",
@@ -23,6 +36,7 @@ const hierarchy: CommandPaletteHierarchy = {
       isWatched: true,
       itemType: "tradePlan",
       name: "Core Entry",
+      navigationCategory: "linked",
       parentCampaign: {
         href: "/campaigns/campaign-1",
         id: "campaign-1",
@@ -48,6 +62,7 @@ const hierarchy: CommandPaletteHierarchy = {
           isWatched: true,
           itemType: "tradePlan",
           name: "Core Entry",
+          navigationCategory: "linked",
           parentCampaign: {
             href: "/campaigns/campaign-1",
             id: "campaign-1",
@@ -62,6 +77,7 @@ const hierarchy: CommandPaletteHierarchy = {
           isWatched: false,
           itemType: "tradePlan",
           name: "Core Entry",
+          navigationCategory: "linked",
           parentCampaign: {
             href: "/campaigns/campaign-1",
             id: "campaign-1",
@@ -90,6 +106,7 @@ const hierarchy: CommandPaletteHierarchy = {
       isWatched: false,
       itemType: "tradePlan",
       name: "Short ARKK",
+      navigationCategory: "standalone",
       parentCampaign: null,
       status: "active",
     },
@@ -109,6 +126,7 @@ describe("command palette helpers", () => {
     ]);
     expect(sections.tradePlans.map((item) => item.id)).toEqual([
       "plan-2",
+      "plan-4",
       "plan-3",
     ]);
   });
@@ -121,6 +139,11 @@ describe("command palette helpers", () => {
         contextLabel: "URA • Macro Rotation",
         id: "plan-2",
         statusLabel: "Idea",
+      },
+      {
+        contextLabel: "QQQ • Bravos Trade",
+        id: "plan-4",
+        statusLabel: "Active",
       },
       {
         contextLabel: "ARKK • Standalone Trade Plan",
@@ -145,6 +168,13 @@ describe("command palette helpers", () => {
     ).toMatchObject([
       {
         id: "plan-3",
+      },
+    ]);
+    expect(
+      filterCommandPaletteSections(sections, "bravos").tradePlans,
+    ).toMatchObject([
+      {
+        id: "plan-4",
       },
     ]);
     expect(

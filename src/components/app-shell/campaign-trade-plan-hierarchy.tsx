@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getLocalHierarchyItemTestId } from "../../../shared/e2e/testIds";
 import { capitalize } from "~/lib/format";
 import {
+  BRAVOS_TRADES_LABEL,
   getTradePlanRelationshipContextLabel,
   type BreadcrumbSegment,
   type CampaignNavigationItem,
@@ -97,7 +98,8 @@ export function CampaignTradePlanHierarchyNavigation({
           Local hierarchy
         </p>
         <p className="text-xs text-olive-10">
-          Browse watched items, campaigns, and standalone trade plans.
+          Browse watched items, campaigns, standalone trade plans, and Bravos
+          imports.
         </p>
       </div>
 
@@ -181,6 +183,32 @@ export function CampaignTradePlanHierarchyNavigation({
                   key={tradePlan.id}
                   dataTestId={getLocalHierarchyItemTestId(
                     "standalone-trade-plan",
+                    tradePlan.name,
+                  )}
+                  href={tradePlan.href}
+                  isActive={isHierarchyItemActive(pathname, tradePlan.href)}
+                  meta={getTradePlanMeta(tradePlan)}
+                  onNavigate={onNavigate}
+                  title={tradePlan.name}
+                />
+              ))
+            )}
+          </div>
+        </section>
+
+        <section className="space-y-2">
+          <SectionHeading title={BRAVOS_TRADES_LABEL} />
+          <div className="space-y-1">
+            {hierarchy.bravosTradePlans.length === 0 ? (
+              <p className="px-3 text-sm text-olive-10">
+                No Bravos trade plans yet.
+              </p>
+            ) : (
+              hierarchy.bravosTradePlans.map((tradePlan) => (
+                <HierarchyLink
+                  key={tradePlan.id}
+                  dataTestId={getLocalHierarchyItemTestId(
+                    "bravos-trade-plan",
                     tradePlan.name,
                   )}
                   href={tradePlan.href}

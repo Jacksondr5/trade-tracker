@@ -1,12 +1,19 @@
 export type CampaignNavigationStatus = "planning" | "active" | "closed";
-export type TradePlanNavigationStatus = "idea" | "watching" | "active" | "closed";
+export type TradePlanNavigationStatus =
+  | "idea"
+  | "watching"
+  | "active"
+  | "closed";
 
 interface TradePlanRelationshipSource {
+  navigationCategory: "bravos" | "linked" | "standalone";
   parentCampaign: {
     name: string;
   } | null;
 }
 
+export const BRAVOS_TRADE_LABEL = "Bravos Trade";
+export const BRAVOS_TRADES_LABEL = "Bravos";
 export const LINKED_TRADE_PLAN_LABEL = "Linked Trade Plan";
 export const STANDALONE_TRADE_PLAN_LABEL = "Standalone Trade Plan";
 export const STANDALONE_TRADE_PLANS_LABEL = "Standalone Trade Plans";
@@ -14,6 +21,10 @@ export const STANDALONE_TRADE_PLANS_LABEL = "Standalone Trade Plans";
 export function getTradePlanRelationshipLabel(
   tradePlan: TradePlanRelationshipSource,
 ): string {
+  if (tradePlan.navigationCategory === "bravos") {
+    return BRAVOS_TRADE_LABEL;
+  }
+
   return tradePlan.parentCampaign === null
     ? STANDALONE_TRADE_PLAN_LABEL
     : LINKED_TRADE_PLAN_LABEL;
@@ -22,6 +33,10 @@ export function getTradePlanRelationshipLabel(
 export function getTradePlanRelationshipContextLabel(
   tradePlan: TradePlanRelationshipSource,
 ): string {
+  if (tradePlan.navigationCategory === "bravos") {
+    return BRAVOS_TRADE_LABEL;
+  }
+
   return tradePlan.parentCampaign?.name ?? STANDALONE_TRADE_PLAN_LABEL;
 }
 
@@ -47,6 +62,7 @@ export interface TradePlanNavigationItem {
   isWatched: boolean;
   itemType: "tradePlan";
   name: string;
+  navigationCategory: "bravos" | "linked" | "standalone";
   parentCampaign: ParentCampaignNavigationContext | null;
   status: TradePlanNavigationStatus;
 }
@@ -57,6 +73,7 @@ export interface CampaignHierarchyRow extends CampaignNavigationItem {
 }
 
 export interface CampaignTradePlanHierarchy {
+  bravosTradePlans: TradePlanNavigationItem[];
   campaigns: CampaignHierarchyRow[];
   standaloneTradePlans: TradePlanNavigationItem[];
   watchlist: Array<CampaignNavigationItem | TradePlanNavigationItem>;
@@ -103,7 +120,9 @@ function findCampaignItem(
   hierarchy: CampaignTradePlanHierarchy,
   campaignId: string,
 ): CampaignHierarchyRow | null {
-  return hierarchy.campaigns.find((campaign) => campaign.id === campaignId) ?? null;
+  return (
+    hierarchy.campaigns.find((campaign) => campaign.id === campaignId) ?? null
+  );
 }
 
 export function findTradePlanNavigationItem(
@@ -112,37 +131,71 @@ export function findTradePlanNavigationItem(
 ): TradePlanNavigationItem | null {
   for (const campaign of hierarchy.campaigns) {
     const linkedTradePlan =
-      campaign.tradePlans.find((tradePlan) => tradePlan.id === tradePlanId) ?? null;
+      campaign.tradePlans.find((tradePlan) => tradePlan.id === tradePlanId) ??
+      null;
     if (linkedTradePlan !== null) {
       return linkedTradePlan;
     }
   }
 
   return (
-    hierarchy.standaloneTradePlans.find((tradePlan) => tradePlan.id === tradePlanId) ??
+    hierarchy.bravosTradePlans.find(
+      (tradePlan) => tradePlan.id === tradePlanId,
+    ) ??
+    hierarchy.standaloneTradePlans.find(
+      (tradePlan) => tradePlan.id === tradePlanId,
+    ) ??
     null
   );
 }
 
-export function buildHierarchyBreadcrumbs(
-  hierarchy: CampaignTradePlanHierarchy,
-  routeContext: CampaignTradePlanDetailRouteContext,
-): BreadcrumbSegment[] | null {
-  if (routeContext.kind === "campaign") {
-    const campaign = findCampaignItem(hierarchy, routeContext.campaignId);
-    if (campaign === null) {
-      return null;
-    }
+function buildBravosTradePlanBreadcrumbs(
+  tradePlan: TradePlanNavigationItem,
+): BreadcrumbSegment[] {
+  return [
+    { href: "/trade-plans", label: "Trade Plans" },
+    { label: BRAVOS_TRADES_LABEL },
+    { label: tradePlan.name },
+  ];
+}
 
-    return [
-      { href: "/campaigns", label: "Campaigns" },
-      { label: campaign.name },
-    ];
+export function isBravosTradePlan(
+  tradePlan: TradePlanRelationshipSource,
+): boolean {
+  return tradePlan.navigationCategory === "bravos";
+}
+
+export function findTradePlanNavigationBucketLabel(
+  tradePlan: TradePlanNavigationItem,
+): string {
+  if (tradePlan.navigationCategory === "bravos") {
+    return BRAVOS_TRADES_LABEL;
   }
 
-  const tradePlan = findTradePlanNavigationItem(hierarchy, routeContext.tradePlanId);
-  if (tradePlan === null) {
-    return null;
+  return tradePlan.parentCampaign === null
+    ? STANDALONE_TRADE_PLAN_LABEL
+    : tradePlan.parentCampaign.name;
+}
+
+export function buildTradePlanIndexRelationshipLabel(
+  tradePlan: TradePlanRelationshipSource,
+): string {
+  if (tradePlan.navigationCategory === "bravos") {
+    return BRAVOS_TRADES_LABEL;
+  }
+
+  if (tradePlan.navigationCategory === "linked") {
+    return tradePlan.parentCampaign?.name ?? "Linked";
+  }
+
+  return "Standalone";
+}
+
+export function buildTradePlanBreadcrumbs(
+  tradePlan: TradePlanNavigationItem,
+): BreadcrumbSegment[] {
+  if (tradePlan.navigationCategory === "bravos") {
+    return buildBravosTradePlanBreadcrumbs(tradePlan);
   }
 
   if (tradePlan.parentCampaign === null) {
@@ -161,4 +214,31 @@ export function buildHierarchyBreadcrumbs(
     },
     { label: tradePlan.name },
   ];
+}
+
+export function buildHierarchyBreadcrumbs(
+  hierarchy: CampaignTradePlanHierarchy,
+  routeContext: CampaignTradePlanDetailRouteContext,
+): BreadcrumbSegment[] | null {
+  if (routeContext.kind === "campaign") {
+    const campaign = findCampaignItem(hierarchy, routeContext.campaignId);
+    if (campaign === null) {
+      return null;
+    }
+
+    return [
+      { href: "/campaigns", label: "Campaigns" },
+      { label: campaign.name },
+    ];
+  }
+
+  const tradePlan = findTradePlanNavigationItem(
+    hierarchy,
+    routeContext.tradePlanId,
+  );
+  if (tradePlan === null) {
+    return null;
+  }
+
+  return buildTradePlanBreadcrumbs(tradePlan);
 }

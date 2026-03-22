@@ -15,6 +15,7 @@ import { Alert, Badge, Button, type BadgeProps } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import {
+  BRAVOS_TRADES_LABEL,
   getTradePlanRelationshipContextLabel,
   STANDALONE_TRADE_PLANS_LABEL,
 } from "~/lib/campaign-trade-plan-navigation";
@@ -23,6 +24,7 @@ import { cn } from "~/lib/utils";
 import {
   defaultPersistedLocalHierarchyState,
   getActiveHierarchyContext,
+  isBravosGroupExpanded,
   isCampaignRowExpanded,
   isStandaloneGroupExpanded,
   localHierarchyStorageKey,
@@ -82,6 +84,10 @@ function normalizePersistedState(
           ? parsed.campaignRows
           : defaultPersistedLocalHierarchyState.campaignRows,
       groups: {
+        bravosTradePlans:
+          typeof parsed.groups?.bravosTradePlans === "boolean"
+            ? parsed.groups.bravosTradePlans
+            : defaultPersistedLocalHierarchyState.groups.bravosTradePlans,
         campaigns:
           typeof parsed.groups?.campaigns === "boolean"
             ? parsed.groups?.campaigns
@@ -402,6 +408,10 @@ function DesktopLocalRail({
     persistedState,
     activeContext.isStandaloneTradePlanActive,
   );
+  const bravosExpanded = isBravosGroupExpanded(
+    persistedState,
+    activeContext.isBravosTradePlanActive,
+  );
 
   return (
     <aside className="hidden border-r border-olive-6 bg-olive-2 md:fixed md:top-0 md:left-[14.5rem] md:z-20 md:flex md:h-screen md:w-[23rem] md:flex-col">
@@ -581,6 +591,45 @@ function DesktopLocalRail({
                 </div>
               )}
             </RailGroup>
+
+            <RailGroup
+              title={BRAVOS_TRADES_LABEL}
+              count={hierarchy.bravosTradePlans.length}
+              expanded={bravosExpanded}
+              onToggle={() => onToggleGroup("bravosTradePlans")}
+              panelId="bravos-trade-plans-group-panel"
+            >
+              {hierarchy.bravosTradePlans.length === 0 ? (
+                <NavigationState
+                  title="No Bravos trade plans yet"
+                  description="Trade plans imported from Bravos appear here when they include a source link."
+                />
+              ) : (
+                <div className="space-y-1">
+                  {hierarchy.bravosTradePlans.map((tradePlan) => (
+                    <TradePlanRow
+                      key={tradePlan.id}
+                      activeItemId={activeContext.activeItemId}
+                      activeItemType={activeContext.activeItemType}
+                      item={tradePlan}
+                      linkTestId={getLocalHierarchyItemTestId(
+                        "bravos-trade-plan",
+                        tradePlan.name,
+                      )}
+                      onToggleWatch={onToggleWatch}
+                      pending={pendingWatchIds.has(
+                        `${tradePlan.itemType}:${tradePlan.id}`,
+                      )}
+                      showParentContext={tradePlan.parentCampaign !== null}
+                      watchToggleTestId={getLocalHierarchyWatchToggleTestId(
+                        "bravos-trade-plan",
+                        tradePlan.name,
+                      )}
+                    />
+                  ))}
+                </div>
+              )}
+            </RailGroup>
           </div>
         </div>
       </div>
@@ -641,7 +690,12 @@ export function CampaignTradePlanHierarchyLayout({
                 currentState,
                 activeContext.isStandaloneTradePlanActive,
               )
-            : !currentState.groups[group],
+            : group === "bravosTradePlans"
+              ? !isBravosGroupExpanded(
+                  currentState,
+                  activeContext.isBravosTradePlanActive,
+                )
+              : !currentState.groups[group],
       },
     }));
   };

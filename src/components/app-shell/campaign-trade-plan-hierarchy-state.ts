@@ -25,6 +25,7 @@ export interface TradePlanNavigationItem {
   isWatched: boolean;
   itemType: "tradePlan";
   name: string;
+  navigationCategory: "bravos" | "linked" | "standalone";
   parentCampaign: ParentCampaignContext | null;
   status: TradePlanStatus;
 }
@@ -35,6 +36,7 @@ export interface CampaignHierarchyRow extends CampaignNavigationItem {
 }
 
 export interface CampaignTradePlanHierarchy {
+  bravosTradePlans: TradePlanNavigationItem[];
   campaigns: CampaignHierarchyRow[];
   standaloneTradePlans: TradePlanNavigationItem[];
   watchlist: Array<CampaignNavigationItem | TradePlanNavigationItem>;
@@ -42,6 +44,7 @@ export interface CampaignTradePlanHierarchy {
 
 export interface ActiveHierarchyContext {
   activeCampaignId: Id<"campaigns"> | null;
+  isBravosTradePlanActive: boolean;
   activeItemId: Id<"campaigns"> | Id<"tradePlans"> | null;
   activeItemType: "campaign" | "tradePlan" | null;
   isStandaloneTradePlanActive: boolean;
@@ -53,20 +56,23 @@ export const localHierarchyStorageKey = "campaign-trade-plan-local-rail:v1";
 export interface PersistedLocalHierarchyState {
   campaignRows: Record<string, boolean>;
   groups: {
+    bravosTradePlans: boolean | null;
     campaigns: boolean;
     standaloneTradePlans: boolean | null;
     watchlist: boolean;
   };
 }
 
-export const defaultPersistedLocalHierarchyState: PersistedLocalHierarchyState = {
-  campaignRows: {},
-  groups: {
-    campaigns: true,
-    standaloneTradePlans: null,
-    watchlist: true,
-  },
-};
+export const defaultPersistedLocalHierarchyState: PersistedLocalHierarchyState =
+  {
+    campaignRows: {},
+    groups: {
+      bravosTradePlans: null,
+      campaigns: true,
+      standaloneTradePlans: null,
+      watchlist: true,
+    },
+  };
 
 export function supportsDesktopLocalHierarchy(pathname: string): boolean {
   if (
@@ -97,6 +103,7 @@ export function getActiveHierarchyContext(
   if (pathname === "/campaigns") {
     return {
       activeCampaignId: null,
+      isBravosTradePlanActive: false,
       activeItemId: null,
       activeItemType: null,
       isStandaloneTradePlanActive: false,
@@ -107,6 +114,7 @@ export function getActiveHierarchyContext(
   if (pathname === "/campaigns/new") {
     return {
       activeCampaignId: null,
+      isBravosTradePlanActive: false,
       activeItemId: null,
       activeItemType: null,
       isStandaloneTradePlanActive: false,
@@ -117,6 +125,7 @@ export function getActiveHierarchyContext(
   if (pathname === "/trade-plans") {
     return {
       activeCampaignId: null,
+      isBravosTradePlanActive: false,
       activeItemId: null,
       activeItemType: null,
       isStandaloneTradePlanActive: false,
@@ -126,9 +135,14 @@ export function getActiveHierarchyContext(
 
   if (pathname.startsWith("/campaigns/")) {
     const campaignId = pathname.slice("/campaigns/".length);
-    if (campaignId.length > 0 && !campaignId.includes("/") && campaignId !== "new") {
+    if (
+      campaignId.length > 0 &&
+      !campaignId.includes("/") &&
+      campaignId !== "new"
+    ) {
       return {
         activeCampaignId: campaignId as Id<"campaigns">,
+        isBravosTradePlanActive: false,
         activeItemId: campaignId as Id<"campaigns">,
         activeItemType: "campaign",
         isStandaloneTradePlanActive: false,
@@ -142,6 +156,7 @@ export function getActiveHierarchyContext(
     if (tradePlanId.length === 0 || tradePlanId.includes("/")) {
       return {
         activeCampaignId: null,
+        isBravosTradePlanActive: false,
         activeItemId: null,
         activeItemType: null,
         isStandaloneTradePlanActive: false,
@@ -149,11 +164,28 @@ export function getActiveHierarchyContext(
       };
     }
 
+    const activeBravosTradePlan = hierarchy.bravosTradePlans.find(
+      (tradePlan) => tradePlan.id === tradePlanId,
+    );
+    if (activeBravosTradePlan !== undefined) {
+      return {
+        activeCampaignId: null,
+        isBravosTradePlanActive: true,
+        activeItemId: activeBravosTradePlan.id,
+        activeItemType: "tradePlan",
+        isStandaloneTradePlanActive: false,
+        routeSection: "trade-plans",
+      };
+    }
+
     for (const campaign of hierarchy.campaigns) {
-      const activeTradePlan = campaign.tradePlans.find((tradePlan) => tradePlan.id === tradePlanId);
+      const activeTradePlan = campaign.tradePlans.find(
+        (tradePlan) => tradePlan.id === tradePlanId,
+      );
       if (activeTradePlan !== undefined) {
         return {
           activeCampaignId: campaign.id,
+          isBravosTradePlanActive: false,
           activeItemId: activeTradePlan.id,
           activeItemType: "tradePlan",
           isStandaloneTradePlanActive: false,
@@ -164,6 +196,7 @@ export function getActiveHierarchyContext(
 
     return {
       activeCampaignId: null,
+      isBravosTradePlanActive: false,
       activeItemId: tradePlanId as Id<"tradePlans">,
       activeItemType: "tradePlan",
       isStandaloneTradePlanActive: true,
@@ -173,6 +206,7 @@ export function getActiveHierarchyContext(
 
   return {
     activeCampaignId: null,
+    isBravosTradePlanActive: false,
     activeItemId: null,
     activeItemType: null,
     isStandaloneTradePlanActive: false,
@@ -203,4 +237,16 @@ export function isStandaloneGroupExpanded(
   }
 
   return isStandaloneTradePlanActive;
+}
+
+export function isBravosGroupExpanded(
+  persistedState: PersistedLocalHierarchyState,
+  isBravosTradePlanActive = false,
+): boolean {
+  const persistedValue = persistedState.groups.bravosTradePlans;
+  if (persistedValue !== null) {
+    return persistedValue;
+  }
+
+  return isBravosTradePlanActive;
 }

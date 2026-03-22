@@ -118,6 +118,7 @@ type CommandPaletteScope =
   | "watchlist-trade-plan";
 
 type LocalHierarchyItemScope =
+  | "bravos-trade-plan"
   | "campaign"
   | "campaign-trade-plan"
   | "standalone-trade-plan"
@@ -136,6 +137,7 @@ export const TRADE_PLANS_INDEX_TEST_IDS = {
   emptyState: "trade-plans-empty-state",
   emptyStateCta: "trade-plans-empty-state-cta",
   filterAll: "trade-plans-filter-all",
+  filterBravos: "trade-plans-filter-bravos",
   filterLinked: "trade-plans-filter-linked",
   filterStandalone: "trade-plans-filter-standalone",
   planList: "trade-plans-list",
