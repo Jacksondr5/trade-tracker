@@ -8,6 +8,7 @@ export default function NotesSection({
   defaultShowEvidence = false,
   notes,
   onAddNote,
+  onDeleteNote,
   onUpdateNote,
   showContext = false,
   testIdPrefix = "notes",
@@ -24,6 +25,7 @@ export default function NotesSection({
       />
       <NoteTimeline
         notes={notes}
+        onDeleteNote={onDeleteNote}
         onUpdateNote={onUpdateNote}
         showContext={showContext}
         testIdPrefix={testIdPrefix}

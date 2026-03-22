@@ -1,10 +1,11 @@
 "use client";
 
-import { Check, Loader2, Pencil, X } from "lucide-react";
+import { Check, Loader2, Pencil, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import {
   getCancelNoteButtonTestId,
+  getDeleteNoteButtonTestId,
   getEditNoteButtonTestId,
   getEditNoteTextareaTestId,
   getNoteContentTestId,
@@ -22,6 +23,7 @@ import type { Note } from "./types";
 
 interface NoteCardProps {
   note: Note;
+  onDeleteNote: (noteId: string) => Promise<void>;
   onUpdateNote: (
     noteId: string,
     content: string,
@@ -33,6 +35,7 @@ interface NoteCardProps {
 
 export function NoteCard({
   note,
+  onDeleteNote,
   onUpdateNote,
   showContext,
   testIdPrefix,
@@ -42,6 +45,8 @@ export function NoteCard({
   const [editChartUrls, setEditChartUrls] = useState<string[]>([]);
   const [editError, setEditError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const startEditing = () => {
     setIsEditing(true);
@@ -122,16 +127,47 @@ export function NoteCard({
         )}
 
         {!isEditing && (
-          <button
-            type="button"
-            aria-label="Edit note"
-            title="Edit"
-            className="ml-auto rounded p-1 text-olive-10 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-olive-4 hover:text-olive-12 focus-visible:opacity-100"
-            data-testid={getEditNoteButtonTestId(testIdPrefix, note._id)}
-            onClick={startEditing}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
+          <div className="ml-auto flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+            <button
+              type="button"
+              aria-label="Edit note"
+              title="Edit"
+              className="rounded p-1 text-olive-10 hover:bg-olive-4 hover:text-olive-12"
+              data-testid={getEditNoteButtonTestId(testIdPrefix, note._id)}
+              onClick={startEditing}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              aria-label="Delete note"
+              title="Delete"
+              className="rounded p-1 text-olive-10 hover:bg-olive-4 hover:text-red-9 disabled:opacity-50"
+              data-testid={getDeleteNoteButtonTestId(testIdPrefix, note._id)}
+              disabled={isDeleting}
+              onClick={async () => {
+                setIsDeleting(true);
+                setDeleteError(null);
+                try {
+                  await onDeleteNote(note._id);
+                } catch (error) {
+                  setDeleteError(
+                    error instanceof Error
+                      ? error.message
+                      : "Failed to delete note",
+                  );
+                } finally {
+                  setIsDeleting(false);
+                }
+              }}
+            >
+              {isDeleting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </div>
         )}
       </div>
 
@@ -212,6 +248,15 @@ export function NoteCard({
             </div>
           )}
         </div>
+      )}
+      {deleteError && (
+        <Alert
+          variant="error"
+          className="mt-2"
+          onDismiss={() => setDeleteError(null)}
+        >
+          {deleteError}
+        </Alert>
       )}
     </article>
   );

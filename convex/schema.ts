@@ -5,7 +5,33 @@ import {
   tradePlanStatusValidator,
 } from "./lib/statuses";
 
+const importTaskStatusValidator = v.union(
+  v.literal("pending"),
+  v.literal("processing"),
+  v.literal("done"),
+  v.literal("error"),
+);
+
+const importTaskModeValidator = v.union(
+  v.literal("create"),
+  v.literal("follow-up"),
+);
+
 export default defineSchema({
+  importTasks: defineTable({
+    chartUrls: v.optional(v.array(v.string())),
+    createdTradePlanId: v.optional(v.id("tradePlans")),
+    dismissedAt: v.optional(v.number()),
+    error: v.optional(v.string()),
+    extractedData: v.optional(v.string()),
+    mode: importTaskModeValidator,
+    ownerId: v.string(),
+    pastedText: v.string(),
+    sourceUrl: v.optional(v.string()),
+    status: importTaskStatusValidator,
+    tradePlanId: v.optional(v.id("tradePlans")),
+  }).index("by_owner", ["ownerId"]),
+
   notes: defineTable({
     campaignId: v.optional(v.id("campaigns")),
     chartUrls: v.optional(v.array(v.string())),
@@ -68,6 +94,7 @@ export default defineSchema({
     ownerId: v.string(),
     rationale: v.optional(v.string()),
     sortOrder: v.optional(v.number()),
+    sourceUrl: v.optional(v.string()),
     status: tradePlanStatusValidator,
     targetConditions: v.optional(v.string()),
   })

@@ -25,6 +25,7 @@ import {
   getTradePlansStatusTestId,
   TRADE_PLANS_INDEX_TEST_IDS,
 } from "../../../../shared/e2e/testIds";
+import { ImportPostDialog } from "./ImportPostDialog";
 
 type TradePlanStatus = "active" | "closed" | "idea" | "watching";
 type RelationshipFilter = "all" | "linked" | "standalone";
@@ -83,6 +84,7 @@ export default function TradePlansPageClient({
   const createTradePlan = useMutation(api.tradePlans.createTradePlan);
   const [error, setError] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
   const [relationshipFilter, setRelationshipFilter] =
     useState<RelationshipFilter>("all");
   const [statusFilter, setStatusFilter] = useState<TradePlanStatus | "all">(
@@ -158,16 +160,31 @@ export default function TradePlansPageClient({
             Manage standalone and linked trade plans across all campaigns.
           </p>
         </div>
-        <Button
-          aria-controls={TRADE_PLANS_INDEX_TEST_IDS.createFormSection}
-          aria-expanded={showCreateForm}
-          dataTestId={TRADE_PLANS_INDEX_TEST_IDS.createFormToggle}
-          variant="default"
-          onClick={() => setShowCreateForm((prev) => !prev)}
-        >
-          {showCreateForm ? "Cancel" : "New trade plan"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            dataTestId={TRADE_PLANS_INDEX_TEST_IDS.importFromServiceButton}
+            variant="outline"
+            onClick={() => setShowImportDialog(true)}
+          >
+            Import from Bravos
+          </Button>
+          <Button
+            aria-controls={TRADE_PLANS_INDEX_TEST_IDS.createFormSection}
+            aria-expanded={showCreateForm}
+            dataTestId={TRADE_PLANS_INDEX_TEST_IDS.createFormToggle}
+            variant="default"
+            onClick={() => setShowCreateForm((prev) => !prev)}
+          >
+            {showCreateForm ? "Cancel" : "New trade plan"}
+          </Button>
+        </div>
       </div>
+
+      <ImportPostDialog
+        mode="create"
+        open={showImportDialog}
+        onOpenChange={setShowImportDialog}
+      />
 
       {/* Create form (collapsible) */}
       {showCreateForm && (

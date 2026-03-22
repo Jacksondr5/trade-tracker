@@ -72,10 +72,43 @@ export const TRADE_PLAN_DETAIL_TEST_IDS = {
   campaignContext: "trade-plan-campaign-context",
   campaignLink: "trade-plan-campaign-link",
   campaignSelect: "trade-plan-campaign-select",
+  importFollowUpButton: "trade-plan-import-follow-up-button",
   relationshipLabel: "trade-plan-relationship-label",
   statusSelect: "trade-plan-status-select",
   tacticalSection: "trade-plan-tactical-section",
   unlinkButton: "trade-plan-unlink-button",
+} as const;
+
+export const IMPORT_TASK_TRAY_TEST_IDS = {
+  trigger: "import-task-tray-trigger",
+  content: "import-task-tray-content",
+  emptyState: "import-task-tray-empty",
+} as const;
+
+export function getImportTaskCardTestId(taskId: string): string {
+  return `import-task-card-${normalizeSegment(taskId)}`;
+}
+
+export function getImportTaskDismissTestId(taskId: string): string {
+  return `import-task-dismiss-${normalizeSegment(taskId)}`;
+}
+
+export function getImportTaskRetryTestId(taskId: string): string {
+  return `import-task-retry-${normalizeSegment(taskId)}`;
+}
+
+export function getImportTaskGoToTestId(taskId: string): string {
+  return `import-task-goto-${normalizeSegment(taskId)}`;
+}
+
+export const IMPORT_POST_DIALOG_TEST_IDS = {
+  dialog: "import-post-dialog",
+  doneButton: "import-post-done-button",
+  errorAlert: "import-post-error-alert",
+  pasteTextarea: "import-post-paste-textarea",
+  processButton: "import-post-process-button",
+  sourceUrlInput: "import-post-source-url-input",
+  statusIndicator: "import-post-status-indicator",
 } as const;
 
 type CommandPaletteScope =
@@ -99,6 +132,7 @@ export const TRADE_PLANS_INDEX_TEST_IDS = {
   createFormToggle: "trade-plans-create-form-toggle",
   createFormSection: "trade-plans-create-form-section",
   createSubmitButton: "trade-plans-create-submit-button",
+  importFromServiceButton: "trade-plans-import-from-service-button",
   emptyState: "trade-plans-empty-state",
   emptyStateCta: "trade-plans-empty-state-cta",
   filterAll: "trade-plans-filter-all",
@@ -218,6 +252,13 @@ export function getNoteContextTextTestId(
   noteId: string,
 ): string {
   return `${prefix}-note-context-text-${noteId}`;
+}
+
+export function getDeleteNoteButtonTestId(
+  prefix: string,
+  noteId: string,
+): string {
+  return `${prefix}-delete-note-button-${noteId}`;
 }
 
 export function getEditNoteButtonTestId(
