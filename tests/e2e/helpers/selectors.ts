@@ -422,6 +422,34 @@ export const NOTES_SELECTORS = {
   saveNoteButton: (noteId: string) => getSaveNoteButtonTestId("notes", noteId),
 } as const;
 
+export function extractNoteId(testId: string): string {
+  const noteId = testId.replace("notes-note-row-", "");
+  if (!noteId) {
+    throw new Error("Expected note id in test id.");
+  }
+
+  return noteId;
+}
+
+export async function deleteNoteById(
+  page: Page,
+  noteId: string,
+): Promise<void> {
+  const noteRow = page.getByTestId(NOTES_SELECTORS.noteRow(noteId));
+  if (!(await noteRow.isVisible())) {
+    return;
+  }
+
+  await noteRow.hover();
+
+  const deleteButton = page.getByTestId(
+    NOTES_SELECTORS.deleteNoteButton(noteId),
+  );
+  await deleteButton.click();
+  await deleteButton.click();
+  await expect(noteRow).not.toBeVisible();
+}
+
 export function getEditRetrospectiveButton(
   page: Page,
   prefix: string,

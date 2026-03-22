@@ -9,7 +9,7 @@ interface ConfirmDeleteButtonProps {
   tooltipTestId: string;
   disabled?: boolean;
   isDeleting?: boolean;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   className?: string;
 }
 
@@ -32,10 +32,7 @@ export function ConfirmDeleteButton({
     if (!isArmed) return;
 
     function handlePointerDown(e: PointerEvent) {
-      if (
-        buttonRef.current &&
-        !buttonRef.current.contains(e.target as Node)
-      ) {
+      if (buttonRef.current && !buttonRef.current.contains(e.target as Node)) {
         disarm();
       }
     }
@@ -65,7 +62,7 @@ export function ConfirmDeleteButton({
     <span className="relative inline-flex">
       {isArmed && (
         <span
-          className="absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-olive-3 px-2 py-1 text-xs font-medium text-red-9 shadow-sm border border-olive-6"
+          className="absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 rounded border border-olive-6 bg-olive-3 px-2 py-1 text-xs font-medium whitespace-nowrap text-red-9 shadow-sm"
           data-testid={tooltipTestId}
           role="tooltip"
         >

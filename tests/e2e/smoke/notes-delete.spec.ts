@@ -1,12 +1,12 @@
 import { expect, test } from "@playwright/test";
 import { waitForAuthenticatedApp } from "../helpers/app";
-import { APP_PAGE_TITLES, getPageTitle, NOTES_SELECTORS } from "../helpers/selectors";
-
-function extractNoteId(testId: string): string {
-  const noteId = testId.replace("notes-note-row-", "");
-  if (!noteId) throw new Error("Expected note id in test id.");
-  return noteId;
-}
+import {
+  APP_PAGE_TITLES,
+  deleteNoteById,
+  extractNoteId,
+  getPageTitle,
+  NOTES_SELECTORS,
+} from "../helpers/selectors";
 
 test.describe("note delete confirmation", () => {
   let noteId: string;
@@ -20,9 +20,7 @@ test.describe("note delete confirmation", () => {
     await expect(getPageTitle(page, "notes")).toBeVisible();
 
     // Create a note to test deletion on
-    await page
-      .getByTestId(NOTES_SELECTORS.addNoteTextarea)
-      .fill(noteContent);
+    await page.getByTestId(NOTES_SELECTORS.addNoteTextarea).fill(noteContent);
     await page.getByTestId(NOTES_SELECTORS.addNoteButton).click();
 
     const noteRows = page.getByTestId(/^notes-note-row-/);
@@ -37,15 +35,17 @@ test.describe("note delete confirmation", () => {
     ).toContainText(noteContent);
   });
 
+  test.afterEach(async ({ page }) => {
+    await deleteNoteById(page, noteId);
+  });
+
   test("first click arms the button and shows tooltip, second click deletes", async ({
     page,
   }) => {
     const deleteButton = page.getByTestId(
       NOTES_SELECTORS.deleteNoteButton(noteId),
     );
-    const tooltip = page.getByTestId(
-      NOTES_SELECTORS.deleteNoteTooltip(noteId),
-    );
+    const tooltip = page.getByTestId(NOTES_SELECTORS.deleteNoteTooltip(noteId));
     const noteRow = page.getByTestId(NOTES_SELECTORS.noteRow(noteId));
 
     // Hover over the note row to reveal the action buttons
@@ -71,9 +71,7 @@ test.describe("note delete confirmation", () => {
     const deleteButton = page.getByTestId(
       NOTES_SELECTORS.deleteNoteButton(noteId),
     );
-    const tooltip = page.getByTestId(
-      NOTES_SELECTORS.deleteNoteTooltip(noteId),
-    );
+    const tooltip = page.getByTestId(NOTES_SELECTORS.deleteNoteTooltip(noteId));
     const noteRow = page.getByTestId(NOTES_SELECTORS.noteRow(noteId));
 
     // Hover to reveal action buttons, then arm the delete
@@ -82,9 +80,7 @@ test.describe("note delete confirmation", () => {
     await expect(tooltip).toBeVisible();
 
     // Click somewhere else on the page (the note content area)
-    await page
-      .getByTestId(NOTES_SELECTORS.noteContent(noteId))
-      .click();
+    await page.getByTestId(NOTES_SELECTORS.noteContent(noteId)).click();
 
     // Tooltip should disappear and note should still exist
     await expect(tooltip).not.toBeVisible();
