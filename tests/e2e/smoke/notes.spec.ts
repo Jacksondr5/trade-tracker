@@ -42,4 +42,11 @@ test("notes page loads and supports add and edit workflow", async ({
   await expect(
     page.getByTestId(NOTES_SELECTORS.noteContent(noteId)),
   ).toContainText(updatedNoteContent);
+
+  await page.reload();
+  await waitForAuthenticatedApp(page, APP_PAGE_TITLES.notes);
+  await expect(getPageTitle(page, "notes")).toBeVisible();
+  await expect(
+    page.getByTestId(NOTES_SELECTORS.noteContent(noteId)),
+  ).toContainText(updatedNoteContent);
 });

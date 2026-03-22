@@ -61,6 +61,8 @@ export const APP_SHELL_TEST_IDS = {
   toggleLocalGroupStandaloneTradePlans:
     "toggle-local-group-standalone-trade-plans",
   openCommandPaletteDesktop: "open-command-palette-desktop",
+  openNavigationDrawer: "open-navigation-drawer",
+  mobileNavigationDrawer: "mobile-navigation-drawer",
   commandPaletteInput: "command-palette-input",
 } as const;
 

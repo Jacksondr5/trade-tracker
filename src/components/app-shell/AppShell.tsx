@@ -18,6 +18,7 @@ import {
   isCampaignTradePlanPathname,
 } from "~/lib/campaign-trade-plan-navigation";
 import { cn } from "~/lib/utils";
+import { APP_SHELL_TEST_IDS } from "../../../shared/e2e/testIds";
 import { CampaignTradePlanHierarchyNavigation } from "./campaign-trade-plan-hierarchy";
 import {
   appNavigationSections,
@@ -193,7 +194,7 @@ function MobileTopBar({
         className="h-10 w-10 border-olive-6 bg-transparent text-olive-12 hover:bg-olive-3"
         onClick={onOpenDrawer}
         aria-label="Open navigation menu"
-        dataTestId="open-navigation-drawer"
+        dataTestId={APP_SHELL_TEST_IDS.openNavigationDrawer}
       >
         <Menu className="h-5 w-5" />
       </Button>
@@ -233,6 +234,7 @@ function MobileNavigationDrawer({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         hideCloseButton
+        data-testid={APP_SHELL_TEST_IDS.mobileNavigationDrawer}
         className="inset-y-0 top-0 left-0 h-full w-[min(18rem,calc(100vw-1.5rem))] translate-x-0 translate-y-0 rounded-none border-r border-olive-6 bg-olive-2 p-0 shadow-2xl data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100"
       >
         <DialogTitle className="sr-only">Navigation</DialogTitle>
