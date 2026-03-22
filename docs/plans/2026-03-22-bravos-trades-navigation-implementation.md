@@ -69,6 +69,6 @@
 
 **Steps:**
 
-1. Run targeted Vitest coverage for navigation, hierarchy helpers, command palette, and trade-plan summaries.
-2. Run repo-level `pnpm typecheck`.
-3. Run repo-level `pnpm lint`.
+1. Execute targeted Vitest coverage for navigation, hierarchy helpers, command palette, and trade-plan summaries.
+2. Perform a repository-wide `pnpm typecheck`.
+3. Perform a repository-wide `pnpm lint`.
