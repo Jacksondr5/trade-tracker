@@ -165,7 +165,10 @@ export const completeImportTask = mutation({
       const planPatch: Record<string, unknown> = {};
       for (const update of data.fieldUpdates) {
         const field = update.field as keyof typeof tradePlan;
-        const currentValue = (tradePlan[field] as string | undefined) ?? "";
+        const currentValue =
+          (planPatch[update.field] as string | undefined) ??
+          (tradePlan[field] as string | undefined) ??
+          "";
         planPatch[update.field] = currentValue
           ? `${currentValue}\n${update.appendText}`
           : update.appendText;
@@ -204,11 +207,15 @@ export const failImportTask = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
-    assertOwner(
+    const task = assertOwner(
       await ctx.db.get(args.taskId),
       ownerId,
       "Import task not found",
     );
+
+    if (task.status !== "pending" && task.status !== "processing") {
+      return null;
+    }
 
     await ctx.db.patch(args.taskId, {
       error: args.error,

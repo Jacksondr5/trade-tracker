@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
+import { cn } from "~/lib/utils";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import {
@@ -60,8 +61,7 @@ function TaskCard({ task }: { task: ImportTask }) {
   const dismissTask = useMutation(api.importTasks.dismissImportTask);
   const retryTask = useMutation(api.importTasks.retryImportTask);
 
-  const label =
-    task.mode === "create" ? "New trade plan" : "Follow-up import";
+  const label = task.mode === "create" ? "New trade plan" : "Follow-up import";
   const preview = task.pastedText.slice(0, 60).trim();
 
   const handleRetry = async () => {
@@ -150,18 +150,20 @@ export function ImportTaskTray({ compact }: { compact?: boolean }) {
           type="button"
           aria-label={`Import tasks (${tasks.length})`}
           data-testid={IMPORT_TASK_TRAY_TEST_IDS.trigger}
-          className={`relative rounded-full border border-olive-6 bg-transparent text-olive-12 hover:bg-olive-3 ${
-            compact ? "h-8 w-8 p-1.5" : "h-9 w-9 p-2"
-          }`}
+          className={cn(
+            "relative rounded-full border border-olive-6 bg-transparent text-olive-12 hover:bg-olive-3",
+            compact ? "h-8 w-8 p-1.5" : "h-9 w-9 p-2",
+          )}
         >
           <ClipboardPaste className="h-full w-full" />
           {tasks.length > 0 && (
             <span
-              className={`absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold ${
+              className={cn(
+                "absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold",
                 activeCount > 0
                   ? "bg-blue-9 text-white"
-                  : "bg-olive-8 text-olive-12"
-              }`}
+                  : "bg-olive-8 text-olive-12",
+              )}
             >
               {tasks.length}
             </span>
