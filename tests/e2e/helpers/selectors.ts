@@ -423,7 +423,14 @@ export const NOTES_SELECTORS = {
 } as const;
 
 export function extractNoteId(testId: string): string {
-  const noteId = testId.replace("notes-note-row-", "");
+  const prefix = "notes-note-row-";
+  if (!testId.startsWith(prefix)) {
+    throw new Error(
+      `Expected test id to start with "${prefix}", got "${testId}"`,
+    );
+  }
+
+  const noteId = testId.slice(prefix.length);
   if (!noteId) {
     throw new Error("Expected note id in test id.");
   }
