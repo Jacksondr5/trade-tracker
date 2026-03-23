@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "~/components/ui";
 
 interface BulkActionsBarProps {
@@ -19,16 +19,41 @@ export function BulkActionsBar({
   totalCount,
 }: BulkActionsBarProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const resetConfirmDeleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (resetConfirmDeleteTimeoutRef.current) {
+        clearTimeout(resetConfirmDeleteTimeoutRef.current);
+      }
+    };
+  }, []);
 
   if (totalCount === 0) return null;
 
   const handleDeleteClick = () => {
+    if (resetConfirmDeleteTimeoutRef.current) {
+      clearTimeout(resetConfirmDeleteTimeoutRef.current);
+      resetConfirmDeleteTimeoutRef.current = null;
+    }
+
     if (confirmDelete) {
       setConfirmDelete(false);
       onDeleteAll();
     } else {
       setConfirmDelete(true);
     }
+  };
+
+  const handleDeleteBlur = () => {
+    if (resetConfirmDeleteTimeoutRef.current) {
+      clearTimeout(resetConfirmDeleteTimeoutRef.current);
+    }
+
+    resetConfirmDeleteTimeoutRef.current = setTimeout(() => {
+      setConfirmDelete(false);
+      resetConfirmDeleteTimeoutRef.current = null;
+    }, 150);
   };
 
   return (
@@ -55,7 +80,7 @@ export function BulkActionsBar({
           dataTestId="delete-all-trades-button"
           variant={confirmDelete ? "destructive" : "outline"}
           onClick={handleDeleteClick}
-          onBlur={() => setConfirmDelete(false)}
+          onBlur={handleDeleteBlur}
         >
           {confirmDelete
             ? `Delete all ${totalCount} trades`
