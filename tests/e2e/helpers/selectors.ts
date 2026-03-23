@@ -438,12 +438,24 @@ export function extractNoteId(testId: string): string {
   return noteId;
 }
 
+/**
+ * Deletes a note by ID using the two-click confirmation flow.
+ * By default, this returns silently when the note row is not visible so cleanup
+ * callers can safely retry. Pass { throwIfMissing: true } to fail fast instead.
+ */
 export async function deleteNoteById(
   page: Page,
   noteId: string,
+  options: { throwIfMissing?: boolean } = {},
 ): Promise<void> {
-  const noteRow = page.getByTestId(NOTES_SELECTORS.noteRow(noteId));
+  const noteRowSelector = NOTES_SELECTORS.noteRow(noteId);
+  const noteRow = page.getByTestId(noteRowSelector);
   if (!(await noteRow.isVisible())) {
+    if (options.throwIfMissing) {
+      throw new Error(
+        `Note row with id "${noteId}" is not visible for selector "${noteRowSelector}".`,
+      );
+    }
     return;
   }
 
