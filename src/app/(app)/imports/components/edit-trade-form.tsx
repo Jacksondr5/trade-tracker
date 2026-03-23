@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Button, Card, useAppForm } from "~/components/ui";
+import { Button, useAppForm } from "~/components/ui";
 
 export interface EditTradeFormValues {
   assetType: "stock" | "crypto";
@@ -51,8 +51,7 @@ export function EditTradeForm({ initialValues, onCancel, onSave }: EditTradeForm
   });
 
   return (
-    <Card className="mb-4 bg-slate-800 p-4">
-      <h3 className="text-slate-12 mb-3 text-sm font-semibold">Edit Trade</h3>
+    <div className="border-t border-slate-6 bg-slate-3 p-4">
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -152,6 +151,6 @@ export function EditTradeForm({ initialValues, onCancel, onSave }: EditTradeForm
           </div>
         </div>
       </form>
-    </Card>
+    </div>
   );
 }
