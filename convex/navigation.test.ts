@@ -51,6 +51,7 @@ describe("navigation hierarchy", () => {
     instrumentSymbol: string;
     name: string;
     ownerId: string;
+    sourceUrl?: string;
     status: "active" | "closed" | "idea" | "watching";
   }): Promise<Id<"tradePlans">> {
     return await t.run(async (ctx) => {
@@ -60,6 +61,7 @@ describe("navigation hierarchy", () => {
         instrumentSymbol: args.instrumentSymbol,
         name: args.name,
         ownerId: args.ownerId,
+        sourceUrl: args.sourceUrl,
         status: args.status,
       });
     });
@@ -123,6 +125,21 @@ describe("navigation hierarchy", () => {
       ownerId: ownerA,
       status: "watching",
     });
+    const bravosStandaloneId = await insertTradePlan({
+      instrumentSymbol: "BRV",
+      name: "Bravos Standalone",
+      ownerId: ownerA,
+      sourceUrl: "https://example.com/bravos/standalone",
+      status: "active",
+    });
+    const bravosLinkedId = await insertTradePlan({
+      campaignId: openCampaignId,
+      instrumentSymbol: "BLN",
+      name: "Bravos Linked",
+      ownerId: ownerA,
+      sourceUrl: "https://example.com/bravos/linked",
+      status: "idea",
+    });
     await insertTradePlan({
       instrumentSymbol: "ECS",
       name: "Echo Closed Standalone",
@@ -154,7 +171,9 @@ describe("navigation hierarchy", () => {
       item: { itemType: "tradePlan", tradePlanId: watchedStandaloneId },
     });
 
-    const hierarchy = await user.query(api.navigation.getCampaignTradePlanHierarchy);
+    const hierarchy = await user.query(
+      api.navigation.getCampaignTradePlanHierarchy,
+    );
 
     expect(hierarchy.watchlist).toMatchObject([
       {
@@ -241,6 +260,9 @@ describe("navigation hierarchy", () => {
       name: "Alpha Open Campaign",
       status: "planning",
     });
+    expect(
+      hierarchy.campaigns[1].tradePlans.some((tp) => tp.id === bravosLinkedId),
+    ).toBe(false);
 
     expect(hierarchy.standaloneTradePlans).toMatchObject([
       {
@@ -250,6 +272,7 @@ describe("navigation hierarchy", () => {
         isWatched: true,
         itemType: "tradePlan",
         name: "Charlie Watched Standalone",
+        navigationCategory: "standalone",
         parentCampaign: null,
         status: "closed",
       },
@@ -257,13 +280,44 @@ describe("navigation hierarchy", () => {
         instrumentSymbol: "BOS",
         isWatched: false,
         name: "Beta Open Standalone",
+        navigationCategory: "standalone",
         status: "watching",
       },
       {
         instrumentSymbol: "ECS",
         isWatched: false,
         name: "Echo Closed Standalone",
+        navigationCategory: "standalone",
         status: "closed",
+      },
+    ]);
+
+    expect(hierarchy.bravosTradePlans).toMatchObject([
+      {
+        href: `/trade-plans/${bravosLinkedId}`,
+        id: bravosLinkedId,
+        instrumentSymbol: "BLN",
+        isWatched: false,
+        itemType: "tradePlan",
+        name: "Bravos Linked",
+        navigationCategory: "bravos",
+        parentCampaign: {
+          href: `/campaigns/${openCampaignId}`,
+          id: openCampaignId,
+          name: "Alpha Open Campaign",
+        },
+        status: "idea",
+      },
+      {
+        href: `/trade-plans/${bravosStandaloneId}`,
+        id: bravosStandaloneId,
+        instrumentSymbol: "BRV",
+        isWatched: false,
+        itemType: "tradePlan",
+        name: "Bravos Standalone",
+        navigationCategory: "bravos",
+        parentCampaign: null,
+        status: "active",
       },
     ]);
   });
@@ -294,7 +348,9 @@ describe("navigation hierarchy", () => {
       await ctx.db.delete(campaignId);
     });
 
-    const hierarchy = await user.query(api.navigation.getCampaignTradePlanHierarchy);
+    const hierarchy = await user.query(
+      api.navigation.getCampaignTradePlanHierarchy,
+    );
 
     expect(hierarchy.campaigns).toEqual([]);
     expect(hierarchy.watchlist).toMatchObject([
@@ -305,10 +361,12 @@ describe("navigation hierarchy", () => {
         isWatched: true,
         itemType: "tradePlan",
         name: "Orphaned Linked Plan",
+        navigationCategory: "standalone",
         parentCampaign: null,
         status: "active",
       },
     ]);
+    expect(hierarchy.bravosTradePlans).toEqual([]);
     expect(hierarchy.standaloneTradePlans).toMatchObject([
       {
         href: `/trade-plans/${orphanedTradePlanId}`,
@@ -317,6 +375,7 @@ describe("navigation hierarchy", () => {
         isWatched: true,
         itemType: "tradePlan",
         name: "Orphaned Linked Plan",
+        navigationCategory: "standalone",
         parentCampaign: null,
         status: "active",
       },

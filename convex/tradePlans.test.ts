@@ -55,6 +55,7 @@ describe("trade plan workspace queries", () => {
     ownerId: string;
     rationale?: string;
     sortOrder?: number;
+    sourceUrl?: string;
     status: "active" | "closed" | "idea" | "watching";
     targetConditions?: string;
   }): Promise<Id<"tradePlans">> {
@@ -69,6 +70,7 @@ describe("trade plan workspace queries", () => {
         ownerId: args.ownerId,
         rationale: args.rationale,
         sortOrder: args.sortOrder,
+        sourceUrl: args.sourceUrl,
         status: args.status,
         targetConditions: args.targetConditions,
       });
@@ -200,6 +202,14 @@ describe("trade plan workspace queries", () => {
       sortOrder: 1,
       status: "watching",
     });
+    const bravosPlanId = await insertTradePlan({
+      instrumentSymbol: "QQQ",
+      name: "QQQ Bravos",
+      ownerId: ownerA,
+      sortOrder: 0,
+      sourceUrl: "https://example.com/bravos/qqq",
+      status: "idea",
+    });
     await insertTrade({
       date: 100,
       ownerId: ownerA,
@@ -230,16 +240,32 @@ describe("trade plan workspace queries", () => {
       {},
     );
 
-    expect(summaries).toHaveLength(2);
+    expect(summaries).toHaveLength(3);
     expect(
-      summaries.map(
-        (summary: (typeof summaries)[number]) => summary.id,
-      ),
-    ).toEqual([
-      standalonePlanId,
-      linkedPlanId,
-    ]);
+      summaries.map((summary: (typeof summaries)[number]) => summary.id),
+    ).toEqual([bravosPlanId, standalonePlanId, linkedPlanId]);
     expect(summaries[0]).toMatchObject({
+      id: bravosPlanId,
+      instrumentSymbol: "QQQ",
+      isWatched: false,
+      relationship: {
+        kind: "bravos",
+        parentCampaign: null,
+      },
+      execution: {
+        latestTradeDate: null,
+        pendingAssignedCount: 0,
+        pendingSuggestedCount: 0,
+        totalPendingCount: 0,
+        tradeCount: 0,
+      },
+      lifecycle: {
+        closedAt: null,
+        isClosed: false,
+      },
+      status: "idea",
+    });
+    expect(summaries[1]).toMatchObject({
       id: standalonePlanId,
       instrumentSymbol: "ARKK",
       isWatched: true,
@@ -260,7 +286,7 @@ describe("trade plan workspace queries", () => {
       },
       status: "watching",
     });
-    expect(summaries[1]).toMatchObject({
+    expect(summaries[2]).toMatchObject({
       id: linkedPlanId,
       relationship: {
         kind: "linked",

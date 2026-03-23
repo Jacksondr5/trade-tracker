@@ -17,6 +17,7 @@ import {
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { capitalize, formatDate } from "~/lib/format";
+import { buildTradePlanIndexRelationshipLabel } from "~/lib/campaign-trade-plan-navigation";
 import {
   APP_PAGE_TITLES,
   getStandaloneTradePlanCardTestId,
@@ -28,7 +29,7 @@ import {
 import { ImportPostDialog } from "./ImportPostDialog";
 
 type TradePlanStatus = "active" | "closed" | "idea" | "watching";
-type RelationshipFilter = "all" | "linked" | "standalone";
+type RelationshipFilter = "all" | "bravos" | "linked" | "standalone";
 
 const STATUS_BADGE_VARIANT: Record<
   TradePlanStatus,
@@ -63,7 +64,7 @@ type TradePlanSummary = {
   };
   name: string;
   relationship: {
-    kind: "linked" | "standalone";
+    kind: "bravos" | "linked" | "standalone";
     parentCampaign: {
       href: string;
       id: Id<"campaigns">;
@@ -157,7 +158,8 @@ export default function TradePlansPageClient({
             Trade Plans
           </h1>
           <p className="max-w-2xl text-sm text-olive-11">
-            Manage standalone and linked trade plans across all campaigns.
+            Manage linked, standalone, and Bravos trade plans across all
+            campaigns.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -255,7 +257,9 @@ export default function TradePlansPageClient({
         </div>
         <div
           className={
-            stats.pending > 0 ? "text-sm text-amber-11" : "text-sm text-olive-11"
+            stats.pending > 0
+              ? "text-sm text-amber-11"
+              : "text-sm text-olive-11"
           }
           data-testid={TRADE_PLANS_INDEX_TEST_IDS.summaryPending}
         >
@@ -290,6 +294,12 @@ export default function TradePlansPageClient({
             dataTestId={TRADE_PLANS_INDEX_TEST_IDS.filterLinked}
             label="Linked"
             onClick={() => setRelationshipFilter("linked")}
+          />
+          <FilterTab
+            active={relationshipFilter === "bravos"}
+            dataTestId={TRADE_PLANS_INDEX_TEST_IDS.filterBravos}
+            label="Bravos"
+            onClick={() => setRelationshipFilter("bravos")}
           />
           <FilterTab
             active={relationshipFilter === "standalone"}
@@ -401,13 +411,14 @@ function FilterTab({
 
 function TradePlanRow({ plan }: { plan: TradePlanSummary }) {
   const isLinked = plan.relationship.kind === "linked";
+  const isStandalone = plan.relationship.kind === "standalone";
 
   return (
     <div
       data-testid={
-        isLinked
-          ? getTradePlanRowTestId(plan.id)
-          : getStandaloneTradePlanCardTestId(plan.id)
+        isStandalone
+          ? getStandaloneTradePlanCardTestId(plan.id)
+          : getTradePlanRowTestId(plan.id)
       }
       className="rounded-lg border border-olive-6 bg-olive-2 p-3 transition-colors hover:border-olive-7 hover:bg-olive-3/50"
     >
@@ -426,14 +437,18 @@ function TradePlanRow({ plan }: { plan: TradePlanSummary }) {
             </span>
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-olive-11">
-            {isLinked ? (
-              <span className="truncate">
-                {plan.relationship.parentCampaign?.name ??
-                  "Linked (missing campaign metadata)"}
-              </span>
-            ) : (
-              <span>Standalone</span>
-            )}
+            <span className="truncate">
+              {buildTradePlanIndexRelationshipLabel({
+                navigationCategory: plan.relationship.kind,
+                parentCampaign: plan.relationship.parentCampaign,
+              })}
+            </span>
+            {isLinked && plan.relationship.parentCampaign === null ? (
+              <>
+                <span className="text-olive-8">·</span>
+                <span>Linked (missing campaign metadata)</span>
+              </>
+            ) : null}
             {plan.execution.tradeCount > 0 && (
               <>
                 <span className="text-olive-8">·</span>

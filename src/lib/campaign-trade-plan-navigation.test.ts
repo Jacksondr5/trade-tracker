@@ -7,6 +7,23 @@ import {
 } from "./campaign-trade-plan-navigation";
 
 const hierarchy: CampaignTradePlanHierarchy = {
+  bravosTradePlans: [
+    {
+      href: "/trade-plans/trade-plan-3",
+      id: "trade-plan-3",
+      instrumentSymbol: "QQQ",
+      isWatched: false,
+      itemType: "tradePlan",
+      name: "QQQ Bravos Follow-Up",
+      navigationCategory: "bravos",
+      parentCampaign: {
+        href: "/campaigns/campaign-1",
+        id: "campaign-1",
+        name: "Commodity Run Up",
+      },
+      status: "active",
+    },
+  ],
   campaigns: [
     {
       defaultExpanded: true,
@@ -24,6 +41,7 @@ const hierarchy: CampaignTradePlanHierarchy = {
           isWatched: false,
           itemType: "tradePlan",
           name: "URNM Breakout",
+          navigationCategory: "linked",
           parentCampaign: {
             href: "/campaigns/campaign-1",
             id: "campaign-1",
@@ -42,6 +60,7 @@ const hierarchy: CampaignTradePlanHierarchy = {
       isWatched: true,
       itemType: "tradePlan",
       name: "Short ARKK",
+      navigationCategory: "standalone",
       parentCampaign: null,
       status: "idea",
     },
@@ -53,20 +72,34 @@ describe("campaign trade plan navigation helpers", () => {
   it("detects campaign and trade-plan domain routes", () => {
     expect(isCampaignTradePlanPathname("/campaigns")).toBe(true);
     expect(isCampaignTradePlanPathname("/campaigns/campaign-1")).toBe(true);
-    expect(isCampaignTradePlanPathname("/campaigns/campaign-1/notes")).toBe(true);
-    expect(isCampaignTradePlanPathname("/campaigns/campaign-1/subpage")).toBe(true);
+    expect(isCampaignTradePlanPathname("/campaigns/campaign-1/notes")).toBe(
+      true,
+    );
+    expect(isCampaignTradePlanPathname("/campaigns/campaign-1/subpage")).toBe(
+      true,
+    );
     expect(isCampaignTradePlanPathname("/trade-plans/trade-plan-1")).toBe(true);
-    expect(isCampaignTradePlanPathname("/trade-plans/trade-plan-1/history")).toBe(true);
+    expect(
+      isCampaignTradePlanPathname("/trade-plans/trade-plan-1/history"),
+    ).toBe(true);
     expect(isCampaignTradePlanPathname("/notes")).toBe(false);
   });
 
   it("does not parse nested in-domain routes as detail pages", () => {
-    expect(getCampaignTradePlanDetailRouteContext("/campaigns/campaign-1/subpage")).toBeNull();
-    expect(getCampaignTradePlanDetailRouteContext("/trade-plans/trade-plan-1/subpage")).toBeNull();
+    expect(
+      getCampaignTradePlanDetailRouteContext("/campaigns/campaign-1/subpage"),
+    ).toBeNull();
+    expect(
+      getCampaignTradePlanDetailRouteContext(
+        "/trade-plans/trade-plan-1/subpage",
+      ),
+    ).toBeNull();
   });
 
   it("parses detail route context from the pathname", () => {
-    expect(getCampaignTradePlanDetailRouteContext("/campaigns/campaign-1")).toEqual({
+    expect(
+      getCampaignTradePlanDetailRouteContext("/campaigns/campaign-1"),
+    ).toEqual({
       campaignId: "campaign-1",
       kind: "campaign",
     });
@@ -132,5 +165,18 @@ describe("campaign trade plan navigation helpers", () => {
         tradePlanId: "missing-trade-plan",
       }),
     ).toBeNull();
+  });
+
+  it("builds Bravos trade-plan breadcrumbs from shared hierarchy data", () => {
+    expect(
+      buildHierarchyBreadcrumbs(hierarchy, {
+        kind: "tradePlan",
+        tradePlanId: "trade-plan-3",
+      }),
+    ).toEqual([
+      { href: "/trade-plans", label: "Trade Plans" },
+      { label: "Bravos" },
+      { label: "QQQ Bravos Follow-Up" },
+    ]);
   });
 });

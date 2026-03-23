@@ -25,6 +25,7 @@ export interface CommandPaletteTradePlanItem {
   isWatched: boolean;
   itemType: "tradePlan";
   name: string;
+  navigationCategory: "bravos" | "linked" | "standalone";
   parentCampaign: CommandPaletteParentCampaign | null;
   status: string;
 }
@@ -35,6 +36,7 @@ export interface CommandPaletteCampaignRow extends CommandPaletteCampaignItem {
 }
 
 export interface CommandPaletteHierarchy {
+  bravosTradePlans: CommandPaletteTradePlanItem[];
   campaigns: CommandPaletteCampaignRow[];
   standaloneTradePlans: CommandPaletteTradePlanItem[];
   watchlist: Array<CommandPaletteCampaignItem | CommandPaletteTradePlanItem>;
@@ -119,6 +121,7 @@ export function buildCommandPaletteSections(
 
   const tradePlans = [
     ...hierarchy.campaigns.flatMap((campaign) => campaign.tradePlans),
+    ...hierarchy.bravosTradePlans,
     ...hierarchy.standaloneTradePlans,
   ]
     .filter((tradePlan) => !watchedKeys.has(itemKey(tradePlan)))
