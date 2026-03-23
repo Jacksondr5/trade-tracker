@@ -5,7 +5,10 @@ import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { validateInboxTradeCandidate } from "../shared/imports/validation";
 import { KRAKEN_DEFAULT_ACCOUNT_ID } from "../shared/imports/constants";
-import { findAutoMatchTradePlanId } from "../shared/imports/auto-match";
+import {
+  findAutoMatchTradePlanId,
+  findMatchingTradePlans,
+} from "../shared/imports/auto-match";
 
 type CanonicalCandidate = {
   assetType: "stock" | "crypto";
@@ -44,6 +47,104 @@ const inboxTradeValidator = v.object({
   validationWarnings: v.array(v.string()),
 });
 
+const openTradePlanReferenceValidator = v.object({
+  _id: v.id("tradePlans"),
+  campaignId: v.optional(v.id("campaigns")),
+  instrumentSymbol: v.string(),
+  name: v.string(),
+  status: v.union(
+    v.literal("active"),
+    v.literal("idea"),
+    v.literal("watching"),
+  ),
+});
+
+const assignedTradePlanReferenceValidator = v.object({
+  _id: v.id("tradePlans"),
+  campaignId: v.optional(v.id("campaigns")),
+  instrumentSymbol: v.string(),
+  name: v.string(),
+  status: v.union(
+    v.literal("active"),
+    v.literal("closed"),
+    v.literal("idea"),
+    v.literal("watching"),
+  ),
+});
+
+const importReviewRowValidator = v.object({
+  inboxTrade: inboxTradeValidator,
+  matchContext: v.object({
+    assignedTradePlan: v.union(assignedTradePlanReferenceValidator, v.null()),
+    candidateCount: v.number(),
+    suggestedTradePlans: v.array(openTradePlanReferenceValidator),
+    ticker: v.union(v.string(), v.null()),
+  }),
+  matchState: v.union(
+    v.literal("ambiguous"),
+    v.literal("assigned"),
+    v.literal("suggested"),
+    v.literal("unmatched"),
+  ),
+  readiness: v.object({
+    isReady: v.boolean(),
+    missingFields: v.array(v.string()),
+  }),
+  reviewState: v.union(v.literal("needs_review"), v.literal("ready")),
+  validationState: v.union(
+    v.literal("error"),
+    v.literal("valid"),
+    v.literal("warning"),
+  ),
+});
+
+const campaignReferenceValidator = v.object({
+  _creationTime: v.number(),
+  _id: v.id("campaigns"),
+  name: v.string(),
+  ownerId: v.string(),
+  status: v.union(v.literal("active"), v.literal("planning")),
+  thesis: v.string(),
+});
+
+const accountMappingValidator = v.object({
+  _creationTime: v.number(),
+  _id: v.id("accountMappings"),
+  accountId: v.string(),
+  friendlyName: v.string(),
+  ownerId: v.string(),
+  source: sourceValidator,
+});
+
+const portfolioReferenceValidator = v.object({
+  _creationTime: v.number(),
+  _id: v.id("portfolios"),
+  name: v.string(),
+  ownerId: v.string(),
+  tradeCount: v.number(),
+});
+
+const importsReviewWorkspaceValidator = v.object({
+  referenceData: v.object({
+    accountMappings: v.array(accountMappingValidator),
+    campaigns: v.array(campaignReferenceValidator),
+    openTradePlans: v.array(openTradePlanReferenceValidator),
+    portfolios: v.array(portfolioReferenceValidator),
+  }),
+  rows: v.array(importReviewRowValidator),
+  summary: v.object({
+    ambiguousCount: v.number(),
+    assignedCount: v.number(),
+    needsReviewCount: v.number(),
+    readyCount: v.number(),
+    suggestedCount: v.number(),
+    totalPendingCount: v.number(),
+    unmatchedCount: v.number(),
+    validCount: v.number(),
+    warningCount: v.number(),
+  }),
+});
+
 function dedupKey(source: "ibkr" | "kraken", externalId: string): string {
   return `${source}|${externalId}`;
 }
@@ -57,6 +158,56 @@ function normalizeBrokerageAccountId(
     return normalizedAccountId ?? KRAKEN_DEFAULT_ACCOUNT_ID;
   }
   return normalizedAccountId;
+}
+
+function sortOpenTradePlansForImports<
+  T extends { _creationTime: number; instrumentSymbol: string; name: string },
+>(plans: T[]): T[] {
+  return [...plans].sort(
+    (a, b) =>
+      a.instrumentSymbol.localeCompare(b.instrumentSymbol) ||
+      a.name.localeCompare(b.name) ||
+      b._creationTime - a._creationTime,
+  );
+}
+
+function getInboxTradeReadiness(trade: {
+  assetType?: "crypto" | "stock";
+  date?: number;
+  direction?: "long" | "short";
+  price?: number;
+  quantity?: number;
+  side?: "buy" | "sell";
+  ticker?: string;
+}) {
+  const missingFields: string[] = [];
+
+  if (!trade.ticker) missingFields.push("ticker");
+  if (!trade.assetType) missingFields.push("assetType");
+  if (!trade.side) missingFields.push("side");
+  if (!trade.direction) missingFields.push("direction");
+  if (trade.date === undefined || !Number.isFinite(trade.date)) {
+    missingFields.push("date");
+  }
+  if (
+    trade.price === undefined ||
+    !Number.isFinite(trade.price) ||
+    trade.price <= 0
+  ) {
+    missingFields.push("price");
+  }
+  if (
+    trade.quantity === undefined ||
+    !Number.isFinite(trade.quantity) ||
+    trade.quantity <= 0
+  ) {
+    missingFields.push("quantity");
+  }
+
+  return {
+    isReady: missingFields.length === 0,
+    missingFields,
+  };
 }
 
 async function acceptInboxTradeInternal(
@@ -347,6 +498,255 @@ export const listInboxTrades = query({
     return trades.sort(
       (a, b) => (b.date ?? b._creationTime) - (a.date ?? a._creationTime),
     );
+  },
+});
+
+export const getImportsReviewWorkspace = query({
+  args: {},
+  returns: importsReviewWorkspaceValidator,
+  handler: async (ctx) => {
+    const ownerId = await requireUser(ctx);
+
+    const [
+      inboxTrades,
+      accountMappings,
+      portfolios,
+      activeCampaigns,
+      planningCampaigns,
+      activeTradePlans,
+      ideaTradePlans,
+      watchingTradePlans,
+      allTradePlans,
+      ownerTrades,
+    ] = await Promise.all([
+      ctx.db
+        .query("inboxTrades")
+        .withIndex("by_owner_status", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "pending_review"),
+        )
+        .collect(),
+      ctx.db
+        .query("accountMappings")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .collect(),
+      ctx.db
+        .query("portfolios")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .order("desc")
+        .collect(),
+      ctx.db
+        .query("campaigns")
+        .withIndex("by_owner_status", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "active"),
+        )
+        .order("desc")
+        .collect(),
+      ctx.db
+        .query("campaigns")
+        .withIndex("by_owner_status", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "planning"),
+        )
+        .order("desc")
+        .collect(),
+      ctx.db
+        .query("tradePlans")
+        .withIndex("by_owner_status", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "active"),
+        )
+        .collect(),
+      ctx.db
+        .query("tradePlans")
+        .withIndex("by_owner_status", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "idea"),
+        )
+        .collect(),
+      ctx.db
+        .query("tradePlans")
+        .withIndex("by_owner_status", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "watching"),
+        )
+        .collect(),
+      ctx.db
+        .query("tradePlans")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .collect(),
+      ctx.db
+        .query("trades")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .collect(),
+    ]);
+
+    const campaignReferences = [
+      ...activeCampaigns.map((campaign) => ({
+        _creationTime: campaign._creationTime,
+        _id: campaign._id,
+        name: campaign.name,
+        ownerId: campaign.ownerId,
+        status: "active" as const,
+        thesis: campaign.thesis,
+      })),
+      ...planningCampaigns.map((campaign) => ({
+        _creationTime: campaign._creationTime,
+        _id: campaign._id,
+        name: campaign.name,
+        ownerId: campaign.ownerId,
+        status: "planning" as const,
+        thesis: campaign.thesis,
+      })),
+    ].sort((a, b) => b._creationTime - a._creationTime);
+    const openTradePlanReferences = sortOpenTradePlansForImports([
+      ...activeTradePlans.map((plan) => ({
+        _creationTime: plan._creationTime,
+        _id: plan._id,
+        campaignId: plan.campaignId,
+        instrumentSymbol: plan.instrumentSymbol,
+        name: plan.name,
+        status: "active" as const,
+      })),
+      ...ideaTradePlans.map((plan) => ({
+        _creationTime: plan._creationTime,
+        _id: plan._id,
+        campaignId: plan.campaignId,
+        instrumentSymbol: plan.instrumentSymbol,
+        name: plan.name,
+        status: "idea" as const,
+      })),
+      ...watchingTradePlans.map((plan) => ({
+        _creationTime: plan._creationTime,
+        _id: plan._id,
+        campaignId: plan.campaignId,
+        instrumentSymbol: plan.instrumentSymbol,
+        name: plan.name,
+        status: "watching" as const,
+      })),
+    ]).map((plan) => ({
+      _id: plan._id,
+      campaignId: plan.campaignId,
+      instrumentSymbol: plan.instrumentSymbol,
+      name: plan.name,
+      status: plan.status,
+    }));
+    const openTradePlanMatchList = openTradePlanReferences.map((plan) => ({
+      id: plan._id as string,
+      instrumentSymbol: plan.instrumentSymbol,
+    }));
+    const openTradePlanReferenceById = new Map(
+      openTradePlanReferences.map((plan) => [plan._id, plan]),
+    );
+    const assignedTradePlanById = new Map(
+      allTradePlans.map((plan) => [
+        plan._id,
+        {
+          _id: plan._id,
+          campaignId: plan.campaignId,
+          instrumentSymbol: plan.instrumentSymbol,
+          name: plan.name,
+          status: plan.status,
+        },
+      ]),
+    );
+
+    const tradeCountByPortfolioId = new Map<Id<"portfolios">, number>();
+    for (const trade of ownerTrades) {
+      if (!trade.portfolioId) continue;
+      tradeCountByPortfolioId.set(
+        trade.portfolioId,
+        (tradeCountByPortfolioId.get(trade.portfolioId) ?? 0) + 1,
+      );
+    }
+
+    const rows = [...inboxTrades]
+      .sort((a, b) => (b.date ?? b._creationTime) - (a.date ?? a._creationTime))
+      .map((trade) => {
+        const readiness = getInboxTradeReadiness(trade);
+        const validationState: "error" | "valid" | "warning" =
+          trade.validationErrors.length > 0
+            ? "error"
+            : trade.validationWarnings.length > 0
+              ? "warning"
+              : "valid";
+
+        const matchedPlans = findMatchingTradePlans(
+          trade.ticker,
+          openTradePlanMatchList,
+        )
+          .map((match) =>
+            openTradePlanReferenceById.get(match.id as Id<"tradePlans">),
+          )
+          .filter((plan) => plan !== undefined);
+
+        const assignedTradePlan =
+          trade.tradePlanId !== undefined
+            ? (assignedTradePlanById.get(trade.tradePlanId) ?? null)
+            : null;
+
+        const matchState:
+          | "ambiguous"
+          | "assigned"
+          | "suggested"
+          | "unmatched" =
+          assignedTradePlan !== null
+            ? "assigned"
+            : matchedPlans.length === 1
+              ? "suggested"
+              : matchedPlans.length > 1
+                ? "ambiguous"
+                : "unmatched";
+        const reviewState: "needs_review" | "ready" =
+          readiness.isReady && validationState !== "error"
+            ? "ready"
+            : "needs_review";
+
+        return {
+          inboxTrade: trade,
+          matchContext: {
+            assignedTradePlan,
+            candidateCount: matchedPlans.length,
+            suggestedTradePlans: matchedPlans,
+            ticker: trade.ticker ?? null,
+          },
+          matchState,
+          readiness,
+          reviewState,
+          validationState,
+        };
+      });
+
+    const summary = {
+      ambiguousCount: rows.filter((row) => row.matchState === "ambiguous")
+        .length,
+      assignedCount: rows.filter((row) => row.matchState === "assigned").length,
+      needsReviewCount: rows.filter((row) => row.reviewState === "needs_review")
+        .length,
+      readyCount: rows.filter((row) => row.reviewState === "ready").length,
+      suggestedCount: rows.filter((row) => row.matchState === "suggested")
+        .length,
+      totalPendingCount: rows.length,
+      unmatchedCount: rows.filter((row) => row.matchState === "unmatched")
+        .length,
+      validCount: rows.filter((row) => row.validationState === "valid").length,
+      warningCount: rows.filter((row) => row.validationState === "warning")
+        .length,
+    };
+
+    return {
+      referenceData: {
+        accountMappings: [...accountMappings].sort(
+          (a, b) =>
+            a.source.localeCompare(b.source) ||
+            a.accountId.localeCompare(b.accountId) ||
+            a.friendlyName.localeCompare(b.friendlyName),
+        ),
+        campaigns: campaignReferences,
+        openTradePlans: openTradePlanReferences,
+        portfolios: portfolios.map((portfolio) => ({
+          ...portfolio,
+          tradeCount: tradeCountByPortfolioId.get(portfolio._id) ?? 0,
+        })),
+      },
+      rows,
+      summary,
+    };
   },
 });
 
