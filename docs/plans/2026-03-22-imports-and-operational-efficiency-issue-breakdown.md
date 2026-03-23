@@ -55,6 +55,11 @@ Implementation assumption:
 
 ## Recommended Linear Issue Set
 
+Ticket mapping:
+- Issue 1 → `JAC-161`
+- Issue 2 → `JAC-162`
+- Issue 3 → `JAC-163`
+
 ### 1. Imports Operational Contract And Data Foundation
 
 **Purpose**
@@ -192,9 +197,9 @@ This issue should not become a whole-app primitive migration or a generalized UI
 
 ## Recommended Issue Order
 
-1. Imports Operational Contract And Data Foundation
-2. Imports Review Workspace And Workflow Overhaul
-3. Operational Surface Systemization, Loading States, And Hardening
+1. `JAC-161` — Imports Operational Contract And Data Foundation
+2. `JAC-162` — Imports Review Workspace And Workflow Overhaul
+3. `JAC-163` — Operational Surface Systemization, Loading States, And Hardening
 
 ## Explicit Dependency Map
 
