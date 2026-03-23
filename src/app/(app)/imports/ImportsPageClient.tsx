@@ -112,7 +112,10 @@ export default function ImportsPageClient({
   const typedTrades = inboxTrades as InboxTrade[] | undefined;
   const totalCount = typedTrades?.length ?? 0;
   const readyCount = useMemo(
-    () => typedTrades?.filter(isTradeReadyForAcceptance).length ?? 0,
+    () =>
+      typedTrades?.filter(
+        (t) => t.validationErrors.length === 0 && isTradeReadyForAcceptance(t),
+      ).length ?? 0,
     [typedTrades],
   );
   const errorCount = useMemo(
@@ -125,7 +128,7 @@ export default function ImportsPageClient({
     () =>
       typedTrades?.filter((t) => {
         const inlineId = inlineTradePlanIds[t._id];
-        return inlineId ? inlineId !== "" : !!t.tradePlanId;
+        return inlineId !== undefined ? inlineId !== "" : !!t.tradePlanId;
       }).length ?? 0,
     [typedTrades, inlineTradePlanIds],
   );
