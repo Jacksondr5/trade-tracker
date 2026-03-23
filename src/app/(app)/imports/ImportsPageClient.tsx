@@ -375,6 +375,9 @@ export default function ImportsPageClient({
           Imports
         </h1>
         <div className="ml-auto flex flex-wrap items-center gap-3">
+          <label htmlFor="brokerage-select" className="sr-only">
+            Select brokerage
+          </label>
           <select
             id="brokerage-select"
             value={brokerage}
@@ -386,6 +389,9 @@ export default function ImportsPageClient({
             <option value="ibkr">Interactive Brokers (IBKR)</option>
             <option value="kraken">Kraken</option>
           </select>
+          <label htmlFor="csv-file-input" className="sr-only">
+            Upload CSV file
+          </label>
           <input
             id="csv-file-input"
             type="file"
