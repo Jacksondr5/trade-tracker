@@ -399,10 +399,11 @@ export default function ImportsPageClient({
             id="csv-file-input"
             type="file"
             accept=".csv"
+            disabled={isImporting}
             onChange={(e: ChangeEvent<HTMLInputElement>) =>
               void handleFileChange(e)
             }
-            className="text-sm text-olive-12 file:mr-3 file:rounded-md file:border file:border-olive-6 file:bg-olive-3 file:px-3 file:py-1.5 file:text-sm file:text-olive-12 file:hover:bg-olive-4"
+            className="text-sm text-olive-12 file:mr-3 file:rounded-md file:border file:border-olive-6 file:bg-olive-3 file:px-3 file:py-1.5 file:text-sm file:text-olive-12 file:hover:bg-olive-4 disabled:cursor-not-allowed disabled:opacity-50"
           />
           {isImporting && (
             <span className="text-sm text-olive-11">Importing trades...</span>

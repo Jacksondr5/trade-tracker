@@ -31,6 +31,11 @@ export function useImportUpload({
   const [isImporting, setIsImporting] = useState(false);
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    if (isImporting) {
+      event.target.value = "";
+      return;
+    }
+
     const file = event.target.files?.[0];
     if (!file) return;
 
