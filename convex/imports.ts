@@ -712,22 +712,57 @@ export const getImportsReviewWorkspace = query({
         };
       });
 
-    const summary = {
-      ambiguousCount: rows.filter((row) => row.matchState === "ambiguous")
-        .length,
-      assignedCount: rows.filter((row) => row.matchState === "assigned").length,
-      needsReviewCount: rows.filter((row) => row.reviewState === "needs_review")
-        .length,
-      readyCount: rows.filter((row) => row.reviewState === "ready").length,
-      suggestedCount: rows.filter((row) => row.matchState === "suggested")
-        .length,
-      totalPendingCount: rows.length,
-      unmatchedCount: rows.filter((row) => row.matchState === "unmatched")
-        .length,
-      validCount: rows.filter((row) => row.validationState === "valid").length,
-      warningCount: rows.filter((row) => row.validationState === "warning")
-        .length,
-    };
+    const summary = rows.reduce(
+      (counts, row) => {
+        counts.totalPendingCount += 1;
+
+        switch (row.matchState) {
+          case "ambiguous":
+            counts.ambiguousCount += 1;
+            break;
+          case "assigned":
+            counts.assignedCount += 1;
+            break;
+          case "suggested":
+            counts.suggestedCount += 1;
+            break;
+          case "unmatched":
+            counts.unmatchedCount += 1;
+            break;
+        }
+
+        switch (row.reviewState) {
+          case "needs_review":
+            counts.needsReviewCount += 1;
+            break;
+          case "ready":
+            counts.readyCount += 1;
+            break;
+        }
+
+        switch (row.validationState) {
+          case "valid":
+            counts.validCount += 1;
+            break;
+          case "warning":
+            counts.warningCount += 1;
+            break;
+        }
+
+        return counts;
+      },
+      {
+        ambiguousCount: 0,
+        assignedCount: 0,
+        needsReviewCount: 0,
+        readyCount: 0,
+        suggestedCount: 0,
+        totalPendingCount: 0,
+        unmatchedCount: 0,
+        validCount: 0,
+        warningCount: 0,
+      },
+    );
 
     return {
       referenceData: {
