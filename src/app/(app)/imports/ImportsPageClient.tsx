@@ -49,6 +49,7 @@ export default function ImportsPageClient({
     variant: "success" | "warning";
   } | null>(null);
   const [isAcceptingAll, setIsAcceptingAll] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
 
   const [editingTradeId, setEditingTradeId] =
     useState<Id<"inboxTrades"> | null>(null);
@@ -349,11 +350,18 @@ export default function ImportsPageClient({
   };
 
   const handleDeleteAll = () => {
-    void deleteAllInboxTrades().catch((error) => {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to delete all trades",
-      );
-    });
+    if (isDeletingAll) return;
+
+    setIsDeletingAll(true);
+    void deleteAllInboxTrades()
+      .catch((error) => {
+        setErrorMessage(
+          error instanceof Error ? error.message : "Failed to delete all trades",
+        );
+      })
+      .finally(() => {
+        setIsDeletingAll(false);
+      });
   };
 
   return (
@@ -462,6 +470,7 @@ export default function ImportsPageClient({
 
         <BulkActionsBar
           isAccepting={isAcceptingAll}
+          isDeleting={isDeletingAll}
           onAcceptAll={handleAcceptAll}
           onDeleteAll={handleDeleteAll}
           readyCount={readyCount}

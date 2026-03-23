@@ -5,6 +5,7 @@ import { Button } from "~/components/ui";
 
 interface BulkActionsBarProps {
   isAccepting: boolean;
+  isDeleting: boolean;
   onAcceptAll: () => Promise<void>;
   onDeleteAll: () => void;
   readyCount: number;
@@ -13,6 +14,7 @@ interface BulkActionsBarProps {
 
 export function BulkActionsBar({
   isAccepting,
+  isDeleting,
   onAcceptAll,
   onDeleteAll,
   readyCount,
@@ -32,6 +34,8 @@ export function BulkActionsBar({
   if (totalCount === 0) return null;
 
   const handleDeleteClick = () => {
+    if (isDeleting) return;
+
     if (resetConfirmDeleteTimeoutRef.current) {
       clearTimeout(resetConfirmDeleteTimeoutRef.current);
       resetConfirmDeleteTimeoutRef.current = null;
@@ -42,6 +46,10 @@ export function BulkActionsBar({
       onDeleteAll();
     } else {
       setConfirmDelete(true);
+      resetConfirmDeleteTimeoutRef.current = setTimeout(() => {
+        setConfirmDelete(false);
+        resetConfirmDeleteTimeoutRef.current = null;
+      }, 3000);
     }
   };
 
@@ -78,13 +86,16 @@ export function BulkActionsBar({
         </Button>
         <Button
           dataTestId="delete-all-trades-button"
+          disabled={isDeleting}
           variant={confirmDelete ? "destructive" : "outline"}
           onClick={handleDeleteClick}
           onBlur={handleDeleteBlur}
         >
-          {confirmDelete
-            ? `Delete all ${totalCount} trades`
-            : "Delete all trades"}
+          {isDeleting
+            ? "Deleting trades..."
+            : confirmDelete
+              ? `Delete all ${totalCount} trades`
+              : "Delete all trades"}
         </Button>
       </div>
     </div>
