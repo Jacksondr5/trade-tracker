@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { findAutoMatchTradePlanId, type TradePlanMatch } from "./auto-match";
+import {
+  findAutoMatchTradePlanId,
+  findMatchingTradePlans,
+  type TradePlanMatch,
+} from "./auto-match";
 
 describe("findAutoMatchTradePlanId", () => {
   const plans: TradePlanMatch[] = [
@@ -40,5 +44,38 @@ describe("findAutoMatchTradePlanId", () => {
 
   it("returns undefined when plans array is empty", () => {
     expect(findAutoMatchTradePlanId("AAPL", [])).toBeUndefined();
+  });
+});
+
+describe("findMatchingTradePlans", () => {
+  const plans: TradePlanMatch[] = [
+    { id: "plan1", instrumentSymbol: "AAPL" },
+    { id: "plan2", instrumentSymbol: "MSFT" },
+    { id: "plan3", instrumentSymbol: "AAPL" },
+  ];
+
+  it("returns all matching plans for the ticker", () => {
+    expect(findMatchingTradePlans("AAPL", plans)).toEqual([
+      { id: "plan1", instrumentSymbol: "AAPL" },
+      { id: "plan3", instrumentSymbol: "AAPL" },
+    ]);
+  });
+
+  it("matches case-insensitively", () => {
+    expect(findMatchingTradePlans("msft", plans)).toEqual([
+      { id: "plan2", instrumentSymbol: "MSFT" },
+    ]);
+  });
+
+  it("returns an empty array when no plans match the ticker", () => {
+    expect(findMatchingTradePlans("TSLA", plans)).toEqual([]);
+  });
+
+  it("returns an empty array when the plans array is empty", () => {
+    expect(findMatchingTradePlans("AAPL", [])).toEqual([]);
+  });
+
+  it("returns an empty array when the ticker is missing", () => {
+    expect(findMatchingTradePlans(undefined, plans)).toEqual([]);
   });
 });
