@@ -445,7 +445,15 @@ export async function deleteNoteById(
   const deleteButton = page.getByTestId(
     NOTES_SELECTORS.deleteNoteButton(noteId),
   );
-  await deleteButton.click();
+  const tooltip = page.getByTestId(NOTES_SELECTORS.deleteNoteTooltip(noteId));
+
+  // If the button is not already armed, click once to arm it
+  if (!(await tooltip.isVisible())) {
+    await deleteButton.click();
+    await expect(tooltip).toBeVisible();
+  }
+
+  // Confirm the deletion
   await deleteButton.click();
   await expect(noteRow).not.toBeVisible();
 }
