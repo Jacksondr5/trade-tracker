@@ -110,7 +110,7 @@ Readiness answers whether the row is currently acceptable as a trade:
 
 ### Validation
 
-Validation remains parser and data-contract driven:
+Validation remains parser- and data-contract-driven:
 
 - `error` when `validationErrors` is non-empty
 - `warning` when there are no errors but `validationWarnings` is non-empty

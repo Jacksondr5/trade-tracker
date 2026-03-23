@@ -67,6 +67,14 @@ describe("findMatchingTradePlans", () => {
     ]);
   });
 
+  it("returns an empty array when no plans match the ticker", () => {
+    expect(findMatchingTradePlans("TSLA", plans)).toEqual([]);
+  });
+
+  it("returns an empty array when the plans array is empty", () => {
+    expect(findMatchingTradePlans("AAPL", [])).toEqual([]);
+  });
+
   it("returns an empty array when the ticker is missing", () => {
     expect(findMatchingTradePlans(undefined, plans)).toEqual([]);
   });
