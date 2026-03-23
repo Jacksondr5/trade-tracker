@@ -185,6 +185,7 @@ describe("imports review workspace", () => {
     expect(workspace.summary).toEqual({
       ambiguousCount: 0,
       assignedCount: 1,
+      errorCount: 0,
       needsReviewCount: 0,
       readyCount: 2,
       suggestedCount: 0,
@@ -296,6 +297,7 @@ describe("imports review workspace", () => {
     expect(workspace.summary).toEqual({
       ambiguousCount: 1,
       assignedCount: 0,
+      errorCount: 1,
       needsReviewCount: 1,
       readyCount: 1,
       suggestedCount: 0,

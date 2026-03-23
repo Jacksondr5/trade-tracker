@@ -83,6 +83,7 @@ This ticket makes trade-plan match state explicit per inbox row:
   - `suggestedCount`
   - `unmatchedCount`
   - `ambiguousCount`
+  - `errorCount`
   - `validCount`
   - `warningCount`
 - `rows`

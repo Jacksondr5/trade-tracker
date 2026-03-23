@@ -135,6 +135,7 @@ const importsReviewWorkspaceValidator = v.object({
   summary: v.object({
     ambiguousCount: v.number(),
     assignedCount: v.number(),
+    errorCount: v.number(),
     needsReviewCount: v.number(),
     readyCount: v.number(),
     suggestedCount: v.number(),
@@ -741,6 +742,9 @@ export const getImportsReviewWorkspace = query({
         }
 
         switch (row.validationState) {
+          case "error":
+            counts.errorCount += 1;
+            break;
           case "valid":
             counts.validCount += 1;
             break;
@@ -754,6 +758,7 @@ export const getImportsReviewWorkspace = query({
       {
         ambiguousCount: 0,
         assignedCount: 0,
+        errorCount: 0,
         needsReviewCount: 0,
         readyCount: 0,
         suggestedCount: 0,
