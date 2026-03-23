@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { waitForAuthenticatedApp } from "../helpers/app";
 import {
   APP_PAGE_TITLES,
+  extractNoteId,
   getPageTitle,
   NOTES_SELECTORS,
 } from "../helpers/selectors";
@@ -28,7 +29,7 @@ test("notes page loads and supports add and edit workflow", async ({
   if (!noteRowTestId) {
     throw new Error("Expected data-testid on note row.");
   }
-  const noteId = noteRowTestId.replace("notes-note-row-", "");
+  const noteId = extractNoteId(noteRowTestId);
   await expect(
     noteRow.getByTestId(NOTES_SELECTORS.noteContent(noteId)),
   ).toContainText(noteContent);

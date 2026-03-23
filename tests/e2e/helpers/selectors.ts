@@ -24,6 +24,8 @@ import {
   getNoteComposerSubmitButtonTestId,
   getNoteRowTestId,
   getNoteContentTestId,
+  getDeleteNoteButtonTestId,
+  getDeleteNoteButtonTooltipTestId,
   getEditNoteButtonTestId,
   getEditNoteTextareaTestId,
   getSaveNoteButtonTestId,
@@ -410,11 +412,70 @@ export const NOTES_SELECTORS = {
   addNoteButton: getNoteComposerSubmitButtonTestId("notes"),
   noteRow: (noteId: string) => getNoteRowTestId("notes", noteId),
   noteContent: (noteId: string) => getNoteContentTestId("notes", noteId),
+  deleteNoteButton: (noteId: string) =>
+    getDeleteNoteButtonTestId("notes", noteId),
+  deleteNoteTooltip: (noteId: string) =>
+    getDeleteNoteButtonTooltipTestId("notes", noteId),
   editNoteButton: (noteId: string) => getEditNoteButtonTestId("notes", noteId),
   editNoteTextarea: (noteId: string) =>
     getEditNoteTextareaTestId("notes", noteId),
   saveNoteButton: (noteId: string) => getSaveNoteButtonTestId("notes", noteId),
 } as const;
+
+export function extractNoteId(testId: string): string {
+  const prefix = getNoteRowTestId("notes", "");
+  if (!testId.startsWith(prefix)) {
+    throw new Error(
+      `Expected test id to start with "${prefix}", got "${testId}"`,
+    );
+  }
+
+  const noteId = testId.slice(prefix.length);
+  if (!noteId) {
+    throw new Error("Expected note id in test id.");
+  }
+
+  return noteId;
+}
+
+/**
+ * Deletes a note by ID using the two-click confirmation flow.
+ * By default, this returns silently when the note row is not visible so cleanup
+ * callers can safely retry. Pass { throwIfMissing: true } to fail fast instead.
+ */
+export async function deleteNoteById(
+  page: Page,
+  noteId: string,
+  options: { throwIfMissing?: boolean } = {},
+): Promise<void> {
+  const noteRowSelector = NOTES_SELECTORS.noteRow(noteId);
+  const noteRow = page.getByTestId(noteRowSelector);
+  if (!(await noteRow.isVisible())) {
+    if (options.throwIfMissing) {
+      throw new Error(
+        `Note row with id "${noteId}" is not visible for selector "${noteRowSelector}".`,
+      );
+    }
+    return;
+  }
+
+  await noteRow.hover();
+
+  const deleteButton = page.getByTestId(
+    NOTES_SELECTORS.deleteNoteButton(noteId),
+  );
+  const tooltip = page.getByTestId(NOTES_SELECTORS.deleteNoteTooltip(noteId));
+
+  // If the button is not already armed, click once to arm it
+  if (!(await tooltip.isVisible())) {
+    await deleteButton.click();
+    await expect(tooltip).toBeVisible();
+  }
+
+  // Confirm the deletion
+  await deleteButton.click();
+  await expect(noteRow).not.toBeVisible();
+}
 
 export function getEditRetrospectiveButton(
   page: Page,
