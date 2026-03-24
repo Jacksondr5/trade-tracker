@@ -315,7 +315,7 @@ export function InboxTable({
   };
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-6">
+    <div className="overflow-x-auto overflow-y-visible rounded-lg border border-slate-6">
       <table className="w-full table-auto">
         <thead className="bg-slate-3">
           <tr>
