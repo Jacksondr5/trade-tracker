@@ -17,7 +17,6 @@ const tradeSchema = z.object({
   assetType: z.enum(["stock", "crypto"]),
   date: z.string().min(1, "Date is required"),
   direction: z.enum(["long", "short"]),
-  notes: z.string().optional(),
   portfolioId: z.string().optional(),
   price: z
     .string()
@@ -66,7 +65,6 @@ export default function NewTradePageClient({
       assetType: "stock" as "stock" | "crypto",
       date: getDefaultDateTime(),
       direction: "long" as "long" | "short",
-      notes: "",
       portfolioId: "",
       price: "",
       quantity: "",
@@ -91,7 +89,6 @@ export default function NewTradePageClient({
           assetType: parsed.assetType,
           date: new Date(parsed.date).getTime(),
           direction: parsed.direction,
-          notes: parsed.notes || undefined,
           portfolioId: parsed.portfolioId
             ? (parsed.portfolioId as Id<"portfolios">)
             : undefined,
@@ -237,16 +234,6 @@ export default function NewTradePageClient({
                 )}
               </form.AppField>
             </div>
-
-            <form.AppField name="notes">
-              {(field) => (
-                <field.FieldTextarea
-                  label="Notes (optional)"
-                  placeholder="Add any notes about this trade..."
-                  rows={3}
-                />
-              )}
-            </form.AppField>
 
             <div className="flex justify-end gap-3 pt-4">
               <form.AppForm>

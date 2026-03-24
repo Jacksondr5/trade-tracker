@@ -7,7 +7,6 @@ export interface InboxTradeCandidate {
   direction?: "long" | "short";
   externalId?: string;
   fees?: number;
-  notes?: string;
   orderType?: string;
   price?: number;
   quantity?: number;

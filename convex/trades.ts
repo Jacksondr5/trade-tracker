@@ -248,7 +248,6 @@ export const createTrade = mutation({
     assetType: v.union(v.literal("crypto"), v.literal("stock")),
     date: v.number(),
     direction: v.union(v.literal("long"), v.literal("short")),
-    notes: v.optional(v.string()),
     portfolioId: v.optional(v.id("portfolios")),
     price: v.number(),
     quantity: v.number(),
@@ -274,7 +273,6 @@ export const createTrade = mutation({
       assetType: args.assetType,
       date: args.date,
       direction: args.direction,
-      notes: args.notes,
       ownerId,
       portfolioId: args.portfolioId,
       price: args.price,
@@ -292,7 +290,6 @@ export const updateTrade = mutation({
     assetType: v.optional(v.union(v.literal("crypto"), v.literal("stock"))),
     date: v.optional(v.number()),
     direction: v.optional(v.union(v.literal("long"), v.literal("short"))),
-    notes: v.optional(v.string()),
     portfolioId: v.optional(v.union(v.id("portfolios"), v.null())),
     price: v.optional(v.number()),
     quantity: v.optional(v.number()),
@@ -323,7 +320,6 @@ export const updateTrade = mutation({
     if (updates.assetType !== undefined) patch.assetType = updates.assetType;
     if (updates.date !== undefined) patch.date = updates.date;
     if (updates.direction !== undefined) patch.direction = updates.direction;
-    if (updates.notes !== undefined) patch.notes = updates.notes;
     if (updates.portfolioId !== undefined) {
       patch.portfolioId =
         updates.portfolioId === null ? undefined : updates.portfolioId;

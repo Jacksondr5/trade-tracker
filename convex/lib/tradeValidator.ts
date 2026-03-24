@@ -9,7 +9,6 @@ export const tradeValidator = v.object({
   direction: v.union(v.literal("long"), v.literal("short")),
   externalId: v.optional(v.string()),
   fees: v.optional(v.number()),
-  notes: v.optional(v.string()),
   orderType: v.optional(v.string()),
   ownerId: v.string(),
   portfolioId: v.optional(v.id("portfolios")),
