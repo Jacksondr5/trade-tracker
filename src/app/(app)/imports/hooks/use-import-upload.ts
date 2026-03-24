@@ -1,7 +1,7 @@
 "use client";
 
 import type { ChangeEvent } from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { parseIBKRCSV } from "~/lib/imports/ibkr-parser";
 import { parseKrakenCSV } from "~/lib/imports/kraken-parser";
 import type {
@@ -29,17 +29,25 @@ export function useImportUpload({
 }: UseImportUploadArgs) {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    setSelectedFile(file);
+    setImportResult(null);
+    setErrorMessage(null);
+  };
+
+  const handleImport = async () => {
+    if (!selectedFile || isImporting) return;
 
     setImportResult(null);
     setErrorMessage(null);
     setIsImporting(true);
 
     try {
-      const content = await file.text();
+      const content = await selectedFile.text();
       const parseResult = brokerage === "ibkr" ? parseIBKRCSV(content) : parseKrakenCSV(content);
 
       if (parseResult.trades.length === 0) {
@@ -53,18 +61,24 @@ export function useImportUpload({
 
       const result = await importTrades({ trades: parseResult.trades });
       setImportResult(result);
+      setSelectedFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Import failed");
     } finally {
       setIsImporting(false);
-      event.target.value = "";
     }
   };
 
   return {
+    fileInputRef,
+    handleFileChange,
+    handleImport,
     importResult,
     isImporting,
+    selectedFile,
     setImportResult,
-    handleFileChange,
   };
 }

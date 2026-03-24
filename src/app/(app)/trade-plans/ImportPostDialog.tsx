@@ -18,6 +18,7 @@ import { runImportExtraction } from "~/lib/import-orchestrator";
 type ImportMode = "create" | "follow-up";
 
 interface ImportPostDialogProps {
+  inboxTradeId?: Id<"inboxTrades">;
   mode: ImportMode;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -25,6 +26,7 @@ interface ImportPostDialogProps {
 }
 
 export function ImportPostDialog({
+  inboxTradeId,
   mode,
   open,
   onOpenChange,
@@ -65,6 +67,7 @@ export function ImportPostDialog({
 
     try {
       const taskId = await createImportTask({
+        inboxTradeId: mode === "create" ? inboxTradeId : undefined,
         mode,
         pastedText: pastedText.trim(),
         sourceUrl: sourceUrl.trim() || undefined,

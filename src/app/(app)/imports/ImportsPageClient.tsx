@@ -2,17 +2,14 @@
 
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
 import { useMemo, useState } from "react";
-import { Button } from "~/components/ui";
+import { Alert, Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { APP_PAGE_TITLES } from "../../../../shared/e2e/testIds";
 import type { BrokerageSource } from "../../../../shared/imports/types";
-import {
-  EditTradeForm,
-  type EditTradeFormValues,
-} from "./components/edit-trade-form";
+import { type EditTradeFormValues } from "./components/edit-trade-form";
 import { InboxTable } from "./components/inbox-table";
-import { UploadSection } from "./components/upload-section";
+import { InboxToolbar } from "./components/inbox-toolbar";
 import { useImportUpload } from "./hooks/use-import-upload";
 import { useInlineInboxEdits } from "./hooks/use-inline-inbox-edits";
 import type { InboxTrade, OpenTradePlanOption } from "./types";
@@ -45,6 +42,12 @@ export default function ImportsPageClient({
 }) {
   const [brokerage, setBrokerage] = useState<BrokerageSource>("ibkr");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [acceptAllMessage, setAcceptAllMessage] = useState<{
+    text: string;
+    variant: "success" | "warning";
+  } | null>(null);
+  const [isAcceptingAll, setIsAcceptingAll] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
 
   const [editingTradeId, setEditingTradeId] =
     useState<Id<"inboxTrades"> | null>(null);
@@ -87,21 +90,68 @@ export default function ImportsPageClient({
   const deleteAllInboxTrades = useMutation(api.imports.deleteAllInboxTrades);
   const updateInboxTrade = useMutation(api.imports.updateInboxTrade);
 
-  const { importResult, isImporting, setImportResult, handleFileChange } =
-    useImportUpload({
-      brokerage,
-      importTrades: importTradesMutation,
-      setErrorMessage,
-    });
+  const {
+    fileInputRef,
+    handleFileChange,
+    handleImport,
+    importResult,
+    isImporting,
+    selectedFile,
+    setImportResult,
+  } = useImportUpload({
+    brokerage,
+    importTrades: importTradesMutation,
+    setErrorMessage,
+  });
 
   const {
-    inlineNotes,
     inlinePortfolioIds,
     inlineTradePlanIds,
-    setInlineNotes,
     setInlinePortfolioIds,
     setInlineTradePlanIds,
   } = useInlineInboxEdits(inboxTrades as InboxTrade[] | undefined);
+
+  // Compute summary counts
+  const typedTrades = inboxTrades as InboxTrade[] | undefined;
+  const totalCount = typedTrades?.length ?? 0;
+
+  // "Ready" = valid fields + has portfolio + has trade plan (green)
+  const readyCount = useMemo(
+    () =>
+      typedTrades?.filter((t) => {
+        const hasPortfolio = (inlinePortfolioIds[t._id] ?? "") !== "";
+        const hasTradePlan = (inlineTradePlanIds[t._id] ?? "") !== "";
+        return (
+          t.validationErrors.length === 0 &&
+          isTradeReadyForAcceptance(t) &&
+          hasPortfolio &&
+          hasTradePlan
+        );
+      }).length ?? 0,
+    [typedTrades, inlinePortfolioIds, inlineTradePlanIds],
+  );
+
+  // "Missing plan" = valid + has portfolio but no trade plan (amber)
+  const missingPlanCount = useMemo(
+    () =>
+      typedTrades?.filter((t) => {
+        const hasPortfolio = (inlinePortfolioIds[t._id] ?? "") !== "";
+        const hasTradePlan = (inlineTradePlanIds[t._id] ?? "") !== "";
+        return (
+          t.validationErrors.length === 0 &&
+          isTradeReadyForAcceptance(t) &&
+          hasPortfolio &&
+          !hasTradePlan
+        );
+      }).length ?? 0,
+    [typedTrades, inlinePortfolioIds, inlineTradePlanIds],
+  );
+
+  // "Needs review" = everything else (red)
+  const needsReviewCount = totalCount - readyCount - missingPlanCount;
+
+  // Acceptable = can be accepted (ready + missing-plan)
+  const acceptableCount = readyCount + missingPlanCount;
 
   const onBrokerageChange = (value: BrokerageSource) => {
     setBrokerage(value);
@@ -124,17 +174,6 @@ export default function ImportsPageClient({
       );
       return false;
     }
-  };
-
-  const persistNotes = (inboxTradeId: Id<"inboxTrades">, value: string) => {
-    void updateInboxTrade({
-      inboxTradeId,
-      notes: value || null,
-    }).catch((error) => {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to update notes",
-      );
-    });
   };
 
   const persistPortfolioSelection = (
@@ -203,6 +242,11 @@ export default function ImportsPageClient({
     });
   };
 
+  const handleCancelEdit = () => {
+    setEditingTradeId(null);
+    setEditInitialValues(DEFAULT_EDIT_VALUES);
+  };
+
   const handleSaveEdit = async (values: EditTradeFormValues) => {
     if (!editingTradeId) return;
 
@@ -238,15 +282,13 @@ export default function ImportsPageClient({
 
   const handleAccept = (inboxTradeId: Id<"inboxTrades">) => {
     const trade = inboxTrades?.find((t) => t._id === inboxTradeId);
-    if (!trade || !isTradeReadyForAcceptance(trade)) return;
+    const portfolioId = inlinePortfolioIds[inboxTradeId] || undefined;
+    if (!trade || !isTradeReadyForAcceptance(trade) || !portfolioId) return;
 
     const tradePlanId = inlineTradePlanIds[inboxTradeId] || undefined;
-    const notesValue = inlineNotes[inboxTradeId] || undefined;
-    const portfolioId = inlinePortfolioIds[inboxTradeId] || undefined;
 
     void acceptTrade({
       inboxTradeId,
-      notes: notesValue,
       portfolioId: portfolioId ? (portfolioId as Id<"portfolios">) : undefined,
       tradePlanId: tradePlanId ? (tradePlanId as Id<"tradePlans">) : undefined,
     })
@@ -263,25 +305,24 @@ export default function ImportsPageClient({
   };
 
   const handleAcceptAll = async () => {
+    setIsAcceptingAll(true);
+    setAcceptAllMessage(null);
     try {
       if (inboxTrades) {
         await Promise.all(
           inboxTrades.map((trade) => {
             const selected = inlineTradePlanIds[trade._id] ?? "";
-            const notes = inlineNotes[trade._id] ?? "";
             const portfolio = inlinePortfolioIds[trade._id] ?? "";
             const tradePlanChanged =
               selected !== (trade.tradePlanId ? String(trade.tradePlanId) : "");
-            const notesChanged = notes !== (trade.notes ?? "");
             const portfolioChanged =
               portfolio !==
               (trade.portfolioId ? String(trade.portfolioId) : "");
-            if (!tradePlanChanged && !notesChanged && !portfolioChanged)
+            if (!tradePlanChanged && !portfolioChanged)
               return Promise.resolve();
 
             return updateInboxTrade({
               inboxTradeId: trade._id,
-              notes: notes || null,
               portfolioId: portfolio ? (portfolio as Id<"portfolios">) : null,
               tradePlanId: selected ? (selected as Id<"tradePlans">) : null,
             });
@@ -290,102 +331,179 @@ export default function ImportsPageClient({
       }
 
       const result = await acceptAllTrades();
-      const messages: string[] = [];
-      if (result.accepted > 0) messages.push(`Accepted ${result.accepted}`);
-      if (result.skippedInvalid > 0)
-        messages.push(`${result.skippedInvalid} need review`);
-      if (result.errors.length > 0)
-        messages.push(`Errors: ${result.errors.slice(0, 3).join("; ")}`);
 
-      if (result.skippedInvalid > 0 || result.errors.length > 0) {
-        setErrorMessage(messages.join(". "));
+      if (result.skippedInvalid > 0) {
+        setAcceptAllMessage({
+          text: `${result.accepted} ${result.accepted === 1 ? "trade" : "trades"} accepted. ${result.skippedInvalid} need review.`,
+          variant: "warning",
+        });
+      } else if (result.accepted > 0) {
+        setAcceptAllMessage({
+          text: `${result.accepted} ${result.accepted === 1 ? "trade" : "trades"} accepted.`,
+          variant: "success",
+        });
+      }
+
+      if (result.errors.length > 0) {
+        setErrorMessage(result.errors.slice(0, 3).join("; "));
       }
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Accept all failed",
       );
+    } finally {
+      setIsAcceptingAll(false);
     }
   };
 
   const handleDeleteAll = () => {
-    void deleteAllInboxTrades().catch((error) => {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to delete all trades",
-      );
-    });
+    if (isDeletingAll) return;
+
+    setIsDeletingAll(true);
+    void deleteAllInboxTrades()
+      .catch((error) => {
+        setErrorMessage(
+          error instanceof Error ? error.message : "Failed to delete all trades",
+        );
+      })
+      .finally(() => {
+        setIsDeletingAll(false);
+      });
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1
-        className="mb-6 text-2xl font-bold text-slate-12"
-        data-testid={APP_PAGE_TITLES.imports}
-      >
-        Import Trades
-      </h1>
-
-      <UploadSection
-        brokerage={brokerage}
-        errorMessage={errorMessage}
-        importResult={importResult}
-        isImporting={isImporting}
-        onBrokerageChange={onBrokerageChange}
-        onClearError={() => setErrorMessage(null)}
-        onFileChange={handleFileChange}
-      />
-
-      <div>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-12">
-            Inbox
-            {inboxTrades && inboxTrades.length > 0 && (
-              <span className="ml-2 text-sm font-normal text-slate-400">
-                ({inboxTrades.length} pending)
-              </span>
-            )}
-          </h2>
-
-          {inboxTrades && inboxTrades.length > 0 && (
-            <div className="flex gap-2">
-              <Button
-                dataTestId="accept-all-trades-button"
-                onClick={() => void handleAcceptAll()}
-                variant="outline"
-              >
-                Accept All ({inboxTrades.length})
-              </Button>
-              <Button
-                dataTestId="delete-all-trades-button"
-                onClick={handleDeleteAll}
-                variant="outline"
-              >
-                Delete All
-              </Button>
-            </div>
-          )}
+    <div className="container mx-auto px-6 py-8">
+      {/* Title row with inline upload controls */}
+      <div className="mb-6 flex flex-wrap items-center gap-4">
+        <h1
+          className="text-3xl font-bold text-olive-12"
+          data-testid={APP_PAGE_TITLES.imports}
+        >
+          Imports
+        </h1>
+        <div className="ml-auto flex items-center gap-3">
+          <label
+            htmlFor="csv-file-input"
+            className="flex h-9 cursor-pointer items-center rounded-md border border-olive-6 bg-olive-3 px-3 text-sm text-olive-12 hover:bg-olive-4"
+          >
+            {selectedFile ? selectedFile.name : "Choose file"}
+            <input
+              ref={fileInputRef}
+              id="csv-file-input"
+              type="file"
+              accept=".csv"
+              disabled={isImporting}
+              onChange={handleFileChange}
+              className="sr-only"
+            />
+          </label>
+          <label htmlFor="brokerage-select" className="sr-only">
+            Select brokerage
+          </label>
+          <select
+            id="brokerage-select"
+            value={brokerage}
+            onChange={(e) =>
+              onBrokerageChange(e.target.value as BrokerageSource)
+            }
+            className="h-9 rounded-md border border-olive-6 bg-olive-3 px-3 py-1 text-sm text-olive-12 focus:outline-none focus:ring-1 focus:ring-blue-8"
+          >
+            <option value="ibkr">Interactive Brokers (IBKR)</option>
+            <option value="kraken">Kraken</option>
+          </select>
+          <Button
+            dataTestId="import-trades-button"
+            className="h-9"
+            disabled={!selectedFile}
+            isLoading={isImporting}
+            onClick={() => void handleImport()}
+          >
+            Import trades
+          </Button>
         </div>
+      </div>
 
-        {editingTradeId && (
-          <EditTradeForm
-            key={editingTradeId}
-            initialValues={editInitialValues}
-            onCancel={() => {
-              setEditingTradeId(null);
-              setEditInitialValues(DEFAULT_EDIT_VALUES);
-            }}
-            onSave={handleSaveEdit}
-          />
+      {/* Alerts */}
+      <div className="mb-4 space-y-2">
+        {importResult && (
+          <Alert variant="success" onDismiss={() => setImportResult(null)}>
+            Imported{" "}
+            <span className="font-semibold">{importResult.imported}</span>{" "}
+            {importResult.imported !== 1 ? "trades" : "trade"}.
+            {importResult.skippedDuplicates > 0 && (
+              <>
+                {" "}
+                Skipped{" "}
+                <span className="font-semibold">
+                  {importResult.skippedDuplicates}
+                </span>{" "}
+                {importResult.skippedDuplicates !== 1
+                  ? "duplicates"
+                  : "duplicate"}
+                .
+              </>
+            )}
+            {importResult.withValidationErrors > 0 && (
+              <>
+                {" "}
+                <span className="font-semibold">
+                  {importResult.withValidationErrors}
+                </span>{" "}
+                need review.
+              </>
+            )}
+            {importResult.withWarnings > 0 && (
+              <>
+                {" "}
+                <span className="font-semibold">
+                  {importResult.withWarnings}
+                </span>{" "}
+                with warnings.
+              </>
+            )}
+          </Alert>
         )}
+
+        {acceptAllMessage && (
+          <Alert
+            variant={acceptAllMessage.variant}
+            onDismiss={() => setAcceptAllMessage(null)}
+          >
+            {acceptAllMessage.text}
+          </Alert>
+        )}
+
+        {errorMessage && (
+          <Alert variant="error" onDismiss={() => setErrorMessage(null)}>
+            {errorMessage}
+          </Alert>
+        )}
+      </div>
+
+      {/* Summary strip + bulk actions + table */}
+      <div className="space-y-3">
+        <InboxToolbar
+          acceptableCount={acceptableCount}
+          isAccepting={isAcceptingAll}
+          isDeleting={isDeletingAll}
+          missingPlanCount={missingPlanCount}
+          needsReviewCount={needsReviewCount}
+          onAcceptAll={handleAcceptAll}
+          onDeleteAll={handleDeleteAll}
+          readyCount={readyCount}
+          totalCount={totalCount}
+        />
 
         <InboxTable
           accountLabelByKey={accountLabelByKey}
           campaigns={campaigns}
           editingTradeId={editingTradeId}
-          inlineNotes={inlineNotes}
+          editInitialValues={editInitialValues}
           inlinePortfolioIds={inlinePortfolioIds}
           inlineTradePlanIds={inlineTradePlanIds}
-          inboxTrades={inboxTrades as InboxTrade[] | undefined}
+          inboxTrades={typedTrades}
           onAccept={handleAccept}
+          onCancelEdit={handleCancelEdit}
           onDelete={(inboxTradeId) => {
             void deleteInboxTrade({ inboxTradeId }).catch((error) => {
               setErrorMessage(
@@ -396,13 +514,6 @@ export default function ImportsPageClient({
             });
           }}
           onEdit={handleEdit}
-          onInlineNotesBlur={persistNotes}
-          onInlineNotesChange={(inboxTradeId, value) => {
-            setInlineNotes((prev) => ({
-              ...prev,
-              [inboxTradeId]: value,
-            }));
-          }}
           onInlinePortfolioChange={(inboxTradeId, value) => {
             setInlinePortfolioIds((prev) => ({
               ...prev,
@@ -435,6 +546,7 @@ export default function ImportsPageClient({
             });
           }}
           onQuickCreateTradePlan={handleQuickCreateTradePlan}
+          onSaveEdit={handleSaveEdit}
           openTradePlans={openTradePlans}
           portfolios={portfolios}
         />

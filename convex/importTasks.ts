@@ -23,6 +23,7 @@ const importTaskValidator = v.object({
   dismissedAt: v.optional(v.number()),
   error: v.optional(v.string()),
   extractedData: v.optional(v.string()),
+  inboxTradeId: v.optional(v.id("inboxTrades")),
   mode: importTaskModeValidator,
   ownerId: v.string(),
   pastedText: v.string(),
@@ -85,6 +86,7 @@ const followUpImportTaskDataSchema = z
 export const createImportTask = mutation({
   args: {
     chartUrls: v.optional(v.array(v.string())),
+    inboxTradeId: v.optional(v.id("inboxTrades")),
     mode: importTaskModeValidator,
     pastedText: v.string(),
     sourceUrl: v.optional(v.string()),
@@ -106,8 +108,17 @@ export const createImportTask = mutation({
       );
     }
 
+    if (args.inboxTradeId) {
+      assertOwner(
+        await ctx.db.get(args.inboxTradeId),
+        ownerId,
+        "Inbox trade not found",
+      );
+    }
+
     return await ctx.db.insert("importTasks", {
       chartUrls: args.chartUrls?.filter(Boolean),
+      inboxTradeId: args.inboxTradeId,
       mode: args.mode,
       ownerId,
       pastedText: args.pastedText,
@@ -164,6 +175,14 @@ export const completeImportTask = mutation({
         ownerId,
         tradePlanId,
       });
+
+      // Auto-assign to inbox trade if created from the imports review page
+      if (task.inboxTradeId) {
+        const inboxTrade = await ctx.db.get(task.inboxTradeId);
+        if (inboxTrade && inboxTrade.ownerId === ownerId && inboxTrade.status === "pending_review") {
+          await ctx.db.patch(task.inboxTradeId, { tradePlanId });
+        }
+      }
 
       await ctx.db.patch(args.taskId, {
         createdTradePlanId: tradePlanId,
