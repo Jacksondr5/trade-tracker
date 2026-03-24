@@ -1,4 +1,4 @@
-import { Check, Pencil, Plus } from "lucide-react";
+import { Check, FileText, Pencil, Plus } from "lucide-react";
 import { useState } from "react";
 import { Badge, Button, ConfirmDeleteButton } from "~/components/ui";
 import {
@@ -12,6 +12,7 @@ import {
   KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME,
   isKrakenDefaultAccountId,
 } from "../../../../../shared/imports/constants";
+import { ImportPostDialog } from "../../trade-plans/ImportPostDialog";
 import type { InboxTrade, OpenTradePlanOption } from "../types";
 import {
   formatCurrency,
@@ -35,7 +36,6 @@ interface InboxTableProps {
     | undefined;
   editingTradeId: Id<"inboxTrades"> | null;
   editInitialValues: EditTradeFormValues;
-  inlineNotes: Record<string, string>;
   inlinePortfolioIds: Record<string, string>;
   inlineTradePlanIds: Record<string, string>;
   inboxTrades: InboxTrade[] | undefined;
@@ -43,11 +43,6 @@ interface InboxTableProps {
   onCancelEdit: () => void;
   onDelete: (inboxTradeId: Id<"inboxTrades">) => void;
   onEdit: (trade: InboxTrade) => void;
-  onInlineNotesBlur: (inboxTradeId: Id<"inboxTrades">, value: string) => void;
-  onInlineNotesChange: (
-    inboxTradeId: Id<"inboxTrades">,
-    value: string,
-  ) => void;
   onInlinePortfolioChange: (
     inboxTradeId: Id<"inboxTrades">,
     value: string,
@@ -69,12 +64,12 @@ interface InboxTableProps {
   portfolios: PortfolioOption[] | undefined;
 }
 
-const TOTAL_COLUMNS = 13;
+const TOTAL_COLUMNS = 12;
 
 function SkeletonRow() {
   return (
     <tr>
-      <td className="px-2 py-3">
+      <td className="px-4 py-3">
         <div className="mx-auto h-2 w-2 animate-pulse rounded-full bg-slate-4" />
       </td>
       {Array.from({ length: TOTAL_COLUMNS - 1 }).map((_, i) => (
@@ -86,36 +81,51 @@ function SkeletonRow() {
   );
 }
 
+type RowStatus = "ready" | "missing-plan" | "needs-review";
+
+function getRowStatus(
+  trade: InboxTrade,
+  hasPortfolio: boolean,
+  hasTradePlan: boolean,
+): RowStatus {
+  const hasErrors = trade.validationErrors.length > 0;
+  const fieldsValid = isTradeReadyForAcceptance(trade);
+  if (hasErrors || !fieldsValid || !hasPortfolio) return "needs-review";
+  if (!hasTradePlan) return "missing-plan";
+  return "ready";
+}
+
+function canAcceptTrade(
+  trade: InboxTrade,
+  hasPortfolio: boolean,
+): boolean {
+  return (
+    trade.validationErrors.length === 0 &&
+    isTradeReadyForAcceptance(trade) &&
+    hasPortfolio
+  );
+}
+
 function RowStatusDot({
-  trade,
+  status,
   testId,
 }: {
-  trade: InboxTrade;
+  status: RowStatus;
   testId: string;
 }) {
-  const hasErrors = trade.validationErrors.length > 0;
-  const isReady = isTradeReadyForAcceptance(trade);
-
-  let color: string;
-  let label: string;
-  if (hasErrors) {
-    color = "bg-red-9";
-    label = "Has validation errors";
-  } else if (isReady) {
-    color = "bg-grass-9";
-    label = "Ready to accept";
-  } else {
-    color = "bg-amber-9";
-    label = "Needs review";
-  }
+  const config = {
+    ready: { color: "bg-grass-9", label: "Ready to accept" },
+    "missing-plan": { color: "bg-amber-9", label: "Missing trade plan" },
+    "needs-review": { color: "bg-red-9", label: "Needs review" },
+  }[status];
 
   return (
-    <td className="px-2 py-3">
+    <td className="px-4 py-3">
       <span
-        className={`inline-block h-2 w-2 rounded-full ${color}`}
+        className={`inline-block h-2 w-2 rounded-full ${config.color}`}
         data-testid={testId}
-        title={label}
-        aria-label={label}
+        title={config.label}
+        aria-label={config.label}
       />
     </td>
   );
@@ -127,6 +137,7 @@ function QuickCreatePopover({
   isLoading,
   onCancel,
   onCreate,
+  onImportFromPost,
 }: {
   campaigns:
     | Array<{ _id: Id<"campaigns">; name: string; status: string }>
@@ -139,6 +150,7 @@ function QuickCreatePopover({
     instrumentSymbol: string;
     campaignId?: Id<"campaigns">;
   }) => void;
+  onImportFromPost: () => void;
 }) {
   const [name, setName] = useState("");
   const [instrument, setInstrument] = useState(defaultSymbol);
@@ -203,6 +215,17 @@ function QuickCreatePopover({
           Cancel
         </Button>
       </div>
+      <div className="border-t border-olive-6 pt-2">
+        <button
+          type="button"
+          data-testid="quick-create-import-from-post"
+          onClick={onImportFromPost}
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-olive-11 hover:bg-olive-4 hover:text-olive-12"
+        >
+          <FileText className="h-3.5 w-3.5" />
+          Import from post
+        </button>
+      </div>
     </div>
   );
 }
@@ -212,7 +235,6 @@ export function InboxTable({
   campaigns,
   editingTradeId,
   editInitialValues,
-  inlineNotes,
   inlinePortfolioIds,
   inlineTradePlanIds,
   inboxTrades,
@@ -220,8 +242,6 @@ export function InboxTable({
   onCancelEdit,
   onDelete,
   onEdit,
-  onInlineNotesBlur,
-  onInlineNotesChange,
   onInlinePortfolioChange,
   onInlineTradePlanChange,
   onQuickCreateTradePlan,
@@ -233,14 +253,16 @@ export function InboxTable({
     useState<Id<"inboxTrades"> | null>(null);
   const [quickCreateLoadingByTradeId, setQuickCreateLoadingByTradeId] =
     useState<Record<string, boolean>>({});
+  const [importDialogTradeId, setImportDialogTradeId] =
+    useState<Id<"inboxTrades"> | null>(null);
 
   if (inboxTrades === undefined) {
     return (
-      <div className="overflow-x-auto rounded-lg border border-slate-6">
+      <div className="overflow-visible rounded-lg border border-slate-6">
         <table className="w-full table-auto">
           <thead className="bg-slate-3">
             <tr>
-              <th className="w-8 px-2 py-2" />
+              <th className="w-8 px-4 py-2" />
               {[
                 "Date",
                 "Ticker",
@@ -252,7 +274,6 @@ export function InboxTable({
                 "Account",
                 "Trade Plan",
                 "Portfolio",
-                "Notes",
                 "Actions",
               ].map((header) => (
                 <th
@@ -315,11 +336,11 @@ export function InboxTable({
   };
 
   return (
-    <div className="overflow-x-auto overflow-y-visible rounded-lg border border-slate-6">
+    <div className="overflow-visible rounded-lg border border-slate-6">
       <table className="w-full table-auto">
         <thead className="bg-slate-3">
           <tr>
-            <th className="w-8 px-2 py-2" />
+            <th className="w-8 px-4 py-2" />
             <th className="px-4 py-2 text-left text-xs font-medium text-slate-11">
               Date
             </th>
@@ -350,9 +371,6 @@ export function InboxTable({
             <th className="px-4 py-2 text-left text-xs font-medium text-slate-11">
               Portfolio
             </th>
-            <th className="px-4 py-2 text-left text-xs font-medium text-slate-11">
-              Notes
-            </th>
             <th className="px-4 py-2 text-right text-xs font-medium text-slate-11">
               Actions
             </th>
@@ -374,7 +392,6 @@ export function InboxTable({
                 accountFriendlyName={accountFriendlyName ?? null}
                 campaigns={campaigns}
                 editInitialValues={editInitialValues}
-                inlineNotes={inlineNotes[trade._id] ?? ""}
                 inlinePortfolioId={inlinePortfolioIds[trade._id] ?? ""}
                 inlineTradePlanId={inlineTradePlanIds[trade._id] ?? ""}
                 isEditing={isEditing}
@@ -386,10 +403,6 @@ export function InboxTable({
                 onCancelEdit={onCancelEdit}
                 onDelete={() => onDelete(trade._id)}
                 onEdit={() => onEdit(trade)}
-                onInlineNotesBlur={(v) => onInlineNotesBlur(trade._id, v)}
-                onInlineNotesChange={(v) =>
-                  onInlineNotesChange(trade._id, v)
-                }
                 onInlinePortfolioChange={(v) =>
                   onInlinePortfolioChange(trade._id, v)
                 }
@@ -409,6 +422,10 @@ export function InboxTable({
                       : trade._id,
                   )
                 }
+                onImportFromPost={() => {
+                  setQuickCreateOpenForTradeId(null);
+                  setImportDialogTradeId(trade._id);
+                }}
                 onSaveEdit={onSaveEdit}
                 openTradePlans={openTradePlans}
                 portfolios={portfolios}
@@ -418,6 +435,14 @@ export function InboxTable({
           })}
         </tbody>
       </table>
+      <ImportPostDialog
+        inboxTradeId={importDialogTradeId ?? undefined}
+        mode="create"
+        open={importDialogTradeId !== null}
+        onOpenChange={(open) => {
+          if (!open) setImportDialogTradeId(null);
+        }}
+      />
     </div>
   );
 }
@@ -426,7 +451,6 @@ function InboxRow({
   accountFriendlyName,
   campaigns,
   editInitialValues,
-  inlineNotes,
   inlinePortfolioId,
   inlineTradePlanId,
   isEditing,
@@ -436,8 +460,7 @@ function InboxRow({
   onCancelEdit,
   onDelete,
   onEdit,
-  onInlineNotesBlur,
-  onInlineNotesChange,
+  onImportFromPost,
   onInlinePortfolioChange,
   onInlineTradePlanChange,
   onQuickCreate,
@@ -453,7 +476,6 @@ function InboxRow({
     | Array<{ _id: Id<"campaigns">; name: string; status: string }>
     | undefined;
   editInitialValues: EditTradeFormValues;
-  inlineNotes: string;
   inlinePortfolioId: string;
   inlineTradePlanId: string;
   isEditing: boolean;
@@ -463,8 +485,7 @@ function InboxRow({
   onCancelEdit: () => void;
   onDelete: () => void;
   onEdit: () => void;
-  onInlineNotesBlur: (value: string) => void;
-  onInlineNotesChange: (value: string) => void;
+  onImportFromPost: () => void;
   onInlinePortfolioChange: (value: string) => void;
   onInlineTradePlanChange: (value: string) => void;
   onQuickCreate: (args: {
@@ -481,7 +502,10 @@ function InboxRow({
     | undefined;
   trade: InboxTrade;
 }) {
-  const ready = isTradeReadyForAcceptance(trade);
+  const hasPortfolio = inlinePortfolioId !== "";
+  const hasTradePlan = inlineTradePlanId !== "";
+  const acceptable = canAcceptTrade(trade, hasPortfolio);
+  const rowStatus = getRowStatus(trade, hasPortfolio, hasTradePlan);
   const ticker = trade.ticker?.toUpperCase();
   const matchingPlans =
     openTradePlans?.filter(
@@ -496,13 +520,14 @@ function InboxRow({
     <>
       <tr
         className={cn({
-          "bg-amber-3/30 border-x border-t border-amber-7": isEditing,
+          "bg-amber-3/30 shadow-[inset_0_1px_0_0_var(--amber-7),inset_1px_0_0_0_var(--amber-7),inset_-1px_0_0_0_var(--amber-7)]":
+            isEditing,
           "hover:bg-slate-3": !isEditing,
         })}
         data-testid={`inbox-row-${trade._id}`}
       >
         <RowStatusDot
-          trade={trade}
+          status={rowStatus}
           testId={`inbox-row-status-${trade._id}`}
         />
         {/* Date */}
@@ -546,7 +571,7 @@ function InboxRow({
         <td className="whitespace-nowrap px-4 py-2 text-sm">
           {trade.direction ? (
             <Badge
-              variant={trade.direction === "long" ? "success" : "danger"}
+              variant={trade.direction === "long" ? "info" : "warning"}
             >
               {trade.direction.toUpperCase()}
             </Badge>
@@ -560,7 +585,9 @@ function InboxRow({
         </td>
         {/* Qty */}
         <td className="whitespace-nowrap px-4 py-2 text-right text-sm text-slate-12">
-          {trade.quantity ?? "---"}
+          {trade.quantity !== undefined
+                    ? Number(trade.quantity.toFixed(1))
+                    : "---"}
         </td>
         {/* Value */}
         <td className="whitespace-nowrap px-4 py-2 text-right text-sm text-slate-12">
@@ -584,6 +611,7 @@ function InboxRow({
         <td className="px-4 py-2 text-sm">
           <div className="flex items-center gap-1">
             <select
+              data-testid={`trade-plan-select-${trade._id}`}
               value={inlineTradePlanId}
               onChange={(e) => onInlineTradePlanChange(e.target.value)}
               className="h-7 w-full min-w-[120px] rounded-md border border-slate-6 bg-slate-3 px-1 text-xs text-slate-12 focus:outline-none focus:ring-1 focus:ring-blue-8"
@@ -642,6 +670,7 @@ function InboxRow({
                   isLoading={isQuickCreateLoading}
                   onCancel={onQuickCreateCancel}
                   onCreate={onQuickCreate}
+                  onImportFromPost={onImportFromPost}
                 />
               </PopoverContent>
             </Popover>
@@ -651,6 +680,7 @@ function InboxRow({
         <td className="px-4 py-2 text-sm">
           <select
             aria-label={`Portfolio for ${trade.ticker || "trade"}`}
+            data-testid={`portfolio-select-${trade._id}`}
             value={inlinePortfolioId}
             onChange={(e) => onInlinePortfolioChange(e.target.value)}
             className="h-7 w-full min-w-[120px] rounded-md border border-slate-6 bg-slate-3 px-1 text-xs text-slate-12 focus:outline-none focus:ring-1 focus:ring-blue-8"
@@ -663,33 +693,24 @@ function InboxRow({
             ))}
           </select>
         </td>
-        {/* Notes */}
-        <td className="px-4 py-2 text-sm">
-          <input
-            type="text"
-            value={inlineNotes}
-            onChange={(e) => onInlineNotesChange(e.target.value)}
-            onBlur={(e) => onInlineNotesBlur(e.target.value)}
-            placeholder="Notes..."
-            className="h-7 w-full min-w-[120px] rounded-md border border-slate-6 bg-slate-3 px-2 text-xs text-slate-12 focus:outline-none focus:ring-1 focus:ring-blue-8"
-          />
-        </td>
         {/* Actions */}
         <td className="whitespace-nowrap px-4 py-2 text-right text-sm">
           <div className="flex items-center justify-end gap-1">
             <button
               type="button"
               aria-label="Accept trade"
+              data-testid={`accept-trade-${trade._id}`}
               onClick={onAccept}
-              disabled={!ready}
+              disabled={!acceptable}
               className="rounded p-1 text-grass-9 hover:bg-grass-3 disabled:cursor-not-allowed disabled:opacity-40"
-              title={ready ? "Accept trade" : "Missing required fields"}
+              title={acceptable ? "Accept trade" : "Missing required fields or portfolio"}
             >
               <Check className="h-4 w-4" />
             </button>
             <button
               type="button"
               aria-label="Edit trade"
+              data-testid={`edit-trade-${trade._id}`}
               onClick={onEdit}
               className="rounded p-1 text-olive-10 hover:bg-olive-4 hover:text-olive-12"
               title="Edit trade"
@@ -705,7 +726,7 @@ function InboxRow({
         </td>
       </tr>
       {isEditing && (
-        <tr>
+        <tr className="bg-amber-3/30 shadow-[inset_0_-1px_0_0_var(--amber-7),inset_1px_0_0_0_var(--amber-7),inset_-1px_0_0_0_var(--amber-7)]">
           <td colSpan={TOTAL_COLUMNS} className="p-0">
             <EditTradeForm
               key={trade._id}

@@ -1,17 +1,15 @@
 "use client";
 
-import type { ChangeEvent } from "react";
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
 import { useMemo, useState } from "react";
-import { Alert } from "~/components/ui";
+import { Alert, Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { APP_PAGE_TITLES } from "../../../../shared/e2e/testIds";
 import type { BrokerageSource } from "../../../../shared/imports/types";
 import { type EditTradeFormValues } from "./components/edit-trade-form";
 import { InboxTable } from "./components/inbox-table";
-import { InboxSummaryStrip } from "./components/inbox-summary-strip";
-import { BulkActionsBar } from "./components/bulk-actions-bar";
+import { InboxToolbar } from "./components/inbox-toolbar";
 import { useImportUpload } from "./hooks/use-import-upload";
 import { useInlineInboxEdits } from "./hooks/use-inline-inbox-edits";
 import type { InboxTrade, OpenTradePlanOption } from "./types";
@@ -92,18 +90,23 @@ export default function ImportsPageClient({
   const deleteAllInboxTrades = useMutation(api.imports.deleteAllInboxTrades);
   const updateInboxTrade = useMutation(api.imports.updateInboxTrade);
 
-  const { importResult, isImporting, setImportResult, handleFileChange } =
-    useImportUpload({
-      brokerage,
-      importTrades: importTradesMutation,
-      setErrorMessage,
-    });
+  const {
+    fileInputRef,
+    handleFileChange,
+    handleImport,
+    importResult,
+    isImporting,
+    selectedFile,
+    setImportResult,
+  } = useImportUpload({
+    brokerage,
+    importTrades: importTradesMutation,
+    setErrorMessage,
+  });
 
   const {
-    inlineNotes,
     inlinePortfolioIds,
     inlineTradePlanIds,
-    setInlineNotes,
     setInlinePortfolioIds,
     setInlineTradePlanIds,
   } = useInlineInboxEdits(inboxTrades as InboxTrade[] | undefined);
@@ -111,27 +114,44 @@ export default function ImportsPageClient({
   // Compute summary counts
   const typedTrades = inboxTrades as InboxTrade[] | undefined;
   const totalCount = typedTrades?.length ?? 0;
+
+  // "Ready" = valid fields + has portfolio + has trade plan (green)
   const readyCount = useMemo(
     () =>
-      typedTrades?.filter(
-        (t) => t.validationErrors.length === 0 && isTradeReadyForAcceptance(t),
-      ).length ?? 0,
-    [typedTrades],
+      typedTrades?.filter((t) => {
+        const hasPortfolio = (inlinePortfolioIds[t._id] ?? "") !== "";
+        const hasTradePlan = (inlineTradePlanIds[t._id] ?? "") !== "";
+        return (
+          t.validationErrors.length === 0 &&
+          isTradeReadyForAcceptance(t) &&
+          hasPortfolio &&
+          hasTradePlan
+        );
+      }).length ?? 0,
+    [typedTrades, inlinePortfolioIds, inlineTradePlanIds],
   );
-  const errorCount = useMemo(
-    () =>
-      typedTrades?.filter((t) => t.validationErrors.length > 0).length ?? 0,
-    [typedTrades],
-  );
-  const needsReviewCount = totalCount - readyCount;
-  const matchedCount = useMemo(
+
+  // "Missing plan" = valid + has portfolio but no trade plan (amber)
+  const missingPlanCount = useMemo(
     () =>
       typedTrades?.filter((t) => {
-        const inlineId = inlineTradePlanIds[t._id];
-        return inlineId !== undefined ? inlineId !== "" : !!t.tradePlanId;
+        const hasPortfolio = (inlinePortfolioIds[t._id] ?? "") !== "";
+        const hasTradePlan = (inlineTradePlanIds[t._id] ?? "") !== "";
+        return (
+          t.validationErrors.length === 0 &&
+          isTradeReadyForAcceptance(t) &&
+          hasPortfolio &&
+          !hasTradePlan
+        );
       }).length ?? 0,
-    [typedTrades, inlineTradePlanIds],
+    [typedTrades, inlinePortfolioIds, inlineTradePlanIds],
   );
+
+  // "Needs review" = everything else (red)
+  const needsReviewCount = totalCount - readyCount - missingPlanCount;
+
+  // Acceptable = can be accepted (ready + missing-plan)
+  const acceptableCount = readyCount + missingPlanCount;
 
   const onBrokerageChange = (value: BrokerageSource) => {
     setBrokerage(value);
@@ -154,17 +174,6 @@ export default function ImportsPageClient({
       );
       return false;
     }
-  };
-
-  const persistNotes = (inboxTradeId: Id<"inboxTrades">, value: string) => {
-    void updateInboxTrade({
-      inboxTradeId,
-      notes: value || null,
-    }).catch((error) => {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to update notes",
-      );
-    });
   };
 
   const persistPortfolioSelection = (
@@ -273,15 +282,13 @@ export default function ImportsPageClient({
 
   const handleAccept = (inboxTradeId: Id<"inboxTrades">) => {
     const trade = inboxTrades?.find((t) => t._id === inboxTradeId);
-    if (!trade || !isTradeReadyForAcceptance(trade)) return;
+    const portfolioId = inlinePortfolioIds[inboxTradeId] || undefined;
+    if (!trade || !isTradeReadyForAcceptance(trade) || !portfolioId) return;
 
     const tradePlanId = inlineTradePlanIds[inboxTradeId] || undefined;
-    const notesValue = inlineNotes[inboxTradeId] || undefined;
-    const portfolioId = inlinePortfolioIds[inboxTradeId] || undefined;
 
     void acceptTrade({
       inboxTradeId,
-      notes: notesValue,
       portfolioId: portfolioId ? (portfolioId as Id<"portfolios">) : undefined,
       tradePlanId: tradePlanId ? (tradePlanId as Id<"tradePlans">) : undefined,
     })
@@ -305,20 +312,17 @@ export default function ImportsPageClient({
         await Promise.all(
           inboxTrades.map((trade) => {
             const selected = inlineTradePlanIds[trade._id] ?? "";
-            const notes = inlineNotes[trade._id] ?? "";
             const portfolio = inlinePortfolioIds[trade._id] ?? "";
             const tradePlanChanged =
               selected !== (trade.tradePlanId ? String(trade.tradePlanId) : "");
-            const notesChanged = notes !== (trade.notes ?? "");
             const portfolioChanged =
               portfolio !==
               (trade.portfolioId ? String(trade.portfolioId) : "");
-            if (!tradePlanChanged && !notesChanged && !portfolioChanged)
+            if (!tradePlanChanged && !portfolioChanged)
               return Promise.resolve();
 
             return updateInboxTrade({
               inboxTradeId: trade._id,
-              notes: notes || null,
               portfolioId: portfolio ? (portfolio as Id<"portfolios">) : null,
               tradePlanId: selected ? (selected as Id<"tradePlans">) : null,
             });
@@ -377,7 +381,22 @@ export default function ImportsPageClient({
         >
           Imports
         </h1>
-        <div className="ml-auto flex flex-wrap items-center gap-3">
+        <div className="ml-auto flex items-center gap-3">
+          <label
+            htmlFor="csv-file-input"
+            className="flex h-9 cursor-pointer items-center rounded-md border border-olive-6 bg-olive-3 px-3 text-sm text-olive-12 hover:bg-olive-4"
+          >
+            {selectedFile ? selectedFile.name : "Choose file"}
+            <input
+              ref={fileInputRef}
+              id="csv-file-input"
+              type="file"
+              accept=".csv"
+              disabled={isImporting}
+              onChange={handleFileChange}
+              className="sr-only"
+            />
+          </label>
           <label htmlFor="brokerage-select" className="sr-only">
             Select brokerage
           </label>
@@ -392,22 +411,15 @@ export default function ImportsPageClient({
             <option value="ibkr">Interactive Brokers (IBKR)</option>
             <option value="kraken">Kraken</option>
           </select>
-          <label htmlFor="csv-file-input" className="sr-only">
-            Upload CSV file
-          </label>
-          <input
-            id="csv-file-input"
-            type="file"
-            accept=".csv"
-            disabled={isImporting}
-            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-              void handleFileChange(e)
-            }
-            className="text-sm text-olive-12 file:mr-3 file:rounded-md file:border file:border-olive-6 file:bg-olive-3 file:px-3 file:py-1.5 file:text-sm file:text-olive-12 file:hover:bg-olive-4 disabled:cursor-not-allowed disabled:opacity-50"
-          />
-          {isImporting && (
-            <span className="text-sm text-olive-11">Importing trades...</span>
-          )}
+          <Button
+            dataTestId="import-trades-button"
+            className="h-9"
+            disabled={!selectedFile}
+            isLoading={isImporting}
+            onClick={() => void handleImport()}
+          >
+            Import trades
+          </Button>
         </div>
       </div>
 
@@ -470,17 +482,12 @@ export default function ImportsPageClient({
 
       {/* Summary strip + bulk actions + table */}
       <div className="space-y-3">
-        <InboxSummaryStrip
-          errorCount={errorCount}
-          matchedCount={matchedCount}
-          needsReviewCount={needsReviewCount}
-          readyCount={readyCount}
-          totalCount={totalCount}
-        />
-
-        <BulkActionsBar
+        <InboxToolbar
+          acceptableCount={acceptableCount}
           isAccepting={isAcceptingAll}
           isDeleting={isDeletingAll}
+          missingPlanCount={missingPlanCount}
+          needsReviewCount={needsReviewCount}
           onAcceptAll={handleAcceptAll}
           onDeleteAll={handleDeleteAll}
           readyCount={readyCount}
@@ -492,7 +499,6 @@ export default function ImportsPageClient({
           campaigns={campaigns}
           editingTradeId={editingTradeId}
           editInitialValues={editInitialValues}
-          inlineNotes={inlineNotes}
           inlinePortfolioIds={inlinePortfolioIds}
           inlineTradePlanIds={inlineTradePlanIds}
           inboxTrades={typedTrades}
@@ -508,13 +514,6 @@ export default function ImportsPageClient({
             });
           }}
           onEdit={handleEdit}
-          onInlineNotesBlur={persistNotes}
-          onInlineNotesChange={(inboxTradeId, value) => {
-            setInlineNotes((prev) => ({
-              ...prev,
-              [inboxTradeId]: value,
-            }));
-          }}
           onInlinePortfolioChange={(inboxTradeId, value) => {
             setInlinePortfolioIds((prev) => ({
               ...prev,

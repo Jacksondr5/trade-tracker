@@ -51,7 +51,7 @@ export function EditTradeForm({ initialValues, onCancel, onSave }: EditTradeForm
   });
 
   return (
-    <div className="border-y border-amber-7 bg-amber-3/30 p-4">
+    <div className="p-4">
       <form
         onSubmit={(event) => {
           event.preventDefault();

@@ -24,6 +24,7 @@ export default defineSchema({
     dismissedAt: v.optional(v.number()),
     error: v.optional(v.string()),
     extractedData: v.optional(v.string()),
+    inboxTradeId: v.optional(v.id("inboxTrades")),
     mode: importTaskModeValidator,
     ownerId: v.string(),
     pastedText: v.string(),
