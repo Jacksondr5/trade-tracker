@@ -12,6 +12,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  EmptyState,
   useAppForm,
 } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
@@ -336,37 +337,24 @@ export default function TradePlansPageClient({
 
       {/* Plan list */}
       {tradePlans.length === 0 ? (
-        <Card
-          className="border-olive-6 bg-olive-2"
-          data-testid={TRADE_PLANS_INDEX_TEST_IDS.emptyState}
-        >
-          <CardContent className="px-4 py-6">
-            <p className="text-sm font-medium text-olive-12">
-              No trade plans yet
-            </p>
-            <p className="mt-1 text-sm text-olive-11">
-              Create a standalone trade plan or add one from a campaign.
-            </p>
-            {!showCreateForm && (
-              <Button
-                dataTestId={TRADE_PLANS_INDEX_TEST_IDS.emptyStateCta}
-                variant="default"
-                className="mt-3"
-                onClick={() => setShowCreateForm(true)}
-              >
-                New trade plan
-              </Button>
-            )}
-          </CardContent>
-        </Card>
+        <EmptyState
+          dataTestId={TRADE_PLANS_INDEX_TEST_IDS.emptyState}
+          title="No trade plans yet"
+          description="Create a standalone trade plan or add one from a campaign."
+          ctaLabel={showCreateForm ? undefined : "New trade plan"}
+          ctaTestId={
+            showCreateForm
+              ? undefined
+              : TRADE_PLANS_INDEX_TEST_IDS.emptyStateCta
+          }
+          onCtaClick={() => setShowCreateForm(true)}
+        />
       ) : filteredPlans.length === 0 ? (
-        <Card className="border-olive-6 bg-olive-2">
-          <CardContent className="px-4 py-6">
-            <p className="text-sm text-olive-11">
-              No trade plans match the current filters.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          dataTestId="trade-plans-filtered-empty-state"
+          title="No trade plans match the current filters"
+          description="Adjust filters to find trade plans."
+        />
       ) : (
         <div
           className="space-y-2"

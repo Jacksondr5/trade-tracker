@@ -2,7 +2,7 @@
 
 import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
 import { useMemo, useState } from "react";
-import { Alert, Button } from "~/components/ui";
+import { Alert, Button, Select } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { APP_PAGE_TITLES } from "../../../../shared/e2e/testIds";
@@ -400,17 +400,18 @@ export default function ImportsPageClient({
           <label htmlFor="brokerage-select" className="sr-only">
             Select brokerage
           </label>
-          <select
+          <Select
+            dataTestId="brokerage-select"
             id="brokerage-select"
+            className="w-auto"
             value={brokerage}
             onChange={(e) =>
               onBrokerageChange(e.target.value as BrokerageSource)
             }
-            className="h-9 rounded-md border border-olive-6 bg-olive-3 px-3 py-1 text-sm text-olive-12 focus:outline-none focus:ring-1 focus:ring-blue-8"
           >
             <option value="ibkr">Interactive Brokers (IBKR)</option>
             <option value="kraken">Kraken</option>
-          </select>
+          </Select>
           <Button
             dataTestId="import-trades-button"
             className="h-9"

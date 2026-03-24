@@ -4,7 +4,7 @@ import { Preloaded, usePreloadedQuery, useQuery } from "convex/react";
 import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Pencil } from "lucide-react";
-import { Badge, Button, Input } from "~/components/ui";
+import { Badge, Button, EmptyState, Input, Select } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { formatCurrency, formatDate } from "~/lib/format";
@@ -306,7 +306,7 @@ export default function TradesPageClient({
         </Link>
       </div>
 
-      <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
+      <div className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <label className="flex flex-col gap-2">
             <span className="text-sm text-slate-11">Start date</span>
@@ -350,10 +350,9 @@ export default function TradesPageClient({
           </label>
           <label className="flex flex-col gap-2">
             <span className="text-sm text-slate-11">Portfolio</span>
-            <select
+            <Select
               aria-label="Portfolio"
-              data-testid="trades-filter-portfolio"
-              className="block h-9 w-full rounded-md border border-olive-7 bg-transparent px-3 text-sm text-slate-12 shadow-xs focus:border-blue-500 focus:outline-none"
+              dataTestId="trades-filter-portfolio"
               value={portfolioValue}
               onChange={(event) => handlePortfolioChange(event.target.value)}
             >
@@ -364,14 +363,13 @@ export default function TradesPageClient({
                   {portfolio.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="flex flex-col gap-2">
             <span className="text-sm text-slate-11">Account</span>
-            <select
+            <Select
               aria-label="Account"
-              data-testid="trades-filter-account"
-              className="block h-9 w-full rounded-md border border-olive-7 bg-transparent px-3 text-sm text-slate-12 shadow-xs focus:border-blue-500 focus:outline-none"
+              dataTestId="trades-filter-account"
               value={accountValue}
               onChange={(event) => handleAccountChange(event.target.value)}
             >
@@ -381,28 +379,32 @@ export default function TradesPageClient({
                   {account.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         </div>
       </div>
       {trades.length === 0 ? (
-        <div className="rounded-lg border border-slate-700 bg-slate-800 p-8 text-center">
-          <p className="text-slate-11">
-            {hasActiveFilters
-              ? "No trades found for the selected filters."
-              : "No trades yet."}
-          </p>
-          {!hasActiveFilters && (
-            <p className="mt-2 text-sm text-slate-11">
-              Click &quot;New Trade&quot; to record your first trade.
-            </p>
-          )}
-        </div>
+        hasActiveFilters ? (
+          <EmptyState
+            dataTestId="trades-filtered-empty-state"
+            title="No trades match the current filters"
+            description="Adjust the filters above to find trades."
+          />
+        ) : (
+          <EmptyState
+            dataTestId="trades-empty-state"
+            title="No trades yet"
+            description="Trades will appear here as you record them or accept imported trades."
+            ctaLabel="New trade"
+            ctaHref="/trades/new"
+            ctaTestId="trades-empty-state-cta"
+          />
+        )
       ) : (
         <>
-          <div className="overflow-x-auto rounded-lg border border-slate-700">
+          <div className="overflow-x-auto rounded-lg border border-slate-6">
             <table className="w-full table-auto">
-              <thead className="bg-slate-800">
+              <thead className="bg-slate-3">
                 <tr>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-11">
                     Date
@@ -439,7 +441,7 @@ export default function TradesPageClient({
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-700 bg-slate-900">
+              <tbody className="divide-y divide-slate-6 bg-slate-2">
                 {trades.map((trade) => {
                   let accountDisplay = "—";
                   if (
@@ -474,7 +476,7 @@ export default function TradesPageClient({
                   return (
                     <React.Fragment key={trade._id}>
                       <tr
-                        className="hover:bg-slate-800/50"
+                        className="hover:bg-slate-3/50"
                         data-testid={getTradeRowTestId(trade.ticker, trade.date)}
                       >
                         <td className="px-4 py-3 text-sm whitespace-nowrap text-slate-12">
@@ -565,7 +567,7 @@ export default function TradesPageClient({
             </table>
           </div>
 
-          <div className="mt-4 flex flex-col gap-3 rounded-lg border border-slate-700 bg-slate-800 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-4 flex flex-col gap-3 rounded-lg border border-olive-6 bg-olive-2 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm text-slate-11">
               Showing {trades.length} trade{trades.length === 1 ? "" : "s"}
             </div>
@@ -576,9 +578,11 @@ export default function TradesPageClient({
               >
                 Rows per page
               </label>
-              <select
+              <Select
+                dataTestId="trades-page-size-select"
+                size="sm"
+                className="w-auto"
                 id="page-size-select"
-                className="rounded border border-slate-600 bg-slate-700 px-2 py-1 text-sm text-slate-12"
                 value={pageSize}
                 onChange={(e) => handlePageSizeChange(Number(e.target.value))}
                 disabled={isLoadingTradesPage}
@@ -588,12 +592,12 @@ export default function TradesPageClient({
                     {option}
                   </option>
                 ))}
-              </select>
+              </Select>
               <button
                 type="button"
                 aria-label="Previous page"
                 title="Previous page"
-                className="rounded border border-slate-600 p-1.5 text-slate-12 disabled:opacity-50"
+                className="rounded border border-olive-6 p-1.5 text-slate-12 disabled:opacity-50"
                 onClick={handlePrevPage}
                 disabled={cursorHistory.length === 0 || isLoadingTradesPage}
               >
@@ -604,7 +608,7 @@ export default function TradesPageClient({
                 type="button"
                 aria-label="Next page"
                 title="Next page"
-                className="rounded border border-slate-600 p-1.5 text-slate-12 disabled:opacity-50"
+                className="rounded border border-olive-6 p-1.5 text-slate-12 disabled:opacity-50"
                 onClick={handleNextPage}
                 disabled={isLoadingTradesPage || displayedTradesPage.isDone}
               >

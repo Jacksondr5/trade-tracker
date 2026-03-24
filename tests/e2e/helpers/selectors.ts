@@ -4,9 +4,12 @@ import { E2E_SMOKE_FIXTURES } from "../../../shared/e2e/smokeFixtures";
 import {
   APP_PAGE_TITLES,
   APP_SHELL_TEST_IDS,
+  IMPORTS_INDEX_TEST_IDS,
   NAVIGATION_SECTION_TEST_IDS,
   NAVIGATION_TEST_IDS,
+  TRADE_PLAN_DETAIL_TEST_IDS,
   TRADE_PLANS_INDEX_TEST_IDS,
+  TRADES_INDEX_TEST_IDS,
   getCommandPaletteItemTestId,
   getTradePlansStatusTestId,
   getCampaignRowTestId,
@@ -482,4 +485,26 @@ export function getEditRetrospectiveButton(
   prefix: string,
 ): Locator {
   return page.getByTestId(getEditRetrospectiveButtonTestId(prefix));
+}
+
+// --- Empty state selectors ---
+
+export function getTradesEmptyState(page: Page): Locator {
+  return page.getByTestId(TRADES_INDEX_TEST_IDS.emptyState);
+}
+
+export function getTradesFilteredEmptyState(page: Page): Locator {
+  return page.getByTestId(TRADES_INDEX_TEST_IDS.filteredEmptyState);
+}
+
+export function getImportsEmptyState(page: Page): Locator {
+  return page.getByTestId(IMPORTS_INDEX_TEST_IDS.emptyState);
+}
+
+export function getTradePlanDetailTradesEmptyState(page: Page): Locator {
+  return page.getByTestId(TRADE_PLAN_DETAIL_TEST_IDS.tradesEmptyState);
+}
+
+export function getTradePlansFilteredEmptyState(page: Page): Locator {
+  return page.getByTestId(TRADE_PLANS_INDEX_TEST_IDS.filteredEmptyState);
 }
