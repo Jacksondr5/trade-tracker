@@ -18,7 +18,7 @@ When an agent starts work on a Linear ticket in this repo:
 - Move the ticket to `In Progress` when the work is picked up.
 - Do not manually move the ticket to `In Review` or `Done`.
 - ALWAYS do ticket work on a new git worktree
-- Open the pull request and let the GitHub integration move the ticket to `In Review` when appropriate.
+- Open the pull request and move the ticket to `In Review`.
 - Let the GitHub integration move the ticket to `Done` after the PR is merged or otherwise completes the configured workflow.
 
 ## Commands
