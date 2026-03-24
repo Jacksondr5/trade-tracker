@@ -51,7 +51,7 @@ export function EditTradeForm({ initialValues, onCancel, onSave }: EditTradeForm
   });
 
   return (
-    <div className="border-t border-slate-6 bg-slate-3 p-4">
+    <div className="border-y border-amber-7 bg-amber-3/30 p-4">
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -106,8 +106,8 @@ export function EditTradeForm({ initialValues, onCancel, onSave }: EditTradeForm
             {(field) => (
               <field.FieldInput
                 label="Price"
-                type="number"
-                step="any"
+                type="text"
+                inputMode="decimal"
                 className="w-[120px]"
               />
             )}
@@ -116,8 +116,8 @@ export function EditTradeForm({ initialValues, onCancel, onSave }: EditTradeForm
             {(field) => (
               <field.FieldInput
                 label="Quantity"
-                type="number"
-                step="any"
+                type="text"
+                inputMode="decimal"
                 className="w-[120px]"
               />
             )}
@@ -127,7 +127,7 @@ export function EditTradeForm({ initialValues, onCancel, onSave }: EditTradeForm
               <field.FieldInput
                 label="Date"
                 type="datetime-local"
-                className="w-[200px]"
+                className="w-[200px] [color-scheme:dark]"
               />
             )}
           </form.AppField>

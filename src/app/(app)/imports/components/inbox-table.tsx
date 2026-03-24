@@ -495,8 +495,9 @@ function InboxRow({
   return (
     <>
       <tr
-        className={cn("hover:bg-slate-3", {
-          "bg-amber-3/30 ring-1 ring-inset ring-amber-7": isEditing,
+        className={cn({
+          "bg-amber-3/30 border-x border-t border-amber-7": isEditing,
+          "hover:bg-slate-3": !isEditing,
         })}
         data-testid={`inbox-row-${trade._id}`}
       >
