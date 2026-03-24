@@ -65,6 +65,55 @@ interface InboxTableProps {
 }
 
 const TOTAL_COLUMNS = 12;
+const MAX_VALIDATION_BADGES = 2;
+
+interface ValidationOverflowIndicatorProps {
+  messages: string[];
+  tradeId: Id<"inboxTrades">;
+  type: "error" | "warning";
+}
+
+function ValidationOverflowIndicator({
+  messages,
+  tradeId,
+  type,
+}: ValidationOverflowIndicatorProps) {
+  const remainingMessages = messages.slice(MAX_VALIDATION_BADGES);
+
+  if (remainingMessages.length === 0) {
+    return null;
+  }
+
+  const variant = type === "error" ? "danger" : "warning";
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex cursor-help border-0 bg-transparent p-0 text-left"
+        >
+          <Badge variant={variant} className="text-[10px]">
+            +{remainingMessages.length} more
+          </Badge>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="max-w-xs p-3">
+        <div className="space-y-1">
+          {remainingMessages.map((message, index) => (
+            <Badge
+              key={`${tradeId}-${type}-overflow-${index}`}
+              variant={variant}
+              className="mr-1 text-[10px]"
+            >
+              {message}
+            </Badge>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 function SkeletonRow() {
   return (
@@ -540,20 +589,34 @@ function InboxRow({
           {(trade.validationErrors.length > 0 ||
             trade.validationWarnings.length > 0) && (
             <div className="mt-1 space-y-0.5">
-              {trade.validationErrors.slice(0, 2).map((error, index) => (
-                <div key={`${trade._id}-error-${index}`}>
-                  <Badge variant="danger" className="text-[10px]">
-                    {error}
-                  </Badge>
-                </div>
-              ))}
-              {trade.validationWarnings.slice(0, 2).map((warning, index) => (
-                <div key={`${trade._id}-warning-${index}`}>
-                  <Badge variant="warning" className="text-[10px]">
-                    {warning}
-                  </Badge>
-                </div>
-              ))}
+              {trade.validationErrors
+                .slice(0, MAX_VALIDATION_BADGES)
+                .map((error, index) => (
+                  <div key={`${trade._id}-error-${index}`}>
+                    <Badge variant="danger" className="text-[10px]">
+                      {error}
+                    </Badge>
+                  </div>
+                ))}
+              <ValidationOverflowIndicator
+                messages={trade.validationErrors}
+                tradeId={trade._id}
+                type="error"
+              />
+              {trade.validationWarnings
+                .slice(0, MAX_VALIDATION_BADGES)
+                .map((warning, index) => (
+                  <div key={`${trade._id}-warning-${index}`}>
+                    <Badge variant="warning" className="text-[10px]">
+                      {warning}
+                    </Badge>
+                  </div>
+                ))}
+              <ValidationOverflowIndicator
+                messages={trade.validationWarnings}
+                tradeId={trade._id}
+                type="warning"
+              />
             </div>
           )}
         </td>
@@ -585,9 +648,7 @@ function InboxRow({
         </td>
         {/* Qty */}
         <td className="whitespace-nowrap px-4 py-2 text-right text-sm text-slate-12">
-          {trade.quantity !== undefined
-                    ? Number(trade.quantity.toFixed(1))
-                    : "---"}
+          {trade.quantity !== undefined ? trade.quantity.toFixed(1) : "---"}
         </td>
         {/* Value */}
         <td className="whitespace-nowrap px-4 py-2 text-right text-sm text-slate-12">

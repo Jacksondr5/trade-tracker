@@ -15,13 +15,15 @@ interface InboxToolbarProps {
   totalCount: number;
 }
 
+type StatusColor = "bg-grass-9" | "bg-amber-9" | "bg-red-9";
+
 function StatSegment({
   color,
   count,
   dataTestId,
   label,
 }: {
-  color: string;
+  color: StatusColor;
   count: number;
   dataTestId: string;
   label: string;
