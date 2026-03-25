@@ -41,13 +41,16 @@ test.describe("operational surfaces regression", () => {
     await expect(getTradesFilteredEmptyState(page)).toBeVisible();
   });
 
-  test("trade plans filtered-empty state appears for non-matching status filter", async ({
+  test("trade plans filtered-empty state appears for non-matching filter combination", async ({
     page,
   }) => {
     await page.goto("/trade-plans");
     await waitForAuthenticatedApp(page, APP_PAGE_TITLES.tradePlans);
 
-    // Click the "Closed" status filter - seeded data should have no closed plans
+    // Combine "Bravos" relationship + "Closed" status filters.
+    // No e2e test creates then closes a Bravos plan, so this
+    // reliably produces zero results on both local and preview targets.
+    await page.getByTestId("trade-plans-filter-bravos").click();
     await page.getByTestId("trade-plans-status-closed").click();
 
     // Verify the filtered empty state is displayed
