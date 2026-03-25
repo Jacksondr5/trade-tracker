@@ -33,6 +33,24 @@ export default defineSchema({
     tradePlanId: v.optional(v.id("tradePlans")),
   }).index("by_owner", ["ownerId"]),
 
+  migrationRuns: defineTable({
+    currentTable: v.union(v.literal("trades"), v.literal("inboxTrades")),
+    inboxTradesPatched: v.number(),
+    name: v.string(),
+    status: v.union(v.literal("running"), v.literal("done")),
+    tables: v.object({
+      inboxTrades: v.object({
+        cursor: v.union(v.string(), v.null()),
+        done: v.boolean(),
+      }),
+      trades: v.object({
+        cursor: v.union(v.string(), v.null()),
+        done: v.boolean(),
+      }),
+    }),
+    tradesPatched: v.number(),
+  }).index("by_name", ["name"]),
+
   notes: defineTable({
     campaignId: v.optional(v.id("campaigns")),
     chartUrls: v.optional(v.array(v.string())),

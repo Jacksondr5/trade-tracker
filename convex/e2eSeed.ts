@@ -230,7 +230,9 @@ async function upsertTrade(
       .collect()
   ).find(
     (trade) =>
-      trade.ticker === args.trade.ticker && trade.date === args.trade.date,
+      trade.ticker === args.trade.ticker &&
+      trade.date === args.trade.date &&
+      trade.tradePlanId === args.tradePlanId,
   );
 
   const patch = {
