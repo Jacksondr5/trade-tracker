@@ -14,6 +14,7 @@ import {
   PopoverTrigger,
 } from "~/components/ui/popover";
 import type { Id } from "~/convex/_generated/dataModel";
+import { IMPORTS_INDEX_TEST_IDS } from "../../../../../shared/e2e/testIds";
 import { cn } from "~/lib/utils";
 import {
   KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME,
@@ -360,7 +361,7 @@ export function InboxTable({
   if (inboxTrades.length === 0) {
     return (
       <EmptyState
-        dataTestId="imports-empty-state"
+        dataTestId={IMPORTS_INDEX_TEST_IDS.emptyState}
         title="No trades waiting for review"
         description="Imported trades will appear here before they become permanent trade records."
       />

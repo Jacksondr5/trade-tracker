@@ -493,6 +493,42 @@ export function getTradesEmptyState(page: Page): Locator {
   return page.getByTestId(TRADES_INDEX_TEST_IDS.emptyState);
 }
 
+export function getTradesFilterPortfolio(page: Page): Locator {
+  return page.getByTestId(TRADES_INDEX_TEST_IDS.filterPortfolio);
+}
+
+export function getTradesFilterAccount(page: Page): Locator {
+  return page.getByTestId(TRADES_INDEX_TEST_IDS.filterAccount);
+}
+
+export function getTradesFilterTicker(page: Page): Locator {
+  return page.getByTestId(TRADES_INDEX_TEST_IDS.filterTicker);
+}
+
+export function getTradesFilterStartDate(page: Page): Locator {
+  return page.getByTestId(TRADES_INDEX_TEST_IDS.filterStartDate);
+}
+
+export function getTradesFilterEndDate(page: Page): Locator {
+  return page.getByTestId(TRADES_INDEX_TEST_IDS.filterEndDate);
+}
+
+export function getTradesPageSizeSelect(page: Page): Locator {
+  return page.getByTestId(TRADES_INDEX_TEST_IDS.pageSizeSelect);
+}
+
+export function getTradePlansFilterBravos(page: Page): Locator {
+  return page.getByTestId(TRADE_PLANS_INDEX_TEST_IDS.filterBravos);
+}
+
+export function getTradePlansStatusClosed(page: Page): Locator {
+  return page.getByTestId(getTradePlansStatusTestId("closed"));
+}
+
+export function getBrokerageSelect(page: Page): Locator {
+  return page.getByTestId(IMPORTS_INDEX_TEST_IDS.brokerageSelect);
+}
+
 export function getTradesFilteredEmptyState(page: Page): Locator {
   return page.getByTestId(TRADES_INDEX_TEST_IDS.filteredEmptyState);
 }

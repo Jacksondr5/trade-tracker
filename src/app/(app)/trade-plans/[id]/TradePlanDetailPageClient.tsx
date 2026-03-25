@@ -1052,7 +1052,7 @@ export default function TradePlanDetailPageClient({
         ) : (
           inboxTradesForPlan.length === 0 && (
             <EmptyState
-              dataTestId="trade-plan-detail-trades-empty-state"
+              dataTestId={TRADE_PLAN_DETAIL_TEST_IDS.tradesEmptyState}
               title="No trades linked to this plan yet"
               description="Trades will appear here once they are linked or imported."
             />

@@ -2,9 +2,18 @@ import { expect, test } from "@playwright/test";
 import { waitForAuthenticatedApp } from "../helpers/app";
 import {
   APP_PAGE_TITLES,
-  getTradesFilteredEmptyState,
-  getTradePlansFilteredEmptyState,
+  getBrokerageSelect,
   getLinkedTradeRow,
+  getTradePlansFilterBravos,
+  getTradePlansFilteredEmptyState,
+  getTradePlansStatusClosed,
+  getTradesFilterAccount,
+  getTradesFilterEndDate,
+  getTradesFilterPortfolio,
+  getTradesFilterStartDate,
+  getTradesFilterTicker,
+  getTradesFilteredEmptyState,
+  getTradesPageSizeSelect,
 } from "../helpers/selectors";
 
 test.describe("operational surfaces regression", () => {
@@ -18,14 +27,14 @@ test.describe("operational surfaces regression", () => {
     await expect(getLinkedTradeRow(page)).toBeVisible();
 
     // Verify filter controls are present and use shared Select
-    await expect(page.getByTestId("trades-filter-portfolio")).toBeVisible();
-    await expect(page.getByTestId("trades-filter-account")).toBeVisible();
-    await expect(page.getByTestId("trades-filter-ticker")).toBeVisible();
-    await expect(page.getByTestId("trades-filter-start-date")).toBeVisible();
-    await expect(page.getByTestId("trades-filter-end-date")).toBeVisible();
+    await expect(getTradesFilterPortfolio(page)).toBeVisible();
+    await expect(getTradesFilterAccount(page)).toBeVisible();
+    await expect(getTradesFilterTicker(page)).toBeVisible();
+    await expect(getTradesFilterStartDate(page)).toBeVisible();
+    await expect(getTradesFilterEndDate(page)).toBeVisible();
 
     // Verify pagination controls are present
-    await expect(page.getByTestId("trades-page-size-select")).toBeVisible();
+    await expect(getTradesPageSizeSelect(page)).toBeVisible();
   });
 
   test("trades filtered-empty state appears for non-matching ticker", async ({
@@ -35,7 +44,7 @@ test.describe("operational surfaces regression", () => {
     await waitForAuthenticatedApp(page, APP_PAGE_TITLES.trades);
 
     // Enter a ticker that does not exist in seeded data
-    await page.getByTestId("trades-filter-ticker").fill("ZZZZZZZ");
+    await getTradesFilterTicker(page).fill("ZZZZZZZ");
 
     // Wait for debounce and verify filtered empty state
     await expect(getTradesFilteredEmptyState(page)).toBeVisible();
@@ -50,8 +59,8 @@ test.describe("operational surfaces regression", () => {
     // Combine "Bravos" relationship + "Closed" status filters.
     // No e2e test creates then closes a Bravos plan, so this
     // reliably produces zero results on both local and preview targets.
-    await page.getByTestId("trade-plans-filter-bravos").click();
-    await page.getByTestId("trade-plans-status-closed").click();
+    await getTradePlansFilterBravos(page).click();
+    await getTradePlansStatusClosed(page).click();
 
     // Verify the filtered empty state is displayed
     await expect(getTradePlansFilteredEmptyState(page)).toBeVisible();
@@ -62,6 +71,6 @@ test.describe("operational surfaces regression", () => {
     await waitForAuthenticatedApp(page, APP_PAGE_TITLES.imports);
 
     // Verify the brokerage select uses shared Select component
-    await expect(page.getByTestId("brokerage-select")).toBeVisible();
+    await expect(getBrokerageSelect(page)).toBeVisible();
   });
 });

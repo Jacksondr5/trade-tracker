@@ -351,7 +351,7 @@ export default function TradePlansPageClient({
         />
       ) : filteredPlans.length === 0 ? (
         <EmptyState
-          dataTestId="trade-plans-filtered-empty-state"
+          dataTestId={TRADE_PLANS_INDEX_TEST_IDS.filteredEmptyState}
           title="No trade plans match the current filters"
           description="Adjust filters to find trade plans."
         />

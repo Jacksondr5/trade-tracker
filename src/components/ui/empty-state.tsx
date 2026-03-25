@@ -9,7 +9,7 @@ export interface EmptyStateProps {
   dataTestId: string;
   /** Short, calm description of what will appear here. */
   description: string;
-  /** Optional CTA button href (renders a link-wrapped button). */
+  /** Optional CTA button href. */
   ctaHref?: string;
   /** Optional CTA button label. */
   ctaLabel?: string;
@@ -30,25 +30,27 @@ function EmptyState({
   onCtaClick,
   title,
 }: EmptyStateProps) {
-  const ctaElement =
-    ctaLabel && ctaTestId ? (
-      ctaHref ? (
-        <Link href={ctaHref}>
-          <Button dataTestId={ctaTestId} variant="default" className="mt-3">
-            {ctaLabel}
-          </Button>
-        </Link>
-      ) : onCtaClick ? (
-        <Button
-          dataTestId={ctaTestId}
-          variant="default"
-          className="mt-3"
-          onClick={onCtaClick}
-        >
-          {ctaLabel}
-        </Button>
-      ) : null
-    ) : null;
+  const ctaElement = ctaLabel ? (
+    ctaHref ? (
+      <Button
+        asChild
+        dataTestId={ctaTestId ?? `${dataTestId}-cta`}
+        variant="default"
+        className="mt-3"
+      >
+        <Link href={ctaHref}>{ctaLabel}</Link>
+      </Button>
+    ) : onCtaClick ? (
+      <Button
+        dataTestId={ctaTestId ?? `${dataTestId}-cta`}
+        variant="default"
+        className="mt-3"
+        onClick={onCtaClick}
+      >
+        {ctaLabel}
+      </Button>
+    ) : null
+  ) : null;
 
   return (
     <Card className="border-olive-6 bg-olive-2" data-testid={dataTestId}>
