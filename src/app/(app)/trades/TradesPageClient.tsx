@@ -572,7 +572,7 @@ export default function TradesPageClient({
             </div>
             <div className="flex items-center gap-3">
               <label
-                className="text-sm text-slate-11"
+                className="whitespace-nowrap text-sm text-slate-11"
                 htmlFor="page-size-select"
               >
                 Rows per page
@@ -602,7 +602,9 @@ export default function TradesPageClient({
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <span className="text-sm text-slate-11">Page {currentPage}</span>
+              <span className="whitespace-nowrap text-sm text-slate-11">
+                Page {currentPage}
+              </span>
               <button
                 type="button"
                 aria-label="Next page"

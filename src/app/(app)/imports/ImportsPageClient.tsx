@@ -384,7 +384,7 @@ export default function ImportsPageClient({
         <div className="ml-auto flex items-center gap-3">
           <label
             htmlFor="csv-file-input"
-            className="flex h-9 cursor-pointer items-center rounded-md border border-olive-6 bg-olive-3 px-3 text-sm text-olive-12 hover:bg-olive-4"
+            className="flex h-9 cursor-pointer items-center whitespace-nowrap rounded-md border border-olive-6 bg-olive-3 px-3 text-sm text-olive-12 hover:bg-olive-4"
           >
             {selectedFile ? selectedFile.name : "Choose file"}
             <input
