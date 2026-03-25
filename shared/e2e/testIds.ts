@@ -136,11 +136,15 @@ export const TRADES_INDEX_TEST_IDS = {
   filteredEmptyState: "trades-filtered-empty-state",
   filterPortfolio: "trades-filter-portfolio",
   filterAccount: "trades-filter-account",
+  filterTicker: "trades-filter-ticker",
+  filterStartDate: "trades-filter-start-date",
+  filterEndDate: "trades-filter-end-date",
   pageSizeSelect: "trades-page-size-select",
 } as const;
 
 export const IMPORTS_INDEX_TEST_IDS = {
   emptyState: "imports-empty-state",
+  brokerageSelect: "brokerage-select",
 } as const;
 
 export const TRADE_PLANS_INDEX_TEST_IDS = {
