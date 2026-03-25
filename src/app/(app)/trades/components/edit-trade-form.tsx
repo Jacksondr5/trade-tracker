@@ -23,7 +23,6 @@ export interface EditTradeFormValues {
   assetType: "stock" | "crypto";
   date: string;
   direction: "long" | "short";
-  notes: string;
   portfolioId: string;
   price: string;
   quantity: string;
@@ -45,7 +44,6 @@ const editTradeSchema = z.object({
   assetType: z.enum(["stock", "crypto"]),
   date: z.string().min(1, "Date is required"),
   direction: z.enum(["long", "short"]),
-  notes: z.string().optional(),
   portfolioId: z.string().optional(),
   price: z
     .string()
@@ -90,7 +88,6 @@ export function EditTradeForm({
           assetType: parsed.assetType,
           date: new Date(parsed.date).getTime(),
           direction: parsed.direction,
-          notes: parsed.notes || undefined,
           portfolioId: parsed.portfolioId
             ? (parsed.portfolioId as Id<"portfolios">)
             : null,
@@ -230,15 +227,6 @@ export function EditTradeForm({
               )}
             </form.AppField>
           </div>
-          <form.AppField name="notes">
-            {(field) => (
-              <field.FieldTextarea
-                label="Notes (optional)"
-                placeholder="Add any notes about this trade..."
-                rows={2}
-              />
-            )}
-          </form.AppField>
           <div className="flex justify-end gap-2">
             <Button
               type="button"

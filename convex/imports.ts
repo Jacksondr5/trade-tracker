@@ -31,7 +31,6 @@ const inboxTradeValidator = v.object({
   direction: v.optional(v.union(v.literal("long"), v.literal("short"))),
   externalId: v.optional(v.string()),
   fees: v.optional(v.number()),
-  notes: v.optional(v.string()),
   orderType: v.optional(v.string()),
   ownerId: v.string(),
   portfolioId: v.optional(v.id("portfolios")),
@@ -216,7 +215,6 @@ async function acceptInboxTradeInternal(
   ownerId: string,
   inboxTradeId: Id<"inboxTrades">,
   args: {
-    notes?: string;
     portfolioId?: Id<"portfolios">;
     tradePlanId?: Id<"tradePlans">;
   },
@@ -232,7 +230,6 @@ async function acceptInboxTradeInternal(
     return { accepted: false, error: "Trade is not pending review" };
   }
 
-  const notes = args.notes !== undefined ? args.notes : inboxTrade.notes;
   const tradePlanId =
     args.tradePlanId !== undefined ? args.tradePlanId : inboxTrade.tradePlanId;
   const portfolioId =
@@ -279,7 +276,6 @@ async function acceptInboxTradeInternal(
     direction: candidate.direction,
     externalId: inboxTrade.externalId,
     fees: inboxTrade.fees,
-    notes,
     orderType: inboxTrade.orderType,
     ownerId,
     portfolioId,
@@ -307,7 +303,6 @@ export const importTrades = mutation({
         direction: v.optional(v.union(v.literal("long"), v.literal("short"))),
         externalId: v.optional(v.string()),
         fees: v.optional(v.number()),
-        notes: v.optional(v.string()),
         orderType: v.optional(v.string()),
         portfolioId: v.optional(v.id("portfolios")),
         price: v.optional(v.number()),
@@ -461,7 +456,6 @@ export const importTrades = mutation({
         direction: trade.direction,
         externalId: trade.externalId,
         fees: trade.fees,
-        notes: trade.notes,
         orderType: trade.orderType,
         ownerId,
         portfolioId: trade.portfolioId,
@@ -853,7 +847,6 @@ export const listInboxTradesForTradePlan = query({
 export const acceptTrade = mutation({
   args: {
     inboxTradeId: v.id("inboxTrades"),
-    notes: v.optional(v.string()),
     portfolioId: v.optional(v.id("portfolios")),
     tradePlanId: v.optional(v.id("tradePlans")),
   },
@@ -864,7 +857,6 @@ export const acceptTrade = mutation({
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
     return await acceptInboxTradeInternal(ctx, ownerId, args.inboxTradeId, {
-      notes: args.notes,
       portfolioId: args.portfolioId,
       tradePlanId: args.tradePlanId,
     });
@@ -958,7 +950,6 @@ export const updateInboxTrade = mutation({
       v.union(v.literal("long"), v.literal("short"), v.null()),
     ),
     inboxTradeId: v.id("inboxTrades"),
-    notes: v.optional(v.union(v.string(), v.null())),
     portfolioId: v.optional(v.union(v.id("portfolios"), v.null())),
     price: v.optional(v.union(v.number(), v.null())),
     quantity: v.optional(v.union(v.number(), v.null())),
@@ -992,7 +983,6 @@ export const updateInboxTrade = mutation({
     if (updates.assetType !== undefined)
       patch.assetType = updates.assetType ?? undefined;
     if (updates.date !== undefined) patch.date = updates.date ?? undefined;
-    if (updates.notes !== undefined) patch.notes = updates.notes ?? undefined;
     if (updates.portfolioId !== undefined) {
       patch.portfolioId = updates.portfolioId ?? undefined;
     }

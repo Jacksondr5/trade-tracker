@@ -228,13 +228,17 @@ async function upsertTrade(
       .query("trades")
       .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
       .collect()
-  ).find((trade) => trade.notes === args.trade.notes);
+  ).find(
+    (trade) =>
+      trade.ticker === args.trade.ticker &&
+      trade.date === args.trade.date &&
+      trade.tradePlanId === args.tradePlanId,
+  );
 
   const patch = {
     assetType: args.trade.assetType,
     date: args.trade.date,
     direction: args.trade.direction,
-    notes: args.trade.notes,
     ownerId: args.ownerId,
     portfolioId: args.portfolioId,
     price: args.trade.price,
@@ -262,7 +266,6 @@ async function upsertInboxTrade(
     date: number;
     direction: "long" | "short";
     externalId: string;
-    notes?: string;
     ownerId: string;
     price: number;
     quantity: number;
@@ -288,7 +291,6 @@ async function upsertInboxTrade(
     date: args.date,
     direction: args.direction,
     externalId: args.externalId,
-    notes: args.notes,
     ownerId: args.ownerId,
     price: args.price,
     quantity: args.quantity,
@@ -510,7 +512,6 @@ export const seedTradePlanInboxScenarios = internalMutation({
       date: E2E_SMOKE_FIXTURES.inboxTrades.linkedSuggested.date,
       direction: "long",
       externalId: linkedSuggestedExternalId,
-      notes: "[e2e-smoke] linked suggested inbox trade",
       ownerId,
       price: 44.25,
       quantity: 8,
@@ -525,7 +526,6 @@ export const seedTradePlanInboxScenarios = internalMutation({
       date: E2E_SMOKE_FIXTURES.inboxTrades.standaloneAssigned.date,
       direction: "short",
       externalId: standaloneAssignedExternalId,
-      notes: "[e2e-smoke] standalone assigned inbox trade",
       ownerId,
       price: 97500,
       quantity: 0.75,

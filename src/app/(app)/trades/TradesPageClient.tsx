@@ -542,7 +542,6 @@ export default function TradesPageClient({
                                 assetType: trade.assetType,
                                 date: formatDateForInput(trade.date),
                                 direction: trade.direction,
-                                notes: trade.notes ?? "",
                                 portfolioId: trade.portfolioId ?? "",
                                 price: String(trade.price),
                                 quantity: String(trade.quantity),
