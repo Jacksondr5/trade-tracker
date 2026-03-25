@@ -76,6 +76,7 @@ export const TRADE_PLAN_DETAIL_TEST_IDS = {
   relationshipLabel: "trade-plan-relationship-label",
   statusSelect: "trade-plan-status-select",
   tacticalSection: "trade-plan-tactical-section",
+  tradesEmptyState: "trade-plan-detail-trades-empty-state",
   unlinkButton: "trade-plan-unlink-button",
 } as const;
 
@@ -129,6 +130,23 @@ export function getCampaignRowTestId(name: string): string {
   return `campaign-row-${normalizeSegment(name)}`;
 }
 
+export const TRADES_INDEX_TEST_IDS = {
+  emptyState: "trades-empty-state",
+  emptyStateCta: "trades-empty-state-cta",
+  filteredEmptyState: "trades-filtered-empty-state",
+  filterPortfolio: "trades-filter-portfolio",
+  filterAccount: "trades-filter-account",
+  filterTicker: "trades-filter-ticker",
+  filterStartDate: "trades-filter-start-date",
+  filterEndDate: "trades-filter-end-date",
+  pageSizeSelect: "trades-page-size-select",
+} as const;
+
+export const IMPORTS_INDEX_TEST_IDS = {
+  emptyState: "imports-empty-state",
+  brokerageSelect: "brokerage-select",
+} as const;
+
 export const TRADE_PLANS_INDEX_TEST_IDS = {
   createFormToggle: "trade-plans-create-form-toggle",
   createFormSection: "trade-plans-create-form-section",
@@ -138,6 +156,7 @@ export const TRADE_PLANS_INDEX_TEST_IDS = {
   emptyStateCta: "trade-plans-empty-state-cta",
   filterAll: "trade-plans-filter-all",
   filterBravos: "trade-plans-filter-bravos",
+  filteredEmptyState: "trade-plans-filtered-empty-state",
   filterLinked: "trade-plans-filter-linked",
   filterStandalone: "trade-plans-filter-standalone",
   planList: "trade-plans-list",

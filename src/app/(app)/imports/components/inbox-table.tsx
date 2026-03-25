@@ -1,12 +1,20 @@
 import { Check, FileText, Pencil, Plus } from "lucide-react";
 import { useState } from "react";
-import { Badge, Button, ConfirmDeleteButton } from "~/components/ui";
+import {
+  Badge,
+  Button,
+  ConfirmDeleteButton,
+  EmptyState,
+  Select,
+  Skeleton,
+} from "~/components/ui";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "~/components/ui/popover";
 import type { Id } from "~/convex/_generated/dataModel";
+import { IMPORTS_INDEX_TEST_IDS } from "../../../../../shared/e2e/testIds";
 import { cn } from "~/lib/utils";
 import {
   KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME,
@@ -119,11 +127,15 @@ function SkeletonRow() {
   return (
     <tr>
       <td className="px-4 py-3">
-        <div className="mx-auto h-2 w-2 animate-pulse rounded-full bg-slate-4" />
+        <Skeleton
+          surface="dense"
+          height="xs"
+          className="mx-auto w-2 rounded-full"
+        />
       </td>
       {Array.from({ length: TOTAL_COLUMNS - 1 }).map((_, i) => (
         <td key={i} className="px-4 py-3">
-          <div className="h-4 w-full animate-pulse rounded bg-slate-4" />
+          <Skeleton surface="dense" height="sm" className="w-full" />
         </td>
       ))}
     </tr>
@@ -224,11 +236,12 @@ function QuickCreatePopover({
         className="h-7 w-full rounded-md border border-slate-6 bg-slate-3 px-2 text-xs text-slate-12 focus:outline-none focus:ring-1 focus:ring-blue-8"
         data-testid="quick-create-symbol-input"
       />
-      <select
+      <Select
+        dataTestId="quick-create-campaign-select"
+        size="dense"
+        surface="dense"
         value={campaignId}
         onChange={(e) => setCampaignId(e.target.value)}
-        className="h-7 w-full rounded-md border border-slate-6 bg-slate-3 px-1 text-xs text-slate-12 focus:outline-none focus:ring-1 focus:ring-blue-8"
-        data-testid="quick-create-campaign-select"
       >
         <option value="">No campaign</option>
         {campaigns?.map((c) => (
@@ -236,7 +249,7 @@ function QuickCreatePopover({
             {c.name}
           </option>
         ))}
-      </select>
+      </Select>
       <div className="flex gap-1">
         <Button
           dataTestId="quick-create-submit"
@@ -329,7 +342,7 @@ export function InboxTable({
                   key={header}
                   className="px-4 py-2 text-left text-xs font-medium text-slate-11"
                 >
-                  <div className="h-4 w-12 animate-pulse rounded bg-slate-4" />
+                  <Skeleton surface="dense" height="sm" className="w-12" />
                 </th>
               ))}
             </tr>
@@ -347,15 +360,11 @@ export function InboxTable({
 
   if (inboxTrades.length === 0) {
     return (
-      <div className="rounded-lg border border-olive-6 bg-olive-2 p-6">
-        <p className="text-sm font-medium text-olive-12">
-          No trades waiting for review
-        </p>
-        <p className="mt-1 text-sm text-olive-11">
-          Imported trades will appear here before they become permanent trade
-          records.
-        </p>
-      </div>
+      <EmptyState
+        dataTestId={IMPORTS_INDEX_TEST_IDS.emptyState}
+        title="No trades waiting for review"
+        description="Imported trades will appear here before they become permanent trade records."
+      />
     );
   }
 
@@ -671,11 +680,13 @@ function InboxRow({
         {/* Trade Plan */}
         <td className="px-4 py-2 text-sm">
           <div className="flex items-center gap-1">
-            <select
-              data-testid={`trade-plan-select-${trade._id}`}
+            <Select
+              dataTestId={`trade-plan-select-${trade._id}`}
+              size="dense"
+              surface="dense"
+              className="min-w-[120px]"
               value={inlineTradePlanId}
               onChange={(e) => onInlineTradePlanChange(e.target.value)}
-              className="h-7 w-full min-w-[120px] rounded-md border border-slate-6 bg-slate-3 px-1 text-xs text-slate-12 focus:outline-none focus:ring-1 focus:ring-blue-8"
             >
               <option value="">None</option>
               {matchingPlans.length > 0 && (
@@ -700,7 +711,7 @@ function InboxRow({
                   ))}
                 </optgroup>
               )}
-            </select>
+            </Select>
             <Popover
               open={isQuickCreateOpen}
               onOpenChange={(open) => {
@@ -739,12 +750,14 @@ function InboxRow({
         </td>
         {/* Portfolio */}
         <td className="px-4 py-2 text-sm">
-          <select
+          <Select
             aria-label={`Portfolio for ${trade.ticker || "trade"}`}
-            data-testid={`portfolio-select-${trade._id}`}
+            dataTestId={`portfolio-select-${trade._id}`}
+            size="dense"
+            surface="dense"
+            className="min-w-[120px]"
             value={inlinePortfolioId}
             onChange={(e) => onInlinePortfolioChange(e.target.value)}
-            className="h-7 w-full min-w-[120px] rounded-md border border-slate-6 bg-slate-3 px-1 text-xs text-slate-12 focus:outline-none focus:ring-1 focus:ring-blue-8"
           >
             <option value="">None</option>
             {portfolios?.map((portfolio) => (
@@ -752,7 +765,7 @@ function InboxRow({
                 {portfolio.name}
               </option>
             ))}
-          </select>
+          </Select>
         </td>
         {/* Actions */}
         <td className="whitespace-nowrap px-4 py-2 text-right text-sm">

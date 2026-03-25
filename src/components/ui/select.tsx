@@ -13,7 +13,12 @@ const selectVariants = {
   size: {
     default: "h-9 px-3 py-1 text-sm",
     sm: "h-8 px-2 py-1 text-xs",
+    dense: "h-7 px-1 py-0.5 text-xs",
     lg: "h-12 px-4 py-2 text-base",
+  },
+  surface: {
+    default: "",
+    dense: "border-slate-6 bg-slate-3",
   },
 };
 
@@ -24,6 +29,7 @@ const selectClassName = cva(
     defaultVariants: {
       error: false,
       size: "default",
+      surface: "default",
     },
   },
 );
@@ -35,6 +41,7 @@ const iconClassName = cva(
       size: {
         default: "size-4",
         sm: "size-3.5",
+        dense: "size-3.5",
         lg: "size-[1.125rem]",
       },
     },
@@ -52,7 +59,7 @@ export interface SelectProps
 }
 
 const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
-  ({ className, dataTestId, error, size, ...props }, ref) => {
+  ({ className, dataTestId, error, size, surface, ...props }, ref) => {
     const { ["aria-invalid"]: ariaInvalidProp, ...selectProps } = props;
 
     return (
@@ -61,7 +68,7 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
           ref={ref}
           data-slot="select"
           data-testid={dataTestId}
-          className={cn(selectClassName({ error, size, className }))}
+          className={cn(selectClassName({ error, size, surface, className }))}
           aria-invalid={ariaInvalidProp ?? (error ? true : undefined)}
           {...selectProps}
         />

@@ -20,7 +20,7 @@ import { RetrospectiveSection } from "~/components/RetrospectiveSection";
 import { WatchToggleButton } from "~/components/WatchToggleButton";
 import { MobileHierarchyBreadcrumbs } from "~/components/app-shell/campaign-trade-plan-hierarchy";
 import { useNavigationData } from "~/components/app-shell";
-import { Alert, Badge } from "~/components/ui";
+import { Alert, Badge, EmptyState, Select } from "~/components/ui";
 import { NotesSection } from "~/components/notes";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
@@ -612,9 +612,10 @@ export default function TradePlanDetailPageClient({
           <div className="group flex items-center gap-2">
             {isEditingCampaign ? (
               <>
-                <select
-                  data-testid={TRADE_PLAN_DETAIL_TEST_IDS.campaignSelect}
+                <Select
+                  dataTestId={TRADE_PLAN_DETAIL_TEST_IDS.campaignSelect}
                   aria-label="Link to campaign"
+                  size="dense"
                   value={tradePlan.campaignId ?? ""}
                   disabled={isChangingRelationship}
                   onChange={(e) => {
@@ -623,7 +624,6 @@ export default function TradePlanDetailPageClient({
                       value ? (value as Id<"campaigns">) : null,
                     );
                   }}
-                  className="h-7 rounded-md border border-olive-7 bg-transparent px-2 py-0.5 text-xs text-olive-12 focus:ring-2 focus:ring-blue-8 focus:outline-none disabled:opacity-50"
                 >
                   <option value="">Standalone (no campaign)</option>
                   {campaigns.map((campaign) => (
@@ -631,7 +631,7 @@ export default function TradePlanDetailPageClient({
                       {campaign.name}
                     </option>
                   ))}
-                </select>
+                </Select>
                 {tradePlan.campaignId && (
                   <button
                     type="button"
@@ -709,21 +709,21 @@ export default function TradePlanDetailPageClient({
           </div>
 
           <div className="flex items-center gap-3">
-            <select
-              data-testid={TRADE_PLAN_DETAIL_TEST_IDS.statusSelect}
+            <Select
+              dataTestId={TRADE_PLAN_DETAIL_TEST_IDS.statusSelect}
               aria-label="Trade plan status"
+              size="sm"
               value={tradePlan.status}
               disabled={isChangingStatus}
               onChange={(e) =>
                 void handleStatusChange(e.target.value as TradePlanStatus)
               }
-              className="h-8 rounded-md border border-olive-7 bg-transparent px-2 py-1 text-sm text-olive-12 focus:ring-2 focus:ring-blue-8 focus:outline-none disabled:opacity-50"
             >
               <option value="idea">Idea</option>
               <option value="watching">Watching</option>
               <option value="active">Active</option>
               <option value="closed">Closed</option>
-            </select>
+            </Select>
 
             {tradePlan.status === "closed" && tradePlan.closedAt && (
               <span
@@ -1051,9 +1051,11 @@ export default function TradePlanDetailPageClient({
           </div>
         ) : (
           inboxTradesForPlan.length === 0 && (
-            <p className="text-sm text-olive-11">
-              No trades linked to this plan yet.
-            </p>
+            <EmptyState
+              dataTestId={TRADE_PLAN_DETAIL_TEST_IDS.tradesEmptyState}
+              title="No trades linked to this plan yet"
+              description="Trades will appear here once they are linked or imported."
+            />
           )
         )}
       </section>
@@ -1157,15 +1159,16 @@ function InboxTradeRow({
       </td>
       <td className="px-3 py-2">
         <div className="flex items-center gap-1">
-          <select
-            data-testid={getInboxTradePortfolioSelectTestId(
+          <Select
+            dataTestId={getInboxTradePortfolioSelectTestId(
               inboxTrade.ticker ?? "trade",
               inboxTrade.externalId ?? inboxTrade._id,
             )}
             aria-label={`Portfolio for ${inboxTrade.ticker || "trade"}`}
+            size="dense"
+            surface="dense"
             value={portfolioId}
             onChange={(e) => onPortfolioChange(e.target.value)}
-            className="h-7 rounded border border-slate-6 bg-transparent px-1 text-xs text-slate-12"
           >
             <option value="">No portfolio</option>
             {portfolios?.map((p) => (
@@ -1173,7 +1176,7 @@ function InboxTradeRow({
                 {p.name}
               </option>
             ))}
-          </select>
+          </Select>
           <button
             type="button"
             data-testid={getInboxTradeAcceptButtonTestId(
