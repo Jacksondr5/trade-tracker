@@ -38,7 +38,7 @@ export const start = internalMutation({
           tradesPatched: 0,
         });
 
-    if (!existingRun || existingRun.status === "running") {
+    if (!existingRun) {
       await ctx.scheduler.runAfter(0, anyApi.migrations.removeTradeNotes.runNextBatch, {
         migrationRunId,
       });
