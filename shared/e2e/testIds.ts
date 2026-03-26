@@ -139,6 +139,8 @@ export const TRADES_INDEX_TEST_IDS = {
   filterTicker: "trades-filter-ticker",
   filterStartDate: "trades-filter-start-date",
   filterEndDate: "trades-filter-end-date",
+  paginationPrev: "trades-pagination-prev",
+  paginationNext: "trades-pagination-next",
   pageSizeSelect: "trades-page-size-select",
 } as const;
 

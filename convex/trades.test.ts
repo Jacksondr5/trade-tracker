@@ -202,6 +202,22 @@ describe("trades filters", () => {
     expect(result.page[0].ticker).toBe("MSFT");
   });
 
+  it("ignores whitespace-only ticker filters", async () => {
+    await insertTrade({ date: Date.UTC(2026, 2, 8), ticker: "AAPL" });
+    await insertTrade({ date: Date.UTC(2026, 2, 7), ticker: "MSFT" });
+
+    const result = await asUser().query(api.trades.listTradesPage, {
+      paginationOpts: {
+        cursor: null,
+        numItems: 10,
+      },
+      ticker: "   ",
+    });
+
+    expect(result.page.map((trade) => trade.ticker)).toEqual(["AAPL", "MSFT"]);
+    expect(result.isDone).toBe(true);
+  });
+
   it("matches the Kraken default account when the trade has no explicit account id", async () => {
     await insertTrade({
       date: Date.UTC(2026, 2, 8),

@@ -24,7 +24,11 @@ import {
   KRAKEN_DEFAULT_ACCOUNT_ID,
   isKrakenDefaultAccountId,
 } from "../../../../shared/imports/constants";
-import { APP_PAGE_TITLES, getTradeRowTestId } from "../../../../shared/e2e/testIds";
+import {
+  APP_PAGE_TITLES,
+  TRADES_INDEX_TEST_IDS,
+  getTradeRowTestId,
+} from "../../../../shared/e2e/testIds";
 import { EditTradeForm } from "./components/edit-trade-form";
 
 function formatDateForInput(epochMs: number): string {
@@ -596,6 +600,7 @@ export default function TradesPageClient({
                 type="button"
                 aria-label="Previous page"
                 title="Previous page"
+                data-testid={TRADES_INDEX_TEST_IDS.paginationPrev}
                 className="rounded border border-olive-6 p-1.5 text-slate-12 disabled:opacity-50"
                 onClick={handlePrevPage}
                 disabled={cursorHistory.length === 0 || isLoadingTradesPage}
@@ -609,6 +614,7 @@ export default function TradesPageClient({
                 type="button"
                 aria-label="Next page"
                 title="Next page"
+                data-testid={TRADES_INDEX_TEST_IDS.paginationNext}
                 className="rounded border border-olive-6 p-1.5 text-slate-12 disabled:opacity-50"
                 onClick={handleNextPage}
                 disabled={isLoadingTradesPage || displayedTradesPage.isDone}

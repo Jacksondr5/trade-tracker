@@ -7,6 +7,19 @@ type SmokeTradePlanFixture = (typeof E2E_SMOKE_FIXTURES)[
   | "linkedTradePlan"
   | "standaloneTradePlan"];
 
+type SeedTradeFixture = {
+  assetType: "crypto" | "stock";
+  date: number;
+  direction: "long" | "short";
+  fixtureKey: string;
+  portfolio: "shared" | undefined;
+  price: number;
+  quantity: number;
+  side: "buy" | "sell";
+  ticker: string;
+  tradePlan: "linked" | "standalone";
+};
+
 function getPlaywrightOwnerId(): string {
   const ownerId = process.env.PLAYWRIGHT_OWNER_ID?.trim();
 
@@ -219,7 +232,7 @@ async function upsertTrade(
   args: {
     ownerId: string;
     portfolioId?: Id<"portfolios">;
-    trade: (typeof E2E_SMOKE_FIXTURES.trades)[number];
+    trade: SeedTradeFixture;
     tradePlanId: Id<"tradePlans">;
   },
 ) {

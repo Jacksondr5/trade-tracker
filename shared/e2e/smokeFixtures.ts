@@ -1,3 +1,35 @@
+const TRADES_VIEWER_MATCH_DATES = Array.from({ length: 12 }, (_, index) =>
+  Date.parse("2026-01-01T14:30:00.000Z") - index * 86_400_000,
+);
+
+const TRADES_VIEWER_MATCH_TRADES = TRADES_VIEWER_MATCH_DATES.map(
+  (date, index) => ({
+    assetType: "stock" as const,
+    date,
+    direction: "long" as const,
+    fixtureKey: `viewer-match-aapl-${index}`,
+    portfolio: "shared" as const,
+    price: 100 + index,
+    quantity: 1,
+    side: "buy" as const,
+    ticker: "AAPL",
+    tradePlan: "linked" as const,
+  }),
+);
+
+const TRADES_VIEWER_FILLER_TRADES = Array.from({ length: 55 }, (_, index) => ({
+  assetType: "stock" as const,
+  date: Date.parse("2026-01-10T15:00:00.000Z") - index * 60_000,
+  direction: "long" as const,
+  fixtureKey: `viewer-filler-msft-${index}`,
+  portfolio: "shared" as const,
+  price: 200 + index,
+  quantity: 1,
+  side: "buy" as const,
+  ticker: `MSFT${index}`,
+  tradePlan: "linked" as const,
+}));
+
 export const E2E_SMOKE_FIXTURES = {
   campaign: {
     name: "E2E Macro Rotation",
@@ -64,7 +96,12 @@ export const E2E_SMOKE_FIXTURES = {
       ticker: "BTC",
       tradePlan: "standalone" as const,
     },
+    ...TRADES_VIEWER_FILLER_TRADES,
+    ...TRADES_VIEWER_MATCH_TRADES,
   ],
+  tradesViewerScenario: {
+    matchDates: TRADES_VIEWER_MATCH_DATES,
+  },
   inboxTrades: {
     linkedSuggested: {
       date: Date.parse("2026-02-05T14:30:00.000Z"),

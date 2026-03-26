@@ -32,19 +32,22 @@ type ListTradesPageArgs = {
 };
 
 type FilteredTradesCursorState = {
-  bufferedIds: Array<Id<"trades">>;
-  databaseCursor: string | null;
-  didReachEnd: boolean;
-  version: 1;
+  offset: number;
+  version: 2;
 };
 
-const FILTERED_TRADES_CURSOR_VERSION = 1;
-const MIN_FILTERED_TRADES_BATCH_SIZE = 50;
-const FILTERED_TRADES_BATCH_MULTIPLIER = 3;
+const FILTERED_TRADES_CURSOR_VERSION = 2;
+
+function normalizeTickerFilter(ticker: string | undefined): string | undefined {
+  const normalizedTicker = ticker?.trim().toUpperCase();
+  return normalizedTicker && normalizedTicker.length > 0
+    ? normalizedTicker
+    : undefined;
+}
 
 function hasAdditionalTradeFilters(args: ListTradesPageArgs): boolean {
   return Boolean(
-    args.ticker ||
+    normalizeTickerFilter(args.ticker) ||
       args.portfolioId ||
       args.withoutPortfolio ||
       (args.accountSource && args.accountId),
@@ -62,9 +65,7 @@ function decodeFilteredTradesCursor(
 ): FilteredTradesCursorState {
   if (!cursor) {
     return {
-      bufferedIds: [],
-      databaseCursor: null,
-      didReachEnd: false,
+      offset: 0,
       version: FILTERED_TRADES_CURSOR_VERSION,
     };
   }
@@ -73,26 +74,21 @@ function decodeFilteredTradesCursor(
     const parsed = JSON.parse(cursor) as Partial<FilteredTradesCursorState>;
     if (
       parsed.version === FILTERED_TRADES_CURSOR_VERSION &&
-      Array.isArray(parsed.bufferedIds) &&
-      (typeof parsed.databaseCursor === "string" ||
-        parsed.databaseCursor === null) &&
-      typeof parsed.didReachEnd === "boolean"
+      typeof parsed.offset === "number" &&
+      Number.isFinite(parsed.offset) &&
+      parsed.offset >= 0
     ) {
       return {
-        bufferedIds: parsed.bufferedIds,
-        databaseCursor: parsed.databaseCursor,
-        didReachEnd: parsed.didReachEnd,
+        offset: parsed.offset,
         version: FILTERED_TRADES_CURSOR_VERSION,
       };
     }
   } catch {
-    // Fall through to compatibility mode for pre-filter cursors.
+    // Fall through to compatibility mode for legacy cursors.
   }
 
   return {
-    bufferedIds: [],
-    databaseCursor: cursor,
-    didReachEnd: false,
+    offset: 0,
     version: FILTERED_TRADES_CURSOR_VERSION,
   };
 }
@@ -112,8 +108,8 @@ function matchesTradeFilters(
   trade: Doc<"trades">,
   args: ListTradesPageArgs,
 ): boolean {
-  if (args.ticker) {
-    const normalizedTickerFilter = args.ticker.trim().toUpperCase();
+  const normalizedTickerFilter = normalizeTickerFilter(args.ticker);
+  if (normalizedTickerFilter) {
     if (!trade.ticker.toUpperCase().includes(normalizedTickerFilter)) {
       return false;
     }
@@ -190,54 +186,36 @@ async function listFilteredTradesPage(
   args: ListTradesPageArgs,
 ) {
   const cursorState = decodeFilteredTradesCursor(args.paginationOpts.cursor);
-  const page: Array<Doc<"trades">> = [];
-  let bufferedIds = [...cursorState.bufferedIds];
-  let databaseCursor = cursorState.databaseCursor;
-  let didReachEnd = cursorState.didReachEnd;
+  const page: Doc<"trades">[] = [];
+  let matchedTradesSeen = 0;
+  let isDone = true;
 
-  while (page.length < args.paginationOpts.numItems) {
-    while (bufferedIds.length > 0 && page.length < args.paginationOpts.numItems) {
-      const nextTradeId = bufferedIds.shift();
-      if (!nextTradeId) {
-        break;
-      }
-
-      const trade = await ctx.db.get(nextTradeId);
-      if (trade && trade.ownerId === ownerId && matchesTradeFilters(trade, args)) {
-        page.push(trade);
-      }
+  for await (const trade of getTradesByDateQuery(ctx, ownerId, args)) {
+    if (!matchesTradeFilters(trade, args)) {
+      continue;
     }
 
-    if (page.length >= args.paginationOpts.numItems || didReachEnd) {
-      break;
+    if (matchedTradesSeen < cursorState.offset) {
+      matchedTradesSeen += 1;
+      continue;
     }
 
-    const nextBatch = await getTradesByDateQuery(ctx, ownerId, args).paginate({
-      cursor: databaseCursor,
-      numItems: Math.max(
-        args.paginationOpts.numItems * FILTERED_TRADES_BATCH_MULTIPLIER,
-        MIN_FILTERED_TRADES_BATCH_SIZE,
-      ),
-    });
-    const filteredBatch = nextBatch.page.filter((trade) =>
-      matchesTradeFilters(trade, args),
-    );
-    const remainingSlots = args.paginationOpts.numItems - page.length;
+    if (page.length < args.paginationOpts.numItems) {
+      page.push(trade);
+      matchedTradesSeen += 1;
+      continue;
+    }
 
-    page.push(...filteredBatch.slice(0, remainingSlots));
-    bufferedIds = filteredBatch.slice(remainingSlots).map((trade) => trade._id);
-    databaseCursor = nextBatch.continueCursor;
-    didReachEnd = nextBatch.isDone;
+    isDone = false;
+    break;
   }
 
   return {
     continueCursor: encodeFilteredTradesCursor({
-      bufferedIds,
-      databaseCursor,
-      didReachEnd,
+      offset: matchedTradesSeen,
       version: FILTERED_TRADES_CURSOR_VERSION,
     }),
-    isDone: bufferedIds.length === 0 && didReachEnd,
+    isDone,
     page,
   };
 }
