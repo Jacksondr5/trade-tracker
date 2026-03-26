@@ -7,6 +7,19 @@ type SmokeTradePlanFixture = (typeof E2E_SMOKE_FIXTURES)[
   | "linkedTradePlan"
   | "standaloneTradePlan"];
 
+type SeedTradeFixture = {
+  assetType: "crypto" | "stock";
+  date: number;
+  direction: "long" | "short";
+  fixtureKey: string;
+  portfolio: "shared" | undefined;
+  price: number;
+  quantity: number;
+  side: "buy" | "sell";
+  ticker: string;
+  tradePlan: "linked" | "standalone";
+};
+
 function getPlaywrightOwnerId(): string {
   const ownerId = process.env.PLAYWRIGHT_OWNER_ID?.trim();
 
@@ -219,7 +232,7 @@ async function upsertTrade(
   args: {
     ownerId: string;
     portfolioId?: Id<"portfolios">;
-    trade: (typeof E2E_SMOKE_FIXTURES.trades)[number];
+    trade: SeedTradeFixture;
     tradePlanId: Id<"tradePlans">;
   },
 ) {
@@ -370,6 +383,71 @@ export const setupPreviewData = internalMutation({
       linkedTradePlanId: linkedTradePlan._id,
       portfolioId: portfolio._id,
       standaloneTradePlanId: standaloneTradePlan._id,
+    };
+  },
+});
+
+export const seedTradesViewerScenario = internalMutation({
+  args: {},
+  returns: v.object({
+    matchDates: v.array(v.number()),
+  }),
+  handler: async (ctx) => {
+    const ownerId = getPlaywrightOwnerId();
+    const portfolio = await upsertPortfolio(ctx, ownerId);
+    const campaign = await upsertCampaign(ctx, ownerId);
+    const linkedTradePlan = await upsertTradePlan(ctx, {
+      campaignId: campaign._id,
+      fixture: E2E_SMOKE_FIXTURES.linkedTradePlan,
+      ownerId,
+    });
+
+    const matchDates = Array.from({ length: 12 }, (_, index) =>
+      Date.parse("2026-01-25T14:30:00.000Z") - index * 86_400_000,
+    );
+
+    for (const [index, date] of matchDates.entries()) {
+      await upsertTrade(ctx, {
+        ownerId,
+        portfolioId: portfolio._id,
+        trade: {
+          assetType: "stock",
+          date,
+          direction: "long",
+          fixtureKey: `viewer-match-aapl-${index}`,
+          portfolio: "shared",
+          price: 100 + index,
+          quantity: 1,
+          side: "buy",
+          ticker: "AAPL",
+          tradePlan: "linked",
+        },
+        tradePlanId: linkedTradePlan._id,
+      });
+    }
+
+    for (let index = 0; index < 55; index += 1) {
+      await upsertTrade(ctx, {
+        ownerId,
+        portfolioId: portfolio._id,
+        trade: {
+          assetType: "stock",
+          date: Date.parse("2026-03-01T15:00:00.000Z") - index * 60_000,
+          direction: "long",
+          fixtureKey: `viewer-filler-msft-${index}`,
+          portfolio: "shared",
+          price: 200 + index,
+          quantity: 1,
+          side: "buy",
+          ticker: `MSFT${index}`,
+          tradePlan: "linked",
+        },
+        tradePlanId: linkedTradePlan._id,
+      });
+    }
+
+    return {
+      matchDates,
     };
   },
 });

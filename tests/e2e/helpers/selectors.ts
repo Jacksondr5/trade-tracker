@@ -517,6 +517,14 @@ export function getTradesPageSizeSelect(page: Page): Locator {
   return page.getByTestId(TRADES_INDEX_TEST_IDS.pageSizeSelect);
 }
 
+export function getTradesPaginationPrev(page: Page): Locator {
+  return page.getByTestId(TRADES_INDEX_TEST_IDS.paginationPrev);
+}
+
+export function getTradesPaginationNext(page: Page): Locator {
+  return page.getByTestId(TRADES_INDEX_TEST_IDS.paginationNext);
+}
+
 export function getTradePlansFilterBravos(page: Page): Locator {
   return page.getByTestId(TRADE_PLANS_INDEX_TEST_IDS.filterBravos);
 }
