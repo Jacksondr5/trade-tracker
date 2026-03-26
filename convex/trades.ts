@@ -186,21 +186,36 @@ async function listFilteredTradesPage(
   args: ListTradesPageArgs,
 ) {
   const cursorState = decodeFilteredTradesCursor(args.paginationOpts.cursor);
-  const filteredTrades = (await getTradesByDateQuery(ctx, ownerId, args).collect())
-    .filter((trade) => matchesTradeFilters(trade, args));
-  const offset = Math.min(cursorState.offset, filteredTrades.length);
-  const nextOffset = Math.min(
-    offset + args.paginationOpts.numItems,
-    filteredTrades.length,
-  );
-  const page = filteredTrades.slice(offset, nextOffset);
+  const page: Doc<"trades">[] = [];
+  let matchedTradesSeen = 0;
+  let isDone = true;
+
+  for await (const trade of getTradesByDateQuery(ctx, ownerId, args)) {
+    if (!matchesTradeFilters(trade, args)) {
+      continue;
+    }
+
+    if (matchedTradesSeen < cursorState.offset) {
+      matchedTradesSeen += 1;
+      continue;
+    }
+
+    if (page.length < args.paginationOpts.numItems) {
+      page.push(trade);
+      matchedTradesSeen += 1;
+      continue;
+    }
+
+    isDone = false;
+    break;
+  }
 
   return {
     continueCursor: encodeFilteredTradesCursor({
-      offset: nextOffset,
+      offset: matchedTradesSeen,
       version: FILTERED_TRADES_CURSOR_VERSION,
     }),
-    isDone: nextOffset >= filteredTrades.length,
+    isDone,
     page,
   };
 }
