@@ -20,6 +20,14 @@ type SeedTradeFixture = {
   tradePlan: "linked" | "standalone";
 };
 
+function getSeedTradeLookupKey(args: {
+  date: number;
+  ticker: string;
+  tradePlanId: Id<"tradePlans">;
+}): string {
+  return `${args.ticker}:${args.date}:${args.tradePlanId}`;
+}
+
 function getPlaywrightOwnerId(): string {
   const ownerId = process.env.PLAYWRIGHT_OWNER_ID?.trim();
 
@@ -230,23 +238,19 @@ async function ensureWatchlistItem(
 async function upsertTrade(
   ctx: MutationCtx,
   args: {
+    existingTradesByKey: Map<string, { _id: Id<"trades"> }>;
     ownerId: string;
     portfolioId?: Id<"portfolios">;
     trade: SeedTradeFixture;
     tradePlanId: Id<"tradePlans">;
   },
 ) {
-  const existingTrade = (
-    await ctx.db
-      .query("trades")
-      .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
-      .collect()
-  ).find(
-    (trade) =>
-      trade.ticker === args.trade.ticker &&
-      trade.date === args.trade.date &&
-      trade.tradePlanId === args.tradePlanId,
-  );
+  const lookupKey = getSeedTradeLookupKey({
+    date: args.trade.date,
+    ticker: args.trade.ticker,
+    tradePlanId: args.tradePlanId,
+  });
+  const existingTrade = args.existingTradesByKey.get(lookupKey);
 
   const patch = {
     assetType: args.trade.assetType,
@@ -268,6 +272,7 @@ async function upsertTrade(
   }
 
   const tradeId = await ctx.db.insert("trades", patch);
+  args.existingTradesByKey.set(lookupKey, { _id: tradeId });
   return (await ctx.db.get(tradeId))!;
 }
 
@@ -366,8 +371,30 @@ export const setupPreviewData = internalMutation({
       tradePlanId: standaloneTradePlan._id,
     });
 
+    const existingTrades = await ctx.db
+      .query("trades")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
+    const existingTradesByKey = new Map<string, { _id: Id<"trades"> }>();
+
+    for (const trade of existingTrades) {
+      if (!trade.tradePlanId) {
+        continue;
+      }
+
+      existingTradesByKey.set(
+        getSeedTradeLookupKey({
+          date: trade.date,
+          ticker: trade.ticker,
+          tradePlanId: trade.tradePlanId,
+        }),
+        { _id: trade._id },
+      );
+    }
+
     for (const trade of E2E_SMOKE_FIXTURES.trades) {
       await upsertTrade(ctx, {
+        existingTradesByKey,
         ownerId,
         portfolioId: trade.portfolio === "shared" ? portfolio._id : undefined,
         trade,

@@ -1,6 +1,11 @@
-const TRADES_VIEWER_MATCH_DATES = Array.from({ length: 12 }, (_, index) =>
-  Date.parse("2026-01-01T14:30:00.000Z") - index * 86_400_000,
+const TRADES_VIEWER_MATCH_DATES: ReadonlyArray<number> = Array.from(
+  { length: 12 },
+  (_, index) => Date.parse("2026-01-01T14:30:00.000Z") - index * 86_400_000,
 );
+
+export function getTradesViewerMatchDates(): number[] {
+  return [...TRADES_VIEWER_MATCH_DATES];
+}
 
 const TRADES_VIEWER_MATCH_TRADES = TRADES_VIEWER_MATCH_DATES.map(
   (date, index) => ({
@@ -100,7 +105,7 @@ export const E2E_SMOKE_FIXTURES = {
     ...TRADES_VIEWER_MATCH_TRADES,
   ],
   tradesViewerScenario: {
-    matchDates: TRADES_VIEWER_MATCH_DATES,
+    matchDates: getTradesViewerMatchDates(),
   },
   inboxTrades: {
     linkedSuggested: {
