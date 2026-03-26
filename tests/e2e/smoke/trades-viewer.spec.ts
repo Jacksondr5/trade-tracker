@@ -2,7 +2,6 @@ import { expect, test } from "@playwright/test";
 import { E2E_SMOKE_FIXTURES } from "../../../shared/e2e/smokeFixtures";
 import { getTradeRowTestId } from "../../../shared/e2e/testIds";
 import { waitForAuthenticatedApp } from "../helpers/app";
-import { runConvexFunction } from "../helpers/convex";
 import {
   APP_PAGE_TITLES,
   getLinkedTradeRow,
@@ -17,17 +16,9 @@ const SEEDED_BTC_TRADE_ROW = getTradeRowTestId(
   E2E_SMOKE_FIXTURES.trades[1].ticker,
   E2E_SMOKE_FIXTURES.trades[1].date,
 );
-
-function resetTradesFixtures() {
-  runConvexFunction("e2eSeed:resetPlaywrightData");
-  runConvexFunction("e2eSeed:setupPreviewData");
-}
+const VIEWER_MATCH_DATES = E2E_SMOKE_FIXTURES.tradesViewerScenario.matchDates;
 
 test.describe("trades viewer regression", () => {
-  test.beforeEach(() => {
-    resetTradesFixtures();
-  });
-
   test("ticker filtering is partial, case-insensitive, and reversible", async ({
     page,
   }) => {
@@ -61,10 +52,6 @@ test.describe("trades viewer regression", () => {
   test("ticker filtering paginates across multi-batch results without crashing", async ({
     page,
   }) => {
-    const { matchDates } = runConvexFunction<{ matchDates: number[] }>(
-      "e2eSeed:seedTradesViewerScenario",
-    );
-
     await page.goto("/trades");
     await waitForAuthenticatedApp(page, APP_PAGE_TITLES.trades);
 
@@ -72,13 +59,13 @@ test.describe("trades viewer regression", () => {
     await getTradesFilterTicker(page).fill("aa");
 
     await expect(
-      page.getByTestId(getTradeRowTestId("AAPL", matchDates[0])),
+      page.getByTestId(getTradeRowTestId("AAPL", VIEWER_MATCH_DATES[0])),
     ).toBeVisible();
     await expect(
-      page.getByTestId(getTradeRowTestId("AAPL", matchDates[9])),
+      page.getByTestId(getTradeRowTestId("AAPL", VIEWER_MATCH_DATES[9])),
     ).toBeVisible();
     await expect(
-      page.getByTestId(getTradeRowTestId("AAPL", matchDates[10])),
+      page.getByTestId(getTradeRowTestId("AAPL", VIEWER_MATCH_DATES[10])),
     ).toHaveCount(0);
     await expect(getTradesPaginationPrev(page)).toBeDisabled();
     await expect(getTradesPaginationNext(page)).toBeEnabled();
@@ -86,10 +73,10 @@ test.describe("trades viewer regression", () => {
     await getTradesPaginationNext(page).click();
 
     await expect(
-      page.getByTestId(getTradeRowTestId("AAPL", matchDates[10])),
+      page.getByTestId(getTradeRowTestId("AAPL", VIEWER_MATCH_DATES[10])),
     ).toBeVisible();
     await expect(
-      page.getByTestId(getTradeRowTestId("AAPL", matchDates[11])),
+      page.getByTestId(getTradeRowTestId("AAPL", VIEWER_MATCH_DATES[11])),
     ).toBeVisible();
     await expect(getTradesPaginationPrev(page)).toBeEnabled();
     await expect(getTradesPaginationNext(page)).toBeDisabled();
@@ -97,7 +84,7 @@ test.describe("trades viewer regression", () => {
     await getTradesPaginationPrev(page).click();
 
     await expect(
-      page.getByTestId(getTradeRowTestId("AAPL", matchDates[0])),
+      page.getByTestId(getTradeRowTestId("AAPL", VIEWER_MATCH_DATES[0])),
     ).toBeVisible();
     await expect(getTradesPaginationPrev(page)).toBeDisabled();
   });
