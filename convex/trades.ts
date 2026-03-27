@@ -342,6 +342,13 @@ export const bulkUpdateTrades = mutation({
       assertOwner(portfolio, ownerId, "Portfolio not found");
     }
 
+    if (args.tradePlanId === undefined && args.portfolioId === undefined) {
+      return {
+        updated: 0,
+        errors: ["At least one bulk update field must be provided"],
+      };
+    }
+
     const patch: Record<string, unknown> = {};
     if (args.tradePlanId !== undefined) {
       patch.tradePlanId =
