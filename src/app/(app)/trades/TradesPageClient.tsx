@@ -1,12 +1,13 @@
 "use client";
 
-import { Preloaded, usePreloadedQuery, useQuery } from "convex/react";
-import React, { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Pencil } from "lucide-react";
-import { Badge, EmptyState, Input, Select } from "~/components/ui";
+import { Preloaded, useMutation, usePreloadedQuery, useQuery } from "convex/react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, Pencil, X } from "lucide-react";
+import { Alert, Badge, EmptyState, Input, Select } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { formatCurrency, formatDate } from "~/lib/format";
+import { cn } from "~/lib/utils";
 import {
   TRADES_PAGE_SIZE_OPTIONS,
   normalizeTradesPageSize,
@@ -119,7 +120,30 @@ export default function TradesPageClient({
   );
   const [cursorHistory, setCursorHistory] = useState<Array<string | null>>([]);
   const [pageSize, setPageSize] = useState(initialFilterState.pageSize);
+  const [selectedTradeIds, setSelectedTradeIds] = useState<
+    Set<Id<"trades">>
+  >(new Set());
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+  const bulkUpdateTrades = useMutation(api.trades.bulkUpdateTrades);
   const currentPage = cursorHistory.length + 1;
+
+  const toggleTradeSelection = useCallback((tradeId: Id<"trades">) => {
+    setSelectedTradeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(tradeId)) {
+        next.delete(tradeId);
+      } else {
+        next.add(tradeId);
+      }
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelectedTradeIds(new Set());
+    setBulkError(null);
+  }, []);
 
   const tradePlanNameMap = useMemo(
     () => new Map(tradePlans.map((p) => [p._id, p.name])),
@@ -178,13 +202,14 @@ export default function TradesPageClient({
 
     const timeoutId = window.setTimeout(() => {
       setEditingTradeId(null);
+      clearSelection();
       setAppliedTicker(normalizedTickerInput);
       setCursor(null);
       setCursorHistory([]);
     }, 250);
 
     return () => window.clearTimeout(timeoutId);
-  }, [appliedTicker, tickerInput]);
+  }, [appliedTicker, clearSelection, tickerInput]);
 
   const queryArgs = useMemo(
     () =>
@@ -236,6 +261,7 @@ export default function TradesPageClient({
 
   const handleDateChange = (type: "startDate" | "endDate", value: string) => {
     setEditingTradeId(null);
+    clearSelection();
     if (type === "startDate") {
       setStartDateValue(value);
     } else {
@@ -247,6 +273,7 @@ export default function TradesPageClient({
 
   const handlePortfolioChange = (value: string) => {
     setEditingTradeId(null);
+    clearSelection();
     setPortfolioValue(value);
     setCursor(null);
     setCursorHistory([]);
@@ -254,6 +281,7 @@ export default function TradesPageClient({
 
   const handleAccountChange = (value: string) => {
     setEditingTradeId(null);
+    clearSelection();
     setAccountValue(value);
     setCursor(null);
     setCursorHistory([]);
@@ -263,6 +291,7 @@ export default function TradesPageClient({
     if (cursorHistory.length === 0) return;
 
     setEditingTradeId(null);
+    clearSelection();
     const nextCursorHistory = cursorHistory.slice(0, -1);
     const previousCursor = cursorHistory[cursorHistory.length - 1];
     setCursor(previousCursor);
@@ -273,18 +302,59 @@ export default function TradesPageClient({
     if (!tradesPage || tradesPage.isDone) return;
 
     setEditingTradeId(null);
+    clearSelection();
     setCursorHistory([...cursorHistory, cursor]);
     setCursor(tradesPage.continueCursor);
   };
 
   const handlePageSizeChange = (nextPageSize: number) => {
     setEditingTradeId(null);
+    clearSelection();
     setPageSize(normalizeTradesPageSize(nextPageSize));
     setCursor(null);
     setCursorHistory([]);
   };
 
+  const handleBulkUpdate = async (field: "tradePlanId" | "portfolioId", value: string) => {
+    if (selectedTradeIds.size === 0) return;
+    setBulkUpdating(true);
+    setBulkError(null);
+    try {
+      const resolvedValue = value === "__remove__"
+        ? null
+        : value as Id<"tradePlans"> | Id<"portfolios">;
+      const result = await bulkUpdateTrades({
+        tradeIds: Array.from(selectedTradeIds),
+        ...(field === "tradePlanId"
+          ? { tradePlanId: resolvedValue as Id<"tradePlans"> | null }
+          : { portfolioId: resolvedValue as Id<"portfolios"> | null }),
+      });
+      if (result.errors.length > 0) {
+        setBulkError(
+          `Updated ${result.updated} trade${result.updated === 1 ? "" : "s"}, but ${result.errors.length} failed.`,
+        );
+      } else {
+        clearSelection();
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Bulk update failed";
+      setBulkError(message);
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
+
   const trades = displayedTradesPage.page;
+  const pageTradeIds = useMemo(
+    () => new Set(trades.map((t) => t._id)),
+    [trades],
+  );
+  const allPageSelected =
+    trades.length > 0 && trades.every((t) => selectedTradeIds.has(t._id));
+  const somePageSelected =
+    trades.some((t) => selectedTradeIds.has(t._id)) && !allPageSelected;
+  const selectionCount = selectedTradeIds.size;
   const isTickerPending =
     normalizeTradesTickerParam(tickerInput) !== appliedTicker;
   const hasActiveFilters = Boolean(
@@ -294,6 +364,26 @@ export default function TradesPageClient({
     portfolioValue ||
     accountValue,
   );
+
+  const handleSelectAll = () => {
+    if (allPageSelected) {
+      setSelectedTradeIds((prev) => {
+        const next = new Set(prev);
+        for (const id of pageTradeIds) {
+          next.delete(id);
+        }
+        return next;
+      });
+    } else {
+      setSelectedTradeIds((prev) => {
+        const next = new Set(prev);
+        for (const id of pageTradeIds) {
+          next.add(id);
+        }
+        return next;
+      });
+    }
+  };
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -403,6 +493,19 @@ export default function TradesPageClient({
             <table className="w-full table-auto">
               <thead className="bg-slate-3">
                 <tr>
+                  <th className="w-10 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      data-testid={TRADES_INDEX_TEST_IDS.selectAll}
+                      checked={allPageSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = somePageSelected;
+                      }}
+                      onChange={handleSelectAll}
+                      className="h-4 w-4 cursor-pointer appearance-none rounded border border-olive-7 bg-olive-3 checked:border-grass-9 checked:bg-grass-9 checked:bg-[url('data:image/svg+xml,%3Csvg%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22white%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M12.207%204.793a1%201%200%20010%201.414l-5%205a1%201%200%2001-1.414%200l-2-2a1%201%200%20011.414-1.414L6.5%209.086l4.293-4.293a1%201%200%20011.414%200z%22%2F%3E%3C%2Fsvg%3E')] checked:bg-[length:120%_120%] checked:bg-center checked:bg-no-repeat"
+                      aria-label="Select all trades on page"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-11">
                     Date
                   </th>
@@ -473,9 +576,23 @@ export default function TradesPageClient({
                   return (
                     <React.Fragment key={trade._id}>
                       <tr
-                        className="hover:bg-slate-3/50"
+                        className={cn({
+                          "bg-amber-3/30 shadow-[inset_0_1px_0_0_var(--amber-7),inset_1px_0_0_0_var(--amber-7),inset_-1px_0_0_0_var(--amber-7)]":
+                            editingTradeId === trade._id,
+                          "hover:bg-slate-3/50": editingTradeId !== trade._id,
+                        })}
                         data-testid={getTradeRowTestId(trade.ticker, trade.date)}
                       >
+                        <td className="px-4 py-3">
+                          <input
+                            type="checkbox"
+                            data-testid={`select-trade-${trade._id}`}
+                            checked={selectedTradeIds.has(trade._id)}
+                            onChange={() => toggleTradeSelection(trade._id)}
+                            className="h-4 w-4 cursor-pointer appearance-none rounded border border-olive-7 bg-olive-3 checked:border-grass-9 checked:bg-grass-9 checked:bg-[url('data:image/svg+xml,%3Csvg%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22white%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M12.207%204.793a1%201%200%20010%201.414l-5%205a1%201%200%2001-1.414%200l-2-2a1%201%200%20011.414-1.414L6.5%209.086l4.293-4.293a1%201%200%20011.414%200z%22%2F%3E%3C%2Fsvg%3E')] checked:bg-[length:120%_120%] checked:bg-center checked:bg-no-repeat"
+                            aria-label={`Select ${trade.ticker} trade`}
+                          />
+                        </td>
                         <td className="px-4 py-3 text-sm whitespace-nowrap text-slate-12">
                           {formatDate(trade.date)}
                         </td>
@@ -533,8 +650,8 @@ export default function TradesPageClient({
                         </td>
                       </tr>
                       {editingTradeId === trade._id && (
-                        <tr>
-                          <td colSpan={11} className="px-4 py-3">
+                        <tr className="bg-amber-3/30 shadow-[inset_0_-1px_0_0_var(--amber-7),inset_1px_0_0_0_var(--amber-7),inset_-1px_0_0_0_var(--amber-7)]">
+                          <td colSpan={12} className="p-0">
                             <EditTradeForm
                               tradeId={trade._id}
                               initialValues={{
@@ -562,6 +679,81 @@ export default function TradesPageClient({
               </tbody>
             </table>
           </div>
+
+          {selectionCount > 0 && (
+            <div
+              className="sticky bottom-4 z-10 mt-4 flex flex-wrap items-center gap-4 rounded-lg border border-olive-6 bg-olive-2 p-4"
+              data-testid={TRADES_INDEX_TEST_IDS.bulkToolbar}
+            >
+              <span className="text-sm font-medium text-olive-12">
+                {selectionCount} trade{selectionCount === 1 ? "" : "s"} selected
+              </span>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-olive-11">
+                  Trade Plan
+                </span>
+                <Select
+                  dataTestId={TRADES_INDEX_TEST_IDS.bulkTradePlanSelect}
+                  className="w-[220px]"
+                  value=""
+                  disabled={bulkUpdating}
+                  onChange={(e) => {
+                    if (e.target.value !== "") {
+                      void handleBulkUpdate("tradePlanId", e.target.value);
+                    }
+                  }}
+                >
+                  <option value="">— Set trade plan —</option>
+                  <option value="__remove__">— Remove trade plan —</option>
+                  {tradePlans.map((tp) => (
+                    <option key={tp._id} value={tp._id}>
+                      {tp.name} ({tp.instrumentSymbol})
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-olive-11">
+                  Portfolio
+                </span>
+                <Select
+                  dataTestId={TRADES_INDEX_TEST_IDS.bulkPortfolioSelect}
+                  className="w-[200px]"
+                  value=""
+                  disabled={bulkUpdating}
+                  onChange={(e) => {
+                    if (e.target.value !== "") {
+                      void handleBulkUpdate("portfolioId", e.target.value);
+                    }
+                  }}
+                >
+                  <option value="">— Set portfolio —</option>
+                  <option value="__remove__">— Remove portfolio —</option>
+                  {portfolios.map((p) => (
+                    <option key={p._id} value={p._id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <button
+                type="button"
+                data-testid={TRADES_INDEX_TEST_IDS.bulkClearSelection}
+                onClick={clearSelection}
+                className="ml-auto flex items-center gap-1 rounded px-2 py-1.5 text-xs text-olive-11 hover:bg-olive-4 hover:text-olive-12"
+                aria-label="Clear selection"
+              >
+                <X className="h-3.5 w-3.5" />
+                Clear
+              </button>
+            </div>
+          )}
+
+          {bulkError && (
+            <Alert variant="error" className="mt-3" onDismiss={() => setBulkError(null)}>
+              {bulkError}
+            </Alert>
+          )}
 
           <div className="mt-4 flex flex-col gap-3 rounded-lg border border-olive-6 bg-olive-2 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm text-slate-11">

@@ -3,7 +3,7 @@
 import { useMutation } from "convex/react";
 import { useState } from "react";
 import { z } from "zod";
-import { Alert, Button, Card, useAppForm } from "~/components/ui";
+import { Alert, Button, useAppForm } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 
@@ -110,8 +110,7 @@ export function EditTradeForm({
   });
 
   return (
-    <Card className="bg-slate-800 p-4">
-      <h3 className="text-slate-12 mb-3 text-sm font-semibold">Edit Trade</h3>
+    <div className="p-4">
       {errorMessage && (
         <Alert variant="error" className="mb-3" onDismiss={() => setErrorMessage(null)}>
           {errorMessage}
@@ -124,110 +123,111 @@ export function EditTradeForm({
           void form.handleSubmit();
         }}
       >
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-end gap-4">
-            <form.AppField name="ticker">
-              {(field) => (
-                <field.FieldInput
-                  label="Ticker"
-                  type="text"
-                  className="w-[140px]"
-                />
-              )}
-            </form.AppField>
-            <form.AppField name="tradePlanId">
-              {(field) => (
-                <field.FieldSelect
-                  label="Trade Plan"
-                  className="w-[200px]"
-                  placeholder="No trade plan"
-                  options={tradePlans.map((tp) => ({
-                    label: `${tp.name} (${tp.instrumentSymbol}) [${tp.status}]`,
-                    value: tp._id,
-                  }))}
-                />
-              )}
-            </form.AppField>
-            <form.AppField name="portfolioId">
-              {(field) => (
-                <field.FieldSelect
-                  label="Portfolio"
-                  className="w-[180px]"
-                  placeholder="No portfolio"
-                  options={portfolios.map((p) => ({
-                    label: p.name,
-                    value: p._id,
-                  }))}
-                />
-              )}
-            </form.AppField>
-            <form.AppField name="side">
-              {(field) => (
-                <field.FieldSelect
-                  label="Side"
-                  className="w-[100px]"
-                  options={[
-                    { label: "Buy", value: "buy" },
-                    { label: "Sell", value: "sell" },
-                  ]}
-                />
-              )}
-            </form.AppField>
-            <form.AppField name="direction">
-              {(field) => (
-                <field.FieldSelect
-                  label="Direction"
-                  className="w-[110px]"
-                  options={[
-                    { label: "Long", value: "long" },
-                    { label: "Short", value: "short" },
-                  ]}
-                />
-              )}
-            </form.AppField>
-            <form.AppField name="assetType">
-              {(field) => (
-                <field.FieldSelect
-                  label="Asset Type"
-                  className="w-[110px]"
-                  options={[
-                    { label: "Stock", value: "stock" },
-                    { label: "Crypto", value: "crypto" },
-                  ]}
-                />
-              )}
-            </form.AppField>
-            <form.AppField name="price">
-              {(field) => (
-                <field.FieldInput
-                  label="Price"
-                  type="number"
-                  step="any"
-                  className="w-[120px]"
-                />
-              )}
-            </form.AppField>
-            <form.AppField name="quantity">
-              {(field) => (
-                <field.FieldInput
-                  label="Quantity"
-                  type="number"
-                  step="any"
-                  className="w-[120px]"
-                />
-              )}
-            </form.AppField>
-            <form.AppField name="date">
-              {(field) => (
-                <field.FieldInput
-                  label="Date"
-                  type="datetime-local"
-                  className="w-[200px]"
-                />
-              )}
-            </form.AppField>
-          </div>
-          <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap items-end gap-4">
+          <form.AppField name="ticker">
+            {(field) => (
+              <field.FieldInput label="Ticker" type="text" className="w-[140px]" />
+            )}
+          </form.AppField>
+          <form.AppField name="tradePlanId">
+            {(field) => (
+              <field.FieldSelect
+                label="Trade Plan"
+                className="w-[200px]"
+                placeholder="No trade plan"
+                options={tradePlans.map((tp) => ({
+                  label: `${tp.name} (${tp.instrumentSymbol}) [${tp.status}]`,
+                  value: tp._id,
+                }))}
+              />
+            )}
+          </form.AppField>
+          <form.AppField name="portfolioId">
+            {(field) => (
+              <field.FieldSelect
+                label="Portfolio"
+                className="w-[180px]"
+                placeholder="No portfolio"
+                options={portfolios.map((p) => ({
+                  label: p.name,
+                  value: p._id,
+                }))}
+              />
+            )}
+          </form.AppField>
+          <form.AppField name="side">
+            {(field) => (
+              <field.FieldSelect
+                label="Side"
+                className="w-[100px]"
+                options={[
+                  { label: "Buy", value: "buy" },
+                  { label: "Sell", value: "sell" },
+                ]}
+              />
+            )}
+          </form.AppField>
+          <form.AppField name="direction">
+            {(field) => (
+              <field.FieldSelect
+                label="Direction"
+                className="w-[120px]"
+                options={[
+                  { label: "Long", value: "long" },
+                  { label: "Short", value: "short" },
+                ]}
+              />
+            )}
+          </form.AppField>
+          <form.AppField name="assetType">
+            {(field) => (
+              <field.FieldSelect
+                label="Asset Type"
+                className="w-[120px]"
+                options={[
+                  { label: "Stock", value: "stock" },
+                  { label: "Crypto", value: "crypto" },
+                ]}
+              />
+            )}
+          </form.AppField>
+          <form.AppField name="price">
+            {(field) => (
+              <field.FieldInput
+                label="Price"
+                type="text"
+                inputMode="decimal"
+                className="w-[120px]"
+              />
+            )}
+          </form.AppField>
+          <form.AppField name="quantity">
+            {(field) => (
+              <field.FieldInput
+                label="Quantity"
+                type="text"
+                inputMode="decimal"
+                className="w-[120px]"
+              />
+            )}
+          </form.AppField>
+          <form.AppField name="date">
+            {(field) => (
+              <field.FieldInput
+                label="Date"
+                type="datetime-local"
+                className="w-[200px] [color-scheme:dark]"
+              />
+            )}
+          </form.AppField>
+          <div className="ml-auto flex gap-2">
+            <form.AppForm>
+              <form.SubmitButton
+                dataTestId="save-edit-button"
+                label="Save"
+                className="h-9"
+              />
+            </form.AppForm>
             <Button
               type="button"
               dataTestId="cancel-edit-button"
@@ -237,16 +237,9 @@ export function EditTradeForm({
             >
               Cancel
             </Button>
-            <form.AppForm>
-              <form.SubmitButton
-                dataTestId="save-edit-button"
-                label="Save"
-                className="h-9"
-              />
-            </form.AppForm>
           </div>
         </div>
       </form>
-    </Card>
+    </div>
   );
 }

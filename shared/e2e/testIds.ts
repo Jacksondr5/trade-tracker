@@ -131,6 +131,10 @@ export function getCampaignRowTestId(name: string): string {
 }
 
 export const TRADES_INDEX_TEST_IDS = {
+  bulkClearSelection: "trades-bulk-clear-selection",
+  bulkPortfolioSelect: "trades-bulk-portfolio-select",
+  bulkToolbar: "trades-bulk-toolbar",
+  bulkTradePlanSelect: "trades-bulk-trade-plan-select",
   emptyState: "trades-empty-state",
   filteredEmptyState: "trades-filtered-empty-state",
   filterPortfolio: "trades-filter-portfolio",
@@ -141,6 +145,7 @@ export const TRADES_INDEX_TEST_IDS = {
   paginationPrev: "trades-pagination-prev",
   paginationNext: "trades-pagination-next",
   pageSizeSelect: "trades-page-size-select",
+  selectAll: "trades-select-all",
 } as const;
 
 export const IMPORTS_INDEX_TEST_IDS = {

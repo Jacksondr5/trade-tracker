@@ -319,6 +319,59 @@ export const updateTrade = mutation({
   },
 });
 
+export const bulkUpdateTrades = mutation({
+  args: {
+    tradeIds: v.array(v.id("trades")),
+    portfolioId: v.optional(v.union(v.id("portfolios"), v.null())),
+    tradePlanId: v.optional(v.union(v.id("tradePlans"), v.null())),
+  },
+  returns: v.object({
+    updated: v.number(),
+    errors: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+
+    if (args.tradePlanId !== undefined && args.tradePlanId !== null) {
+      const tradePlan = await ctx.db.get(args.tradePlanId);
+      assertOwner(tradePlan, ownerId, "Trade plan not found");
+    }
+
+    if (args.portfolioId !== undefined && args.portfolioId !== null) {
+      const portfolio = await ctx.db.get(args.portfolioId);
+      assertOwner(portfolio, ownerId, "Portfolio not found");
+    }
+
+    const patch: Record<string, unknown> = {};
+    if (args.tradePlanId !== undefined) {
+      patch.tradePlanId =
+        args.tradePlanId === null ? undefined : args.tradePlanId;
+    }
+    if (args.portfolioId !== undefined) {
+      patch.portfolioId =
+        args.portfolioId === null ? undefined : args.portfolioId;
+    }
+
+    let updated = 0;
+    const errors: string[] = [];
+
+    for (const tradeId of args.tradeIds) {
+      try {
+        const trade = await ctx.db.get(tradeId);
+        assertOwner(trade, ownerId, "Trade not found");
+        await ctx.db.patch(tradeId, { ...patch, ownerId });
+        updated++;
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unknown error";
+        errors.push(`${tradeId}: ${message}`);
+      }
+    }
+
+    return { updated, errors };
+  },
+});
+
 export const listTrades = query({
   args: {},
   returns: v.array(tradeValidator),
