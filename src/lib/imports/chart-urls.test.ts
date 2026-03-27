@@ -28,6 +28,30 @@ describe("normalizeEditableChartUrls", () => {
       "",
     ]);
   });
+
+  it("preserves the edited empty slot when a middle URL is cleared", () => {
+    expect(
+      normalizeEditableChartUrls(
+        ["https://example.com/chart-a.png", "", ""],
+        1,
+      ),
+    ).toEqual(["https://example.com/chart-a.png", "", ""]);
+  });
+
+  it("preserves mid-array whitespace entries for editing", () => {
+    expect(
+      normalizeEditableChartUrls([
+        "https://example.com/chart-a.png",
+        "   ",
+        "https://example.com/chart-b.png",
+      ]),
+    ).toEqual([
+      "https://example.com/chart-a.png",
+      "   ",
+      "https://example.com/chart-b.png",
+      "",
+    ]);
+  });
 });
 
 describe("getSubmittedChartUrls", () => {
