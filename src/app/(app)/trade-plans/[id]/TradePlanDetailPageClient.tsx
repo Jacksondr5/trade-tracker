@@ -889,6 +889,7 @@ export default function TradePlanDetailPageClient({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-6 text-left text-xs font-medium text-slate-11">
+                    <th className="pl-4 pr-2 py-2"></th>
                     <th className="px-3 py-2">Date</th>
                     <th className="px-3 py-2">Ticker</th>
                     <th className="px-3 py-2">Account</th>
@@ -943,6 +944,7 @@ export default function TradePlanDetailPageClient({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-6 text-left text-xs font-medium text-slate-11">
+                    <th className="pl-4 pr-2 py-2"></th>
                     <th className="px-3 py-2">Date</th>
                     <th className="px-3 py-2">Ticker</th>
                     <th className="px-3 py-2">Account</th>
@@ -1110,26 +1112,24 @@ function InboxTradeRow({
 }) {
   return (
     <tr
-      className={
-        matchType === "assigned"
-          ? "border-b border-slate-6 bg-amber-2/50"
-          : "border-b border-slate-6 bg-blue-2/30"
-      }
+      className="border-b border-slate-6"
       data-testid={getInboxTradeRowTestId(
         inboxTrade.ticker ?? "trade",
         inboxTrade.externalId ?? inboxTrade._id,
       )}
     >
+      <td className="pl-4 pr-2 py-2">
+        <Badge variant={matchType === "suggested" ? "info" : "warning"}>
+          {matchType === "suggested" ? "Suggested" : "Pending"}
+        </Badge>
+      </td>
       <td className="px-3 py-2 text-slate-11">
         {inboxTrade.date
           ? new Date(inboxTrade.date).toLocaleDateString("en-US")
           : "---"}
       </td>
       <td className="px-3 py-2 text-slate-12">
-        {inboxTrade.ticker ?? "---"}{" "}
-        <Badge variant={matchType === "suggested" ? "info" : "warning"}>
-          {matchType === "suggested" ? "Suggested" : "Pending"}
-        </Badge>
+        {inboxTrade.ticker ?? "---"}
       </td>
       <td className="px-3 py-2 text-slate-11">
         {accountNameByAccountId.get(inboxTrade.brokerageAccountId ?? "") ??
