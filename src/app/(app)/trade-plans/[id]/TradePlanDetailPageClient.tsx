@@ -889,7 +889,9 @@ export default function TradePlanDetailPageClient({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-6 text-left text-xs font-medium text-slate-11">
-                    <th className="pl-4 pr-2 py-2"></th>
+                    <th scope="col" className="pl-4 pr-2 py-2">
+                      <span className="sr-only">Status</span>
+                    </th>
                     <th className="px-3 py-2">Date</th>
                     <th className="px-3 py-2">Ticker</th>
                     <th className="px-3 py-2">Account</th>
@@ -944,7 +946,9 @@ export default function TradePlanDetailPageClient({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-6 text-left text-xs font-medium text-slate-11">
-                    <th className="pl-4 pr-2 py-2"></th>
+                    <th scope="col" className="pl-4 pr-2 py-2">
+                      <span className="sr-only">Status</span>
+                    </th>
                     <th className="px-3 py-2">Date</th>
                     <th className="px-3 py-2">Ticker</th>
                     <th className="px-3 py-2">Account</th>
