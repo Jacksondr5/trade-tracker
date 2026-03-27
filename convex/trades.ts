@@ -332,6 +332,13 @@ export const bulkUpdateTrades = mutation({
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
 
+    if (args.tradeIds.length === 0) {
+      return {
+        updated: 0,
+        errors: ["No trades provided"],
+      };
+    }
+
     if (args.tradePlanId !== undefined && args.tradePlanId !== null) {
       const tradePlan = await ctx.db.get(args.tradePlanId);
       assertOwner(tradePlan, ownerId, "Trade plan not found");
