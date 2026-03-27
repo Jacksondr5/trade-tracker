@@ -13,6 +13,10 @@ import {
 import { EvidenceCarousel } from "~/components/notes/EvidenceCarousel";
 import { Alert } from "~/components/ui";
 import { IMPORT_POST_DIALOG_TEST_IDS } from "../../../../shared/e2e/testIds";
+import {
+  getSubmittedChartUrls,
+  normalizeEditableChartUrls,
+} from "~/lib/imports/chart-urls";
 import { runImportExtraction } from "~/lib/import-orchestrator";
 
 type ImportMode = "create" | "follow-up";
@@ -63,7 +67,7 @@ export function ImportPostDialog({
 
     setSubmitError(null);
     setIsSubmitting(true);
-    const normalizedUrls = chartUrls.map((u) => u.trim()).filter(Boolean);
+    const normalizedUrls = getSubmittedChartUrls(chartUrls);
 
     try {
       const taskId = await createImportTask({
@@ -159,7 +163,9 @@ export function ImportPostDialog({
                 type="button"
                 aria-label="Add chart image URL"
                 className="rounded-md border border-olive-7 px-2 py-1 text-xs text-olive-11 hover:bg-olive-4 hover:text-olive-12"
-                onClick={() => setChartUrls((prev) => [...prev, ""])}
+                onClick={() =>
+                  setChartUrls((prev) => normalizeEditableChartUrls([...prev, ""]))
+                }
               >
                 + Add URL
               </button>
@@ -174,7 +180,9 @@ export function ImportPostDialog({
                   value={url}
                   onChange={(e) =>
                     setChartUrls((prev) =>
-                      prev.map((u, j) => (j === i ? e.target.value : u)),
+                      normalizeEditableChartUrls(
+                        prev.map((u, j) => (j === i ? e.target.value : u)),
+                      ),
                     )
                   }
                 />
@@ -183,7 +191,9 @@ export function ImportPostDialog({
                   aria-label={`Remove chart URL ${i + 1}`}
                   className="rounded p-1.5 text-olive-10 hover:bg-olive-4 hover:text-red-9"
                   onClick={() =>
-                    setChartUrls((prev) => prev.filter((_, j) => j !== i))
+                    setChartUrls((prev) =>
+                      normalizeEditableChartUrls(prev.filter((_, j) => j !== i)),
+                    )
                   }
                 >
                   &times;
