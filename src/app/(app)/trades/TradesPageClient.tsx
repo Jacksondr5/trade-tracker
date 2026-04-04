@@ -1,10 +1,9 @@
 "use client";
 
 import { Preloaded, usePreloadedQuery, useQuery } from "convex/react";
-import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Pencil } from "lucide-react";
-import { Badge, Button, EmptyState, Input, Select } from "~/components/ui";
+import { Badge, EmptyState, Input, Select } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { formatCurrency, formatDate } from "~/lib/format";
@@ -305,9 +304,6 @@ export default function TradesPageClient({
         >
           Trades
         </h1>
-        <Link href="/trades/new">
-          <Button dataTestId="new-trade-button">New Trade</Button>
-        </Link>
       </div>
 
       <div className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4">
@@ -398,10 +394,7 @@ export default function TradesPageClient({
           <EmptyState
             dataTestId="trades-empty-state"
             title="No trades yet"
-            description="Trades will appear here as you record them or accept imported trades."
-            ctaLabel="New trade"
-            ctaHref="/trades/new"
-            ctaTestId="trades-empty-state-cta"
+            description="Trades will appear here after you accept imported trades."
           />
         )
       ) : (
