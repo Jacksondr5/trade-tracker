@@ -132,7 +132,6 @@ export function getCampaignRowTestId(name: string): string {
 
 export const TRADES_INDEX_TEST_IDS = {
   emptyState: "trades-empty-state",
-  emptyStateCta: "trades-empty-state-cta",
   filteredEmptyState: "trades-filtered-empty-state",
   filterPortfolio: "trades-filter-portfolio",
   filterAccount: "trades-filter-account",
