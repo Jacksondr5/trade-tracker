@@ -13,6 +13,10 @@ import {
 import { EvidenceCarousel } from "~/components/notes/EvidenceCarousel";
 import { Alert } from "~/components/ui";
 import { IMPORT_POST_DIALOG_TEST_IDS } from "../../../../shared/e2e/testIds";
+import {
+  getSubmittedChartUrls,
+  normalizeEditableChartUrls,
+} from "~/lib/imports/chart-urls";
 import { runImportExtraction } from "~/lib/import-orchestrator";
 
 type ImportMode = "create" | "follow-up";
@@ -35,6 +39,7 @@ export function ImportPostDialog({
   const [pastedText, setPastedText] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
   const [chartUrls, setChartUrls] = useState<string[]>([""]);
+  const [editingChartIndex, setEditingChartIndex] = useState<number | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -44,6 +49,7 @@ export function ImportPostDialog({
     setPastedText("");
     setSourceUrl("");
     setChartUrls([""]);
+    setEditingChartIndex(null);
     setSubmitError(null);
     setIsSubmitting(false);
   }, []);
@@ -63,7 +69,7 @@ export function ImportPostDialog({
 
     setSubmitError(null);
     setIsSubmitting(true);
-    const normalizedUrls = chartUrls.map((u) => u.trim()).filter(Boolean);
+    const normalizedUrls = getSubmittedChartUrls(chartUrls);
 
     try {
       const taskId = await createImportTask({
@@ -159,7 +165,11 @@ export function ImportPostDialog({
                 type="button"
                 aria-label="Add chart image URL"
                 className="rounded-md border border-olive-7 px-2 py-1 text-xs text-olive-11 hover:bg-olive-4 hover:text-olive-12"
-                onClick={() => setChartUrls((prev) => [...prev, ""])}
+                onClick={() =>
+                  setChartUrls((prev) =>
+                    normalizeEditableChartUrls([...prev, ""], editingChartIndex ?? undefined),
+                  )
+                }
               >
                 + Add URL
               </button>
@@ -172,19 +182,32 @@ export function ImportPostDialog({
                   className="flex-1 rounded-md border border-olive-7 bg-transparent px-3 py-1.5 text-sm text-olive-12 placeholder:text-slate-11 focus:ring-2 focus:ring-blue-8 focus:outline-none"
                   placeholder="Chart image URL"
                   value={url}
-                  onChange={(e) =>
+                  onFocus={() => setEditingChartIndex(i)}
+                  onBlur={() => setEditingChartIndex((current) => (current === i ? null : current))}
+                  onChange={(e) => {
+                    setEditingChartIndex(i);
                     setChartUrls((prev) =>
-                      prev.map((u, j) => (j === i ? e.target.value : u)),
-                    )
-                  }
+                      normalizeEditableChartUrls(
+                        prev.map((u, j) => (j === i ? e.target.value : u)),
+                        i,
+                      ),
+                    );
+                  }}
                 />
                 <button
                   type="button"
                   aria-label={`Remove chart URL ${i + 1}`}
                   className="rounded p-1.5 text-olive-10 hover:bg-olive-4 hover:text-red-9"
-                  onClick={() =>
-                    setChartUrls((prev) => prev.filter((_, j) => j !== i))
-                  }
+                  onClick={() => {
+                    setEditingChartIndex((current) => {
+                      if (current === null) return null;
+                      if (current === i) return null;
+                      return current > i ? current - 1 : current;
+                    });
+                    setChartUrls((prev) =>
+                      normalizeEditableChartUrls(prev.filter((_, j) => j !== i)),
+                    );
+                  }}
                 >
                   &times;
                 </button>
