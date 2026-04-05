@@ -25,7 +25,7 @@ export function getTradePlanRelationshipLabel(
     return BRAVOS_TRADE_LABEL;
   }
 
-  return tradePlan.parentujytngbrfdv cCampaign === null
+  return tradePlan.parentCampaign === null
     ? STANDALONE_TRADE_PLAN_LABEL
     : LINKED_TRADE_PLAN_LABEL;
 }
