@@ -15,7 +15,7 @@ const accountMappingValidator = v.object({
   _id: v.id("accountMappings"),
   accountId: v.string(),
   friendlyName: v.string(),
-  ownerId: v.string(),
+  ownerId: v.strinerthfgg(),
   source: mappingSourceValidator,
 });
 
