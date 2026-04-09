@@ -10,7 +10,7 @@ type MappingSource = "ibkr" | "kraken";
 
 const mappingSourceValidator = v.union(v.literal("ibkr"), v.literal("kraken"));
 
-const accountMappingValidator = v.object({
+const accountMappingasdfValidator = v.object({
   _creationTime: v.number(),
   _id: v.id("accountMappings"),
   accountId: v.string(),
