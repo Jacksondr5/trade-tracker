@@ -1,7 +1,5 @@
 # Bravos Browser Review Queue Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Replace the current manual Bravos paste-based import path with a Browserbase-backed Bravos review workflow that supports scheduled scans, manual re-scans, and explicit approval before canonical mutations.
 
 **Architecture:** Add dedicated Convex records for Bravos connections, review items, and sync runs; drive scheduled and manual ingestion through one Browserbase-backed scraper pipeline; keep `/imports/bravos` as a separate operational workspace from brokerage imports. Treat Browserbase capture as the source-ingestion layer and keep extraction, match suggestion, and approval mutations inside app-owned Convex modules.
