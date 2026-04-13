@@ -14,6 +14,7 @@ Unlike the dated documents in `docs/plans/`, these docs are meant to stay curren
 - `navigation-model.md` - where things live and how movement through the product should work
 - `ux-principles.md` - interaction-level rules about context, visibility, reviewability, and friction
 - `feature-philosophy.md` - what each major surface is for and what it should avoid becoming
+- `bravos-ai/README.md` - evergreen docs for the Bravos-grounded AI assistant and related future work
 - `content-and-copy-principles.md` - naming, labels, actions, helper text, and feedback wording
 - `visual-design-system.md` - concrete visual implementation guidance
 - `technical-architecture-overview.md` - repository structure and mandatory engineering conventions
