@@ -284,12 +284,8 @@ function sortPendingInboxTrades(a: InboxTradeDoc, b: InboxTradeDoc): number {
   return (b.date ?? b._creationTime) - (a.date ?? a._creationTime);
 }
 
-function getNoteDate(note: NoteDoc): number {
-  return note.noteDate ?? note._creationTime;
-}
-
 function sortNotesAsc(a: NoteDoc, b: NoteDoc): number {
-  return getNoteDate(a) - getNoteDate(b) || a._creationTime - b._creationTime;
+  return a.noteDate - b.noteDate || a._creationTime - b._creationTime;
 }
 
 async function resolveTradePlanNoteEvidence(ctx: QueryCtx, note: NoteDoc) {
@@ -369,7 +365,7 @@ async function serializeTradePlanNotes(
         contextKind: "tradePlan" as const,
         contextLabel: tradePlan.name,
         evidence,
-        noteDate: getNoteDate(note),
+        noteDate: note.noteDate,
         ownerId: note.ownerId,
         tradePlanId: note.tradePlanId,
       };

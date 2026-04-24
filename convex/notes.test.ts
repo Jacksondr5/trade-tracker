@@ -16,6 +16,8 @@ const modules = (import.meta as ImportMetaWithGlob).glob([
   "!./**/*.spec.ts",
 ]);
 
+const DEFAULT_TEST_NOTE_DATE = Date.UTC(2026, 0, 1, 14, 0);
+
 describe("notes contract", () => {
   const ownerA = "owner-a";
   const ownerB = "owner-b";
@@ -81,7 +83,7 @@ describe("notes contract", () => {
         chartUrls: args.chartUrls,
         content: args.content,
         evidence: args.evidence,
-        noteDate: args.noteDate,
+        noteDate: args.noteDate ?? DEFAULT_TEST_NOTE_DATE,
         ownerId: args.ownerId,
         tradePlanId: args.tradePlanId,
       });
@@ -221,25 +223,16 @@ describe("notes contract", () => {
 
     const notes = await asUser(ownerA).query(api.notes.getNotesFeed, {});
 
-    expect(notes.map((note) => note._id)).toEqual([firstCreatedId, secondCreatedId]);
+    expect(notes.map((note) => note._id)).toEqual([
+      firstCreatedId,
+      secondCreatedId,
+    ]);
     expect(notes.find((note) => note._id === firstCreatedId)?.noteDate).toBe(
       newerNoteDate,
     );
     expect(notes.find((note) => note._id === secondCreatedId)?.noteDate).toBe(
       olderNoteDate,
     );
-  });
-
-  it("falls back to creation time for legacy notes without explicit note dates", async () => {
-    const noteId = await insertNote({
-      content: "legacy note without explicit note date",
-      ownerId: ownerA,
-    });
-
-    const notes = await asUser(ownerA).query(api.notes.getNotesFeed, {});
-    const legacyNote = notes.find((note) => note._id === noteId);
-
-    expect(legacyNote?.noteDate).toBe(legacyNote?._creationTime);
   });
 
   it("filters campaign, trade-plan, and general queries to the supported ownership model", async () => {
@@ -439,80 +432,5 @@ describe("notes contract", () => {
         },
       ]);
     });
-  });
-});
-
-describe("note date migration", () => {
-  const ownerA = "owner-a";
-  const ownerB = "owner-b";
-
-  let t: ReturnType<typeof convexTest>;
-
-  beforeEach(() => {
-    t = convexTest(schema, modules);
-  });
-
-  async function insertNote(args: {
-    content: string;
-    noteDate?: number;
-    ownerId: string;
-  }): Promise<Id<"notes">> {
-    return await t.run(async (ctx) => {
-      return await ctx.db.insert("notes", {
-        content: args.content,
-        noteDate: args.noteDate,
-        ownerId: args.ownerId,
-      });
-    });
-  }
-
-  it("backfills missing note dates from creation time without overwriting existing note dates", async () => {
-    const existingNoteDate = Date.UTC(2026, 4, 7, 14, 0);
-    const legacyNoteId = await insertNote({
-      content: "legacy note",
-      ownerId: ownerA,
-    });
-    const datedNoteId = await insertNote({
-      content: "dated note",
-      noteDate: existingNoteDate,
-      ownerId: ownerB,
-    });
-
-    const dryRunResult = await t.mutation(
-      api.migrations.backfillNoteDates.run,
-      {
-        cursor: null,
-        dryRun: true,
-        numItems: 100,
-      },
-    );
-    expect(dryRunResult).toMatchObject({
-      isDone: true,
-      patched: 1,
-      scanned: 2,
-    });
-
-    const migrationResult = await t.mutation(
-      api.migrations.backfillNoteDates.run,
-      {
-        cursor: null,
-        numItems: 100,
-      },
-    );
-    expect(migrationResult).toMatchObject({
-      isDone: true,
-      patched: 1,
-      scanned: 2,
-    });
-
-    const { datedNote, legacyNote } = await t.run(async (ctx) => {
-      return {
-        datedNote: await ctx.db.get(datedNoteId),
-        legacyNote: await ctx.db.get(legacyNoteId),
-      };
-    });
-
-    expect(legacyNote?.noteDate).toBe(legacyNote?._creationTime);
-    expect(datedNote?.noteDate).toBe(existingNoteDate);
   });
 });
