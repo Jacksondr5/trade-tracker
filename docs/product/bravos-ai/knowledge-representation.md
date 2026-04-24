@@ -31,6 +31,14 @@ The current corpus names should be treated as canonical:
 - `macro-economic-conditions`
 - `durable-market-principles`
 
+The corpus boundary matters during extraction, not only during storage.
+
+In particular:
+
+- `trading-system` should stay strict and hold explicit, broadly applicable trade and process rules
+- `macro-economic-conditions` should hold current market framing, current watch items, current setup guidance, and historical analogs used to interpret the present
+- `durable-market-principles` should hold recurring market behaviors, even when they are conditional or subject-specific
+
 ## Core Recommendation
 
 The default indexed evidence unit should be:
@@ -73,12 +81,36 @@ The shared envelope should cover the metadata the system needs consistently, suc
 - stable identity
 - corpus
 - source identity
+- source published date/time
 - timestamps and citation spans
 - review status
 - confidence
 - tags and extracted entities
 
 The knowledge payload itself can vary by corpus because `trading-system`, `macro-economic-conditions`, and `durable-market-principles` are not the same kind of material.
+
+At this stage, `market-history` should not be treated as a fully separate corpus. It is better modeled as a lens, subtype, or metadata dimension within `macro-economic-conditions` because Bravos historical references usually appear as brief comparisons inside current macro commentary rather than as standalone historical lessons.
+
+## Temporal Grounding
+
+Bravos posts and videos often use relative time language such as:
+
+- `last week`
+- `earlier this year`
+- `recently`
+- `coming into this month`
+
+Because of that, extraction and retrieval must preserve the source publication date and give the model enough time context to interpret relative references correctly.
+
+The system should not let the model reason about relative time phrases in a vacuum.
+
+This means:
+
+- every source should retain an absolute published timestamp
+- extracted units should preserve any relevant `as-of` context when possible
+- downstream agents should be grounded in the source date when they interpret time-relative language
+
+For `macro-economic-conditions` especially, temporal grounding is part of the meaning of the claim, not just metadata.
 
 ### Good Evidence Units
 
@@ -137,6 +169,52 @@ For V1, these evidence units will likely be trusted differently by corpus:
 - `trading-system` should bias toward fully reviewed content
 - `macro-economic-conditions` and `durable-market-principles` will often need to rely on auto-extracted content with preserved confidence and review metadata
 
+For `macro-economic-conditions`, units may also carry historical-analog metadata when a present-day macro discussion references a prior episode. That does not require a fourth fully separate corpus yet.
+
+The extractor should also allow one passage to yield both:
+
+- a `macro-economic-conditions` unit about the current environment
+- a `durable-market-principles` unit about the recurring behavior being explained nearby
+
+By contrast, `trading-system` should not be inferred from current commentary unless Bravos explicitly states a broadly applicable trading or process rule.
+
+## Scenario And Conditional Language
+
+Macro and market commentary often uses conditional language such as:
+
+- `if`
+- `could`
+- `perhaps`
+- `may`
+- `unless`
+
+The extraction layer should not flatten these statements into asserted facts.
+
+Instead, it should preserve whether a statement is:
+
+- an asserted observation
+- a scenario
+- a contingent forecast
+- a watch condition
+
+This matters because scenario language is often part of the actual knowledge being communicated. Flattening it into a hard claim would distort the source.
+
+## Signal Tension
+
+Macro videos often contain multiple meaningful signals that point in different directions at the same time.
+
+The system should not treat that as extraction noise by default.
+
+Examples of this pattern include:
+
+- one indicator acting as a tailwind while another acts as a headwind
+- a bullish market behavior occurring alongside a risk signal
+- multiple regimes or cross-currents that need to be monitored together
+
+The extraction layer should preserve these tensions as first-class information rather than trying to prematurely collapse them into a single clean conclusion.
+
+Historical analog references are one example of this pattern. They may enrich the interpretation of the current backdrop without becoming timeless principles themselves.
+
 ## Source Representations For Video
 
 YouTube videos require a custom preprocessing layer because the caption stream is not organized around actual ideas.
@@ -175,7 +253,11 @@ They should reflect:
 
 They should not simply mirror subtitle screen lengths.
 
-Semantic segments provide the main extraction substrate for candidate knowledge units.
+Semantic segments should not be treated as the primary meaning-defining layer for extraction.
+
+The extractor should identify candidate knowledge directly from transcript passages and then attach those units to semantic segments for context, citation review, and later drill-down.
+
+Across repeated videos, semantic segments may also support later rolling summaries or watch-item synthesis, but that should remain a separate layer from the primary source-of-truth extraction flow.
 
 ## Video Citation Model
 

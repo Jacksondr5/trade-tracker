@@ -62,6 +62,18 @@ These items deepen how the assistant interacts with source material.
 
 These items should only move forward once the simpler transcript-first and citation-first model has proven valuable.
 
+## Rolling Context And Watch Items
+
+The following future-facing ideas should be discussed further rather than assumed into `V1` immediately:
+
+- maintaining rolling summaries of repeated topics across prior videos
+- deriving `things to watch` that can be carried forward into later videos
+- giving a summarization agent bounded prior context so it can detect what is changing versus what is being reinforced
+- separating rolling-summary maintenance from the primary source extraction flow so cross-video summaries do not overwrite source-level knowledge
+- evaluating multiple approaches to this rolling-context layer to understand which one yields the most useful knowledge
+
+This area looks promising, especially for repeated macro themes and durable knowledge that accumulates over time, but it likely needs experimentation before it should shape the core `V1` extraction workflow.
+
 ## Multimodal And Visual Understanding
 
 The following items have been discussed as possible future directions:
@@ -80,6 +92,7 @@ These items expand the sophistication of the knowledge layer itself.
 - more advanced trust policy once manual review coverage grows
 - heavier ontology or knowledge-graph modeling
 - broader cross-source synthesis features once grounding quality is strong enough
+- revisiting whether `market-history` should remain a lens inside `macro-economic-conditions` or eventually become a more distinct layer
 
 These are meaningful directions, but they should not complicate the initial `V1` design before the simpler retrieval-backed system is validated.
 

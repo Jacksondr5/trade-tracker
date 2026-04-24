@@ -208,6 +208,12 @@ This corpus holds time-agnostic Bravos rulebook material such as:
 - sizing guidance
 - recurring tactical principles
 
+This corpus should stay strict.
+
+It is for explicit, broadly applicable trading and process rules that could apply to almost any trade regardless of the current market environment.
+
+It should not absorb one-off present-market commentary just because that commentary sounds actionable.
+
 This corpus should not be recency-weighted in the same way macro content is.
 
 Because this corpus is both critical and comparatively bounded, the current working assumption is that it can receive full manual review and curation.
@@ -226,6 +232,22 @@ This corpus should have a meaningful default recency bias.
 
 V1 will likely need to trust auto-extracted knowledge in this corpus by default, while preserving review status and confidence metadata for later refinement.
 
+This corpus should also preserve:
+
+- absolute source timing for interpreting relative time language
+- tensions between competing macro signals
+- scenario or conditional statements without flattening them into hard facts
+
+This corpus should also include:
+
+- current watch items
+- current setup guidance
+- current market-context warnings that are specific to the present environment
+
+Historical analogs used to interpret the present should stay here rather than being promoted into timeless principle storage.
+
+This corpus may also contain short historical analog references when they are part of current macro commentary. For now, those historical references should be treated as a reasoning lens or subtype within `macro-economic-conditions`, not as a fully separate corpus.
+
 ### 3. `durable-market-principles`
 
 This corpus holds more timeless or slowly changing market lessons that may appear inside macro videos, posts, or PDFs, such as:
@@ -242,7 +264,28 @@ This corpus exists because macro content often contains both:
 
 Those two should not be treated as the same kind of knowledge.
 
+These principles do not need to be universal rules.
+
+They may be:
+
+- conditional
+- subject-specific
+- tied to a particular asset, sector, policy action, or intermarket relationship
+
+This corpus is for recurring market behaviors and tendencies, not for explicit trade-process rules.
+
 Like `macro-economic-conditions`, this corpus will likely need to trust auto-extracted knowledge by default in V1 while preserving reviewability and provenance.
+
+This corpus should remain distinct from historical analog references. `durable-market-principles` is intended for timeless or slow-changing market knowledge, not for episode-specific comparisons to past environments.
+
+### Mixed Passages
+
+One passage may legitimately produce:
+
+- a `macro-economic-conditions` unit describing what matters now
+- a `durable-market-principles` unit describing the recurring behavior being explained nearby
+
+That does not mean the system should force both corpora to appear in every passage. It means the extraction layer should allow both when they are explicitly present.
 
 ## Shared Schema Envelope
 
@@ -279,6 +322,8 @@ Because of that, the system should avoid classifying an entire source as simply 
 - rule-like and time-agnostic
 
 This distinction is one of the key strengths the system should preserve over time.
+
+For sources that use relative time language, the assistant should be grounded in the source publication date so it can interpret terms like `last week` or `earlier this year` correctly.
 
 ## Runtime Knowledge Strategy
 
@@ -340,11 +385,15 @@ Separate retrieval policies make it easier to:
 - preserve time-agnostic rulebook guidance
 - introduce future human-review workflows without redesigning the whole system
 
+For `macro-economic-conditions`, retrieval and reasoning should also preserve the fact that the backdrop may contain meaningful tensions rather than one clean directional answer. The assistant should treat competing signals as something to surface and monitor, not as bad ambiguity to ignore.
+
 The current corpus names should be used consistently:
 
 - `trading-system`
 - `macro-economic-conditions`
 - `durable-market-principles`
+
+`market-history` should not be treated as a fully separate corpus at this stage. It is better modeled for now as a retrieval lens, subtype, or metadata dimension inside `macro-economic-conditions`, since Bravos historical references usually appear as short comparisons embedded inside current macro commentary.
 
 ## Source Drill-Down Behavior
 
@@ -513,6 +562,8 @@ Current working assumptions:
 - `trading-system` can be fully reviewed
 - `macro-economic-conditions` and `durable-market-principles` will need to trust auto-extracted knowledge in V1
 - review-state weighting can be added later if it proves necessary
+- relative time language must be grounded by source publication date
+- scenario language should remain conditional rather than being converted into asserted fact
 
 ## Summary
 

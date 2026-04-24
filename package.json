@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "next build",
+    "bravos:extract": "tsx scripts/bravos-ai/extract-knowledge.ts",
     "dev": "next dev",
     "lint": "eslint .",
     "start": "next start",
@@ -40,6 +41,7 @@
     "@tiptap/starter-kit": "^3.20.0",
     "@types/papaparse": "^5.5.2",
     "ai": "^6.0.134",
+    "ai-sdk-provider-codex-cli": "^1.1.0",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "cmdk": "^1.1.1",
@@ -74,6 +76,7 @@
     "prettier-plugin-packagejson": "2.5.19",
     "prettier-plugin-tailwindcss": "0.7.2",
     "tailwindcss": "4.2.1",
+    "tsx": "^4.21.0",
     "typescript": "5.9.3",
     "vitest": "^4.0.18"
   },

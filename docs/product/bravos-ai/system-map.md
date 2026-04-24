@@ -44,11 +44,18 @@ It includes:
 
 - source acquisition for posts, PDFs, and YouTube videos
 - source identity, deduping, and change detection
+- source publication date and time capture for temporal grounding
 - transcript cleanup and normalization
 - semantic segmentation for videos and long-form content
 - preprocessing of PDFs, text posts, and attached images
 - screenshot hooks and timestamp mapping for future multimodal use
 - extraction jobs that produce candidate knowledge units
+
+Those extraction jobs should:
+
+- identify knowledge directly from transcript passages
+- keep `trading-system` strict and explicit
+- allow `macro-economic-conditions` and `durable-market-principles` to co-exist within the same local discussion when both are explicitly present
 
 This is not just scraping. It is the first meaning-shaping layer.
 
@@ -65,6 +72,14 @@ It includes:
 - provenance and citation metadata
 - confidence and review-state metadata
 - separation of `trading-system`, `macro-economic-conditions`, and `durable-market-principles`
+- preservation of conditional language and signal tensions where they are part of the source meaning
+- support for historical-reference retrieval as a lens within `macro-economic-conditions`
+
+In this layer, the corpus boundary should remain explicit:
+
+- `trading-system` for explicit, broadly applicable trade and process rules
+- `macro-economic-conditions` for current market framing and present-focused watch items
+- `durable-market-principles` for recurring market behaviors, even when they are conditional or subject-specific
 
 This is the core data layer behind the assistant.
 
@@ -191,6 +206,7 @@ Current V1 working assumptions include:
 - `trading-system` is important and bounded enough to support full manual review
 - `macro-economic-conditions` and `durable-market-principles` will need to trust auto-extracted knowledge by default
 - the system should preserve review status and confidence metadata even before it uses them heavily in runtime weighting
+- historical analogs should stay inside `macro-economic-conditions` as a reasoning lens rather than becoming a fourth separate corpus for now
 
 V1 should not include:
 
