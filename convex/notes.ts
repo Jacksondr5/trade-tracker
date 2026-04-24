@@ -38,6 +38,7 @@ const noteValidator = v.object({
   ),
   contextLabel: v.string(),
   evidence: v.optional(v.array(noteEvidenceValidator)),
+  noteDate: v.number(),
   ownerId: v.string(),
   tradePlanId: v.optional(v.id("tradePlans")),
 });
@@ -119,6 +120,18 @@ function validateSingleParent(args: {
   if (parentCount > 1) {
     throw new ConvexError("A note can only belong to one parent");
   }
+}
+
+function getNoteDate(note: Doc<"notes">): number {
+  return note.noteDate ?? note._creationTime;
+}
+
+function sortNotesAsc(a: Doc<"notes">, b: Doc<"notes">): number {
+  return getNoteDate(a) - getNoteDate(b) || a._creationTime - b._creationTime;
+}
+
+function sortNotesDesc(a: Doc<"notes">, b: Doc<"notes">): number {
+  return getNoteDate(b) - getNoteDate(a) || b._creationTime - a._creationTime;
 }
 
 async function buildNoteContextLookups(ctx: NotesCtx, notes: Doc<"notes">[]) {
@@ -227,6 +240,7 @@ async function serializeNotes(ctx: NotesCtx, notes: Doc<"notes">[]) {
           contextKind: "campaign" as const,
           contextLabel: campaign?.name ?? "Campaign",
           evidence,
+          noteDate: getNoteDate(note),
           ownerId: note.ownerId,
           tradePlanId: note.tradePlanId,
         };
@@ -244,6 +258,7 @@ async function serializeNotes(ctx: NotesCtx, notes: Doc<"notes">[]) {
           contextKind: "tradePlan" as const,
           contextLabel: tradePlan?.name ?? "Trade Plan",
           evidence,
+          noteDate: getNoteDate(note),
           ownerId: note.ownerId,
           tradePlanId: note.tradePlanId,
         };
@@ -259,6 +274,7 @@ async function serializeNotes(ctx: NotesCtx, notes: Doc<"notes">[]) {
         contextKind: "general" as const,
         contextLabel: "General note",
         evidence,
+        noteDate: getNoteDate(note),
         ownerId: note.ownerId,
         tradePlanId: note.tradePlanId,
       };
@@ -272,6 +288,7 @@ export const addNote = mutation({
     chartUrls: v.optional(v.array(v.string())),
     content: v.string(),
     evidence: v.optional(v.array(noteEvidenceInputValidator)),
+    noteDate: v.optional(v.number()),
     tradePlanId: v.optional(v.id("tradePlans")),
   },
   returns: v.id("notes"),
@@ -296,6 +313,7 @@ export const addNote = mutation({
       chartUrls,
       content,
       evidence,
+      noteDate: args.noteDate ?? Date.now(),
       ownerId,
       tradePlanId: args.tradePlanId,
     });
@@ -307,6 +325,7 @@ export const updateNote = mutation({
     chartUrls: v.optional(v.array(v.string())),
     content: v.optional(v.string()),
     evidence: v.optional(v.array(noteEvidenceInputValidator)),
+    noteDate: v.optional(v.number()),
     noteId: v.id("notes"),
   },
   returns: v.null(),
@@ -324,6 +343,9 @@ export const updateNote = mutation({
     }
     if (args.evidence !== undefined) {
       patch.evidence = normalizeEvidence(args.evidence);
+    }
+    if (args.noteDate !== undefined) {
+      patch.noteDate = args.noteDate;
     }
 
     await ctx.db.patch(args.noteId, patch);
@@ -369,10 +391,9 @@ export const getNotesByCampaign = query({
       .withIndex("by_owner_campaignId", (q) =>
         q.eq("ownerId", ownerId).eq("campaignId", args.campaignId),
       )
-      .order("asc")
       .collect();
 
-    return await serializeNotes(ctx, notes);
+    return await serializeNotes(ctx, notes.sort(sortNotesAsc));
   },
 });
 
@@ -391,10 +412,9 @@ export const getNotesByTradePlan = query({
       .withIndex("by_owner_tradePlanId", (q) =>
         q.eq("ownerId", ownerId).eq("tradePlanId", args.tradePlanId),
       )
-      .order("asc")
       .collect();
 
-    return await serializeNotes(ctx, notes);
+    return await serializeNotes(ctx, notes.sort(sortNotesAsc));
   },
 });
 
@@ -406,12 +426,13 @@ export const getGeneralNotes = query({
     const notes = await ctx.db
       .query("notes")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .order("desc")
       .collect();
 
     return await serializeNotes(
       ctx,
-      notes.filter((note) => !note.campaignId && !note.tradePlanId),
+      notes
+        .filter((note) => !note.campaignId && !note.tradePlanId)
+        .sort(sortNotesDesc),
     );
   },
 });
@@ -424,9 +445,8 @@ export const getNotesFeed = query({
     const notes = await ctx.db
       .query("notes")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .order("desc")
       .collect();
 
-    return await serializeNotes(ctx, notes);
+    return await serializeNotes(ctx, notes.sort(sortNotesDesc));
   },
 });

@@ -105,6 +105,7 @@ const tradePlanWorkspaceNoteValidator = v.object({
   contextKind: v.literal("tradePlan"),
   contextLabel: v.string(),
   evidence: v.optional(v.array(noteEvidenceValidator)),
+  noteDate: v.number(),
   ownerId: v.string(),
   tradePlanId: v.optional(v.id("tradePlans")),
 });
@@ -283,6 +284,14 @@ function sortPendingInboxTrades(a: InboxTradeDoc, b: InboxTradeDoc): number {
   return (b.date ?? b._creationTime) - (a.date ?? a._creationTime);
 }
 
+function getNoteDate(note: NoteDoc): number {
+  return note.noteDate ?? note._creationTime;
+}
+
+function sortNotesAsc(a: NoteDoc, b: NoteDoc): number {
+  return getNoteDate(a) - getNoteDate(b) || a._creationTime - b._creationTime;
+}
+
 async function resolveTradePlanNoteEvidence(ctx: QueryCtx, note: NoteDoc) {
   const evidenceItems = note.evidence ?? [];
   const resolvedUrls = await Promise.all(
@@ -360,6 +369,7 @@ async function serializeTradePlanNotes(
         contextKind: "tradePlan" as const,
         contextLabel: tradePlan.name,
         evidence,
+        noteDate: getNoteDate(note),
         ownerId: note.ownerId,
         tradePlanId: note.tradePlanId,
       };
@@ -782,7 +792,6 @@ export const getTradePlanWorkspace = query({
         .withIndex("by_owner_tradePlanId", (q) =>
           q.eq("ownerId", ownerId).eq("tradePlanId", args.tradePlanId),
         )
-        .order("asc")
         .collect(),
       ctx.db
         .query("trades")
@@ -808,7 +817,7 @@ export const getTradePlanWorkspace = query({
     const serializedNotes = await serializeTradePlanNotes(
       ctx,
       tradePlan,
-      notes,
+      notes.sort(sortNotesAsc),
     );
 
     const sortedTrades = trades.sort((a, b) => b.date - a.date);

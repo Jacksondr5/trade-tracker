@@ -827,16 +827,17 @@ export default function TradePlanDetailPageClient({
           defaultShowEvidence
           testIdPrefix="trade-plan"
           notes={notes}
-          onAddNote={async (content, chartUrls) => {
-            await addNote({ tradePlanId, content, chartUrls });
+          onAddNote={async (content, noteDate, chartUrls) => {
+            await addNote({ tradePlanId, content, noteDate, chartUrls });
           }}
           onDeleteNote={async (noteId) => {
             await deleteNoteMutation({ noteId: noteId as Id<"notes"> });
           }}
-          onUpdateNote={async (noteId, content, chartUrls) => {
+          onUpdateNote={async (noteId, content, noteDate, chartUrls) => {
             await updateNoteM({
               noteId: noteId as Id<"notes">,
               content,
+              noteDate,
               chartUrls,
             });
           }}

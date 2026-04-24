@@ -6,16 +6,22 @@ export interface Note {
   contextHref?: string | null;
   contextKind?: "campaign" | "general" | "tradePlan";
   contextLabel?: string;
+  noteDate: number;
 }
 
 export interface NotesSectionProps {
   defaultShowEvidence?: boolean;
   notes: Note[];
-  onAddNote: (content: string, chartUrls?: string[]) => Promise<void>;
+  onAddNote: (
+    content: string,
+    noteDate: number,
+    chartUrls?: string[],
+  ) => Promise<void>;
   onDeleteNote: (noteId: string) => Promise<void>;
   onUpdateNote: (
     noteId: string,
     content: string,
+    noteDate: number,
     chartUrls?: string[],
   ) => Promise<void>;
   showContext?: boolean;

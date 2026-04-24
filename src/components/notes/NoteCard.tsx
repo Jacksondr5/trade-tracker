@@ -7,6 +7,7 @@ import {
   getCancelNoteButtonTestId,
   getDeleteNoteButtonTestId,
   getDeleteNoteButtonTooltipTestId,
+  getEditNoteDateInputTestId,
   getEditNoteButtonTestId,
   getEditNoteTextareaTestId,
   getNoteContentTestId,
@@ -18,6 +19,7 @@ import {
 } from "../../../shared/e2e/testIds";
 import { Alert, ConfirmDeleteButton } from "~/components/ui";
 import { formatDate } from "~/lib/format";
+import { parseDateTimeLocalValue, toDateTimeLocalValue } from "./date";
 import { EvidenceCarousel } from "./EvidenceCarousel";
 import { EvidenceUrlInputs } from "./EvidenceUrlInputs";
 import type { Note } from "./types";
@@ -28,6 +30,7 @@ interface NoteCardProps {
   onUpdateNote: (
     noteId: string,
     content: string,
+    noteDate: number,
     chartUrls?: string[],
   ) => Promise<void>;
   showContext: boolean;
@@ -43,6 +46,7 @@ export function NoteCard({
 }: NoteCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState("");
+  const [editNoteDate, setEditNoteDate] = useState("");
   const [editChartUrls, setEditChartUrls] = useState<string[]>([]);
   const [editError, setEditError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -52,6 +56,7 @@ export function NoteCard({
   const startEditing = () => {
     setIsEditing(true);
     setEditContent(note.content);
+    setEditNoteDate(toDateTimeLocalValue(note.noteDate));
     setEditChartUrls(note.chartUrls ?? []);
     setEditError(null);
   };
@@ -59,6 +64,7 @@ export function NoteCard({
   const cancelEditing = () => {
     setIsEditing(false);
     setEditContent("");
+    setEditNoteDate("");
     setEditChartUrls([]);
     setEditError(null);
   };
@@ -73,14 +79,17 @@ export function NoteCard({
     setIsSaving(true);
 
     try {
+      const noteDate = parseDateTimeLocalValue(editNoteDate);
       const urls = editChartUrls.map((u) => u.trim()).filter(Boolean);
       await onUpdateNote(
         note._id,
         editContent.trim(),
+        noteDate,
         urls.length > 0 ? urls : undefined,
       );
       setIsEditing(false);
       setEditContent("");
+      setEditNoteDate("");
       setEditChartUrls([]);
     } catch (error) {
       setEditError(
@@ -100,9 +109,9 @@ export function NoteCard({
         <time
           className="text-xs font-medium text-olive-10"
           data-testid={getNoteDateTestId(testIdPrefix, note._id)}
-          dateTime={new Date(note._creationTime).toISOString()}
+          dateTime={new Date(note.noteDate).toISOString()}
         >
-          {formatDate(note._creationTime)}
+          {formatDate(note.noteDate)}
         </time>
 
         {showContext && (
@@ -178,6 +187,22 @@ export function NoteCard({
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
           />
+          <div className="grid w-full max-w-xs items-center gap-1.5">
+            <label
+              htmlFor={`edit-note-date-${note._id}`}
+              className="text-sm font-medium text-olive-11"
+            >
+              Note date
+            </label>
+            <input
+              id={`edit-note-date-${note._id}`}
+              type="datetime-local"
+              data-testid={getEditNoteDateInputTestId(testIdPrefix, note._id)}
+              className="h-9 rounded-md border border-olive-7 bg-transparent px-3 py-2 text-sm text-olive-12 focus:ring-2 focus:ring-blue-8 focus:outline-none"
+              value={editNoteDate}
+              onChange={(event) => setEditNoteDate(event.target.value)}
+            />
+          </div>
           <EvidenceUrlInputs urls={editChartUrls} onChange={setEditChartUrls} />
           <div className="flex items-center gap-1.5">
             <EvidenceUrlInputs.AddButton

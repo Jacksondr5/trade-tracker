@@ -26,16 +26,17 @@ export default function NotesPageClient({
       </h1>
       <NotesSection
         notes={notes}
-        onAddNote={async (content, chartUrls) => {
-          await addNote({ content, chartUrls });
+        onAddNote={async (content, noteDate, chartUrls) => {
+          await addNote({ content, noteDate, chartUrls });
         }}
         onDeleteNote={async (noteId) => {
           await deleteNoteMutation({ noteId: noteId as Id<"notes"> });
         }}
-        onUpdateNote={async (noteId, content, chartUrls) => {
+        onUpdateNote={async (noteId, content, noteDate, chartUrls) => {
           await updateNote({
             noteId: noteId as Id<"notes">,
             content,
+            noteDate,
             chartUrls,
           });
         }}
