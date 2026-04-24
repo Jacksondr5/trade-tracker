@@ -1,0 +1,12 @@
+Here are some disorganized thoughts about how I can potentially use AI to trade. 
+
+First and most important, I am not trying to build an autonomous trading bot here. I do not want to get into the business of trying to build something that just goes and tries to make money for me. Number one, everyone is trying to do that. It's stupid to try and follow the thing that everyone is trying to do. Somebody else will 1000% do it better than me. Most people will, because they will be more dedicated to it than I am. 
+Number two, figuring out how to get this thing to even interact with the markets, pulling data and executing on the trades in a way that doesn't burn through all the profits it makes, is a very difficult task and would stop me from making money early. 
+
+With all that said, here's where I do think it could be valuable: I think that the AI can be a great way of distilling the Bravos trading system and, critically, the regular updates that Bravos is giving into a persona that I can talk with and bounce ideas off of. In the future, I could also have it just review my portfolio and give me some ideas about what I should do with the trades I'm currently in, the things I'm watching, etc. 
+
+The big thing here is that I can take all these videos that they're producing. I can grab transcripts. I can possibly even give the AI a way to go in and take screenshots of the videos at certain points if it needs to understand what's happening on a chart; then I can distill that information down into a knowledge base for it to converse with me. 
+
+An MVP is probably going to involve just creating markdown file summaries and shit like that, but in the future I can probably also look into various data stores. I don't know if RAG is really still a thing that I could be doing or whatnot, but there's probably better ways of storing the data. I definitely want to incorporate it with the trade tracker that I have, because it's a decent snapshot of my portfolio and I don't have to use the god-awful IBKR APIs. 
+
+The main thing here is that this will help me get up to speed with their trading system faster. It will not take me weeks of detailed research and learning and then trying to figure out a way to be consistent in applying that knowledge. I still need to get the knowledge for sure, but now I don't need to worry about taking notes and constantly reviewing them and all that kind of stuff. I can use this as a springboard to bounce ideas off of.
