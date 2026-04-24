@@ -1,19 +1,11 @@
 import { v } from "convex/values";
 import { mutation } from "../_generated/server";
 
-function assertMigrationAuthorized(secret: string | undefined) {
-  const expectedSecret = process.env.CONVEX_MIGRATION_SECRET;
-  if (expectedSecret === undefined || secret !== expectedSecret) {
-    throw new Error("Missing or invalid migration secret");
-  }
-}
-
 export const run = mutation({
   args: {
     cursor: v.union(v.string(), v.null()),
     dryRun: v.optional(v.boolean()),
     numItems: v.optional(v.number()),
-    secret: v.optional(v.string()),
   },
   returns: v.object({
     continueCursor: v.string(),
@@ -22,8 +14,6 @@ export const run = mutation({
     scanned: v.number(),
   }),
   handler: async (ctx, args) => {
-    assertMigrationAuthorized(args.secret);
-
     const page = await ctx.db.query("notes").paginate({
       cursor: args.cursor,
       numItems: args.numItems ?? 100,
