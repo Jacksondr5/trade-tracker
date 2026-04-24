@@ -3,8 +3,8 @@ import { mutation } from "../_generated/server";
 
 function assertMigrationAuthorized(secret: string | undefined) {
   const expectedSecret = process.env.CONVEX_MIGRATION_SECRET;
-  if (expectedSecret !== undefined && secret !== expectedSecret) {
-    throw new Error("Invalid migration secret");
+  if (expectedSecret === undefined || secret !== expectedSecret) {
+    throw new Error("Missing or invalid migration secret");
   }
 }
 

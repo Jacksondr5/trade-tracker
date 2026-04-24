@@ -1,7 +1,7 @@
 // @vitest-environment edge-runtime
 
 import { convexTest } from "convex-test";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
@@ -445,11 +445,22 @@ describe("notes contract", () => {
 describe("note date migration", () => {
   const ownerA = "owner-a";
   const ownerB = "owner-b";
+  const migrationSecret = "test-migration-secret";
+  const originalMigrationSecret = process.env.CONVEX_MIGRATION_SECRET;
 
   let t: ReturnType<typeof convexTest>;
 
   beforeEach(() => {
+    process.env.CONVEX_MIGRATION_SECRET = migrationSecret;
     t = convexTest(schema, modules);
+  });
+  afterEach(() => {
+    if (originalMigrationSecret === undefined) {
+      delete process.env.CONVEX_MIGRATION_SECRET;
+      return;
+    }
+
+    process.env.CONVEX_MIGRATION_SECRET = originalMigrationSecret;
   });
 
   async function insertNote(args: {
@@ -484,6 +495,7 @@ describe("note date migration", () => {
         cursor: null,
         dryRun: true,
         numItems: 100,
+        secret: migrationSecret,
       },
     );
     expect(dryRunResult).toMatchObject({
@@ -497,6 +509,7 @@ describe("note date migration", () => {
       {
         cursor: null,
         numItems: 100,
+        secret: migrationSecret,
       },
     );
     expect(migrationResult).toMatchObject({
@@ -514,5 +527,42 @@ describe("note date migration", () => {
 
     expect(legacyNote?.noteDate).toBe(legacyNote?._creationTime);
     expect(datedNote?.noteDate).toBe(existingNoteDate);
+  });
+
+  it("requires a valid migration secret before running", async () => {
+    await insertNote({
+      content: "legacy note",
+      ownerId: ownerA,
+    });
+
+    await expect(
+      t.mutation(api.migrations.backfillNoteDates.run, {
+        cursor: null,
+        numItems: 100,
+      }),
+    ).rejects.toThrow("Missing or invalid migration secret");
+
+    await expect(
+      t.mutation(api.migrations.backfillNoteDates.run, {
+        cursor: null,
+        numItems: 100,
+        secret: "wrong-secret",
+      }),
+    ).rejects.toThrow("Missing or invalid migration secret");
+
+    const authorizedResult = await t.mutation(
+      api.migrations.backfillNoteDates.run,
+      {
+        cursor: null,
+        dryRun: true,
+        numItems: 100,
+        secret: migrationSecret,
+      },
+    );
+    expect(authorizedResult).toMatchObject({
+      isDone: true,
+      patched: 1,
+      scanned: 1,
+    });
   });
 });
