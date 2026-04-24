@@ -17,7 +17,6 @@ import type * as imports from "../imports.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_statuses from "../lib/statuses.js";
 import type * as lib_tradeValidator from "../lib/tradeValidator.js";
-import type * as migrations_backfillNoteDates from "../migrations/backfillNoteDates.js";
 import type * as navigation from "../navigation.js";
 import type * as notes from "../notes.js";
 import type * as portfolios from "../portfolios.js";
@@ -44,7 +43,6 @@ declare const fullApi: ApiFromModules<{
   "lib/auth": typeof lib_auth;
   "lib/statuses": typeof lib_statuses;
   "lib/tradeValidator": typeof lib_tradeValidator;
-  "migrations/backfillNoteDates": typeof migrations_backfillNoteDates;
   navigation: typeof navigation;
   notes: typeof notes;
   portfolios: typeof portfolios;

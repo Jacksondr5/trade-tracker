@@ -122,16 +122,12 @@ function validateSingleParent(args: {
   }
 }
 
-function getNoteDate(note: Doc<"notes">): number {
-  return note.noteDate ?? note._creationTime;
-}
-
 function sortNotesAsc(a: Doc<"notes">, b: Doc<"notes">): number {
-  return getNoteDate(a) - getNoteDate(b) || a._creationTime - b._creationTime;
+  return a.noteDate - b.noteDate || a._creationTime - b._creationTime;
 }
 
 function sortNotesDesc(a: Doc<"notes">, b: Doc<"notes">): number {
-  return getNoteDate(b) - getNoteDate(a) || b._creationTime - a._creationTime;
+  return b.noteDate - a.noteDate || b._creationTime - a._creationTime;
 }
 
 async function buildNoteContextLookups(ctx: NotesCtx, notes: Doc<"notes">[]) {
@@ -240,7 +236,7 @@ async function serializeNotes(ctx: NotesCtx, notes: Doc<"notes">[]) {
           contextKind: "campaign" as const,
           contextLabel: campaign?.name ?? "Campaign",
           evidence,
-          noteDate: getNoteDate(note),
+          noteDate: note.noteDate,
           ownerId: note.ownerId,
           tradePlanId: note.tradePlanId,
         };
@@ -258,7 +254,7 @@ async function serializeNotes(ctx: NotesCtx, notes: Doc<"notes">[]) {
           contextKind: "tradePlan" as const,
           contextLabel: tradePlan?.name ?? "Trade Plan",
           evidence,
-          noteDate: getNoteDate(note),
+          noteDate: note.noteDate,
           ownerId: note.ownerId,
           tradePlanId: note.tradePlanId,
         };
@@ -274,7 +270,7 @@ async function serializeNotes(ctx: NotesCtx, notes: Doc<"notes">[]) {
         contextKind: "general" as const,
         contextLabel: "General note",
         evidence,
-        noteDate: getNoteDate(note),
+        noteDate: note.noteDate,
         ownerId: note.ownerId,
         tradePlanId: note.tradePlanId,
       };

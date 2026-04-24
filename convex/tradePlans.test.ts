@@ -16,6 +16,8 @@ const modules = (import.meta as ImportMetaWithGlob).glob([
   "!./**/*.spec.ts",
 ]);
 
+const DEFAULT_TEST_NOTE_DATE = Date.UTC(2026, 0, 1, 14, 0);
+
 describe("trade plan workspace queries", () => {
   const ownerA = "owner-a";
   const ownerB = "owner-b";
@@ -136,6 +138,7 @@ describe("trade plan workspace queries", () => {
       kind: "chart" | "image";
       url?: string;
     }>;
+    noteDate?: number;
     ownerId: string;
     tradePlanId: Id<"tradePlans">;
   }): Promise<Id<"notes">> {
@@ -144,6 +147,7 @@ describe("trade plan workspace queries", () => {
         chartUrls: args.chartUrls,
         content: args.content,
         evidence: args.evidence,
+        noteDate: args.noteDate ?? DEFAULT_TEST_NOTE_DATE,
         ownerId: args.ownerId,
         tradePlanId: args.tradePlanId,
       });
