@@ -693,16 +693,17 @@ export default function CampaignDetailPageClient({
           defaultShowEvidence
           testIdPrefix="campaign"
           notes={campaignNotes}
-          onAddNote={async (content, chartUrls) => {
-            await addNote({ campaignId, content, chartUrls });
+          onAddNote={async (content, noteDate, chartUrls) => {
+            await addNote({ campaignId, content, noteDate, chartUrls });
           }}
           onDeleteNote={async (noteId) => {
             await deleteNoteMutation({ noteId: noteId as Id<"notes"> });
           }}
-          onUpdateNote={async (noteId, content, chartUrls) => {
+          onUpdateNote={async (noteId, content, noteDate, chartUrls) => {
             await updateNote({
               noteId: noteId as Id<"notes">,
               content,
+              noteDate,
               chartUrls,
             });
           }}

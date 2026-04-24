@@ -255,6 +255,10 @@ export function getNoteComposerTextareaTestId(prefix: string): string {
   return `${prefix}-add-note-textarea`;
 }
 
+export function getNoteComposerDateInputTestId(prefix: string): string {
+  return `${prefix}-add-note-date-input`;
+}
+
 export function getNoteComposerSubmitButtonTestId(prefix: string): string {
   return `${prefix}-add-note-button`;
 }
@@ -307,6 +311,13 @@ export function getEditNoteTextareaTestId(
   noteId: string,
 ): string {
   return `${prefix}-edit-note-textarea-${noteId}`;
+}
+
+export function getEditNoteDateInputTestId(
+  prefix: string,
+  noteId: string,
+): string {
+  return `${prefix}-edit-note-date-input-${noteId}`;
 }
 
 export function getSaveNoteButtonTestId(
