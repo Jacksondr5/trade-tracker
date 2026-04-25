@@ -188,6 +188,7 @@ export default defineSchema({
         }),
       ),
     ),
+    noteDate: v.number(),
     ownerId: v.string(),
     tradePlanId: v.optional(v.id("tradePlans")),
   })

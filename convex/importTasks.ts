@@ -172,6 +172,7 @@ export const completeImportTask = mutation({
       await ctx.db.insert("notes", {
         chartUrls: chartUrls && chartUrls.length > 0 ? chartUrls : undefined,
         content: noteContent,
+        noteDate: Date.now(),
         ownerId,
         tradePlanId,
       });
@@ -228,6 +229,7 @@ export const completeImportTask = mutation({
       await ctx.db.insert("notes", {
         chartUrls: chartUrls && chartUrls.length > 0 ? chartUrls : undefined,
         content: data.noteContent,
+        noteDate: Date.now(),
         ownerId,
         tradePlanId: task.tradePlanId,
       });

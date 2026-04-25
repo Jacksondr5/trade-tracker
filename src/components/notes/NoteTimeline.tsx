@@ -9,6 +9,7 @@ interface NoteTimelineProps {
   onUpdateNote: (
     noteId: string,
     content: string,
+    noteDate: number,
     chartUrls?: string[],
   ) => Promise<void>;
   showContext: boolean;

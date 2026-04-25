@@ -3,11 +3,13 @@
 import { useState } from "react";
 import { z } from "zod";
 import {
+  getNoteComposerDateInputTestId,
   getNoteComposerFormTestId,
   getNoteComposerSubmitButtonTestId,
   getNoteComposerTextareaTestId,
 } from "../../../shared/e2e/testIds";
 import { Alert, useAppForm } from "~/components/ui";
+import { parseDateTimeLocalValue, toDateTimeLocalValue } from "./date";
 import { EvidenceUrlInputs } from "./EvidenceUrlInputs";
 
 const noteSchema = z.object({
@@ -20,7 +22,11 @@ function normalizeUrls(urls: string[]) {
 
 interface NoteComposerProps {
   defaultShowEvidence?: boolean;
-  onAddNote: (content: string, chartUrls?: string[]) => Promise<void>;
+  onAddNote: (
+    content: string,
+    noteDate: number,
+    chartUrls?: string[],
+  ) => Promise<void>;
   testIdPrefix: string;
 }
 
@@ -33,6 +39,9 @@ export function NoteComposer({
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [chartUrls, setChartUrls] = useState<string[]>(
     defaultShowEvidence ? [""] : [],
+  );
+  const [noteDateInput, setNoteDateInput] = useState(() =>
+    toDateTimeLocalValue(Date.now()),
   );
 
   const noteForm = useAppForm({
@@ -54,9 +63,15 @@ export function NoteComposer({
 
       try {
         const parsed = noteSchema.parse(value);
+        const noteDate = parseDateTimeLocalValue(noteDateInput);
         const urls = normalizeUrls(chartUrls);
-        await onAddNote(parsed.content, urls.length > 0 ? urls : undefined);
+        await onAddNote(
+          parsed.content,
+          noteDate,
+          urls.length > 0 ? urls : undefined,
+        );
         formApi.reset();
+        setNoteDateInput(toDateTimeLocalValue(Date.now()));
         setChartUrls(defaultShowEvidence ? [""] : []);
       } catch (error) {
         setAddNoteError(
@@ -99,6 +114,22 @@ export function NoteComposer({
             />
           )}
         </noteForm.AppField>
+        <div className="grid w-full max-w-xs items-center gap-1.5">
+          <label
+            htmlFor={`${testIdPrefix}-add-note-date`}
+            className="text-sm font-medium text-olive-11"
+          >
+            Note date
+          </label>
+          <input
+            id={`${testIdPrefix}-add-note-date`}
+            type="datetime-local"
+            data-testid={getNoteComposerDateInputTestId(testIdPrefix)}
+            className="h-9 rounded-md border border-olive-7 bg-transparent px-3 py-2 text-sm text-olive-12 focus:ring-2 focus:ring-blue-8 focus:outline-none"
+            value={noteDateInput}
+            onChange={(event) => setNoteDateInput(event.target.value)}
+          />
+        </div>
         <EvidenceUrlInputs urls={chartUrls} onChange={setChartUrls} />
         <div className="flex items-center justify-between">
           <EvidenceUrlInputs.AddButton
