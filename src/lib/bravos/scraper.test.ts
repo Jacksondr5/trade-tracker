@@ -1,6 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import {
   extractBravosListingPage,
   extractBravosListingPosts,
@@ -25,21 +23,46 @@ describe("extractBravosListingPosts", () => {
   });
 
   it("returns Bravos archive post links and next-page url", () => {
-    const fixture = readFileSync(
-      resolve(process.cwd(), "trade-alerts.html"),
-      "utf8",
-    );
+    const fixture = `<html>
+      <body>
+        <main>
+          <div class="post_single">
+            <a href="/category/portfolio-update/">Portfolio Update</a>
+            <a href="/news-feed/closing-global-agriculture-producers-etf-vegi-breakdown?utm_source=email">
+              Closing Global Agriculture Producers ETF VEGI Breakdown
+            </a>
+          </div>
+          <div class="post_single">
+            <a href="/news-feed/qqq-breakout-plan">QQQ Breakout Plan</a>
+          </div>
+          <div class="post_single">
+            <a href="/news-feed/aapl-risk-update#comments">Comments</a>
+            <a href="/news-feed/aapl-risk-update">AAPL Risk Update</a>
+          </div>
+          <div class="post_single">
+            <a href="/portfolio-update/spy-follow-up">SPY Follow Up</a>
+          </div>
+          <div class="pagination">
+            <a class="next page-numbers" href="/category/portfolio-update/page/2/">Next</a>
+          </div>
+        </main>
+      </body>
+    </html>`;
 
     const result = extractBravosListingPage(fixture, {
       baseUrl: "https://bravosresearch.com/category/portfolio-update/",
     });
 
-    expect(result.posts).toHaveLength(10);
+    expect(result.posts).toHaveLength(4);
     expect(result.posts[0]).toMatchObject({
       sourceIdentity:
         "https://bravosresearch.com/news-feed/closing-global-agriculture-producers-etf-vegi-breakdown",
       sourceUrl:
         "https://bravosresearch.com/news-feed/closing-global-agriculture-producers-etf-vegi-breakdown",
+    });
+    expect(result.posts[2]).toMatchObject({
+      sourceIdentity: "https://bravosresearch.com/news-feed/aapl-risk-update",
+      sourceUrl: "https://bravosresearch.com/news-feed/aapl-risk-update",
     });
     expect(result.nextPageUrl).toBe(
       "https://bravosresearch.com/category/portfolio-update/page/2/",
