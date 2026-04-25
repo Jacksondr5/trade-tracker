@@ -94,6 +94,8 @@ const mutableFollowUpFields = new Set<FollowUpField>([
   "targetConditions",
 ]);
 
+const WORKER_DISPATCH_TIMEOUT_MS = 30_000;
+
 function normalizeBravosSourceUrl(url: string): string {
   const parsed = new URL(url.trim());
   parsed.hash = "";
@@ -650,17 +652,33 @@ export const dispatchSyncRun = internalAction({
 
     let response: Response;
     try {
-      response = await fetch(configuredWorkerUrl, {
-        body: JSON.stringify({ syncRunId: args.syncRunId }),
-        headers: {
-          Authorization: `Bearer ${configuredWorkerSecret}`,
-          "Content-Type": "application/json",
-        },
-        method: "POST",
-      });
+      const controller = new AbortController();
+      const timeoutHandle = setTimeout(
+        () => controller.abort(),
+        WORKER_DISPATCH_TIMEOUT_MS,
+      );
+      try {
+        response = await fetch(configuredWorkerUrl, {
+          body: JSON.stringify({ syncRunId: args.syncRunId }),
+          headers: {
+            Authorization: `Bearer ${configuredWorkerSecret}`,
+            "Content-Type": "application/json",
+          },
+          method: "POST",
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutHandle);
+      }
     } catch (error) {
+      const isTimeoutError =
+        error instanceof DOMException && error.name === "AbortError";
       const message =
-        error instanceof Error ? error.message : "Bravos worker dispatch failed";
+        isTimeoutError
+          ? `Bravos worker dispatch timed out after ${WORKER_DISPATCH_TIMEOUT_MS}ms`
+          : error instanceof Error
+            ? error.message
+            : "Bravos worker dispatch failed";
       await _ctx.runMutation(internal.bravos.markRunDispatchError, {
         error: message,
         syncRunId: args.syncRunId,
