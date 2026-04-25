@@ -5,6 +5,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import {
   ChartCandlestick,
+  ChessKnight,
   FolderKanban,
   GalleryVerticalEnd,
   Import as ImportIcon,
@@ -17,6 +18,7 @@ import {
 } from "lucide-react";
 
 export interface AppNavigationItem {
+  exact?: boolean;
   href: string;
   icon: LucideIcon;
   label: string;
@@ -83,12 +85,26 @@ export const appNavigationSections: AppNavigationSection[] = [
         matchPrefixes: ["/portfolios", "/portfolio"],
         testId: NAVIGATION_TEST_IDS.portfolios,
       },
+    ],
+  },
+  {
+    testId: NAVIGATION_SECTION_TEST_IDS.imports,
+    title: "Imports",
+    items: [
       {
+        exact: true,
         href: "/imports",
         icon: ImportIcon,
-        label: "Imports",
+        label: "Trades",
         matchPrefixes: ["/imports"],
-        testId: NAVIGATION_TEST_IDS.imports,
+        testId: NAVIGATION_TEST_IDS.importsTrades,
+      },
+      {
+        href: "/imports/bravos",
+        icon: ChessKnight,
+        label: "Bravos Trade Plans",
+        matchPrefixes: ["/imports/bravos"],
+        testId: NAVIGATION_TEST_IDS.importsBravos,
       },
     ],
   },
@@ -131,13 +147,29 @@ export function isAppNavigationItemActive(
   pathname: string,
   item: AppNavigationItem,
 ): boolean {
+  if (item.exact) {
+    return pathname === item.href;
+  }
+
   return item.matchPrefixes.some((prefix) => {
     return pathname === prefix || pathname.startsWith(`${prefix}/`);
   });
 }
 
+export function getAppNavigationItems(): AppNavigationItem[] {
+  return appNavigationSections.flatMap((section) => section.items);
+}
+
 export function getActiveAppNavigationItem(pathname: string) {
-  return appNavigationSections
-    .flatMap((section) => section.items)
+  return getAppNavigationItems()
+    .sort((first, second) => {
+      const firstPrefixLength = Math.max(
+        ...first.matchPrefixes.map((prefix) => prefix.length),
+      );
+      const secondPrefixLength = Math.max(
+        ...second.matchPrefixes.map((prefix) => prefix.length),
+      );
+      return secondPrefixLength - firstPrefixLength;
+    })
     .find((item) => isAppNavigationItemActive(pathname, item));
 }

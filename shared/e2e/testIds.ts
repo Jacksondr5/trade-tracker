@@ -11,6 +11,7 @@ export const APP_PAGE_TITLES = {
   campaigns: "campaigns-page-title",
   dashboard: "dashboard-page-title",
   imports: "imports-page-title",
+  importsBravos: "bravos-review-page-title",
   notes: "notes-page-title",
   portfolios: "portfolios-page-title",
   positions: "positions-page-title",
@@ -23,7 +24,8 @@ export const NAVIGATION_TEST_IDS = {
   accounts: "nav-accounts-link",
   campaigns: "nav-campaigns-link",
   dashboard: "nav-dashboard-link",
-  imports: "nav-imports-link",
+  importsBravos: "nav-imports-bravos-link",
+  importsTrades: "nav-imports-trades-link",
   notes: "nav-notes-link",
   portfolios: "nav-portfolios-link",
   positions: "nav-positions-link",
@@ -34,6 +36,7 @@ export const NAVIGATION_TEST_IDS = {
 
 export const NAVIGATION_SECTION_TEST_IDS = {
   activity: "nav-section-activity",
+  imports: "nav-section-imports",
   review: "nav-section-review",
   settings: "nav-section-settings",
   writing: "nav-section-writing",
@@ -152,6 +155,27 @@ export const IMPORTS_INDEX_TEST_IDS = {
   emptyState: "imports-empty-state",
   brokerageSelect: "brokerage-select",
 } as const;
+
+export const BRAVOS_REVIEW_TEST_IDS = {
+  approveButton: "bravos-review-approve-button",
+  connectButton: "bravos-connect-button",
+  detailPanel: "bravos-review-detail",
+  dismissButton: "bravos-review-dismiss-button",
+  fetchPostButton: "bravos-fetch-post-button",
+  fetchPostInput: "bravos-fetch-post-input",
+  listingScanButton: "bravos-listing-scan-button",
+  listingUrlInput: "bravos-listing-url-input",
+  saveListingUrlButton: "bravos-save-listing-url-button",
+  list: "bravos-review-list",
+  paginationNext: "bravos-review-pagination-next",
+  paginationPrev: "bravos-review-pagination-prev",
+  syncCard: "bravos-sync-card",
+  targetTradePlanSelect: "bravos-target-trade-plan-select",
+} as const;
+
+export function getBravosRunRetryTestId(runId: string): string {
+  return `bravos-run-retry-${normalizeSegment(runId)}`;
+}
 
 export const TRADE_PLANS_INDEX_TEST_IDS = {
   createFormToggle: "trade-plans-create-form-toggle",

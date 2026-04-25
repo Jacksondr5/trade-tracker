@@ -17,7 +17,147 @@ const importTaskModeValidator = v.union(
   v.literal("follow-up"),
 );
 
+const bravosConnectionStatusValidator = v.union(
+  v.literal("not_connected"),
+  v.literal("connected"),
+  v.literal("needs_reconnect"),
+);
+
+const bravosReviewStateValidator = v.union(
+  v.literal("pending"),
+  v.literal("processing"),
+  v.literal("ready"),
+  v.literal("needs_attention"),
+  v.literal("approved"),
+  v.literal("dismissed"),
+  v.literal("failed"),
+);
+
+const bravosSyncRunKindValidator = v.union(
+  v.literal("direct_post_fetch"),
+  v.literal("listing_scan"),
+  v.literal("scheduled_scan"),
+);
+
+const bravosSyncRunStatusValidator = v.union(
+  v.literal("queued"),
+  v.literal("processing"),
+  v.literal("done"),
+  v.literal("error"),
+);
+
+const bravosClassificationValidator = v.union(
+  v.literal("initiate"),
+  v.literal("follow_up"),
+  v.literal("unknown"),
+);
+
+const bravosFollowUpFieldValidator = v.union(
+  v.literal("entryConditions"),
+  v.literal("exitConditions"),
+  v.literal("instrumentNotes"),
+  v.literal("rationale"),
+  v.literal("targetConditions"),
+);
+
+const bravosProposedActionValidator = v.union(
+  v.object({
+    kind: v.literal("create_trade_plan"),
+    entryConditions: v.optional(v.string()),
+    exitConditions: v.optional(v.string()),
+    instrumentNotes: v.optional(v.string()),
+    instrumentSymbol: v.string(),
+    instrumentType: v.optional(v.string()),
+    name: v.string(),
+    rationale: v.optional(v.string()),
+    targetConditions: v.optional(v.string()),
+  }),
+  v.object({
+    kind: v.literal("apply_follow_up"),
+    fieldUpdates: v.array(
+      v.object({
+        field: bravosFollowUpFieldValidator,
+        text: v.string(),
+      }),
+    ),
+    noteContent: v.optional(v.string()),
+    targetTradePlanId: v.optional(v.id("tradePlans")),
+  }),
+  v.object({
+    kind: v.literal("note_only"),
+    content: v.string(),
+    targetTradePlanId: v.optional(v.id("tradePlans")),
+  }),
+  v.object({
+    kind: v.literal("unknown"),
+    reason: v.optional(v.string()),
+  }),
+);
+
 export default defineSchema({
+  bravosConnections: defineTable({
+    browserbaseContextId: v.optional(v.string()),
+    connectionError: v.optional(v.string()),
+    lastFailedSyncAt: v.optional(v.number()),
+    lastLiveViewUrl: v.optional(v.string()),
+    lastSuccessfulSyncAt: v.optional(v.number()),
+    listingUrl: v.optional(v.string()),
+    ownerId: v.string(),
+    reconnectReason: v.optional(v.string()),
+    status: bravosConnectionStatusValidator,
+    updatedAt: v.number(),
+  }).index("by_ownerId", ["ownerId"]),
+
+  bravosReviewItems: defineTable({
+    aiOutput: v.optional(v.string()),
+    approvedAction: v.optional(bravosProposedActionValidator),
+    approvedAt: v.optional(v.number()),
+    appliedNoteId: v.optional(v.id("notes")),
+    appliedTradePlanId: v.optional(v.id("tradePlans")),
+    canonicalSourceIdentity: v.string(),
+    classification: bravosClassificationValidator,
+    dismissedAt: v.optional(v.number()),
+    fetchSource: bravosSyncRunKindValidator,
+    fetchedAt: v.number(),
+    imageUrls: v.array(v.string()),
+    lastFetchedAt: v.number(),
+    lastProcessedAt: v.optional(v.number()),
+    listingUrl: v.optional(v.string()),
+    ownerId: v.string(),
+    processingError: v.optional(v.string()),
+    proposedAction: bravosProposedActionValidator,
+    rawText: v.string(),
+    reviewState: bravosReviewStateValidator,
+    sourcePostDate: v.optional(v.string()),
+    sourceTitle: v.optional(v.string()),
+    sourcePublishedAt: v.optional(v.number()),
+    sourceUrl: v.string(),
+    suggestedTradePlanId: v.optional(v.id("tradePlans")),
+    suggestedTradePlanReason: v.optional(v.string()),
+    syncRunId: v.optional(v.id("bravosSyncRuns")),
+  })
+    .index("by_ownerId", ["ownerId"])
+    .index("by_ownerId_and_canonicalSourceIdentity", [
+      "ownerId",
+      "canonicalSourceIdentity",
+    ])
+    .index("by_ownerId_and_reviewState", ["ownerId", "reviewState"]),
+
+  bravosSyncRuns: defineTable({
+    completedAt: v.optional(v.number()),
+    connectionId: v.optional(v.id("bravosConnections")),
+    error: v.optional(v.string()),
+    kind: bravosSyncRunKindValidator,
+    ownerId: v.string(),
+    requestedAt: v.number(),
+    requestedSourceUrl: v.optional(v.string()),
+    startedAt: v.optional(v.number()),
+    status: bravosSyncRunStatusValidator,
+  })
+    .index("by_ownerId", ["ownerId"])
+    .index("by_ownerId_and_status", ["ownerId", "status"])
+    .index("by_status", ["status"]),
+
   importTasks: defineTable({
     chartUrls: v.optional(v.array(v.string())),
     createdTradePlanId: v.optional(v.id("tradePlans")),

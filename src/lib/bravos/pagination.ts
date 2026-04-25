@@ -1,0 +1,1 @@
+export const DEFAULT_BRAVOS_REVIEW_PAGE_SIZE = 25;
