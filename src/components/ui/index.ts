@@ -53,6 +53,7 @@ export {
 } from "./form-error-message";
 export { Input, inputVariants, type InputProps } from "./input";
 export { Label } from "./label";
+export { PaginationControls } from "./pagination-controls";
 export { RadioGroup, RadioGroupItem } from "./radio-group";
 export {
   Select,

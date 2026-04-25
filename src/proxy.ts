@@ -2,6 +2,7 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
 const isPublicRoute = createRouteMatcher([
   "/",
+  "/api/internal/bravos/run",
   "/sign-in(.*)",
   "/sign-up(.*)",
 ]);

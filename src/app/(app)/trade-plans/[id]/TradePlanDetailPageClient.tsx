@@ -382,7 +382,7 @@ export default function TradePlanDetailPageClient({
   const summary = workspace?.summary ?? null;
   const notes = workspace?.notes ?? [];
   const trades = workspace?.trades ?? [];
-  const accountMappings = workspace?.accountMappings ?? [];
+  const accountMappings = workspace?.accountMappings;
   const inboxTradesForPlan = workspace?.inboxTrades ?? [];
   const portfolios = workspace?.portfolios ?? [];
   const { hierarchy } = useNavigationData();
@@ -428,7 +428,7 @@ export default function TradePlanDetailPageClient({
 
   const accountNameByAccountId = useMemo(() => {
     const map = new Map<string, string>();
-    for (const mapping of accountMappings) {
+    for (const mapping of accountMappings ?? []) {
       map.set(mapping.accountId, mapping.friendlyName);
     }
     return map;

@@ -68,6 +68,26 @@ Backend code is organized by domain, with shared helpers under `convex/lib/` and
 
 Generated Convex artifacts live under `convex/_generated/` and should be treated as generated files rather than hand-edited architecture.
 
+### Operational worker runtimes
+
+Most product backend behavior should stay in Convex, but some unattended ingestion work may need a specialized server runtime.
+
+An internal worker runtime may be introduced when the work is primarily:
+
+- browser automation
+- AI or model orchestration
+- third-party session handling
+- image, screenshot, or large document processing
+- long-running or failure-prone external ingestion
+
+In those cases, Convex remains the system of record and workflow coordinator. The worker should receive bounded job identifiers, perform capture or processing, and write results back through explicit Convex functions. It must not own a separate data model, authorization model, or canonical mutation path.
+
+Prefer this split:
+
+- Convex owns durable state, dedupe, review workflow, authorization, and canonical domain mutations.
+- Worker runtimes own external I/O, browser sessions, AI calls, and heavyweight processing.
+- Shared pure modules own parsing, normalization, and validation contracts where practical.
+
 ### Product documentation
 
 Evergreen product docs live in `docs/product/`.
@@ -83,6 +103,7 @@ Contributors should use the product docs for product-wide guidance instead of in
 - All backend logic goes through `Convex`.
 - Do not add Next.js API routes as a parallel backend surface.
 - Keep backend logic in the domain module that owns the behavior, or in `convex/lib/` if it is genuinely shared.
+- A narrow internal Next.js route handler or external worker may be used for operational ingestion workloads that need browser automation, AI-heavy processing, or specialized Node runtime behavior. This is an execution worker, not a second product backend: Convex must still own durable state, authorization, review boundaries, and canonical mutations.
 
 ### Authentication wiring
 
@@ -149,6 +170,7 @@ Work should be considered incomplete if it breaks the repository's standard vali
 ## Rules For Future Technical Changes
 
 - Do not introduce a second backend pattern beside Convex.
+- If a specialized worker runtime is introduced, document why Convex's normal runtime is not the right fit and keep the worker behind Convex-owned workflow state.
 - Do not bypass the shared form system without a concrete reason.
 - Do not add one-off UI primitives when the shared UI layer should own them.
 - Do not let route-local code become the default home for logic that is actually shared across the app.
@@ -160,7 +182,7 @@ Work should be considered incomplete if it breaks the repository's standard vali
 Trade Tracker is organized around a small number of deliberate technical choices:
 
 - App Router on the frontend
-- Convex as the only backend surface
+- Convex as the system of record and normal backend surface
 - a shared UI and form layer
 - dark-mode-only Radix-token styling
 - product guidance centralized in `docs/product/`

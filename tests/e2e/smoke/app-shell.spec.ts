@@ -39,7 +39,8 @@ test("authenticated app shell renders primary navigation", async ({ page }) => {
   await expect(getNavigationLink(page, "campaigns")).toBeVisible();
   await expect(getNavigationLink(page, "tradePlans")).toBeVisible();
   await expect(getNavigationLink(page, "portfolios")).toBeVisible();
-  await expect(getNavigationLink(page, "imports")).toBeVisible();
+  await expect(getNavigationLink(page, "importsTrades")).toBeVisible();
+  await expect(getNavigationLink(page, "importsBravos")).toBeVisible();
   await expect(getNavigationLink(page, "positions")).toBeVisible();
   await expect(getNavigationLink(page, "notes")).toBeVisible();
   await expect(getNavigationLink(page, "strategy")).toBeVisible();
@@ -53,7 +54,8 @@ test("authenticated app shell renders primary navigation", async ({ page }) => {
     ["tradePlans", "tradePlans", "/trade-plans"],
     ["positions", "positions", "/positions"],
     ["portfolios", "portfolios", "/portfolios"],
-    ["imports", "imports", "/imports"],
+    ["importsTrades", "imports", "/imports"],
+    ["importsBravos", "importsBravos", "/imports/bravos"],
     ["notes", "notes", "/notes"],
     ["strategy", "strategy", "/strategy"],
     ["accounts", "accounts", "/accounts"],

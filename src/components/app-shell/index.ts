@@ -4,5 +4,6 @@ export { NavigationState } from "./NavigationState";
 export {
   appNavigationSections,
   getActiveAppNavigationItem,
+  getAppNavigationItems,
   isAppNavigationItemActive,
 } from "./app-navigation";

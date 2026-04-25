@@ -2,8 +2,15 @@
 
 import { Preloaded, useMutation, usePreloadedQuery, useQuery } from "convex/react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Pencil, X } from "lucide-react";
-import { Alert, Badge, EmptyState, Input, Select } from "~/components/ui";
+import { Pencil, X } from "lucide-react";
+import {
+  Alert,
+  Badge,
+  EmptyState,
+  Input,
+  PaginationControls,
+  Select,
+} from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { formatCurrency, formatDate } from "~/lib/format";
@@ -781,31 +788,16 @@ export default function TradesPageClient({
                   </option>
                 ))}
               </Select>
-              <button
-                type="button"
-                aria-label="Previous page"
-                title="Previous page"
-                data-testid={TRADES_INDEX_TEST_IDS.paginationPrev}
-                className="rounded border border-olive-6 p-1.5 text-slate-12 disabled:opacity-50"
-                onClick={handlePrevPage}
-                disabled={cursorHistory.length === 0 || isLoadingTradesPage}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <span className="whitespace-nowrap text-sm text-slate-11">
-                Page {currentPage}
-              </span>
-              <button
-                type="button"
-                aria-label="Next page"
-                title="Next page"
-                data-testid={TRADES_INDEX_TEST_IDS.paginationNext}
-                className="rounded border border-olive-6 p-1.5 text-slate-12 disabled:opacity-50"
-                onClick={handleNextPage}
-                disabled={isLoadingTradesPage || displayedTradesPage.isDone}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
+              <PaginationControls
+                currentPage={currentPage}
+                isLoading={isLoadingTradesPage}
+                nextDisabled={displayedTradesPage.isDone}
+                nextTestId={TRADES_INDEX_TEST_IDS.paginationNext}
+                onNext={handleNextPage}
+                onPrevious={handlePrevPage}
+                previousDisabled={cursorHistory.length === 0}
+                previousTestId={TRADES_INDEX_TEST_IDS.paginationPrev}
+              />
             </div>
           </div>
         </>
