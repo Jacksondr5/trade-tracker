@@ -276,7 +276,7 @@ export const getBravosReviewSummary = query({
     const items = await ctx.db
       .query("bravosReviewItems")
       .withIndex("by_ownerId", (q) => q.eq("ownerId", ownerId))
-      .take(200);
+      .collect();
     return {
       needsAttentionCount: items.filter(
         (item) => item.reviewState === "needs_attention",
@@ -728,8 +728,8 @@ export const retryBravosSyncRun = mutation({
       "Bravos sync run not found",
     );
 
-    if (run.status === "done") {
-      throw new ConvexError("Completed Bravos sync runs cannot be retried");
+    if (run.status !== "error") {
+      throw new ConvexError("Only failed Bravos sync runs can be retried");
     }
 
     await ctx.db.patch(args.syncRunId, {
@@ -856,7 +856,9 @@ export const markRunDoneForWorker = mutation({
     const connection = await getConnectionByOwner(ctx, run.ownerId);
     if (connection) {
       await ctx.db.patch(connection._id, {
+        connectionError: undefined,
         lastSuccessfulSyncAt: Date.now(),
+        reconnectReason: undefined,
         status:
           connection.status === "needs_reconnect"
             ? "connected"
@@ -970,7 +972,8 @@ export const upsertReviewItemForWorker = mutation({
           ? args.proposedAction.targetTradePlanId
           : undefined;
     const reviewState: Doc<"bravosReviewItems">["reviewState"] =
-      args.proposedAction.kind === "apply_follow_up" && !args.sourcePostDate
+      args.proposedAction.kind === "unknown" ||
+      (args.proposedAction.kind === "apply_follow_up" && !args.sourcePostDate)
         ? "needs_attention"
         : "ready";
     const existing = await ctx.db
