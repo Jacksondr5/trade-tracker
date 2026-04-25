@@ -1,4 +1,4 @@
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { paginationOptsValidator } from "convex/server";
 import {
@@ -644,10 +644,9 @@ export const dispatchSyncRun = internalAction({
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Bravos worker dispatch failed";
-      await _ctx.runMutation(api.bravos.markRunErrorForWorker, {
+      await _ctx.runMutation(internal.bravos.markRunDispatchError, {
         error: message,
         syncRunId: args.syncRunId,
-        workerSecret: configuredWorkerSecret,
       });
       throw new ConvexError(message);
     }
@@ -660,10 +659,9 @@ export const dispatchSyncRun = internalAction({
             1000,
           )}`
         : `Bravos worker dispatch failed: ${response.status}`;
-      await _ctx.runMutation(api.bravos.markRunErrorForWorker, {
+      await _ctx.runMutation(internal.bravos.markRunDispatchError, {
         error: message,
         syncRunId: args.syncRunId,
-        workerSecret: configuredWorkerSecret,
       });
       throw new ConvexError(message);
     }
