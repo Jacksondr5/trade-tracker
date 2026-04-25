@@ -163,6 +163,18 @@ function appendDatedValue(
   return currentValue ? `${currentValue}\n${appendedValue}` : appendedValue;
 }
 
+function noteDateFromSourcePostDate(
+  sourcePostDate: string | undefined,
+  fallback: number,
+) {
+  if (!sourcePostDate) {
+    return fallback;
+  }
+
+  const parsed = Date.parse(sourcePostDate);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 async function createBravosListingScanRun(args: {
   connectionId?: Id<"bravosConnections">;
   ctx: MutationCtx;
@@ -509,6 +521,8 @@ export const approveBravosReviewItem = mutation({
     }
 
     const action = item.proposedAction;
+    const now = Date.now();
+    const importedNoteDate = noteDateFromSourcePostDate(item.sourcePostDate, now);
     let tradePlanId: Id<"tradePlans"> | null = null;
     let noteId: Id<"notes"> | null = null;
 
@@ -529,6 +543,7 @@ export const approveBravosReviewItem = mutation({
       noteId = await ctx.db.insert("notes", {
         chartUrls: item.imageUrls.length > 0 ? item.imageUrls : undefined,
         content: `Imported from Bravos: ${item.sourceUrl}`,
+        noteDate: importedNoteDate,
         ownerId,
         tradePlanId,
       });
@@ -570,6 +585,7 @@ export const approveBravosReviewItem = mutation({
       noteId = await ctx.db.insert("notes", {
         chartUrls: item.imageUrls.length > 0 ? item.imageUrls : undefined,
         content: noteContent,
+        noteDate: importedNoteDate,
         ownerId,
         tradePlanId,
       });
@@ -585,6 +601,7 @@ export const approveBravosReviewItem = mutation({
       noteId = await ctx.db.insert("notes", {
         chartUrls: item.imageUrls.length > 0 ? item.imageUrls : undefined,
         content: action.content,
+        noteDate: importedNoteDate,
         ownerId,
         tradePlanId: tradePlanId ?? undefined,
       });
@@ -594,7 +611,7 @@ export const approveBravosReviewItem = mutation({
 
     await ctx.db.patch(args.reviewItemId, {
       approvedAction: action,
-      approvedAt: Date.now(),
+      approvedAt: now,
       appliedNoteId: noteId ?? undefined,
       appliedTradePlanId: tradePlanId ?? undefined,
       reviewState: "approved",
