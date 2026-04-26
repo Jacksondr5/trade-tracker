@@ -6,7 +6,9 @@ const BRAVOS_LOGIN_URL = "https://bravosresearch.com";
 
 interface BrowserbaseSession {
   connectUrl?: string;
+  contextId?: string;
   id: string;
+  status?: string;
   projectId?: string;
 }
 
@@ -78,6 +80,75 @@ export async function getBrowserbaseLiveViewUrl(
     links.debuggerUrl ??
     links.pages?.[0]?.debuggerUrl ??
     `https://browserbase.com/sessions/${sessionId}`
+  );
+}
+
+export async function releaseBrowserbaseSession(sessionId: string) {
+  await browserbaseRequest<BrowserbaseSession>(`/sessions/${sessionId}`, {
+    body: JSON.stringify({
+      projectId: env.BROWSERBASE_PROJECT_ID,
+      status: "REQUEST_RELEASE",
+    }),
+    method: "POST",
+  });
+}
+
+const SESSION_RELEASE_PENDING_STATUSES = new Set([
+  "CREATED",
+  "REQUEST_RELEASE",
+  "RUNNING",
+]);
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isSessionReleased(status: string | undefined): boolean {
+  if (!status) {
+    return false;
+  }
+  return !SESSION_RELEASE_PENDING_STATUSES.has(status.toUpperCase());
+}
+
+export async function pollBrowserbaseSessionReady(
+  sessionId: string,
+  options?: {
+    initialIntervalMs?: number;
+    maxIntervalMs?: number;
+    timeoutMs?: number;
+  },
+) {
+  const timeoutMs = options?.timeoutMs ?? 60_000;
+  const initialIntervalMs = options?.initialIntervalMs ?? 500;
+  const maxIntervalMs = options?.maxIntervalMs ?? 5_000;
+  const startedAt = Date.now();
+  let intervalMs = initialIntervalMs;
+  let lastStatus: string | undefined;
+  let lastError: unknown = undefined;
+
+  while (Date.now() - startedAt <= timeoutMs) {
+    try {
+      const session = await browserbaseRequest<BrowserbaseSession>(
+        `/sessions/${sessionId}`,
+        { method: "GET" },
+      );
+      lastStatus = session.status;
+      if (isSessionReleased(session.status)) {
+        return;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+
+    await delay(intervalMs);
+    intervalMs = Math.min(maxIntervalMs, Math.round(intervalMs * 1.7));
+  }
+
+  const errorSuffix = lastError instanceof Error
+    ? ` Last error: ${lastError.message}`
+    : "";
+  throw new Error(
+    `Timed out waiting for Browserbase session ${sessionId} to release. Last status: ${lastStatus ?? "unknown"}.${errorSuffix}`,
   );
 }
 

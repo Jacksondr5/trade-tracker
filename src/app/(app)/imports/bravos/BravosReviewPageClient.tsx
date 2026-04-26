@@ -92,6 +92,7 @@ export default function BravosReviewPageClient({
   const [isFetching, setIsFetching] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [isDismissing, setIsDismissing] = useState(false);
+  const [isSavingLoginSession, setIsSavingLoginSession] = useState(false);
   const [isSavingListingUrl, setIsSavingListingUrl] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [retryingRunId, setRetryingRunId] = useState<string | null>(null);
@@ -132,6 +133,13 @@ export default function BravosReviewPageClient({
   const isLoadingReviewItemsPage = !reviewItemsPage;
   const reviewItems = displayedReviewItemsPage.page as BravosReviewItem[];
   const currentReviewPage = reviewCursorHistory.length + 1;
+  const hasPendingLoginSession = Boolean(
+    connection?.browserbaseLoginSessionId &&
+      connection.browserbaseLoginSessionReleasedAt === undefined,
+  );
+  const isBravosSessionReady = Boolean(
+    connection?.browserbaseContextId && !hasPendingLoginSession,
+  );
 
   const queueRows = useMemo(() => {
     const reviewByRunId = new Map<string, BravosReviewItem>();
@@ -237,6 +245,30 @@ export default function BravosReviewPageClient({
       );
     } finally {
       setIsConnecting(false);
+    }
+  };
+
+  const handleSaveLoginSession = async () => {
+    setErrorMessage(null);
+    setStatusMessage(null);
+    setIsSavingLoginSession(true);
+    try {
+      const response = await fetch("/api/bravos/save-session", {
+        method: "POST",
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Failed to save Bravos login session");
+      }
+      setStatusMessage("Bravos login session saved.");
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to save Bravos login session",
+      );
+    } finally {
+      setIsSavingLoginSession(false);
     }
   };
 
@@ -391,7 +423,9 @@ export default function BravosReviewPageClient({
               <div className="flex justify-between gap-4">
                 <dt className="text-olive-11">Connection</dt>
                 <dd className="text-olive-12">
-                  {connection?.status.replace("_", " ") ?? "not connected"}
+                  {hasPendingLoginSession
+                    ? "login pending"
+                    : (connection?.status.replace("_", " ") ?? "not connected")}
                 </dd>
               </div>
               <div className="flex justify-between gap-4">
@@ -403,19 +437,30 @@ export default function BravosReviewPageClient({
                 <dd className="text-olive-12">{summary.needsAttentionCount}</dd>
               </div>
             </dl>
-            <Button
-              className="mt-4"
-              dataTestId={BRAVOS_REVIEW_TEST_IDS.connectButton}
-              isLoading={isConnecting}
-              onClick={handleConnect}
-              type="button"
-              variant="outline"
-            >
-              <RefreshCw className="size-4" />
-              {connection?.status === "needs_reconnect"
-                ? "Reconnect Bravos"
-                : "Connect Bravos"}
-            </Button>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                dataTestId={BRAVOS_REVIEW_TEST_IDS.connectButton}
+                isLoading={isConnecting}
+                onClick={handleConnect}
+                type="button"
+                variant="outline"
+              >
+                <RefreshCw className="size-4" />
+                {connection?.status === "needs_reconnect"
+                  ? "Reconnect Bravos"
+                  : "Connect Bravos"}
+              </Button>
+              {hasPendingLoginSession ? (
+                <Button
+                  dataTestId={BRAVOS_REVIEW_TEST_IDS.saveLoginSessionButton}
+                  isLoading={isSavingLoginSession}
+                  onClick={handleSaveLoginSession}
+                  type="button"
+                >
+                  Save session
+                </Button>
+              ) : null}
+            </div>
           </div>
 
           <div className="flex flex-col gap-5">
@@ -447,7 +492,7 @@ export default function BravosReviewPageClient({
                 </Button>
                 <Button
                   dataTestId={BRAVOS_REVIEW_TEST_IDS.listingScanButton}
-                  disabled={!listingUrl.trim()}
+                  disabled={!listingUrl.trim() || !isBravosSessionReady}
                   isLoading={isScanning}
                   onClick={handleRunListingScan}
                   type="button"
@@ -476,7 +521,7 @@ export default function BravosReviewPageClient({
                 />
                 <Button
                   dataTestId={BRAVOS_REVIEW_TEST_IDS.fetchPostButton}
-                  disabled={!sourceUrl.trim()}
+                  disabled={!sourceUrl.trim() || !isBravosSessionReady}
                   isLoading={isFetching}
                   onClick={handleFetchPost}
                   type="button"
