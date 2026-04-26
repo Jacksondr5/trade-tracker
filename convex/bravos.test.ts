@@ -177,6 +177,13 @@ describe("bravos review queue", () => {
       listingUrl:
         "https://bravosresearch.com/category/portfolio-update/?utm_source=test",
     });
+    await asUser().mutation(api.bravos.saveBravosBrowserbaseSession, {
+      browserbaseContextId: "ctx_123",
+      browserbaseSessionId: "session_123",
+    });
+    await asUser().mutation(api.bravos.markBravosBrowserbaseSessionSaved, {
+      browserbaseSessionId: "session_123",
+    });
 
     const syncRunId = await asUser().mutation(api.bravos.requestBravosListingScan, {});
 
@@ -260,6 +267,7 @@ describe("bravos review queue", () => {
   it("marks the connection as needs_reconnect when auth fails", async () => {
     await asUser().mutation(api.bravos.saveBravosBrowserbaseSession, {
       browserbaseContextId: "ctx_123",
+      browserbaseSessionId: "session_123",
     });
     const syncRunId = await insertRun({ sourceUrl: "https://example.com/post/4" });
 
@@ -275,5 +283,26 @@ describe("bravos review queue", () => {
       reconnectReason: "Unauthorized on Bravos",
       status: "needs_reconnect",
     });
+  });
+
+  it("blocks imports while a Bravos login session is waiting to be saved", async () => {
+    await asUser().mutation(api.bravos.saveBravosListingUrl, {
+      listingUrl: "https://example.com/category/trade-alerts",
+    });
+    await asUser().mutation(api.bravos.saveBravosBrowserbaseSession, {
+      browserbaseContextId: "ctx_123",
+      browserbaseSessionId: "session_123",
+    });
+
+    await expect(
+      asUser().mutation(api.bravos.requestBravosListingScan, {}),
+    ).rejects.toThrow("Save the Bravos login session before importing posts");
+
+    await asUser().mutation(api.bravos.markBravosBrowserbaseSessionSaved, {
+      browserbaseSessionId: "session_123",
+    });
+
+    const syncRunId = await asUser().mutation(api.bravos.requestBravosListingScan, {});
+    expect(syncRunId).toBeTruthy();
   });
 });

@@ -165,6 +165,7 @@ export const BRAVOS_REVIEW_TEST_IDS = {
   fetchPostInput: "bravos-fetch-post-input",
   listingScanButton: "bravos-listing-scan-button",
   listingUrlInput: "bravos-listing-url-input",
+  saveLoginSessionButton: "bravos-save-login-session-button",
   saveListingUrlButton: "bravos-save-listing-url-button",
   list: "bravos-review-list",
   paginationNext: "bravos-review-pagination-next",

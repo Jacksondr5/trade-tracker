@@ -97,6 +97,9 @@ const bravosProposedActionValidator = v.union(
 export default defineSchema({
   bravosConnections: defineTable({
     browserbaseContextId: v.optional(v.string()),
+    browserbaseLoginSessionId: v.optional(v.string()),
+    browserbaseLoginSessionReleasedAt: v.optional(v.number()),
+    browserbaseLoginSessionStartedAt: v.optional(v.number()),
     connectionError: v.optional(v.string()),
     lastFailedSyncAt: v.optional(v.number()),
     lastLiveViewUrl: v.optional(v.string()),

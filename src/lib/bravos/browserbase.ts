@@ -81,6 +81,16 @@ export async function getBrowserbaseLiveViewUrl(
   );
 }
 
+export async function releaseBrowserbaseSession(sessionId: string) {
+  await browserbaseRequest<BrowserbaseSession>(`/sessions/${sessionId}`, {
+    body: JSON.stringify({
+      projectId: env.BROWSERBASE_PROJECT_ID,
+      status: "REQUEST_RELEASE",
+    }),
+    method: "POST",
+  });
+}
+
 async function navigateBrowserbaseSession(args: {
   session: BrowserbaseSession;
   url: string;

@@ -19,6 +19,7 @@ export async function POST() {
   convex.setAuth(token);
   await convex.mutation(api.bravos.saveBravosBrowserbaseSession, {
     browserbaseContextId: session.contextId,
+    browserbaseSessionId: session.sessionId,
     liveViewUrl: session.liveViewUrl,
   });
 

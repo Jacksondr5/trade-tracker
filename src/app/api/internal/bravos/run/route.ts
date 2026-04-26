@@ -12,6 +12,7 @@ import {
 } from "~/lib/bravos/scraper";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 const MAX_LISTING_SCAN_PAGES = 3;
 

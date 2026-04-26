@@ -94,7 +94,7 @@ const mutableFollowUpFields = new Set<FollowUpField>([
   "targetConditions",
 ]);
 
-const WORKER_DISPATCH_TIMEOUT_MS = 30_000;
+const WORKER_DISPATCH_TIMEOUT_MS = 180_000;
 
 function normalizeBravosSourceUrl(url: string): string {
   const parsed = new URL(url.trim());
@@ -149,6 +149,28 @@ async function ensureConnection(ctx: MutationCtx, ownerId: string) {
     updatedAt: now,
   });
   return await ctx.db.get(connectionId);
+}
+
+function hasPendingBravosLoginSession(
+  connection: Doc<"bravosConnections"> | null,
+) {
+  return Boolean(
+    connection?.browserbaseLoginSessionId &&
+      connection.browserbaseLoginSessionReleasedAt === undefined,
+  );
+}
+
+function assertBravosConnectionReady(
+  connection: Doc<"bravosConnections"> | null,
+) {
+  if (hasPendingBravosLoginSession(connection)) {
+    throw new ConvexError(
+      "Save the Bravos login session before importing posts",
+    );
+  }
+  if (!connection?.browserbaseContextId) {
+    throw new ConvexError("Connect Bravos before importing posts");
+  }
 }
 
 function normalizeOptionalString(value: string | undefined): string | undefined {
@@ -207,6 +229,9 @@ export const getBravosConnection = query({
       _creationTime: v.number(),
       _id: v.id("bravosConnections"),
       browserbaseContextId: v.optional(v.string()),
+      browserbaseLoginSessionId: v.optional(v.string()),
+      browserbaseLoginSessionReleasedAt: v.optional(v.number()),
+      browserbaseLoginSessionStartedAt: v.optional(v.number()),
       connectionError: v.optional(v.string()),
       lastFailedSyncAt: v.optional(v.number()),
       lastLiveViewUrl: v.optional(v.string()),
@@ -351,6 +376,7 @@ export const saveBravosListingUrl = mutation({
 export const saveBravosBrowserbaseSession = mutation({
   args: {
     browserbaseContextId: v.string(),
+    browserbaseSessionId: v.string(),
     liveViewUrl: v.optional(v.string()),
   },
   returns: v.id("bravosConnections"),
@@ -359,6 +385,9 @@ export const saveBravosBrowserbaseSession = mutation({
     const existing = await getConnectionByOwner(ctx, ownerId);
     const patch = {
       browserbaseContextId: args.browserbaseContextId,
+      browserbaseLoginSessionId: args.browserbaseSessionId,
+      browserbaseLoginSessionReleasedAt: undefined,
+      browserbaseLoginSessionStartedAt: Date.now(),
       connectionError: undefined,
       lastLiveViewUrl: args.liveViewUrl,
       status: "connected" as const,
@@ -372,6 +401,32 @@ export const saveBravosBrowserbaseSession = mutation({
       ...patch,
       ownerId,
     });
+  },
+});
+
+export const markBravosBrowserbaseSessionSaved = mutation({
+  args: {
+    browserbaseSessionId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const connection = await getConnectionByOwner(ctx, ownerId);
+    if (!connection?.browserbaseLoginSessionId) {
+      throw new ConvexError("No Bravos login session is waiting to be saved");
+    }
+    if (connection.browserbaseLoginSessionId !== args.browserbaseSessionId) {
+      throw new ConvexError("Bravos login session no longer matches");
+    }
+
+    await ctx.db.patch(connection._id, {
+      browserbaseLoginSessionReleasedAt: Date.now(),
+      connectionError: undefined,
+      reconnectReason: undefined,
+      status: "connected",
+      updatedAt: Date.now(),
+    });
+    return null;
   },
 });
 
@@ -400,6 +455,7 @@ export const requestSpecificBravosPostFetch = mutation({
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
     const connection = await ensureConnection(ctx, ownerId);
+    assertBravosConnectionReady(connection);
     const syncRunId = await ctx.db.insert("bravosSyncRuns", {
       connectionId: connection?._id,
       kind: "direct_post_fetch",
@@ -424,6 +480,7 @@ export const requestBravosListingScan = mutation({
     if (!connection) {
       throw new ConvexError("Unable to create Bravos connection");
     }
+    assertBravosConnectionReady(connection);
     const listingUrl = normalizeOptionalString(args.listingUrl) ??
       connection.listingUrl;
     if (!listingUrl) {
@@ -456,7 +513,11 @@ export const requestScheduledBravosListingScans = internalMutation({
 
     const connections = await ctx.db.query("bravosConnections").collect();
     for (const connection of connections) {
-      if (!connection.listingUrl || connection.status !== "connected") {
+      if (
+        !connection.listingUrl ||
+        connection.status !== "connected" ||
+        hasPendingBravosLoginSession(connection)
+      ) {
         continue;
       }
       await createBravosListingScanRun({
@@ -677,7 +738,7 @@ export const dispatchSyncRun = internalAction({
         isTimeoutError
           ? `Bravos worker dispatch timed out after ${WORKER_DISPATCH_TIMEOUT_MS}ms`
           : error instanceof Error
-            ? error.message
+            ? `Bravos worker dispatch failed for ${new URL(configuredWorkerUrl).host}: ${error.message}`
             : "Bravos worker dispatch failed";
       await _ctx.runMutation(internal.bravos.markRunDispatchError, {
         error: message,
