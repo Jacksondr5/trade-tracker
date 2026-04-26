@@ -3,15 +3,12 @@ import { ConvexHttpClient } from "convex/browser";
 import { NextResponse } from "next/server";
 import { api } from "~/convex/_generated/api";
 import { env } from "~/env";
-import { releaseBrowserbaseSession } from "~/lib/bravos/browserbase";
+import {
+  pollBrowserbaseSessionReady,
+  releaseBrowserbaseSession,
+} from "~/lib/bravos/browserbase";
 
 export const runtime = "nodejs";
-
-const CONTEXT_SYNC_DELAY_MS = 5_000;
-
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 export async function POST() {
   const authState = await auth();
@@ -32,7 +29,7 @@ export async function POST() {
   }
 
   await releaseBrowserbaseSession(sessionId);
-  await delay(CONTEXT_SYNC_DELAY_MS);
+  await pollBrowserbaseSessionReady(sessionId);
   await convex.mutation(api.bravos.markBravosBrowserbaseSessionSaved, {
     browserbaseSessionId: sessionId,
   });
