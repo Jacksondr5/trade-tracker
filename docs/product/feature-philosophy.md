@@ -211,18 +211,24 @@ What portfolios should optimize for:
 
 - exposure grouping
 - capital organization
-- future analytics relevance
+- allocation visibility
+- performance review
 
 What portfolios are for:
 
 - separating different buckets of money
 - helping interpret performance and exposure by allocation bucket
 - supporting cross-cutting review of trades that share a capital source
+- showing cash versus market value
+- showing total equity over time
+- showing campaign exposure from the portfolio direction
 
 What portfolios are not for:
 
 - becoming the main thesis hierarchy
 - replacing campaigns or trade plans as the primary planning structure
+- replacing brokerage account records
+- becoming a live market data terminal
 
 ### Accounts
 
