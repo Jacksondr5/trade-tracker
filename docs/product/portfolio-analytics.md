@@ -16,6 +16,7 @@ Portfolio analytics should help answer:
 - which campaigns a portfolio is exposed to
 - how total portfolio equity has changed over time
 - how portfolio performance compares across useful date ranges
+- how portfolio performance compares against useful benchmarks such as the S&P 500
 
 Portfolio analytics should not become:
 
@@ -34,6 +35,8 @@ The canonical sources for portfolio analytics are:
 - market price snapshots, for cached daily close prices
 
 Daily portfolio valuations are derived from those sources. They are stored for performance and charting, but they must remain recomputable.
+
+Benchmark comparisons also use market data instruments and market price snapshots. Benchmarks are analytical reference series, not portfolios and not cash-ledger participants.
 
 ## Portfolio Cash Ledger
 
@@ -209,6 +212,26 @@ External cash flow must be removed from return math because total equity already
 
 For example, a portfolio that starts at `$10,000`, receives a `$5,000` deposit, and ends at `$15,000` has a `0%` return, not a `50%` return.
 
+## Benchmark Comparisons
+
+Portfolio analytics should support comparison against useful benchmarks.
+
+Initial benchmark:
+
+- S&P 500, represented by a practical market instrument such as `SPY` unless the product later adopts a dedicated index data source
+
+Benchmark comparison should answer:
+
+- how the portfolio performed over the selected timeframe
+- how the benchmark performed over the same timeframe
+- whether portfolio performance outpaced or lagged the benchmark
+
+Benchmark return should be computed from cached close prices over the selected period. It should use the same selected start and end dates as the portfolio return, but it should not use the portfolio cash ledger.
+
+Benchmark data should be stored through the same market data instrument and market price snapshot model used for traded symbols. Benchmark instruments may be system-created records rather than user-created records.
+
+The UI should present benchmark comparison as context for review, not as a trading signal or live market monitor.
+
 ## Campaign Exposure
 
 Portfolio campaign exposure is derived, not directly assigned.
@@ -270,4 +293,3 @@ Do not include these in the first version:
 - linked transfers between portfolios
 
 Portfolio valuation dirty ranges should be revisited after the full first version exists and the recomputation needs are clearer.
-

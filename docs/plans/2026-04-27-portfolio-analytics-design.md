@@ -12,6 +12,7 @@ The desired direction is to make portfolios answer:
 - which campaigns the portfolio is exposed to
 - how total equity has changed over time
 - how performance changes across selected timeframes
+- how performance compares against useful benchmarks such as the S&P 500
 
 This design keeps portfolios as overlays on the core `Campaign -> Trade Plan -> Trade` hierarchy. It gives portfolios stronger analytics without making them the parent structure for campaigns or trade plans.
 
@@ -108,6 +109,16 @@ The initial period return formula is:
 ```
 
 External cash flow is subtracted because deposits and withdrawals are already reflected in total equity.
+
+### Compare against benchmarks
+
+Portfolio analytics should support benchmark comparison as review context.
+
+The first benchmark should be the S&P 500, represented by a practical market instrument such as `SPY` unless the product later adopts a dedicated index data source.
+
+Benchmark data should use the same market data instrument and market price snapshot model used for traded symbols. Benchmarks are analytical reference series, not portfolios and not participants in the cash ledger.
+
+Benchmark return should be computed from cached close prices over the same selected timeframe as the portfolio return.
 
 ## Data Model
 
@@ -284,6 +295,7 @@ Primary modules:
 - allocation summary: cash versus market value
 - total equity
 - return over selected timeframe
+- benchmark comparison over selected timeframe
 - equity chart
 - campaign exposure table
 - open positions table
@@ -350,4 +362,3 @@ Expected tests:
 - portfolio daily valuation computation
 - period return calculation with deposits and withdrawals
 - portfolio detail exposure derivation through trade plans and campaigns
-
