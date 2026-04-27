@@ -1,6 +1,5 @@
 # Portfolio Analytics Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Build first-class portfolio analytics for cash allocation, market-valued equity history, timeframe returns, benchmark comparison, and campaign exposure.
 
