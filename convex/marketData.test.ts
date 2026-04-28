@@ -703,6 +703,7 @@ describe("market data instruments", () => {
             values: [
               { close: `${baseClose + 2}`, datetime: "2026-04-24" },
               { close: `${baseClose + 1}`, datetime: "2026-04-23" },
+              { close: `${baseClose}`, datetime: "2026-04-22" },
             ],
           }),
           { status: 200 },
@@ -742,7 +743,7 @@ describe("market data instruments", () => {
       symbolsRequested: 2,
       symbolsSucceeded: 2,
     });
-    expect(snapshots).toHaveLength(4);
+    expect(snapshots).toHaveLength(6);
     expect(snapshots).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -769,7 +770,7 @@ describe("market data instruments", () => {
 
   it("records failed historical backfill symbols for follow-up", async () => {
     const portfolioId = await insertPortfolio();
-    await insertTrade({
+    const tradeId = await insertTrade({
       date: Date.UTC(2026, 3, 22),
       portfolioId,
       ticker: "NOPE",
@@ -811,7 +812,10 @@ describe("market data instruments", () => {
         return new Response(
           JSON.stringify({
             status: "ok",
-            values: [{ close: "503.25", datetime: "2026-04-24" }],
+            values: [
+              { close: "503.25", datetime: "2026-04-24" },
+              { close: "501.00", datetime: "2026-04-22" },
+            ],
           }),
           { status: 200 },
         );
@@ -845,6 +849,8 @@ describe("market data instruments", () => {
       symbolsSucceeded: 1,
     });
     expect(result.failedSymbols[0]).toMatchObject({
+      errorMessage: expect.stringContaining(tradeId),
+      sourceTradeIds: [tradeId],
       symbol: "NOPE",
     });
     expect(nopeInstrument).toMatchObject({
@@ -852,7 +858,7 @@ describe("market data instruments", () => {
       resolutionStatus: "needs_review",
       symbol: "NOPE",
     });
-    expect(snapshots).toHaveLength(1);
+    expect(snapshots).toHaveLength(2);
     expect(snapshots[0]).toMatchObject({
       close: 503.25,
       status: "ok",
@@ -864,5 +870,6 @@ describe("market data instruments", () => {
       symbolsRequested: 2,
       symbolsSucceeded: 1,
     });
+    expect(runs[0]?.errorMessage).toContain(tradeId);
   });
 });

@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   action,
   internalAction,
@@ -116,6 +116,7 @@ type PriceSnapshotWrite = {
 
 type HistoricalBackfillCandidate = {
   assetType: MarketDataAssetType;
+  sourceTradeIds: Id<"trades">[];
   symbol: string;
 };
 
@@ -127,6 +128,7 @@ type HistoricalBackfillUniverse = {
 type HistoricalBackfillFailedSymbol = {
   assetType: MarketDataAssetType;
   errorMessage: string;
+  sourceTradeIds: Id<"trades">[];
   symbol: string;
 };
 
@@ -328,6 +330,13 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
   return "Unknown market data refresh error";
+}
+
+function formatSourceTradeContext(sourceTradeIds: Id<"trades">[]): string {
+  if (sourceTradeIds.length === 0) {
+    return "";
+  }
+  return ` Source trade IDs: ${sourceTradeIds.join(", ")}`;
 }
 
 async function fetchDailyCloseForInstrument(args: {
@@ -655,6 +664,7 @@ export const getHistoricalBackfillUniverse = internalQuery({
     candidates: v.array(
       v.object({
         assetType: assetTypeValidator,
+        sourceTradeIds: v.array(v.id("trades")),
         symbol: v.string(),
       }),
     ),
@@ -693,10 +703,17 @@ export const getHistoricalBackfillUniverse = internalQuery({
           earliestTradeDate === null
             ? trade.date
             : Math.min(earliestTradeDate, trade.date);
-        candidateByKey.set(`${trade.assetType}:${symbol}`, {
-          assetType: trade.assetType,
-          symbol,
-        });
+        const candidateKey = `${trade.assetType}:${symbol}`;
+        const existingCandidate = candidateByKey.get(candidateKey);
+        if (existingCandidate === undefined) {
+          candidateByKey.set(candidateKey, {
+            assetType: trade.assetType,
+            sourceTradeIds: [trade._id],
+            symbol,
+          });
+        } else {
+          existingCandidate.sourceTradeIds.push(trade._id);
+        }
       }
     }
 
@@ -704,6 +721,7 @@ export const getHistoricalBackfillUniverse = internalQuery({
       for (const benchmark of BENCHMARK_INSTRUMENTS) {
         candidateByKey.set(`${benchmark.assetType}:${benchmark.symbol}`, {
           assetType: benchmark.assetType,
+          sourceTradeIds: [],
           symbol: benchmark.symbol,
         });
       }
@@ -1250,6 +1268,7 @@ export const backfillHistoricalPriceSnapshots = action({
       v.object({
         assetType: assetTypeValidator,
         errorMessage: v.string(),
+        sourceTradeIds: v.array(v.id("trades")),
         symbol: v.string(),
       }),
     ),
@@ -1320,7 +1339,8 @@ export const backfillHistoricalPriceSnapshots = action({
             `Market data instrument ${candidate.symbol} is not resolved`;
           failedSymbols.push({
             assetType: candidate.assetType,
-            errorMessage,
+            errorMessage: `${errorMessage}${formatSourceTradeContext(candidate.sourceTradeIds)}`,
+            sourceTradeIds: candidate.sourceTradeIds,
             symbol: candidate.symbol,
           });
           continue;
@@ -1348,7 +1368,8 @@ export const backfillHistoricalPriceSnapshots = action({
       } catch (error) {
         failedSymbols.push({
           assetType: candidate.assetType,
-          errorMessage: getErrorMessage(error),
+          errorMessage: `${getErrorMessage(error)}${formatSourceTradeContext(candidate.sourceTradeIds)}`,
+          sourceTradeIds: candidate.sourceTradeIds,
           symbol: candidate.symbol,
         });
       }
@@ -1359,7 +1380,10 @@ export const backfillHistoricalPriceSnapshots = action({
       errorMessage:
         failedSymbols.length > 0
           ? `Historical backfill failed for ${failedSymbols
-              .map((failed) => failed.symbol)
+              .map(
+                (failed) =>
+                  `${failed.symbol}${formatSourceTradeContext(failed.sourceTradeIds)}`,
+              )
               .join(", ")}`
           : undefined,
       runId,
