@@ -452,13 +452,13 @@ describe("market data instruments", () => {
 
   it("refreshes daily snapshots for resolved instruments used by open portfolio positions", async () => {
     const portfolioId = await insertPortfolio();
-    const appleInstrumentId = await insertResolvedInstrument({
+    await insertResolvedInstrument({
       symbol: "AAPL",
     });
-    const microsoftInstrumentId = await insertResolvedInstrument({
+    await insertResolvedInstrument({
       symbol: "MSFT",
     });
-    const tslaInstrumentId = await insertResolvedInstrument({ symbol: "TSLA" });
+    await insertResolvedInstrument({ symbol: "TSLA" });
     await insertTrade({ portfolioId, ticker: "AAPL" });
     await insertTrade({ portfolioId, ticker: "MSFT" });
     await insertTrade({ ticker: "TSLA" });
@@ -491,9 +491,7 @@ describe("market data instruments", () => {
 
     const snapshots = await t.run(async (ctx) => {
       const rows = await ctx.db.query("marketPriceSnapshots").collect();
-      return rows.filter(
-        (row) => row.ownerId === ownerId && row.date === "2026-04-24",
-      );
+      return rows.filter((row) => row.date === "2026-04-24");
     });
     const run = await t.run(async (ctx) => {
       const rows = await ctx.db.query("marketDataRefreshRuns").collect();
@@ -516,12 +514,14 @@ describe("market data instruments", () => {
       expect.arrayContaining([
         expect.objectContaining({
           close: 202.25,
-          instrumentId: appleInstrumentId,
+          provider: "twelve_data",
+          providerSymbol: "AAPL",
           status: "ok",
         }),
         expect.objectContaining({
           errorMessage: expect.stringContaining("No daily close returned"),
-          instrumentId: microsoftInstrumentId,
+          provider: "twelve_data",
+          providerSymbol: "MSFT",
           status: "missing",
         }),
       ]),
@@ -529,7 +529,7 @@ describe("market data instruments", () => {
     expect(snapshots).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          instrumentId: tslaInstrumentId,
+          providerSymbol: "TSLA",
         }),
       ]),
     );
@@ -545,7 +545,7 @@ describe("market data instruments", () => {
 
   it("includes open positions older than the most recent trades in refresh universe", async () => {
     const portfolioId = await insertPortfolio();
-    const appleInstrumentId = await insertResolvedInstrument({
+    await insertResolvedInstrument({
       symbol: "AAPL",
     });
     await insertTrade({ portfolioId, ticker: "AAPL" });
@@ -590,9 +590,7 @@ describe("market data instruments", () => {
       const rows = await ctx.db.query("marketPriceSnapshots").collect();
       return rows.filter(
         (row) =>
-          row.ownerId === ownerId &&
-          row.instrumentId === appleInstrumentId &&
-          row.date === "2026-04-24",
+          row.providerSymbol === "AAPL" && row.date === "2026-04-24",
       );
     });
 
@@ -610,15 +608,15 @@ describe("market data instruments", () => {
 
   it("upserts existing daily snapshots during refresh", async () => {
     const portfolioId = await insertPortfolio();
-    const instrumentId = await insertResolvedInstrument({ symbol: "AAPL" });
+    await insertResolvedInstrument({ symbol: "AAPL" });
     await insertTrade({ portfolioId, ticker: "AAPL" });
     await t.run(async (ctx) => {
       await ctx.db.insert("marketPriceSnapshots", {
         close: 190,
         date: "2026-04-24",
         fetchedAt: Date.UTC(2026, 3, 24),
-        instrumentId,
-        ownerId,
+        provider: "twelve_data",
+        providerSymbol: "AAPL",
         status: "ok",
       });
     });
@@ -644,9 +642,7 @@ describe("market data instruments", () => {
       const rows = await ctx.db.query("marketPriceSnapshots").collect();
       return rows.filter(
         (row) =>
-          row.ownerId === ownerId &&
-          row.instrumentId === instrumentId &&
-          row.date === "2026-04-24",
+          row.providerSymbol === "AAPL" && row.date === "2026-04-24",
       );
     });
 

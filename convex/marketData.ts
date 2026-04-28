@@ -110,8 +110,8 @@ type PriceSnapshotWrite = {
   close?: number;
   date: string;
   errorMessage?: string;
-  instrumentId: Doc<"marketDataInstruments">["_id"];
-  ownerId: string;
+  provider: typeof MARKET_DATA_PROVIDER;
+  providerSymbol: string;
   status: "error" | "missing" | "ok";
 };
 
@@ -390,10 +390,10 @@ async function upsertMarketPriceSnapshots(
   for (const snapshot of snapshots) {
     const existing = await ctx.db
       .query("marketPriceSnapshots")
-      .withIndex("by_ownerId_and_instrumentId_and_date", (q) =>
+      .withIndex("by_provider_and_providerSymbol_and_date", (q) =>
         q
-          .eq("ownerId", snapshot.ownerId)
-          .eq("instrumentId", snapshot.instrumentId)
+          .eq("provider", snapshot.provider)
+          .eq("providerSymbol", snapshot.providerSymbol)
           .eq("date", snapshot.date),
       )
       .unique();
@@ -405,8 +405,8 @@ async function upsertMarketPriceSnapshots(
         ? { errorMessage: snapshot.errorMessage }
         : {}),
       fetchedAt,
-      instrumentId: snapshot.instrumentId,
-      ownerId: snapshot.ownerId,
+      provider: snapshot.provider,
+      providerSymbol: snapshot.providerSymbol,
       status: snapshot.status,
     };
 
@@ -846,8 +846,8 @@ export const completeMarketDataRefreshRun = internalMutation({
         close: v.optional(v.number()),
         date: v.string(),
         errorMessage: v.optional(v.string()),
-        instrumentId: v.id("marketDataInstruments"),
-        ownerId: v.string(),
+        provider: v.literal("twelve_data"),
+        providerSymbol: v.string(),
         status: v.union(
           v.literal("ok"),
           v.literal("missing"),
@@ -887,8 +887,8 @@ export const appendMarketDataRefreshRunSnapshots = internalMutation({
         close: v.optional(v.number()),
         date: v.string(),
         errorMessage: v.optional(v.string()),
-        instrumentId: v.id("marketDataInstruments"),
-        ownerId: v.string(),
+        provider: v.literal("twelve_data"),
+        providerSymbol: v.string(),
         status: v.union(
           v.literal("ok"),
           v.literal("missing"),
@@ -1238,8 +1238,8 @@ export const refreshDailyPriceSnapshots = internalAction({
           snapshots.push({
             close: close.close,
             date: close.date,
-            instrumentId: instrument._id,
-            ownerId: instrument.ownerId,
+            provider: close.provider,
+            providerSymbol: close.providerSymbol,
             status: "ok",
           });
           symbolsSucceeded += 1;
@@ -1248,8 +1248,8 @@ export const refreshDailyPriceSnapshots = internalAction({
           snapshots.push({
             date: runDate,
             errorMessage: getErrorMessage(error),
-            instrumentId: instrument._id,
-            ownerId: instrument.ownerId,
+            provider: MARKET_DATA_PROVIDER,
+            providerSymbol: instrument.providerSymbol ?? instrument.symbol,
             status: isMissing ? "missing" : "error",
           });
           symbolsFailed += 1;
@@ -1384,8 +1384,8 @@ export const backfillHistoricalPriceSnapshots = action({
             snapshotBatch.push({
               close: close.close,
               date: close.date,
-              instrumentId: resolution.instrument._id,
-              ownerId,
+              provider: close.provider,
+              providerSymbol: close.providerSymbol,
               status: "ok",
             });
             if (snapshotBatch.length >= HISTORICAL_PRICE_BATCH_SIZE) {
