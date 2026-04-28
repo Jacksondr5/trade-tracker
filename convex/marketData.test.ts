@@ -28,6 +28,7 @@ describe("market data instruments", () => {
 
   afterEach(async () => {
     await t.finishInProgressScheduledFunctions();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     vi.unstubAllGlobals();
     delete process.env.TWELVE_DATA_API_KEY;
   });
@@ -329,8 +330,6 @@ describe("market data instruments", () => {
       ],
     });
 
-    await t.finishInProgressScheduledFunctions();
-
     const cryptoInstrument = await asUser().query(
       api.marketData.getInstrumentBySymbol,
       {
@@ -373,8 +372,6 @@ describe("market data instruments", () => {
         },
       ],
     });
-    await t.finishInProgressScheduledFunctions();
-
     const inboxTrades = await asUser().query(api.imports.listInboxTrades, {});
     expect(inboxTrades).toHaveLength(1);
 
@@ -431,8 +428,6 @@ describe("market data instruments", () => {
         },
       ],
     });
-    await t.finishInProgressScheduledFunctions();
-
     const instrument = await asUser().query(
       api.marketData.getInstrumentBySymbol,
       {
