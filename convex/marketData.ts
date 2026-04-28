@@ -17,6 +17,7 @@ import {
 
 const MARKET_DATA_PROVIDER = "twelve_data";
 const TWELVE_DATA_BASE_URL = "https://api.twelvedata.com";
+const TWELVE_DATA_TIMEOUT_MS = 8_000;
 
 const assetTypeValidator = v.union(v.literal("crypto"), v.literal("stock"));
 
@@ -122,6 +123,36 @@ function getTwelveDataError(payload: {
   return null;
 }
 
+async function fetchTwelveDataJson<T>(args: {
+  context: string;
+  url: string;
+}): Promise<{ payload: T } | { error: string }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), TWELVE_DATA_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(args.url, { signal: controller.signal });
+    if (!response.ok) {
+      return {
+        error: `Twelve Data ${args.context} failed: HTTP ${response.status}`,
+      };
+    }
+
+    const payload = (await response.json()) as T;
+    return { payload };
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return {
+        error: `Twelve Data ${args.context} failed: request timed out after ${TWELVE_DATA_TIMEOUT_MS}ms`,
+      };
+    }
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return { error: `Twelve Data ${args.context} failed: ${message}` };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 function scoreSymbolCandidate(
   row: TwelveDataSymbolSearchRow,
   assetType: MarketDataAssetType,
@@ -193,23 +224,21 @@ async function resolveProviderSymbol(args: {
   assetType: MarketDataAssetType;
   symbol: string;
 }): Promise<{ providerSymbol: string } | { error: string }> {
-  const response = await fetch(
-    buildTwelveDataUrl("symbol_search", {
+  const result = await fetchTwelveDataJson<TwelveDataSymbolSearchResponse>({
+    context: "symbol search",
+    url: buildTwelveDataUrl("symbol_search", {
       apikey: args.apiKey,
       symbol: args.symbol,
     }),
-  );
-
-  if (!response.ok) {
-    return {
-      error: `Twelve Data symbol search failed with HTTP ${response.status}`,
-    };
+  });
+  if ("error" in result) {
+    return { error: result.error };
   }
 
-  const payload = (await response.json()) as TwelveDataSymbolSearchResponse;
+  const payload = result.payload;
   const providerError = getTwelveDataError(payload);
   if (providerError !== null) {
-    return { error: providerError };
+    return { error: `Twelve Data symbol search failed: ${providerError}` };
   }
 
   const candidate = selectBestSymbolCandidate(
@@ -332,7 +361,7 @@ export const storeResolutionResult = internalMutation({
       providerSymbol:
         args.resolutionStatus === "resolved"
           ? args.providerSymbol
-          : existing?.providerSymbol,
+          : undefined,
       resolutionStatus: args.resolutionStatus,
       updatedAt: now,
     };
@@ -474,17 +503,18 @@ export const fetchDailyClose = action({
       params.start_date = args.date;
     }
 
-    const response = await fetch(buildTwelveDataUrl("time_series", params));
-    if (!response.ok) {
-      throw new ConvexError(
-        `Twelve Data time series failed with HTTP ${response.status}`,
-      );
+    const result = await fetchTwelveDataJson<TwelveDataTimeSeriesResponse>({
+      context: "time series",
+      url: buildTwelveDataUrl("time_series", params),
+    });
+    if ("error" in result) {
+      throw new ConvexError(result.error);
     }
 
-    const payload = (await response.json()) as TwelveDataTimeSeriesResponse;
+    const payload = result.payload;
     const providerError = getTwelveDataError(payload);
     if (providerError !== null) {
-      throw new ConvexError(providerError);
+      throw new ConvexError(`Twelve Data time series failed: ${providerError}`);
     }
 
     const value = payload.values?.[0];
