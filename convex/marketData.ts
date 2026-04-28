@@ -664,27 +664,40 @@ export const getHistoricalBackfillUniverse = internalQuery({
     const candidateByKey = new Map<string, HistoricalBackfillCandidate>();
     let earliestTradeDate: number | null = null;
 
-    for await (const trade of ctx.db
-      .query("trades")
-      .withIndex("by_owner_date", (q) => q.eq("ownerId", args.ownerId))
-      .order("asc")) {
-      if (trade.portfolioId === undefined) {
-        continue;
-      }
+    let cursor: string | null = null;
+    let isDone = false;
 
-      const symbol = normalizeMarketDataSymbol(trade.ticker);
-      if (!symbol) {
-        continue;
-      }
+    while (!isDone) {
+      const page = await ctx.db
+        .query("trades")
+        .withIndex("by_owner_date", (q) => q.eq("ownerId", args.ownerId))
+        .order("asc")
+        .paginate({
+          cursor,
+          numItems: PORTFOLIO_TRADE_SCAN_PAGE_SIZE,
+        });
+      cursor = page.continueCursor;
+      isDone = page.isDone;
 
-      earliestTradeDate =
-        earliestTradeDate === null
-          ? trade.date
-          : Math.min(earliestTradeDate, trade.date);
-      candidateByKey.set(`${trade.assetType}:${symbol}`, {
-        assetType: trade.assetType,
-        symbol,
-      });
+      for (const trade of page.page) {
+        if (trade.portfolioId === undefined) {
+          continue;
+        }
+
+        const symbol = normalizeMarketDataSymbol(trade.ticker);
+        if (!symbol) {
+          continue;
+        }
+
+        earliestTradeDate =
+          earliestTradeDate === null
+            ? trade.date
+            : Math.min(earliestTradeDate, trade.date);
+        candidateByKey.set(`${trade.assetType}:${symbol}`, {
+          assetType: trade.assetType,
+          symbol,
+        });
+      }
     }
 
     if (earliestTradeDate !== null) {
