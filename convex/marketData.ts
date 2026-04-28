@@ -8,6 +8,7 @@ import {
   internalQuery,
   query,
   type ActionCtx,
+  type MutationCtx,
 } from "./_generated/server";
 import { assertOwner, requireUser } from "./lib/auth";
 import {
@@ -337,6 +338,84 @@ function formatSourceTradeContext(sourceTradeIds: Id<"trades">[]): string {
     return "";
   }
   return ` Source trade IDs: ${sourceTradeIds.join(", ")}`;
+}
+
+function assertIsoDateStringInEastern(
+  value: string,
+  paramName: "endDate" | "startDate",
+): void {
+  const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
+  if (!isoDatePattern.test(value)) {
+    throw new ConvexError(`${paramName} must use YYYY-MM-DD format`);
+  }
+
+  const [yearRaw, monthRaw, dayRaw] = value.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  const utcNoon = Date.UTC(year, month - 1, day, 12, 0, 0);
+  const parsedDate = new Date(utcNoon);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "America/New_York",
+    year: "numeric",
+  }).formatToParts(parsedDate);
+  const partByType = new Map(parts.map((part) => [part.type, part.value]));
+  const canonical = `${partByType.get("year")}-${partByType.get("month")}-${partByType.get("day")}`;
+
+  if (canonical !== value) {
+    throw new ConvexError(
+      `${paramName} must be a valid calendar date in YYYY-MM-DD format`,
+    );
+  }
+}
+
+function formatFailedSymbolsForRun(
+  failedSymbols: HistoricalBackfillFailedSymbol[],
+): string {
+  return failedSymbols
+    .map(
+      (failed) =>
+        `${failed.symbol}${formatSourceTradeContext(failed.sourceTradeIds)}`,
+    )
+    .join(", ");
+}
+
+async function upsertMarketPriceSnapshots(
+  ctx: MutationCtx,
+  snapshots: PriceSnapshotWrite[],
+  fetchedAt: number,
+): Promise<void> {
+  for (const snapshot of snapshots) {
+    const existing = await ctx.db
+      .query("marketPriceSnapshots")
+      .withIndex("by_ownerId_and_instrumentId_and_date", (q) =>
+        q
+          .eq("ownerId", snapshot.ownerId)
+          .eq("instrumentId", snapshot.instrumentId)
+          .eq("date", snapshot.date),
+      )
+      .unique();
+
+    const snapshotDoc = {
+      ...(snapshot.close !== undefined ? { close: snapshot.close } : {}),
+      date: snapshot.date,
+      ...(snapshot.errorMessage !== undefined
+        ? { errorMessage: snapshot.errorMessage }
+        : {}),
+      fetchedAt,
+      instrumentId: snapshot.instrumentId,
+      ownerId: snapshot.ownerId,
+      status: snapshot.status,
+    };
+
+    if (existing === null) {
+      await ctx.db.insert("marketPriceSnapshots", snapshotDoc);
+    } else {
+      await ctx.db.replace(existing._id, snapshotDoc);
+    }
+  }
 }
 
 async function fetchDailyCloseForInstrument(args: {
@@ -782,36 +861,7 @@ export const completeMarketDataRefreshRun = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const fetchedAt = Date.now();
-
-    for (const snapshot of args.snapshots) {
-      const existing = await ctx.db
-        .query("marketPriceSnapshots")
-        .withIndex("by_ownerId_and_instrumentId_and_date", (q) =>
-          q
-            .eq("ownerId", snapshot.ownerId)
-            .eq("instrumentId", snapshot.instrumentId)
-            .eq("date", snapshot.date),
-        )
-        .unique();
-
-      const snapshotDoc = {
-        ...(snapshot.close !== undefined ? { close: snapshot.close } : {}),
-        date: snapshot.date,
-        ...(snapshot.errorMessage !== undefined
-          ? { errorMessage: snapshot.errorMessage }
-          : {}),
-        fetchedAt,
-        instrumentId: snapshot.instrumentId,
-        ownerId: snapshot.ownerId,
-        status: snapshot.status,
-      };
-
-      if (existing === null) {
-        await ctx.db.insert("marketPriceSnapshots", snapshotDoc);
-      } else {
-        await ctx.db.replace(existing._id, snapshotDoc);
-      }
-    }
+    await upsertMarketPriceSnapshots(ctx, args.snapshots, fetchedAt);
 
     await ctx.db.patch(args.runId, {
       completedAt: fetchedAt,
@@ -850,36 +900,7 @@ export const appendMarketDataRefreshRunSnapshots = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const fetchedAt = Date.now();
-
-    for (const snapshot of args.snapshots) {
-      const existing = await ctx.db
-        .query("marketPriceSnapshots")
-        .withIndex("by_ownerId_and_instrumentId_and_date", (q) =>
-          q
-            .eq("ownerId", snapshot.ownerId)
-            .eq("instrumentId", snapshot.instrumentId)
-            .eq("date", snapshot.date),
-        )
-        .unique();
-
-      const snapshotDoc = {
-        ...(snapshot.close !== undefined ? { close: snapshot.close } : {}),
-        date: snapshot.date,
-        ...(snapshot.errorMessage !== undefined
-          ? { errorMessage: snapshot.errorMessage }
-          : {}),
-        fetchedAt,
-        instrumentId: snapshot.instrumentId,
-        ownerId: snapshot.ownerId,
-        status: snapshot.status,
-      };
-
-      if (existing === null) {
-        await ctx.db.insert("marketPriceSnapshots", snapshotDoc);
-      } else {
-        await ctx.db.replace(existing._id, snapshotDoc);
-      }
-    }
+    await upsertMarketPriceSnapshots(ctx, args.snapshots, fetchedAt);
 
     return null;
   },
@@ -1281,6 +1302,7 @@ export const backfillHistoricalPriceSnapshots = action({
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
     const endDate = args.endDate ?? getEasternDateString(Date.now());
+    assertIsoDateStringInEastern(endDate, "endDate");
     const universe: HistoricalBackfillUniverse = await ctx.runQuery(
       internal.marketData.getHistoricalBackfillUniverse,
       { ownerId },
@@ -1298,6 +1320,10 @@ export const backfillHistoricalPriceSnapshots = action({
         symbolsSucceeded: 0,
       };
     }
+    assertIsoDateStringInEastern(startDate, "startDate");
+    if (startDate > endDate) {
+      throw new ConvexError("startDate must be on or before endDate");
+    }
 
     const runId = await ctx.runMutation(
       internal.marketData.startMarketDataRefreshRun,
@@ -1312,6 +1338,7 @@ export const backfillHistoricalPriceSnapshots = action({
     const snapshotBatch: PriceSnapshotWrite[] = [];
     let snapshotsWritten = 0;
     let symbolsSucceeded = 0;
+    let runCompleted = false;
 
     const flushSnapshotBatch = async () => {
       if (snapshotBatch.length === 0) {
@@ -1324,73 +1351,87 @@ export const backfillHistoricalPriceSnapshots = action({
       snapshotBatch.length = 0;
     };
 
-    for (const candidate of universe.candidates) {
-      try {
-        const resolution = await resolveInstrumentForOwner(ctx, ownerId, {
-          assetType: candidate.assetType,
-          ticker: candidate.symbol,
-        });
-        if (
-          resolution.status !== "resolved" ||
-          !resolution.instrument.providerSymbol
-        ) {
-          const errorMessage =
-            resolution.instrument.lastError ??
-            `Market data instrument ${candidate.symbol} is not resolved`;
+    try {
+      for (const candidate of universe.candidates) {
+        try {
+          const resolution = await resolveInstrumentForOwner(ctx, ownerId, {
+            assetType: candidate.assetType,
+            ticker: candidate.symbol,
+          });
+          if (
+            resolution.status !== "resolved" ||
+            !resolution.instrument.providerSymbol
+          ) {
+            const errorMessage =
+              resolution.instrument.lastError ??
+              `Market data instrument ${candidate.symbol} is not resolved`;
+            failedSymbols.push({
+              assetType: candidate.assetType,
+              errorMessage: `${errorMessage}${formatSourceTradeContext(candidate.sourceTradeIds)}`,
+              sourceTradeIds: candidate.sourceTradeIds,
+              symbol: candidate.symbol,
+            });
+            continue;
+          }
+
+          const closes = await fetchHistoricalDailyClosesForInstrument({
+            apiKey: requireTwelveDataApiKey(),
+            endDate,
+            instrument: resolution.instrument,
+            startDate,
+          });
+          for (const close of closes) {
+            snapshotBatch.push({
+              close: close.close,
+              date: close.date,
+              instrumentId: resolution.instrument._id,
+              ownerId,
+              status: "ok",
+            });
+            if (snapshotBatch.length >= HISTORICAL_PRICE_BATCH_SIZE) {
+              await flushSnapshotBatch();
+            }
+          }
+          symbolsSucceeded += 1;
+        } catch (error) {
           failedSymbols.push({
             assetType: candidate.assetType,
-            errorMessage: `${errorMessage}${formatSourceTradeContext(candidate.sourceTradeIds)}`,
+            errorMessage: `${getErrorMessage(error)}${formatSourceTradeContext(candidate.sourceTradeIds)}`,
             sourceTradeIds: candidate.sourceTradeIds,
             symbol: candidate.symbol,
           });
-          continue;
         }
+      }
 
-        const closes = await fetchHistoricalDailyClosesForInstrument({
-          apiKey: requireTwelveDataApiKey(),
-          endDate,
-          instrument: resolution.instrument,
-          startDate,
-        });
-        for (const close of closes) {
-          snapshotBatch.push({
-            close: close.close,
-            date: close.date,
-            instrumentId: resolution.instrument._id,
-            ownerId,
-            status: "ok",
-          });
-          if (snapshotBatch.length >= HISTORICAL_PRICE_BATCH_SIZE) {
-            await flushSnapshotBatch();
-          }
-        }
-        symbolsSucceeded += 1;
-      } catch (error) {
-        failedSymbols.push({
-          assetType: candidate.assetType,
-          errorMessage: `${getErrorMessage(error)}${formatSourceTradeContext(candidate.sourceTradeIds)}`,
-          sourceTradeIds: candidate.sourceTradeIds,
-          symbol: candidate.symbol,
+      await flushSnapshotBatch();
+      await ctx.runMutation(internal.marketData.completeMarketDataRefreshRun, {
+        errorMessage:
+          failedSymbols.length > 0
+            ? `Historical backfill failed for ${formatFailedSymbolsForRun(failedSymbols)}`
+            : undefined,
+        runId,
+        snapshots: [],
+        symbolsFailed: failedSymbols.length,
+        symbolsSucceeded,
+      });
+      runCompleted = true;
+    } catch (error) {
+      if (!runCompleted) {
+        const fatalMessage = getErrorMessage(error);
+        const failedSymbolsMessage = formatFailedSymbolsForRun(failedSymbols);
+        await ctx.runMutation(internal.marketData.completeMarketDataRefreshRun, {
+          errorMessage:
+            failedSymbolsMessage.length > 0
+              ? `Historical backfill aborted: ${fatalMessage}. Failed symbols: ${failedSymbolsMessage}`
+              : `Historical backfill aborted: ${fatalMessage}`,
+          runId,
+          snapshots: [],
+          symbolsFailed: failedSymbols.length,
+          symbolsSucceeded,
         });
       }
+      throw error;
     }
-
-    await flushSnapshotBatch();
-    await ctx.runMutation(internal.marketData.completeMarketDataRefreshRun, {
-      errorMessage:
-        failedSymbols.length > 0
-          ? `Historical backfill failed for ${failedSymbols
-              .map(
-                (failed) =>
-                  `${failed.symbol}${formatSourceTradeContext(failed.sourceTradeIds)}`,
-              )
-              .join(", ")}`
-          : undefined,
-      runId,
-      snapshots: [],
-      symbolsFailed: failedSymbols.length,
-      symbolsSucceeded,
-    });
 
     return {
       endDate,
