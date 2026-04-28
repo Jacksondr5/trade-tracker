@@ -52,6 +52,14 @@ const bravosClassificationValidator = v.union(
   v.literal("unknown"),
 );
 
+const marketDataProviderValidator = v.literal("twelve_data");
+
+const marketDataResolutionStatusValidator = v.union(
+  v.literal("resolved"),
+  v.literal("needs_review"),
+  v.literal("ignored"),
+);
+
 const bravosFollowUpFieldValidator = v.union(
   v.literal("entryConditions"),
   v.literal("exitConditions"),
@@ -225,6 +233,29 @@ export default defineSchema({
     name: v.string(),
     ownerId: v.string(),
   }).index("by_owner", ["ownerId"]),
+
+  marketDataInstruments: defineTable({
+    assetType: v.union(v.literal("crypto"), v.literal("stock")),
+    createdAt: v.number(),
+    lastError: v.optional(v.string()),
+    lastResolvedAt: v.optional(v.number()),
+    ownerId: v.string(),
+    provider: marketDataProviderValidator,
+    providerSymbol: v.optional(v.string()),
+    resolutionStatus: marketDataResolutionStatusValidator,
+    symbol: v.string(),
+    updatedAt: v.number(),
+  })
+    .index("by_ownerId", ["ownerId"])
+    .index("by_ownerId_and_assetType_and_symbol", [
+      "ownerId",
+      "assetType",
+      "symbol",
+    ])
+    .index("by_ownerId_and_resolutionStatus", [
+      "ownerId",
+      "resolutionStatus",
+    ]),
 
   tradePlans: defineTable({
     campaignId: v.optional(v.id("campaigns")),

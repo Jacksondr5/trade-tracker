@@ -3,6 +3,7 @@ import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { assertOwner, requireUser } from "./lib/auth";
+import { ensureMarketDataInstrumentReviewRecord } from "./lib/marketDataInstruments";
 import { tradeValidator } from "./lib/tradeValidator";
 import { paginationOptsValidator } from "convex/server";
 import { KRAKEN_DEFAULT_ACCOUNT_ID } from "../shared/imports/constants";
@@ -247,6 +248,14 @@ export const createTrade = mutation({
       assertOwner(portfolio, ownerId, "Portfolio not found");
     }
 
+    const ticker = normalizeTicker(args.ticker);
+    await ensureMarketDataInstrumentReviewRecord(
+      ctx,
+      ownerId,
+      args.assetType,
+      ticker,
+    );
+
     return await ctx.db.insert("trades", {
       assetType: args.assetType,
       date: args.date,
@@ -257,7 +266,7 @@ export const createTrade = mutation({
       quantity: args.quantity,
       side: args.side,
       source: "manual",
-      ticker: normalizeTicker(args.ticker),
+      ticker,
       tradePlanId: args.tradePlanId,
     });
   },
@@ -281,8 +290,11 @@ export const updateTrade = mutation({
     const ownerId = await requireUser(ctx);
     const { tradeId, ...updates } = args;
 
-    const existingTrade = await ctx.db.get(tradeId);
-    assertOwner(existingTrade, ownerId, "Trade not found");
+    const existingTrade = assertOwner(
+      await ctx.db.get(tradeId),
+      ownerId,
+      "Trade not found",
+    );
 
     if (updates.tradePlanId !== undefined && updates.tradePlanId !== null) {
       const tradePlan = await ctx.db.get(updates.tradePlanId);
@@ -293,6 +305,18 @@ export const updateTrade = mutation({
       const portfolio = await ctx.db.get(updates.portfolioId);
       assertOwner(portfolio, ownerId, "Portfolio not found");
     }
+
+    const nextAssetType = updates.assetType ?? existingTrade.assetType;
+    const nextTicker =
+      updates.ticker !== undefined
+        ? normalizeTicker(updates.ticker)
+        : existingTrade.ticker;
+    await ensureMarketDataInstrumentReviewRecord(
+      ctx,
+      ownerId,
+      nextAssetType,
+      nextTicker,
+    );
 
     const patch: Record<string, unknown> = {};
     if (updates.assetType !== undefined) patch.assetType = updates.assetType;
@@ -305,8 +329,7 @@ export const updateTrade = mutation({
     if (updates.price !== undefined) patch.price = updates.price;
     if (updates.quantity !== undefined) patch.quantity = updates.quantity;
     if (updates.side !== undefined) patch.side = updates.side;
-    if (updates.ticker !== undefined)
-      patch.ticker = normalizeTicker(updates.ticker);
+    if (updates.ticker !== undefined) patch.ticker = nextTicker;
     if (updates.tradePlanId !== undefined) {
       patch.tradePlanId =
         updates.tradePlanId === null ? undefined : updates.tradePlanId;

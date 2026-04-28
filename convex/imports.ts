@@ -1,6 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
 import { assertOwner, requireUser } from "./lib/auth";
+import { ensureMarketDataInstrumentReviewRecord } from "./lib/marketDataInstruments";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { validateInboxTradeCandidate } from "../shared/imports/validation";
@@ -266,6 +267,13 @@ async function acceptInboxTradeInternal(
     ticker: validation.normalizedTicker!,
   };
 
+  await ensureMarketDataInstrumentReviewRecord(
+    ctx,
+    ownerId,
+    candidate.assetType,
+    candidate.ticker,
+  );
+
   await ctx.db.insert("trades", {
     assetType: candidate.assetType,
     brokerageAccountId: normalizeBrokerageAccountId(
@@ -447,6 +455,15 @@ export const importTrades = mutation({
           assertOwner(portfolio, ownerId, "Portfolio not found");
           portfolioOwnerCache.set(trade.portfolioId, true);
         }
+      }
+
+      if (trade.assetType && validation.normalizedTicker) {
+        await ensureMarketDataInstrumentReviewRecord(
+          ctx,
+          ownerId,
+          trade.assetType,
+          validation.normalizedTicker,
+        );
       }
 
       await ctx.db.insert("inboxTrades", {
@@ -1006,6 +1023,14 @@ export const updateInboxTrade = mutation({
     const validation = validateInboxTradeCandidate(merged, {
       includeExisting: false,
     });
+    if (merged.assetType && validation.normalizedTicker) {
+      await ensureMarketDataInstrumentReviewRecord(
+        ctx,
+        ownerId,
+        merged.assetType,
+        validation.normalizedTicker,
+      );
+    }
     patch.validationErrors = validation.validationErrors;
     patch.validationWarnings = validation.validationWarnings;
     patch.ticker = validation.normalizedTicker;
