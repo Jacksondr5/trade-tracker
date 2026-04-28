@@ -405,8 +405,9 @@ export default function TradePlanDetailPageClient({
   const unwatchItem = useMutation(api.watchlist.unwatchItem);
 
   const campaigns = useQuery(api.campaigns.listCampaigns) ?? [];
-  const inboxTradePriceMappings =
-    useQuery(api.imports.listInboxTradePriceMappings) ?? [];
+  const inboxTradePriceMappings = useQuery(
+    api.imports.listInboxTradePriceMappings,
+  );
   const [relationshipError, setRelationshipError] = useState<string | null>(
     null,
   );
@@ -454,7 +455,7 @@ export default function TradePlanDetailPageClient({
 
   const priceMappingByInboxTradeId = useMemo(() => {
     const map = new Map<Id<"inboxTrades">, InboxTradePriceMapping>();
-    for (const entry of inboxTradePriceMappings) {
+    for (const entry of inboxTradePriceMappings ?? []) {
       map.set(entry.inboxTradeId, entry.priceMapping as InboxTradePriceMapping);
     }
     return map;
