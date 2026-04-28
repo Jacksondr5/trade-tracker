@@ -46,18 +46,48 @@ const bravosSyncRunStatusValidator = v.union(
   v.literal("error"),
 );
 
-const bravosClassificationValidator = v.union(
-  v.literal("initiate"),
-  v.literal("follow_up"),
-  v.literal("unknown"),
+const portfolioCashLedgerEntryTypeValidator = v.union(
+  v.literal("deposit"),
+  v.literal("withdrawal"),
+  v.literal("correction"),
+);
+
+const marketDataAssetTypeValidator = v.union(
+  v.literal("crypto"),
+  v.literal("stock"),
 );
 
 const marketDataProviderValidator = v.literal("twelve_data");
 
-const marketDataResolutionStatusValidator = v.union(
+const marketDataInstrumentResolutionStatusValidator = v.union(
   v.literal("resolved"),
   v.literal("needs_review"),
   v.literal("ignored"),
+);
+
+const marketPriceSnapshotStatusValidator = v.union(
+  v.literal("ok"),
+  v.literal("missing"),
+  v.literal("error"),
+);
+
+const portfolioDailyValuationPriceCoverageStatusValidator = v.union(
+  v.literal("complete"),
+  v.literal("partial"),
+  v.literal("missing"),
+);
+
+const marketDataRefreshRunStatusValidator = v.union(
+  v.literal("running"),
+  v.literal("completed"),
+  v.literal("failed"),
+  v.literal("partial"),
+);
+
+const bravosClassificationValidator = v.union(
+  v.literal("initiate"),
+  v.literal("follow_up"),
+  v.literal("unknown"),
 );
 
 const bravosFollowUpFieldValidator = v.union(
@@ -234,19 +264,35 @@ export default defineSchema({
     ownerId: v.string(),
   }).index("by_owner", ["ownerId"]),
 
+  portfolioCashLedgerEntries: defineTable({
+    amount: v.number(),
+    createdAt: v.number(),
+    date: v.number(),
+    entryType: portfolioCashLedgerEntryTypeValidator,
+    note: v.optional(v.string()),
+    ownerId: v.string(),
+    portfolioId: v.id("portfolios"),
+    updatedAt: v.number(),
+  })
+    .index("by_ownerId_and_portfolioId_and_date", [
+      "ownerId",
+      "portfolioId",
+      "date",
+    ])
+    .index("by_ownerId_and_date", ["ownerId", "date"]),
+
   marketDataInstruments: defineTable({
-    assetType: v.union(v.literal("crypto"), v.literal("stock")),
+    assetType: marketDataAssetTypeValidator,
     createdAt: v.number(),
     lastError: v.optional(v.string()),
     lastResolvedAt: v.optional(v.number()),
     ownerId: v.string(),
     provider: marketDataProviderValidator,
     providerSymbol: v.optional(v.string()),
-    resolutionStatus: marketDataResolutionStatusValidator,
+    resolutionStatus: marketDataInstrumentResolutionStatusValidator,
     symbol: v.string(),
     updatedAt: v.number(),
   })
-    .index("by_ownerId", ["ownerId"])
     .index("by_ownerId_and_assetType_and_symbol", [
       "ownerId",
       "assetType",
@@ -256,6 +302,55 @@ export default defineSchema({
       "ownerId",
       "resolutionStatus",
     ]),
+
+  marketPriceSnapshots: defineTable({
+    close: v.optional(v.number()),
+    date: v.string(),
+    errorMessage: v.optional(v.string()),
+    fetchedAt: v.number(),
+    instrumentId: v.id("marketDataInstruments"),
+    ownerId: v.string(),
+    status: marketPriceSnapshotStatusValidator,
+  })
+    .index("by_ownerId_and_instrumentId_and_date", [
+      "ownerId",
+      "instrumentId",
+      "date",
+    ])
+    .index("by_ownerId_and_date", ["ownerId", "date"]),
+
+  portfolioDailyValuations: defineTable({
+    cashBalance: v.number(),
+    computedAt: v.number(),
+    date: v.string(),
+    marketValue: v.number(),
+    missingSymbols: v.array(v.string()),
+    ownerId: v.string(),
+    portfolioId: v.id("portfolios"),
+    priceCoverageStatus: portfolioDailyValuationPriceCoverageStatusValidator,
+    totalEquity: v.number(),
+  })
+    .index("by_ownerId_and_portfolioId_and_date", [
+      "ownerId",
+      "portfolioId",
+      "date",
+    ])
+    .index("by_ownerId_and_date", ["ownerId", "date"]),
+
+  marketDataRefreshRuns: defineTable({
+    completedAt: v.optional(v.number()),
+    errorMessage: v.optional(v.string()),
+    ownerId: v.string(),
+    provider: marketDataProviderValidator,
+    runDate: v.string(),
+    startedAt: v.number(),
+    status: marketDataRefreshRunStatusValidator,
+    symbolsFailed: v.number(),
+    symbolsRequested: v.number(),
+    symbolsSucceeded: v.number(),
+  })
+    .index("by_ownerId_and_runDate", ["ownerId", "runDate"])
+    .index("by_ownerId_and_status", ["ownerId", "status"]),
 
   tradePlans: defineTable({
     campaignId: v.optional(v.id("campaigns")),
