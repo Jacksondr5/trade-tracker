@@ -46,6 +46,12 @@ const bravosSyncRunStatusValidator = v.union(
   v.literal("error"),
 );
 
+const portfolioCashLedgerEntryTypeValidator = v.union(
+  v.literal("deposit"),
+  v.literal("withdrawal"),
+  v.literal("correction"),
+);
+
 const bravosClassificationValidator = v.union(
   v.literal("initiate"),
   v.literal("follow_up"),
@@ -225,6 +231,23 @@ export default defineSchema({
     name: v.string(),
     ownerId: v.string(),
   }).index("by_owner", ["ownerId"]),
+
+  portfolioCashLedgerEntries: defineTable({
+    amount: v.number(),
+    createdAt: v.number(),
+    date: v.number(),
+    entryType: portfolioCashLedgerEntryTypeValidator,
+    note: v.optional(v.string()),
+    ownerId: v.string(),
+    portfolioId: v.id("portfolios"),
+    updatedAt: v.number(),
+  })
+    .index("by_ownerId_and_portfolioId_and_date", [
+      "ownerId",
+      "portfolioId",
+      "date",
+    ])
+    .index("by_ownerId_and_date", ["ownerId", "date"]),
 
   tradePlans: defineTable({
     campaignId: v.optional(v.id("campaigns")),
