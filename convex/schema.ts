@@ -304,7 +304,7 @@ export default defineSchema({
     ]),
 
   marketPriceSnapshots: defineTable({
-    close: v.number(),
+    close: v.optional(v.number()),
     date: v.string(),
     errorMessage: v.optional(v.string()),
     fetchedAt: v.number(),
