@@ -132,6 +132,23 @@ function scoreSymbolCandidate(
     return -1;
   }
 
+  const compactProviderSymbol = providerSymbol.replace(/[^A-Z0-9]/g, "");
+  const compactSymbol = symbol.replace(/[^A-Z0-9]/g, "");
+  const hasStockSymbolMatch = providerSymbol === symbol;
+  const hasCryptoSymbolMatch =
+    providerSymbol === symbol ||
+    compactProviderSymbol === compactSymbol ||
+    providerSymbol === `${symbol}/USD` ||
+    providerSymbol.startsWith(`${symbol}/`) ||
+    compactProviderSymbol === `${compactSymbol}USD`;
+
+  if (assetType === "stock" && !hasStockSymbolMatch) {
+    return -1;
+  }
+  if (assetType === "crypto" && !hasCryptoSymbolMatch) {
+    return -1;
+  }
+
   const instrumentType = row.instrument_type?.toLowerCase() ?? "";
   const country = row.country?.toLowerCase() ?? "";
   let score = 0;
@@ -145,8 +162,6 @@ function scoreSymbolCandidate(
     return score;
   }
 
-  const compactProviderSymbol = providerSymbol.replace(/[^A-Z0-9]/g, "");
-  const compactSymbol = symbol.replace(/[^A-Z0-9]/g, "");
   if (instrumentType.includes("digital currency")) score += 40;
   if (providerSymbol === symbol) score += 100;
   if (compactProviderSymbol === compactSymbol) score += 95;
