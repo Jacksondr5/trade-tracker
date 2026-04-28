@@ -139,8 +139,8 @@ export const updatePortfolioCashLedgerEntry = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
-    const entry = await ctx.db.get(args.entryId);
-    assertOwner(entry, ownerId, "Cash ledger entry not found");
+    const existing = await ctx.db.get(args.entryId);
+    const entry = assertOwner(existing, ownerId, "Cash ledger entry not found");
 
     const patch: Record<string, unknown> = {
       updatedAt: Date.now(),
