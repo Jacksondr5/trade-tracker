@@ -1,7 +1,7 @@
-import type { QueryCtx, MutationCtx } from "../_generated/server";
+import type { ActionCtx, MutationCtx, QueryCtx } from "../_generated/server";
 import { ConvexError } from "convex/values";
 
-type AuthCtx = Pick<QueryCtx | MutationCtx, "auth">;
+type AuthCtx = Pick<ActionCtx | MutationCtx | QueryCtx, "auth">;
 
 export async function requireUser(ctx: AuthCtx): Promise<string> {
   const identity = await ctx.auth.getUserIdentity();

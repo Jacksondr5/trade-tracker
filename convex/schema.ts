@@ -288,7 +288,7 @@ export default defineSchema({
     lastResolvedAt: v.optional(v.number()),
     ownerId: v.string(),
     provider: marketDataProviderValidator,
-    providerSymbol: v.string(),
+    providerSymbol: v.optional(v.string()),
     resolutionStatus: marketDataInstrumentResolutionStatusValidator,
     symbol: v.string(),
     updatedAt: v.number(),
