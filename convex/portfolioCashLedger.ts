@@ -33,6 +33,22 @@ function validateAmount(amount: number): number {
   return amount;
 }
 
+function validateEntryAmount(
+  amount: number,
+  entryType: "deposit" | "withdrawal" | "correction",
+): number {
+  const normalizedAmount = validateAmount(amount);
+
+  if (entryType === "deposit" && normalizedAmount < 0) {
+    throw new ConvexError("Deposits must use a positive amount");
+  }
+  if (entryType === "withdrawal" && normalizedAmount > 0) {
+    throw new ConvexError("Withdrawals must use a negative amount");
+  }
+
+  return normalizedAmount;
+}
+
 function validateDate(date: number): number {
   if (!Number.isFinite(date)) {
     throw new ConvexError("Date is required");
@@ -94,7 +110,7 @@ export const createPortfolioCashLedgerEntry = mutation({
     const portfolio = await ctx.db.get(args.portfolioId);
     assertOwner(portfolio, ownerId, "Portfolio not found");
 
-    const amount = validateAmount(args.amount);
+    const amount = validateEntryAmount(args.amount, args.entryType);
     const date = validateDate(args.date);
     const note = normalizeNote(args.note);
     const now = Date.now();
@@ -130,8 +146,11 @@ export const updatePortfolioCashLedgerEntry = mutation({
       updatedAt: Date.now(),
     };
 
-    if (args.amount !== undefined) {
-      patch.amount = validateAmount(args.amount);
+    const nextEntryType = args.entryType ?? entry.entryType;
+    const nextAmount = args.amount ?? entry.amount;
+
+    if (args.amount !== undefined || args.entryType !== undefined) {
+      patch.amount = validateEntryAmount(nextAmount, nextEntryType);
     }
     if (args.date !== undefined) {
       patch.date = validateDate(args.date);

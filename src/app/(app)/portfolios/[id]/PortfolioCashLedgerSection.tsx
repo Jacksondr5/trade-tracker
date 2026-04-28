@@ -3,7 +3,7 @@
 import { ConvexError } from "convex/values";
 import { useMutation, useQuery } from "convex/react";
 import { Check, Loader2, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import {
   Alert,
@@ -288,14 +288,15 @@ function CashLedgerRow({ entry }: { entry: CashLedgerEntry }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const getEditFormValues = () => ({
+    "cash-ledger-edit-amount": String(entry.amount),
+    "cash-ledger-edit-date": formatDateForInput(entry.date),
+    "cash-ledger-edit-entry-type": entry.entryType,
+    "cash-ledger-edit-note": entry.note ?? "",
+  });
 
   const form = useAppForm({
-    defaultValues: {
-      "cash-ledger-edit-amount": String(entry.amount),
-      "cash-ledger-edit-date": formatDateForInput(entry.date),
-      "cash-ledger-edit-entry-type": entry.entryType,
-      "cash-ledger-edit-note": entry.note ?? "",
-    },
+    defaultValues: getEditFormValues(),
     validators: {
       onChange: ({ value }) => {
         const result = editEntrySchema.safeParse(value);
@@ -322,6 +323,13 @@ function CashLedgerRow({ entry }: { entry: CashLedgerEntry }) {
       }
     },
   });
+
+  useEffect(() => {
+    if (!isEditing) {
+      return;
+    }
+    form.reset(getEditFormValues());
+  }, [entry, form, isEditing]);
 
   const handleDelete = async () => {
     setErrorMessage(null);
@@ -396,6 +404,7 @@ function CashLedgerRow({ entry }: { entry: CashLedgerEntry }) {
               data-testid={getCashLedgerCancelButtonTestId(entry._id)}
               onClick={() => {
                 setErrorMessage(null);
+                form.reset(getEditFormValues());
                 setIsEditing(false);
               }}
               className="flex h-9 w-9 items-center justify-center rounded border border-slate-600 text-slate-11 hover:bg-slate-700 hover:text-slate-12"
@@ -448,7 +457,10 @@ function CashLedgerRow({ entry }: { entry: CashLedgerEntry }) {
         <button
           type="button"
           data-testid={getCashLedgerEditButtonTestId(entry._id)}
-          onClick={() => setIsEditing(true)}
+          onClick={() => {
+            form.reset(getEditFormValues());
+            setIsEditing(true);
+          }}
           className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-11 hover:bg-slate-700 hover:text-slate-12"
         >
           Edit

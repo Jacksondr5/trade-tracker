@@ -105,6 +105,44 @@ describe("portfolio cash ledger", () => {
       expect(entries[0]?.entryType).toBe("withdrawal");
     });
 
+    it("rejects a negative deposit amount", async () => {
+      const portfolioId = await insertPortfolio({
+        name: "Main",
+        ownerId: ownerA,
+      });
+
+      await expect(
+        asUser(ownerA).mutation(
+          api.portfolioCashLedger.createPortfolioCashLedgerEntry,
+          {
+            amount: -500,
+            date: DEFAULT_DATE,
+            entryType: "deposit",
+            portfolioId,
+          },
+        ),
+      ).rejects.toThrow("Deposits must use a positive amount");
+    });
+
+    it("rejects a positive withdrawal amount", async () => {
+      const portfolioId = await insertPortfolio({
+        name: "Main",
+        ownerId: ownerA,
+      });
+
+      await expect(
+        asUser(ownerA).mutation(
+          api.portfolioCashLedger.createPortfolioCashLedgerEntry,
+          {
+            amount: 500,
+            date: DEFAULT_DATE,
+            entryType: "withdrawal",
+            portfolioId,
+          },
+        ),
+      ).rejects.toThrow("Withdrawals must use a negative amount");
+    });
+
     it("rejects non-finite amounts", async () => {
       const portfolioId = await insertPortfolio({
         name: "Main",
@@ -436,6 +474,54 @@ describe("portfolio cash ledger", () => {
       );
 
       expect(entries[0]?.note).toBeUndefined();
+    });
+
+    it("rejects changing only entry type when resulting sign is invalid", async () => {
+      const portfolioId = await insertPortfolio({
+        name: "Main",
+        ownerId: ownerA,
+      });
+
+      const entryId = await asUser(ownerA).mutation(
+        api.portfolioCashLedger.createPortfolioCashLedgerEntry,
+        {
+          amount: 1_000,
+          date: DEFAULT_DATE,
+          entryType: "deposit",
+          portfolioId,
+        },
+      );
+
+      await expect(
+        asUser(ownerA).mutation(
+          api.portfolioCashLedger.updatePortfolioCashLedgerEntry,
+          { entryId, entryType: "withdrawal" },
+        ),
+      ).rejects.toThrow("Withdrawals must use a negative amount");
+    });
+
+    it("rejects changing only amount when resulting sign is invalid", async () => {
+      const portfolioId = await insertPortfolio({
+        name: "Main",
+        ownerId: ownerA,
+      });
+
+      const entryId = await asUser(ownerA).mutation(
+        api.portfolioCashLedger.createPortfolioCashLedgerEntry,
+        {
+          amount: -1_000,
+          date: DEFAULT_DATE,
+          entryType: "withdrawal",
+          portfolioId,
+        },
+      );
+
+      await expect(
+        asUser(ownerA).mutation(
+          api.portfolioCashLedger.updatePortfolioCashLedgerEntry,
+          { amount: 100, entryId },
+        ),
+      ).rejects.toThrow("Withdrawals must use a negative amount");
     });
   });
 
