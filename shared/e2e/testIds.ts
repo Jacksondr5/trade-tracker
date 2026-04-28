@@ -363,6 +363,42 @@ export function getNoteContentTestId(prefix: string, noteId: string): string {
   return `${prefix}-note-content-${noteId}`;
 }
 
+export const PORTFOLIO_CASH_LEDGER_TEST_IDS = {
+  addAmountInput: "cash-ledger-amount-input",
+  addDateInput: "cash-ledger-date-input",
+  addEntryTypeSelect: "cash-ledger-entry-type-select",
+  addNoteInput: "cash-ledger-note-input",
+  addSubmitButton: "cash-ledger-add-submit-button",
+  emptyState: "cash-ledger-empty-state",
+  errorAlert: "cash-ledger-error-alert",
+  list: "cash-ledger-list",
+  section: "portfolio-cash-ledger-section",
+} as const;
+
+export function getCashLedgerRowTestId(entryId: string): string {
+  return `cash-ledger-row-${normalizeSegment(entryId)}`;
+}
+
+export function getCashLedgerEditButtonTestId(entryId: string): string {
+  return `cash-ledger-edit-button-${normalizeSegment(entryId)}`;
+}
+
+export function getCashLedgerSaveButtonTestId(entryId: string): string {
+  return `cash-ledger-save-button-${normalizeSegment(entryId)}`;
+}
+
+export function getCashLedgerCancelButtonTestId(entryId: string): string {
+  return `cash-ledger-cancel-button-${normalizeSegment(entryId)}`;
+}
+
+export function getCashLedgerDeleteButtonTestId(entryId: string): string {
+  return `cash-ledger-delete-button-${normalizeSegment(entryId)}`;
+}
+
+export function getCashLedgerDeleteTooltipTestId(entryId: string): string {
+  return `cash-ledger-delete-tooltip-${normalizeSegment(entryId)}`;
+}
+
 export function getRetrospectiveSectionTestId(prefix: string): string {
   return `${prefix}-retrospective-section`;
 }

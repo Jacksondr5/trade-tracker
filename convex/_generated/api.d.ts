@@ -23,6 +23,7 @@ import type * as lib_tradeValidator from "../lib/tradeValidator.js";
 import type * as marketData from "../marketData.js";
 import type * as navigation from "../navigation.js";
 import type * as notes from "../notes.js";
+import type * as portfolioCashLedger from "../portfolioCashLedger.js";
 import type * as portfolios from "../portfolios.js";
 import type * as positions from "../positions.js";
 import type * as retrospectives from "../retrospectives.js";
@@ -53,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   marketData: typeof marketData;
   navigation: typeof navigation;
   notes: typeof notes;
+  portfolioCashLedger: typeof portfolioCashLedger;
   portfolios: typeof portfolios;
   positions: typeof positions;
   retrospectives: typeof retrospectives;

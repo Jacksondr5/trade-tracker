@@ -10,6 +10,7 @@ import { Alert, Badge } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { capitalize, formatCurrency, formatDate } from "~/lib/format";
+import PortfolioCashLedgerSection from "./PortfolioCashLedgerSection";
 
 type SaveState = "idle" | "saving" | "saved";
 
@@ -205,6 +206,8 @@ export default function PortfolioDetailPageClient({
           )}
         </div>
       </div>
+
+      <PortfolioCashLedgerSection portfolioId={portfolioId} />
 
       {/* Trades section */}
       <section className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
