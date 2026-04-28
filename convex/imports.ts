@@ -494,6 +494,7 @@ export const importTrades = mutation({
     let skippedDuplicates = 0;
     let withValidationErrors = 0;
     let withWarnings = 0;
+    const scheduledResolutionKeys = new Set<string>();
 
     const portfolioOwnerCache = new Map<Id<"portfolios">, true>();
     const tradePlanOwnerCache = new Map<Id<"tradePlans">, true>();
@@ -561,15 +562,19 @@ export const importTrades = mutation({
           instrument.resolutionStatus !== "resolved" &&
           instrument.resolutionStatus !== "ignored"
         ) {
-          await ctx.scheduler.runAfter(
-            0,
-            internal.marketData.resolveInstrumentInternal,
-            {
-              assetType: trade.assetType,
-              ownerId,
-              ticker: validation.normalizedTicker,
-            },
-          );
+          const resolutionKey = `${trade.assetType}|${validation.normalizedTicker}`;
+          if (!scheduledResolutionKeys.has(resolutionKey)) {
+            scheduledResolutionKeys.add(resolutionKey);
+            await ctx.scheduler.runAfter(
+              0,
+              internal.marketData.resolveInstrumentInternal,
+              {
+                assetType: trade.assetType,
+                ownerId,
+                ticker: validation.normalizedTicker,
+              },
+            );
+          }
         }
       }
 
