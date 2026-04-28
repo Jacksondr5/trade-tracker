@@ -28,6 +28,7 @@ That core chain is supported by additional layers:
 - `Strategy` for the formal long-lived operating document
 - `Inbox Trades` for pre-acceptance import workflow
 - `Portfolios` for capital-allocation grouping
+- market data and portfolio valuation records for portfolio analytics
 - `Account Mappings` for display clarity
 - derived views such as `Positions`, `Dashboard Stats`, and future analytics
 
@@ -211,6 +212,54 @@ Role:
 
 - they improve readability across trades and imports
 
+### Market Data Instruments
+
+Role:
+
+- they map app trade tickers to provider-specific symbols for market price lookup
+- they are an internal resolution cache, not a primary user-facing object
+
+Important constraint:
+
+- trades remain the execution record and keep their own ticker and asset type
+- market data instruments support valuation and should not become the way trades are identified
+- unresolved market data mappings should be handled during trade creation or import review
+
+### Market Price Snapshots
+
+Role:
+
+- they cache daily close prices from the configured market data provider
+- they support portfolio valuation without calling external providers from portfolio pages
+
+Important constraint:
+
+- the first version should store close prices only
+- live prices, adjusted price series, currencies, splits, and dividends are later concerns
+
+### Portfolio Cash Ledger Entries
+
+Role:
+
+- they record external cash movement into or out of a portfolio
+- they are canonical input for cash balance and return calculations
+
+Important constraint:
+
+- trade cash flows come from trades
+- deposits, withdrawals, and corrections come from the cash ledger
+
+### Portfolio Daily Valuations
+
+Role:
+
+- they store the derived daily portfolio equity series used for graphs and review
+
+Important constraint:
+
+- they are materialized analytics, not source-of-truth records
+- they should remain recomputable from trades, cash ledger entries, and market price snapshots
+
 ## Relationship Model
 
 ### Foundational relationships
@@ -237,6 +286,9 @@ More precisely:
 - a portfolio can have many trades
 - a portfolio can have many inbox trades
 - a portfolio's relationship to campaigns is derived through `trades -> tradePlans -> campaigns`
+- portfolio cash ledger entries belong to portfolios
+- portfolio daily valuations belong to portfolios
+- market price snapshots belong to market data instruments
 
 ## Ideal Workflow Versus Tolerated Workflow
 
