@@ -10,4 +10,11 @@ crons.interval(
   {},
 );
 
+crons.daily(
+  "nightly portfolio price snapshot refresh",
+  { hourUTC: 1, minuteUTC: 0 },
+  internal.marketData.refreshDailyPriceSnapshots,
+  {},
+);
+
 export default crons;
