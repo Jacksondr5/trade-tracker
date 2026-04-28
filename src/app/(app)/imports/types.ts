@@ -7,3 +7,17 @@ export interface OpenTradePlanOption {
   instrumentSymbol: string;
   name: string;
 }
+
+export type InboxTradePriceMapping =
+  | { state: "missing" }
+  | {
+      state: "needs_review";
+      instrumentId: Id<"marketDataInstruments">;
+      lastError?: string;
+    }
+  | {
+      state: "resolved";
+      instrumentId: Id<"marketDataInstruments">;
+      providerSymbol: string;
+    }
+  | { state: "ignored"; instrumentId: Id<"marketDataInstruments"> };

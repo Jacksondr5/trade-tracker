@@ -1,9 +1,11 @@
-import { mutation, query } from "./_generated/server";
+import { action, internalMutation, mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { assertOwner, requireUser } from "./lib/auth";
 import { ensureMarketDataInstrumentReviewRecord } from "./lib/marketDataInstruments";
+import { resolveInstrumentForOwner } from "./marketData";
 import { tradeValidator } from "./lib/tradeValidator";
 import { paginationOptsValidator } from "convex/server";
 import { KRAKEN_DEFAULT_ACCOUNT_ID } from "../shared/imports/constants";
@@ -222,7 +224,69 @@ async function listFilteredTradesPage(
 }
 
 
-export const createTrade = mutation({
+export const createTradeInternal = internalMutation({
+  args: {
+    assetType: v.union(v.literal("crypto"), v.literal("stock")),
+    date: v.number(),
+    direction: v.union(v.literal("long"), v.literal("short")),
+    instrumentId: v.id("marketDataInstruments"),
+    ownerId: v.string(),
+    portfolioId: v.optional(v.id("portfolios")),
+    price: v.number(),
+    quantity: v.number(),
+    side: v.union(v.literal("buy"), v.literal("sell")),
+    ticker: v.string(),
+    tradePlanId: v.optional(v.id("tradePlans")),
+  },
+  returns: v.id("trades"),
+  handler: async (ctx, args) => {
+    if (args.tradePlanId) {
+      const tradePlan = await ctx.db.get(args.tradePlanId);
+      assertOwner(tradePlan, args.ownerId, "Trade plan not found");
+    }
+
+    if (args.portfolioId) {
+      const portfolio = await ctx.db.get(args.portfolioId);
+      assertOwner(portfolio, args.ownerId, "Portfolio not found");
+    }
+
+    const instrument = assertOwner(
+      await ctx.db.get(args.instrumentId),
+      args.ownerId,
+      "Market data instrument not found",
+    );
+    if (
+      instrument.resolutionStatus !== "resolved" &&
+      instrument.resolutionStatus !== "ignored"
+    ) {
+      throw new ConvexError(
+        `Price mapping required for ${args.ticker}: ${instrument.lastError ?? "instrument not resolved"}`,
+      );
+    }
+    if (
+      instrument.assetType !== args.assetType ||
+      instrument.symbol !== args.ticker
+    ) {
+      throw new ConvexError("Market data instrument does not match trade");
+    }
+
+    return await ctx.db.insert("trades", {
+      assetType: args.assetType,
+      date: args.date,
+      direction: args.direction,
+      ownerId: args.ownerId,
+      portfolioId: args.portfolioId,
+      price: args.price,
+      quantity: args.quantity,
+      side: args.side,
+      source: "manual",
+      ticker: args.ticker,
+      tradePlanId: args.tradePlanId,
+    });
+  },
+});
+
+export const createTrade = action({
   args: {
     assetType: v.union(v.literal("crypto"), v.literal("stock")),
     date: v.number(),
@@ -235,40 +299,40 @@ export const createTrade = mutation({
     tradePlanId: v.optional(v.id("tradePlans")),
   },
   returns: v.id("trades"),
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<Id<"trades">> => {
     const ownerId = await requireUser(ctx);
-
-    if (args.tradePlanId) {
-      const tradePlan = await ctx.db.get(args.tradePlanId);
-      assertOwner(tradePlan, ownerId, "Trade plan not found");
-    }
-
-    if (args.portfolioId) {
-      const portfolio = await ctx.db.get(args.portfolioId);
-      assertOwner(portfolio, ownerId, "Portfolio not found");
-    }
-
     const ticker = normalizeTicker(args.ticker);
-    await ensureMarketDataInstrumentReviewRecord(
-      ctx,
-      ownerId,
-      args.assetType,
-      ticker,
-    );
 
-    return await ctx.db.insert("trades", {
+    const resolution = await resolveInstrumentForOwner(ctx, ownerId, {
       assetType: args.assetType,
-      date: args.date,
-      direction: args.direction,
-      ownerId,
-      portfolioId: args.portfolioId,
-      price: args.price,
-      quantity: args.quantity,
-      side: args.side,
-      source: "manual",
       ticker,
-      tradePlanId: args.tradePlanId,
     });
+    if (
+      resolution.status !== "resolved" &&
+      resolution.status !== "ignored"
+    ) {
+      throw new ConvexError(
+        `Price mapping required for ${ticker}: ${resolution.instrument.lastError ?? "instrument not resolved"}`,
+      );
+    }
+
+    const tradeId: Id<"trades"> = await ctx.runMutation(
+      internal.trades.createTradeInternal,
+      {
+        assetType: args.assetType,
+        date: args.date,
+        direction: args.direction,
+        instrumentId: resolution.instrument._id,
+        ownerId,
+        portfolioId: args.portfolioId,
+        price: args.price,
+        quantity: args.quantity,
+        side: args.side,
+        ticker,
+        tradePlanId: args.tradePlanId,
+      },
+    );
+    return tradeId;
   },
 });
 

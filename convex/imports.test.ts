@@ -1,7 +1,7 @@
 // @vitest-environment edge-runtime
 
 import { convexTest } from "convex-test";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
@@ -16,6 +16,37 @@ const modules = (import.meta as ImportMetaWithGlob).glob([
   "!./**/*.spec.ts",
 ]);
 
+function stubTwelveDataResolutionFetch() {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+      const parsed = new URL(url);
+      const symbol = parsed.searchParams.get("symbol")?.toUpperCase() ?? "";
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              country: "United States",
+              currency: "USD",
+              exchange: "NASDAQ",
+              instrument_type: "Common Stock",
+              symbol,
+            },
+          ],
+          status: "ok",
+        }),
+        { status: 200 },
+      );
+    }),
+  );
+}
+
 describe("imports review workspace", () => {
   const ownerA = "owner-a";
   const ownerB = "owner-b";
@@ -24,6 +55,13 @@ describe("imports review workspace", () => {
 
   beforeEach(() => {
     t = convexTest(schema, modules);
+    process.env.TWELVE_DATA_API_KEY = "test-key";
+    stubTwelveDataResolutionFetch();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.TWELVE_DATA_API_KEY;
   });
 
   function asUser(ownerId: string) {
@@ -104,6 +142,26 @@ describe("imports review workspace", () => {
     });
   }
 
+  async function insertResolvedInstrument(args: {
+    assetType: "crypto" | "stock";
+    ownerId: string;
+    symbol: string;
+  }) {
+    const now = Date.now();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("marketDataInstruments", {
+        assetType: args.assetType,
+        createdAt: now,
+        ownerId: args.ownerId,
+        provider: "twelve_data",
+        providerSymbol: args.symbol,
+        resolutionStatus: "resolved",
+        symbol: args.symbol,
+        updatedAt: now,
+      });
+    });
+  }
+
   it("returns reference data and explicit review states for pending inbox rows", async () => {
     const activeCampaignId = await insertCampaign({
       name: "Semis",
@@ -149,6 +207,16 @@ describe("imports review workspace", () => {
       ownerId: ownerA,
       source: "ibkr",
     });
+    await insertResolvedInstrument({
+      assetType: "stock",
+      ownerId: ownerA,
+      symbol: "NVDA",
+    });
+    await insertResolvedInstrument({
+      assetType: "stock",
+      ownerId: ownerA,
+      symbol: "MSFT",
+    });
 
     await asUser(ownerA).mutation(api.imports.importTrades, {
       trades: [
@@ -176,6 +244,8 @@ describe("imports review workspace", () => {
         },
       ],
     });
+
+    await t.finishInProgressScheduledFunctions();
 
     const workspace = await asUser(ownerA).query(
       api.imports.getImportsReviewWorkspace,
@@ -263,6 +333,16 @@ describe("imports review workspace", () => {
       ownerId: ownerA,
       status: "watching",
     });
+    await insertResolvedInstrument({
+      assetType: "stock",
+      ownerId: ownerA,
+      symbol: "AAPL",
+    });
+    await insertResolvedInstrument({
+      assetType: "stock",
+      ownerId: ownerA,
+      symbol: "SHOP",
+    });
 
     await asUser(ownerA).mutation(api.imports.importTrades, {
       trades: [
@@ -288,6 +368,8 @@ describe("imports review workspace", () => {
         },
       ],
     });
+
+    await t.finishInProgressScheduledFunctions();
 
     const workspace = await asUser(ownerA).query(
       api.imports.getImportsReviewWorkspace,
@@ -338,6 +420,11 @@ describe("imports review workspace", () => {
       ownerId: ownerB,
       status: "active",
     });
+    await insertResolvedInstrument({
+      assetType: "stock",
+      ownerId: ownerB,
+      symbol: "META",
+    });
     await asUser(ownerB).mutation(api.imports.importTrades, {
       trades: [
         {
@@ -352,6 +439,8 @@ describe("imports review workspace", () => {
         },
       ],
     });
+
+    await t.finishInProgressScheduledFunctions();
 
     const workspace = await asUser(ownerA).query(
       api.imports.getImportsReviewWorkspace,
