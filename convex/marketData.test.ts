@@ -25,7 +25,8 @@ describe("market data instruments", () => {
     process.env.TWELVE_DATA_API_KEY = "test-key";
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await t.finishInProgressScheduledFunctions();
     vi.unstubAllGlobals();
     delete process.env.TWELVE_DATA_API_KEY;
   });
@@ -336,11 +337,28 @@ describe("market data instruments", () => {
   it("accepts a trade once the user manually fixes the provider symbol", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => {
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+        const parsed = new URL(url);
+        if (parsed.pathname.endsWith("/symbol_search")) {
+          return new Response(
+            JSON.stringify({
+              data: [],
+              status: "ok",
+            }),
+            { status: 200 },
+          );
+        }
         return new Response(
           JSON.stringify({
-            data: [],
+            meta: { symbol: "WEIRD.US" },
             status: "ok",
+            values: [{ close: "10.25", datetime: "2026-04-24" }],
           }),
           { status: 200 },
         );
@@ -372,7 +390,7 @@ describe("market data instruments", () => {
     );
     expect(instrument).not.toBeNull();
 
-    await asUser().mutation(api.marketData.setProviderSymbol, {
+    await asUser().action(api.marketData.setProviderSymbol, {
       instrumentId: instrument!._id,
       providerSymbol: "WEIRD.US",
     });

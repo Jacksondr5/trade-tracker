@@ -6,7 +6,6 @@ import {
   internalAction,
   internalMutation,
   internalQuery,
-  mutation,
   query,
   type ActionCtx,
 } from "./_generated/server";
@@ -485,7 +484,7 @@ export const resolveInstrumentInternal = internalAction({
   },
 });
 
-export const setProviderSymbol = mutation({
+export const setProviderSymbol = action({
   args: {
     instrumentId: v.id("marketDataInstruments"),
     providerSymbol: v.string(),
@@ -493,8 +492,11 @@ export const setProviderSymbol = mutation({
   returns: marketDataInstrumentValidator,
   handler: async (ctx, args): Promise<Doc<"marketDataInstruments">> => {
     const ownerId = await requireUser(ctx);
-    const existing = assertOwner(
-      await ctx.db.get(args.instrumentId),
+    const existing: Doc<"marketDataInstruments"> = assertOwner(
+      await ctx.runQuery(internal.marketData.getInstrumentById, {
+        instrumentId: args.instrumentId,
+        ownerId,
+      }),
       ownerId,
       "Market data instrument not found",
     );
@@ -503,8 +505,37 @@ export const setProviderSymbol = mutation({
       throw new ConvexError("Provider symbol is required");
     }
 
+    const validation = await fetchTwelveDataJson<TwelveDataTimeSeriesResponse>({
+      context: "time series",
+      url: buildTwelveDataUrl("time_series", {
+        apikey: requireTwelveDataApiKey(),
+        interval: "1day",
+        outputsize: "1",
+        symbol: trimmedProviderSymbol,
+      }),
+    });
+    if ("error" in validation) {
+      throw new ConvexError(validation.error);
+    }
+    const providerError = getTwelveDataError(validation.payload);
+    if (providerError !== null) {
+      const now = Date.now();
+      await ctx.runMutation(internal.marketData.setProviderSymbolInternal, {
+        instrumentId: existing._id,
+        lastError: `Twelve Data time series failed: ${providerError}`,
+        lastResolvedAt: existing.lastResolvedAt,
+        providerSymbol: existing.providerSymbol,
+        resolutionStatus: "needs_review",
+        updatedAt: now,
+      });
+      throw new ConvexError(
+        `Provider symbol ${trimmedProviderSymbol} could not be validated: ${providerError}`,
+      );
+    }
+
     const now = Date.now();
-    await ctx.db.patch(existing._id, {
+    await ctx.runMutation(internal.marketData.setProviderSymbolInternal, {
+      instrumentId: existing._id,
       lastError: undefined,
       lastResolvedAt: now,
       providerSymbol: trimmedProviderSymbol,
@@ -512,11 +543,40 @@ export const setProviderSymbol = mutation({
       updatedAt: now,
     });
 
-    const updated = await ctx.db.get(existing._id);
-    if (updated === null) {
-      throw new ConvexError("Market data instrument not found after update");
-    }
-    return updated;
+    return assertOwner(
+      await ctx.runQuery(internal.marketData.getInstrumentById, {
+        instrumentId: existing._id,
+        ownerId,
+      }),
+      ownerId,
+      "Market data instrument not found after update",
+    );
+  },
+});
+
+export const setProviderSymbolInternal = internalMutation({
+  args: {
+    instrumentId: v.id("marketDataInstruments"),
+    lastError: v.optional(v.string()),
+    lastResolvedAt: v.optional(v.number()),
+    providerSymbol: v.optional(v.string()),
+    resolutionStatus: v.union(
+      v.literal("resolved"),
+      v.literal("needs_review"),
+      v.literal("ignored"),
+    ),
+    updatedAt: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.instrumentId, {
+      lastError: args.lastError,
+      lastResolvedAt: args.lastResolvedAt,
+      providerSymbol: args.providerSymbol,
+      resolutionStatus: args.resolutionStatus,
+      updatedAt: args.updatedAt,
+    });
+    return null;
   },
 });
 

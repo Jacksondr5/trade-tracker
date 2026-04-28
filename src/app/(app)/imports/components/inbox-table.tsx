@@ -1,6 +1,6 @@
-import { useMutation } from "convex/react";
+import { useAction } from "convex/react";
 import { AlertTriangle, Check, FileText, Pencil, Plus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Badge,
   Button,
@@ -223,7 +223,7 @@ function PriceMappingPopover({
   priceMapping: InboxTradePriceMapping;
   ticker: string;
 }) {
-  const setProviderSymbol = useMutation(api.marketData.setProviderSymbol);
+  const setProviderSymbol = useAction(api.marketData.setProviderSymbol);
   const [open, setOpen] = useState(false);
   const initialSymbol =
     priceMapping.state === "resolved" ? priceMapping.providerSymbol : ticker;
@@ -235,6 +235,12 @@ function PriceMappingPopover({
   const showInstrumentControls =
     priceMapping.state === "needs_review" ||
     priceMapping.state === "resolved";
+
+  useEffect(() => {
+    if (!open) return;
+    setProviderSymbolValue(initialSymbol);
+    setError(null);
+  }, [initialSymbol, open]);
 
   const handleSave = async () => {
     if (!showInstrumentControls) return;

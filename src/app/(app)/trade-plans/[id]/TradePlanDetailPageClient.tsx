@@ -41,9 +41,14 @@ import {
   getTradeRowTestId,
 } from "../../../../../shared/e2e/testIds";
 import { ImportPostDialog } from "../ImportPostDialog";
+import type { InboxTradePriceMapping } from "../../imports/types";
 
 type TradePlanStatus = "idea" | "watching" | "active" | "closed";
 type SaveState = "idle" | "saving" | "saved";
+
+function isPriceMappingResolved(mapping: InboxTradePriceMapping | undefined) {
+  return mapping?.state === "resolved" || mapping?.state === "ignored";
+}
 
 // --- Inline editable field ---
 
@@ -400,6 +405,8 @@ export default function TradePlanDetailPageClient({
   const unwatchItem = useMutation(api.watchlist.unwatchItem);
 
   const campaigns = useQuery(api.campaigns.listCampaigns) ?? [];
+  const inboxTradePriceMappings =
+    useQuery(api.imports.listInboxTradePriceMappings) ?? [];
   const [relationshipError, setRelationshipError] = useState<string | null>(
     null,
   );
@@ -444,6 +451,14 @@ export default function TradePlanDetailPageClient({
   const [watchLoading, setWatchLoading] = useState(false);
   const [watchError, setWatchError] = useState<string | null>(null);
   const [showImportDialog, setShowImportDialog] = useState(false);
+
+  const priceMappingByInboxTradeId = useMemo(() => {
+    const map = new Map<Id<"inboxTrades">, InboxTradePriceMapping>();
+    for (const entry of inboxTradePriceMappings) {
+      map.set(entry.inboxTradeId, entry.priceMapping as InboxTradePriceMapping);
+    }
+    return map;
+  }, [inboxTradePriceMappings]);
 
   const breadcrumbs = buildHierarchyBreadcrumbs(hierarchy, {
     kind: "tradePlan",
@@ -908,6 +923,9 @@ export default function TradePlanDetailPageClient({
                     <InboxTradeRow
                       key={inboxTrade._id}
                       inboxTrade={inboxTrade}
+                      isPriceMappingResolved={isPriceMappingResolved(
+                        priceMappingByInboxTradeId.get(inboxTrade._id),
+                      )}
                       matchType="assigned"
                       accountNameByAccountId={accountNameByAccountId}
                       portfolios={portfolios}
@@ -965,6 +983,9 @@ export default function TradePlanDetailPageClient({
                     <InboxTradeRow
                       key={inboxTrade._id}
                       inboxTrade={inboxTrade}
+                      isPriceMappingResolved={isPriceMappingResolved(
+                        priceMappingByInboxTradeId.get(inboxTrade._id),
+                      )}
                       matchType="suggested"
                       accountNameByAccountId={accountNameByAccountId}
                       portfolios={portfolios}
@@ -1091,6 +1112,7 @@ export default function TradePlanDetailPageClient({
 function InboxTradeRow({
   accountNameByAccountId,
   inboxTrade,
+  isPriceMappingResolved,
   isAccepting,
   matchType,
   onAccept,
@@ -1109,6 +1131,7 @@ function InboxTradeRow({
     side?: "buy" | "sell";
     ticker?: string;
   };
+  isPriceMappingResolved: boolean;
   isAccepting: boolean;
   matchType: "assigned" | "suggested";
   onAccept: (portfolioId: string) => void;
@@ -1192,8 +1215,12 @@ function InboxTradeRow({
             aria-label={`Accept ${inboxTrade.ticker ?? "trade"} from inbox`}
             onClick={() => onAccept(portfolioId)}
             className="rounded p-1.5 text-grass-11 hover:bg-grass-3 disabled:opacity-50"
-            title="Accept"
-            disabled={isAccepting}
+            title={
+              isPriceMappingResolved
+                ? "Accept"
+                : "Resolve price mapping in Imports before accepting"
+            }
+            disabled={isAccepting || !isPriceMappingResolved}
           >
             {isAccepting ? (
               <Loader2 className="h-4 w-4 animate-spin" />

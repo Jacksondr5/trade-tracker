@@ -1412,12 +1412,27 @@ export const updateInboxTrade = mutation({
       includeExisting: false,
     });
     if (merged.assetType && validation.normalizedTicker) {
-      await ensureMarketDataInstrumentReviewRecord(
+      const instrument = await ensureMarketDataInstrumentReviewRecord(
         ctx,
         ownerId,
         merged.assetType,
         validation.normalizedTicker,
       );
+      if (
+        instrument !== null &&
+        instrument.resolutionStatus !== "resolved" &&
+        instrument.resolutionStatus !== "ignored"
+      ) {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.marketData.resolveInstrumentInternal,
+          {
+            assetType: merged.assetType,
+            ownerId,
+            ticker: validation.normalizedTicker,
+          },
+        );
+      }
     }
     patch.validationErrors = validation.validationErrors;
     patch.validationWarnings = validation.validationWarnings;
