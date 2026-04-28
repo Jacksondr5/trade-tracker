@@ -19,7 +19,7 @@ import {
 const MARKET_DATA_PROVIDER = "twelve_data";
 const TWELVE_DATA_BASE_URL = "https://api.twelvedata.com";
 const TWELVE_DATA_TIMEOUT_MS = 8_000;
-const MAX_PORTFOLIO_TRADE_SCAN = 1_000;
+const PORTFOLIO_TRADE_SCAN_PAGE_SIZE = 256;
 const POSITION_EPSILON = 0.00000001;
 
 const assetTypeValidator = v.union(v.literal("crypto"), v.literal("stock"));
@@ -431,11 +431,6 @@ export const getPortfolioValuationUniverse = internalQuery({
     }),
   ),
   handler: async (ctx) => {
-    const trades = await ctx.db
-      .query("trades")
-      .order("desc")
-      .take(MAX_PORTFOLIO_TRADE_SCAN);
-
     const positionQuantities = new Map<
       string,
       {
@@ -446,24 +441,39 @@ export const getPortfolioValuationUniverse = internalQuery({
       }
     >();
 
-    for (const trade of trades) {
-      if (trade.portfolioId === undefined) {
-        continue;
-      }
+    let cursor: string | null = null;
+    let isDone = false;
 
-      const symbol = normalizeMarketDataSymbol(trade.ticker);
-      if (!symbol) {
-        continue;
-      }
+    while (!isDone) {
+      const page = await ctx.db
+        .query("trades")
+        .order("desc")
+        .paginate({
+          cursor,
+          numItems: PORTFOLIO_TRADE_SCAN_PAGE_SIZE,
+        });
+      cursor = page.continueCursor;
+      isDone = page.isDone;
 
-      const key = `${trade.ownerId}:${trade.assetType}:${symbol}`;
-      const current = positionQuantities.get(key);
-      positionQuantities.set(key, {
-        assetType: trade.assetType,
-        ownerId: trade.ownerId,
-        quantity: (current?.quantity ?? 0) + getSignedPositionQuantity(trade),
-        symbol,
-      });
+      for (const trade of page.page) {
+        if (trade.portfolioId === undefined) {
+          continue;
+        }
+
+        const symbol = normalizeMarketDataSymbol(trade.ticker);
+        if (!symbol) {
+          continue;
+        }
+
+        const key = `${trade.ownerId}:${trade.assetType}:${symbol}`;
+        const current = positionQuantities.get(key);
+        positionQuantities.set(key, {
+          assetType: trade.assetType,
+          ownerId: trade.ownerId,
+          quantity: (current?.quantity ?? 0) + getSignedPositionQuantity(trade),
+          symbol,
+        });
+      }
     }
 
     const instrumentsByOwner = new Map<

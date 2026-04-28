@@ -356,6 +356,71 @@ describe("market data instruments", () => {
     });
   });
 
+  it("includes open positions older than the most recent trades in refresh universe", async () => {
+    const portfolioId = await insertPortfolio();
+    const appleInstrumentId = await insertResolvedInstrument({
+      symbol: "AAPL",
+    });
+    await insertTrade({ portfolioId, ticker: "AAPL" });
+
+    for (let index = 0; index < 1_005; index += 1) {
+      const side = index % 2 === 0 ? "buy" : "sell";
+      await insertTrade({
+        portfolioId,
+        quantity: 1,
+        side,
+        ticker: "TSLA",
+      });
+    }
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const symbol = new URL(url).searchParams.get("symbol");
+        if (symbol !== "AAPL") {
+          return new Response(JSON.stringify({ status: "ok", values: [] }), {
+            status: 200,
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            status: "ok",
+            values: [{ close: "215.75", datetime: "2026-04-24" }],
+          }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    const result = await t.action(
+      internal.marketData.refreshDailyPriceSnapshots,
+      {
+        date: "2026-04-24",
+      },
+    );
+
+    const snapshots = await t.run(async (ctx) => {
+      const rows = await ctx.db.query("marketPriceSnapshots").collect();
+      return rows.filter(
+        (row) =>
+          row.ownerId === ownerId &&
+          row.instrumentId === appleInstrumentId &&
+          row.date === "2026-04-24",
+      );
+    });
+
+    expect(result).toMatchObject({
+      ownersProcessed: 1,
+      symbolsRequested: 1,
+      symbolsSucceeded: 1,
+    });
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]).toMatchObject({
+      close: 215.75,
+      status: "ok",
+    });
+  });
+
   it("upserts existing daily snapshots during refresh", async () => {
     const portfolioId = await insertPortfolio();
     const instrumentId = await insertResolvedInstrument({ symbol: "AAPL" });
