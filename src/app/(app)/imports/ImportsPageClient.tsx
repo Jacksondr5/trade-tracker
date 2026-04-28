@@ -1,7 +1,12 @@
 "use client";
 
-import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
-import { useMemo, useState } from "react";
+import {
+  Preloaded,
+  useAction,
+  useMutation,
+  usePreloadedQuery,
+} from "convex/react";
+import { useCallback, useMemo, useState } from "react";
 import { Alert, Button, Select } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
@@ -12,7 +17,11 @@ import { InboxTable } from "./components/inbox-table";
 import { InboxToolbar } from "./components/inbox-toolbar";
 import { useImportUpload } from "./hooks/use-import-upload";
 import { useInlineInboxEdits } from "./hooks/use-inline-inbox-edits";
-import type { InboxTrade, OpenTradePlanOption } from "./types";
+import type {
+  InboxTrade,
+  InboxTradePriceMapping,
+  OpenTradePlanOption,
+} from "./types";
 import { isTradeReadyForAcceptance, toDateTimeLocalValue } from "./utils";
 
 const DEFAULT_EDIT_VALUES: EditTradeFormValues = {
@@ -28,6 +37,7 @@ const DEFAULT_EDIT_VALUES: EditTradeFormValues = {
 export default function ImportsPageClient({
   preloadedAccountMappings,
   preloadedCampaigns,
+  preloadedInboxTradePriceMappings,
   preloadedInboxTrades,
   preloadedOpenTradePlans,
   preloadedPortfolios,
@@ -36,6 +46,9 @@ export default function ImportsPageClient({
     typeof api.accountMappings.listAccountMappings
   >;
   preloadedCampaigns: Preloaded<typeof api.campaigns.listCampaigns>;
+  preloadedInboxTradePriceMappings: Preloaded<
+    typeof api.imports.listInboxTradePriceMappings
+  >;
   preloadedInboxTrades: Preloaded<typeof api.imports.listInboxTrades>;
   preloadedOpenTradePlans: Preloaded<typeof api.tradePlans.listOpenTradePlans>;
   preloadedPortfolios: Preloaded<typeof api.portfolios.listPortfolios>;
@@ -55,6 +68,9 @@ export default function ImportsPageClient({
     useState<EditTradeFormValues>(DEFAULT_EDIT_VALUES);
 
   const inboxTrades = usePreloadedQuery(preloadedInboxTrades);
+  const inboxTradePriceMappings = usePreloadedQuery(
+    preloadedInboxTradePriceMappings,
+  );
   const openTradePlansRaw = usePreloadedQuery(preloadedOpenTradePlans);
   const accountMappings = usePreloadedQuery(preloadedAccountMappings);
   const portfolios = usePreloadedQuery(preloadedPortfolios);
@@ -84,8 +100,8 @@ export default function ImportsPageClient({
   );
 
   const importTradesMutation = useMutation(api.imports.importTrades);
-  const acceptTrade = useMutation(api.imports.acceptTrade);
-  const acceptAllTrades = useMutation(api.imports.acceptAllTrades);
+  const acceptTrade = useAction(api.imports.acceptTrade);
+  const acceptAllTrades = useAction(api.imports.acceptAllTrades);
   const deleteInboxTrade = useMutation(api.imports.deleteInboxTrade);
   const deleteAllInboxTrades = useMutation(api.imports.deleteAllInboxTrades);
   const updateInboxTrade = useMutation(api.imports.updateInboxTrade);
@@ -115,7 +131,23 @@ export default function ImportsPageClient({
   const typedTrades = inboxTrades as InboxTrade[] | undefined;
   const totalCount = typedTrades?.length ?? 0;
 
-  // "Ready" = valid fields + has portfolio + has trade plan (green)
+  const priceMappingByInboxTradeId = useMemo(() => {
+    const map = new Map<Id<"inboxTrades">, InboxTradePriceMapping>();
+    for (const entry of inboxTradePriceMappings) {
+      map.set(entry.inboxTradeId, entry.priceMapping as InboxTradePriceMapping);
+    }
+    return map;
+  }, [inboxTradePriceMappings]);
+
+  const isPriceMappingResolved = useCallback(
+    (inboxTradeId: Id<"inboxTrades">): boolean => {
+      const mapping = priceMappingByInboxTradeId.get(inboxTradeId);
+      return mapping?.state === "resolved" || mapping?.state === "ignored";
+    },
+    [priceMappingByInboxTradeId],
+  );
+
+  // "Ready" = valid fields + has portfolio + has trade plan + resolved mapping (green)
   const readyCount = useMemo(
     () =>
       typedTrades?.filter((t) => {
@@ -125,13 +157,14 @@ export default function ImportsPageClient({
           t.validationErrors.length === 0 &&
           isTradeReadyForAcceptance(t) &&
           hasPortfolio &&
-          hasTradePlan
+          hasTradePlan &&
+          isPriceMappingResolved(t._id)
         );
       }).length ?? 0,
-    [typedTrades, inlinePortfolioIds, inlineTradePlanIds],
+    [typedTrades, inlinePortfolioIds, inlineTradePlanIds, isPriceMappingResolved],
   );
 
-  // "Missing plan" = valid + has portfolio but no trade plan (amber)
+  // "Missing plan" = valid + has portfolio + resolved mapping but no trade plan (amber)
   const missingPlanCount = useMemo(
     () =>
       typedTrades?.filter((t) => {
@@ -141,10 +174,11 @@ export default function ImportsPageClient({
           t.validationErrors.length === 0 &&
           isTradeReadyForAcceptance(t) &&
           hasPortfolio &&
-          !hasTradePlan
+          !hasTradePlan &&
+          isPriceMappingResolved(t._id)
         );
       }).length ?? 0,
-    [typedTrades, inlinePortfolioIds, inlineTradePlanIds],
+    [typedTrades, inlinePortfolioIds, inlineTradePlanIds, isPriceMappingResolved],
   );
 
   // "Needs review" = everything else (red)
@@ -283,7 +317,13 @@ export default function ImportsPageClient({
   const handleAccept = (inboxTradeId: Id<"inboxTrades">) => {
     const trade = inboxTrades?.find((t) => t._id === inboxTradeId);
     const portfolioId = inlinePortfolioIds[inboxTradeId] || undefined;
-    if (!trade || !isTradeReadyForAcceptance(trade) || !portfolioId) return;
+    if (
+      !trade ||
+      !isTradeReadyForAcceptance(trade) ||
+      !portfolioId ||
+      !isPriceMappingResolved(inboxTradeId)
+    )
+      return;
 
     const tradePlanId = inlineTradePlanIds[inboxTradeId] || undefined;
 
@@ -503,6 +543,7 @@ export default function ImportsPageClient({
           inlinePortfolioIds={inlinePortfolioIds}
           inlineTradePlanIds={inlineTradePlanIds}
           inboxTrades={typedTrades}
+          priceMappingByInboxTradeId={priceMappingByInboxTradeId}
           onAccept={handleAccept}
           onCancelEdit={handleCancelEdit}
           onDelete={(inboxTradeId) => {

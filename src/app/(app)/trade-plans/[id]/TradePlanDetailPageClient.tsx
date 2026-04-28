@@ -2,6 +2,7 @@
 
 import {
   Preloaded,
+  useAction,
   useMutation,
   usePreloadedQuery,
   useQuery,
@@ -394,7 +395,7 @@ export default function TradePlanDetailPageClient({
   const updateTradePlanStatus = useMutation(
     api.tradePlans.updateTradePlanStatus,
   );
-  const acceptTrade = useMutation(api.imports.acceptTrade);
+  const acceptTrade = useAction(api.imports.acceptTrade);
   const watchItem = useMutation(api.watchlist.watchItem);
   const unwatchItem = useMutation(api.watchlist.unwatchItem);
 

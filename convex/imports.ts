@@ -1,9 +1,17 @@
-import { mutation, query } from "./_generated/server";
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 import { ConvexError, v } from "convex/values";
+import { internal } from "./_generated/api";
 import { assertOwner, requireUser } from "./lib/auth";
 import { ensureMarketDataInstrumentReviewRecord } from "./lib/marketDataInstruments";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
+import { resolveInstrumentForOwner } from "./marketData";
 import { validateInboxTradeCandidate } from "../shared/imports/validation";
 import { KRAKEN_DEFAULT_ACCOUNT_ID } from "../shared/imports/constants";
 import {
@@ -20,6 +28,20 @@ type CanonicalCandidate = {
   side: "buy" | "sell";
   ticker: string;
 };
+
+type PriceMappingState =
+  | { state: "missing" }
+  | {
+      state: "needs_review";
+      instrumentId: Id<"marketDataInstruments">;
+      lastError?: string;
+    }
+  | {
+      state: "resolved";
+      instrumentId: Id<"marketDataInstruments">;
+      providerSymbol: string;
+    }
+  | { state: "ignored"; instrumentId: Id<"marketDataInstruments"> };
 
 const sourceValidator = v.union(v.literal("ibkr"), v.literal("kraken"));
 
@@ -72,6 +94,26 @@ const assignedTradePlanReferenceValidator = v.object({
   ),
 });
 
+const priceMappingStateValidator = v.union(
+  v.object({
+    state: v.literal("missing"),
+  }),
+  v.object({
+    state: v.literal("needs_review"),
+    instrumentId: v.id("marketDataInstruments"),
+    lastError: v.optional(v.string()),
+  }),
+  v.object({
+    state: v.literal("resolved"),
+    instrumentId: v.id("marketDataInstruments"),
+    providerSymbol: v.string(),
+  }),
+  v.object({
+    state: v.literal("ignored"),
+    instrumentId: v.id("marketDataInstruments"),
+  }),
+);
+
 const importReviewRowValidator = v.object({
   inboxTrade: inboxTradeValidator,
   matchContext: v.object({
@@ -86,6 +128,7 @@ const importReviewRowValidator = v.object({
     v.literal("suggested"),
     v.literal("unmatched"),
   ),
+  priceMapping: priceMappingStateValidator,
   readiness: v.object({
     isReady: v.boolean(),
     missingFields: v.array(v.string()),
@@ -211,7 +254,18 @@ function getInboxTradeReadiness(trade: {
   };
 }
 
-async function acceptInboxTradeInternal(
+type InboxAcceptanceCheck =
+  | {
+      ok: true;
+      assetType: "crypto" | "stock";
+      candidate: CanonicalCandidate;
+      inboxTrade: Doc<"inboxTrades">;
+      portfolioId: Id<"portfolios"> | undefined;
+      tradePlanId: Id<"tradePlans"> | undefined;
+    }
+  | { ok: false; error: string };
+
+async function checkInboxTradeForAcceptance(
   ctx: MutationCtx,
   ownerId: string,
   inboxTradeId: Id<"inboxTrades">,
@@ -219,7 +273,7 @@ async function acceptInboxTradeInternal(
     portfolioId?: Id<"portfolios">;
     tradePlanId?: Id<"tradePlans">;
   },
-): Promise<{ accepted: boolean; error?: string }> {
+): Promise<InboxAcceptanceCheck> {
   const rawInboxTrade = await ctx.db.get(inboxTradeId);
   const inboxTrade = assertOwner(
     rawInboxTrade,
@@ -228,7 +282,7 @@ async function acceptInboxTradeInternal(
   );
 
   if (inboxTrade.status !== "pending_review") {
-    return { accepted: false, error: "Trade is not pending review" };
+    return { ok: false, error: "Trade is not pending review" };
   }
 
   const tradePlanId =
@@ -254,7 +308,7 @@ async function acceptInboxTradeInternal(
       validationErrors: validation.validationErrors,
       validationWarnings: validation.validationWarnings,
     });
-    return { accepted: false, error: validation.validationErrors.join("; ") };
+    return { ok: false, error: validation.validationErrors.join("; ") };
   }
 
   const candidate: CanonicalCandidate = {
@@ -267,36 +321,74 @@ async function acceptInboxTradeInternal(
     ticker: validation.normalizedTicker!,
   };
 
-  await ensureMarketDataInstrumentReviewRecord(
-    ctx,
+  return {
+    ok: true,
+    assetType: candidate.assetType,
+    candidate,
+    inboxTrade,
+    portfolioId,
+    tradePlanId,
+  };
+}
+
+async function commitInboxTradeAcceptance(
+  ctx: MutationCtx,
+  ownerId: string,
+  args: {
+    candidate: CanonicalCandidate;
+    inboxTrade: Doc<"inboxTrades">;
+    instrumentId: Id<"marketDataInstruments">;
+    portfolioId: Id<"portfolios"> | undefined;
+    tradePlanId: Id<"tradePlans"> | undefined;
+  },
+): Promise<{ accepted: boolean; error?: string }> {
+  const instrument = assertOwner(
+    await ctx.db.get(args.instrumentId),
     ownerId,
-    candidate.assetType,
-    candidate.ticker,
+    "Market data instrument not found",
   );
+  if (
+    instrument.resolutionStatus !== "resolved" &&
+    instrument.resolutionStatus !== "ignored"
+  ) {
+    return {
+      accepted: false,
+      error: `Price mapping required for ${args.candidate.ticker}: ${instrument.lastError ?? "instrument not resolved"}`,
+    };
+  }
+  if (
+    instrument.assetType !== args.candidate.assetType ||
+    instrument.symbol !== args.candidate.ticker
+  ) {
+    return {
+      accepted: false,
+      error: "Market data instrument does not match trade",
+    };
+  }
 
   await ctx.db.insert("trades", {
-    assetType: candidate.assetType,
+    assetType: args.candidate.assetType,
     brokerageAccountId: normalizeBrokerageAccountId(
-      inboxTrade.source,
-      inboxTrade.brokerageAccountId,
+      args.inboxTrade.source,
+      args.inboxTrade.brokerageAccountId,
     ),
-    date: candidate.date,
-    direction: candidate.direction,
-    externalId: inboxTrade.externalId,
-    fees: inboxTrade.fees,
-    orderType: inboxTrade.orderType,
+    date: args.candidate.date,
+    direction: args.candidate.direction,
+    externalId: args.inboxTrade.externalId,
+    fees: args.inboxTrade.fees,
+    orderType: args.inboxTrade.orderType,
     ownerId,
-    portfolioId,
-    price: candidate.price,
-    quantity: candidate.quantity,
-    side: candidate.side,
-    source: inboxTrade.source,
-    taxes: inboxTrade.taxes,
-    ticker: candidate.ticker,
-    tradePlanId,
+    portfolioId: args.portfolioId,
+    price: args.candidate.price,
+    quantity: args.candidate.quantity,
+    side: args.candidate.side,
+    source: args.inboxTrade.source,
+    taxes: args.inboxTrade.taxes,
+    ticker: args.candidate.ticker,
+    tradePlanId: args.tradePlanId,
   });
 
-  await ctx.db.delete(inboxTrade._id);
+  await ctx.db.delete(args.inboxTrade._id);
 
   return { accepted: true };
 }
@@ -458,12 +550,27 @@ export const importTrades = mutation({
       }
 
       if (trade.assetType && validation.normalizedTicker) {
-        await ensureMarketDataInstrumentReviewRecord(
+        const instrument = await ensureMarketDataInstrumentReviewRecord(
           ctx,
           ownerId,
           trade.assetType,
           validation.normalizedTicker,
         );
+        if (
+          instrument !== null &&
+          instrument.resolutionStatus !== "resolved" &&
+          instrument.resolutionStatus !== "ignored"
+        ) {
+          await ctx.scheduler.runAfter(
+            0,
+            internal.marketData.resolveInstrumentInternal,
+            {
+              assetType: trade.assetType,
+              ownerId,
+              ticker: validation.normalizedTicker,
+            },
+          );
+        }
       }
 
       await ctx.db.insert("inboxTrades", {
@@ -513,6 +620,70 @@ export const listInboxTrades = query({
   },
 });
 
+export const listInboxTradePriceMappings = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      inboxTradeId: v.id("inboxTrades"),
+      priceMapping: priceMappingStateValidator,
+    }),
+  ),
+  handler: async (ctx) => {
+    const ownerId = await requireUser(ctx);
+    const [trades, ownerInstruments] = await Promise.all([
+      ctx.db
+        .query("inboxTrades")
+        .withIndex("by_owner_status", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "pending_review"),
+        )
+        .collect(),
+      ctx.db
+        .query("marketDataInstruments")
+        .withIndex("by_ownerId_and_assetType_and_symbol", (q) =>
+          q.eq("ownerId", ownerId),
+        )
+        .collect(),
+    ]);
+
+    const instrumentByAssetTypeAndSymbol = new Map<
+      string,
+      Doc<"marketDataInstruments">
+    >();
+    for (const instrument of ownerInstruments) {
+      instrumentByAssetTypeAndSymbol.set(
+        `${instrument.assetType}|${instrument.symbol}`,
+        instrument,
+      );
+    }
+
+    return trades.map((trade) => {
+      const instrument =
+        trade.assetType !== undefined && trade.ticker !== undefined
+          ? instrumentByAssetTypeAndSymbol.get(
+              `${trade.assetType}|${trade.ticker}`,
+            )
+          : undefined;
+      const priceMapping: PriceMappingState =
+        instrument === undefined
+          ? { state: "missing" }
+          : instrument.resolutionStatus === "resolved"
+            ? {
+                state: "resolved",
+                instrumentId: instrument._id,
+                providerSymbol: instrument.providerSymbol ?? "",
+              }
+            : instrument.resolutionStatus === "ignored"
+              ? { state: "ignored", instrumentId: instrument._id }
+              : {
+                  state: "needs_review",
+                  instrumentId: instrument._id,
+                  lastError: instrument.lastError,
+                };
+      return { inboxTradeId: trade._id, priceMapping };
+    });
+  },
+});
+
 export const getImportsReviewWorkspace = query({
   args: {},
   returns: importsReviewWorkspaceValidator,
@@ -530,6 +701,7 @@ export const getImportsReviewWorkspace = query({
       watchingTradePlans,
       allTradePlans,
       ownerTrades,
+      ownerInstruments,
     ] = await Promise.all([
       ctx.db
         .query("inboxTrades")
@@ -585,6 +757,12 @@ export const getImportsReviewWorkspace = query({
       ctx.db
         .query("trades")
         .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .collect(),
+      ctx.db
+        .query("marketDataInstruments")
+        .withIndex("by_ownerId_and_assetType_and_symbol", (q) =>
+          q.eq("ownerId", ownerId),
+        )
         .collect(),
     ]);
 
@@ -667,6 +845,17 @@ export const getImportsReviewWorkspace = query({
       );
     }
 
+    const instrumentByAssetTypeAndSymbol = new Map<
+      string,
+      Doc<"marketDataInstruments">
+    >();
+    for (const instrument of ownerInstruments) {
+      instrumentByAssetTypeAndSymbol.set(
+        `${instrument.assetType}|${instrument.symbol}`,
+        instrument,
+      );
+    }
+
     const rows = [...inboxTrades]
       .sort((a, b) => (b.date ?? b._creationTime) - (a.date ?? a._creationTime))
       .map((trade) => {
@@ -704,8 +893,37 @@ export const getImportsReviewWorkspace = query({
               : matchedPlans.length > 1
                 ? "ambiguous"
                 : "unmatched";
+
+        const instrument =
+          trade.assetType !== undefined && trade.ticker !== undefined
+            ? instrumentByAssetTypeAndSymbol.get(
+                `${trade.assetType}|${trade.ticker}`,
+              )
+            : undefined;
+        const priceMapping: PriceMappingState =
+          instrument === undefined
+            ? { state: "missing" }
+            : instrument.resolutionStatus === "resolved"
+              ? {
+                  state: "resolved",
+                  instrumentId: instrument._id,
+                  providerSymbol: instrument.providerSymbol ?? "",
+                }
+              : instrument.resolutionStatus === "ignored"
+                ? { state: "ignored", instrumentId: instrument._id }
+                : {
+                    state: "needs_review",
+                    instrumentId: instrument._id,
+                    lastError: instrument.lastError,
+                  };
+
+        const isPriceMappingBlocking =
+          priceMapping.state === "missing" ||
+          priceMapping.state === "needs_review";
         const reviewState: "needs_review" | "ready" =
-          readiness.isReady && validationState !== "error"
+          readiness.isReady &&
+          validationState !== "error" &&
+          !isPriceMappingBlocking
             ? "ready"
             : "needs_review";
 
@@ -718,6 +936,7 @@ export const getImportsReviewWorkspace = query({
             ticker: trade.ticker ?? null,
           },
           matchState,
+          priceMapping,
           readiness,
           reviewState,
           validationState,
@@ -861,7 +1080,171 @@ export const listInboxTradesForTradePlan = query({
   },
 });
 
-export const acceptTrade = mutation({
+type AcceptCheckResult =
+  | {
+      ok: true;
+      assetType: "crypto" | "stock";
+      candidate: CanonicalCandidate;
+      inboxTradeId: Id<"inboxTrades">;
+      portfolioId: Id<"portfolios"> | undefined;
+      tradePlanId: Id<"tradePlans"> | undefined;
+    }
+  | { ok: false; error: string };
+
+const acceptCheckValidator = v.union(
+  v.object({
+    ok: v.literal(true),
+    assetType: v.union(v.literal("crypto"), v.literal("stock")),
+    candidate: v.object({
+      assetType: v.union(v.literal("crypto"), v.literal("stock")),
+      date: v.number(),
+      direction: v.union(v.literal("long"), v.literal("short")),
+      price: v.number(),
+      quantity: v.number(),
+      side: v.union(v.literal("buy"), v.literal("sell")),
+      ticker: v.string(),
+    }),
+    inboxTradeId: v.id("inboxTrades"),
+    portfolioId: v.optional(v.id("portfolios")),
+    tradePlanId: v.optional(v.id("tradePlans")),
+  }),
+  v.object({
+    ok: v.literal(false),
+    error: v.string(),
+  }),
+);
+
+export const checkInboxTradeForAcceptanceInternal = internalMutation({
+  args: {
+    inboxTradeId: v.id("inboxTrades"),
+    ownerId: v.string(),
+    portfolioId: v.optional(v.id("portfolios")),
+    tradePlanId: v.optional(v.id("tradePlans")),
+  },
+  returns: acceptCheckValidator,
+  handler: async (ctx, args): Promise<AcceptCheckResult> => {
+    const result = await checkInboxTradeForAcceptance(
+      ctx,
+      args.ownerId,
+      args.inboxTradeId,
+      {
+        portfolioId: args.portfolioId,
+        tradePlanId: args.tradePlanId,
+      },
+    );
+    if (!result.ok) {
+      return { ok: false, error: result.error };
+    }
+    return {
+      ok: true,
+      assetType: result.assetType,
+      candidate: result.candidate,
+      inboxTradeId: result.inboxTrade._id,
+      portfolioId: result.portfolioId,
+      tradePlanId: result.tradePlanId,
+    };
+  },
+});
+
+export const commitInboxTradeAcceptanceInternal = internalMutation({
+  args: {
+    inboxTradeId: v.id("inboxTrades"),
+    instrumentId: v.id("marketDataInstruments"),
+    ownerId: v.string(),
+    portfolioId: v.optional(v.id("portfolios")),
+    tradePlanId: v.optional(v.id("tradePlans")),
+  },
+  returns: v.object({
+    accepted: v.boolean(),
+    error: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const checkResult = await checkInboxTradeForAcceptance(
+      ctx,
+      args.ownerId,
+      args.inboxTradeId,
+      {
+        portfolioId: args.portfolioId,
+        tradePlanId: args.tradePlanId,
+      },
+    );
+    if (!checkResult.ok) {
+      return { accepted: false, error: checkResult.error };
+    }
+    return await commitInboxTradeAcceptance(ctx, args.ownerId, {
+      candidate: checkResult.candidate,
+      inboxTrade: checkResult.inboxTrade,
+      instrumentId: args.instrumentId,
+      portfolioId: checkResult.portfolioId,
+      tradePlanId: checkResult.tradePlanId,
+    });
+  },
+});
+
+export const listPendingInboxTradesInternal = internalQuery({
+  args: { ownerId: v.string() },
+  returns: v.array(v.id("inboxTrades")),
+  handler: async (ctx, args): Promise<Id<"inboxTrades">[]> => {
+    const trades = await ctx.db
+      .query("inboxTrades")
+      .withIndex("by_owner_status", (q) =>
+        q.eq("ownerId", args.ownerId).eq("status", "pending_review"),
+      )
+      .collect();
+    return trades.map((trade) => trade._id);
+  },
+});
+
+async function acceptInboxTradeViaAction(
+  ctx: import("./_generated/server").ActionCtx,
+  ownerId: string,
+  inboxTradeId: Id<"inboxTrades">,
+  args: {
+    portfolioId?: Id<"portfolios">;
+    tradePlanId?: Id<"tradePlans">;
+  },
+): Promise<{ accepted: boolean; error?: string }> {
+  const check: AcceptCheckResult = await ctx.runMutation(
+    internal.imports.checkInboxTradeForAcceptanceInternal,
+    {
+      inboxTradeId,
+      ownerId,
+      portfolioId: args.portfolioId,
+      tradePlanId: args.tradePlanId,
+    },
+  );
+  if (!check.ok) {
+    return { accepted: false, error: check.error };
+  }
+
+  const resolution = await resolveInstrumentForOwner(ctx, ownerId, {
+    assetType: check.assetType,
+    ticker: check.candidate.ticker,
+  });
+  if (
+    resolution.status !== "resolved" &&
+    resolution.status !== "ignored"
+  ) {
+    return {
+      accepted: false,
+      error: `Price mapping required for ${check.candidate.ticker}: ${resolution.instrument.lastError ?? "instrument not resolved"}`,
+    };
+  }
+
+  const result: { accepted: boolean; error?: string } = await ctx.runMutation(
+    internal.imports.commitInboxTradeAcceptanceInternal,
+    {
+      inboxTradeId: check.inboxTradeId,
+      instrumentId: resolution.instrument._id,
+      ownerId,
+      portfolioId: check.portfolioId,
+      tradePlanId: check.tradePlanId,
+    },
+  );
+  return result;
+}
+
+export const acceptTrade = action({
   args: {
     inboxTradeId: v.id("inboxTrades"),
     portfolioId: v.optional(v.id("portfolios")),
@@ -871,40 +1254,46 @@ export const acceptTrade = mutation({
     accepted: v.boolean(),
     error: v.optional(v.string()),
   }),
-  handler: async (ctx, args) => {
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ accepted: boolean; error?: string }> => {
     const ownerId = await requireUser(ctx);
-    return await acceptInboxTradeInternal(ctx, ownerId, args.inboxTradeId, {
+    return await acceptInboxTradeViaAction(ctx, ownerId, args.inboxTradeId, {
       portfolioId: args.portfolioId,
       tradePlanId: args.tradePlanId,
     });
   },
 });
 
-export const acceptAllTrades = mutation({
+export const acceptAllTrades = action({
   args: {},
   returns: v.object({
     accepted: v.number(),
     errors: v.array(v.string()),
     skippedInvalid: v.number(),
   }),
-  handler: async (ctx) => {
+  handler: async (
+    ctx,
+  ): Promise<{
+    accepted: number;
+    errors: string[];
+    skippedInvalid: number;
+  }> => {
     const ownerId = await requireUser(ctx);
-    const pendingTrades = await ctx.db
-      .query("inboxTrades")
-      .withIndex("by_owner_status", (q) =>
-        q.eq("ownerId", ownerId).eq("status", "pending_review"),
-      )
-      .collect();
+    const inboxTradeIds: Id<"inboxTrades">[] = await ctx.runQuery(
+      internal.imports.listPendingInboxTradesInternal,
+      { ownerId },
+    );
 
     let accepted = 0;
     let skippedInvalid = 0;
     const errors: string[] = [];
-
-    for (const trade of pendingTrades) {
-      const result = await acceptInboxTradeInternal(
+    for (const inboxTradeId of inboxTradeIds) {
+      const result = await acceptInboxTradeViaAction(
         ctx,
         ownerId,
-        trade._id,
+        inboxTradeId,
         {},
       );
       if (result.accepted) {
@@ -912,11 +1301,10 @@ export const acceptAllTrades = mutation({
       } else {
         skippedInvalid++;
         if (result.error) {
-          errors.push(`${trade._id}: ${result.error}`);
+          errors.push(`${inboxTradeId}: ${result.error}`);
         }
       }
     }
-
     return { accepted, errors, skippedInvalid };
   },
 });

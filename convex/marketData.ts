@@ -3,9 +3,12 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import {
   action,
+  internalAction,
   internalMutation,
   internalQuery,
+  mutation,
   query,
+  type ActionCtx,
 } from "./_generated/server";
 import { assertOwner, requireUser } from "./lib/auth";
 import {
@@ -395,6 +398,66 @@ export const storeResolutionResult = internalMutation({
   },
 });
 
+export async function resolveInstrumentForOwner(
+  ctx: ActionCtx,
+  ownerId: string,
+  args: { assetType: MarketDataAssetType; ticker: string },
+): Promise<ResolutionResult> {
+  const symbol = normalizeMarketDataSymbol(args.ticker);
+  if (!symbol) {
+    throw new ConvexError("Ticker is required");
+  }
+
+  const existing: Doc<"marketDataInstruments"> | null = await ctx.runQuery(
+    internal.marketData.getInstrumentBySymbolInternal,
+    {
+      assetType: args.assetType,
+      ownerId,
+      ticker: symbol,
+    },
+  );
+  if (
+    existing !== null &&
+    (existing.resolutionStatus === "resolved" ||
+      existing.resolutionStatus === "ignored")
+  ) {
+    return {
+      instrument: existing,
+      status: existing.resolutionStatus,
+    };
+  }
+
+  const resolution = await resolveProviderSymbol({
+    apiKey: requireTwelveDataApiKey(),
+    assetType: args.assetType,
+    symbol,
+  });
+
+  const instrument: Doc<"marketDataInstruments"> = await ctx.runMutation(
+    internal.marketData.storeResolutionResult,
+    "providerSymbol" in resolution
+      ? {
+          assetType: args.assetType,
+          ownerId,
+          providerSymbol: resolution.providerSymbol,
+          resolutionStatus: "resolved",
+          ticker: symbol,
+        }
+      : {
+          assetType: args.assetType,
+          lastError: resolution.error,
+          ownerId,
+          resolutionStatus: "needs_review",
+          ticker: symbol,
+        },
+  );
+
+  return {
+    instrument,
+    status: instrument.resolutionStatus,
+  };
+}
+
 export const resolveInstrument = action({
   args: {
     assetType: assetTypeValidator,
@@ -403,59 +466,57 @@ export const resolveInstrument = action({
   returns: resolutionResultValidator,
   handler: async (ctx, args): Promise<ResolutionResult> => {
     const ownerId = await requireUser(ctx);
-    const symbol = normalizeMarketDataSymbol(args.ticker);
-    if (!symbol) {
-      throw new ConvexError("Ticker is required");
-    }
+    return await resolveInstrumentForOwner(ctx, ownerId, args);
+  },
+});
 
-    const existing: Doc<"marketDataInstruments"> | null = await ctx.runQuery(
-      internal.marketData.getInstrumentBySymbolInternal,
-      {
-        assetType: args.assetType,
-        ownerId,
-        ticker: symbol,
-      },
-    );
-    if (
-      existing !== null &&
-      (existing.resolutionStatus === "resolved" ||
-        existing.resolutionStatus === "ignored")
-    ) {
-      return {
-        instrument: existing,
-        status: existing.resolutionStatus,
-      };
-    }
-
-    const resolution = await resolveProviderSymbol({
-      apiKey: requireTwelveDataApiKey(),
+export const resolveInstrumentInternal = internalAction({
+  args: {
+    assetType: assetTypeValidator,
+    ownerId: v.string(),
+    ticker: v.string(),
+  },
+  returns: resolutionResultValidator,
+  handler: async (ctx, args): Promise<ResolutionResult> => {
+    return await resolveInstrumentForOwner(ctx, args.ownerId, {
       assetType: args.assetType,
-      symbol,
+      ticker: args.ticker,
+    });
+  },
+});
+
+export const setProviderSymbol = mutation({
+  args: {
+    instrumentId: v.id("marketDataInstruments"),
+    providerSymbol: v.string(),
+  },
+  returns: marketDataInstrumentValidator,
+  handler: async (ctx, args): Promise<Doc<"marketDataInstruments">> => {
+    const ownerId = await requireUser(ctx);
+    const existing = assertOwner(
+      await ctx.db.get(args.instrumentId),
+      ownerId,
+      "Market data instrument not found",
+    );
+    const trimmedProviderSymbol = args.providerSymbol.trim();
+    if (!trimmedProviderSymbol) {
+      throw new ConvexError("Provider symbol is required");
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(existing._id, {
+      lastError: undefined,
+      lastResolvedAt: now,
+      providerSymbol: trimmedProviderSymbol,
+      resolutionStatus: "resolved",
+      updatedAt: now,
     });
 
-    const instrument: Doc<"marketDataInstruments"> = await ctx.runMutation(
-      internal.marketData.storeResolutionResult,
-      "providerSymbol" in resolution
-        ? {
-            assetType: args.assetType,
-            ownerId,
-            providerSymbol: resolution.providerSymbol,
-            resolutionStatus: "resolved",
-            ticker: symbol,
-          }
-        : {
-            assetType: args.assetType,
-            lastError: resolution.error,
-            ownerId,
-            resolutionStatus: "needs_review",
-            ticker: symbol,
-          },
-    );
-
-    return {
-      instrument,
-      status: instrument.resolutionStatus,
-    };
+    const updated = await ctx.db.get(existing._id);
+    if (updated === null) {
+      throw new ConvexError("Market data instrument not found after update");
+    }
+    return updated;
   },
 });
 

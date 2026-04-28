@@ -7,12 +7,14 @@ export default async function ImportsPage() {
   const token = await getConvexTokenOrThrow();
   const [
     preloadedInboxTrades,
+    preloadedInboxTradePriceMappings,
     preloadedOpenTradePlans,
     preloadedAccountMappings,
     preloadedPortfolios,
     preloadedCampaigns,
   ] = await Promise.all([
     preloadQuery(api.imports.listInboxTrades, {}, { token }),
+    preloadQuery(api.imports.listInboxTradePriceMappings, {}, { token }),
     preloadQuery(api.tradePlans.listOpenTradePlans, {}, { token }),
     preloadQuery(api.accountMappings.listAccountMappings, {}, { token }),
     preloadQuery(api.portfolios.listPortfolios, {}, { token }),
@@ -23,6 +25,7 @@ export default async function ImportsPage() {
     <ImportsPageClient
       preloadedAccountMappings={preloadedAccountMappings}
       preloadedCampaigns={preloadedCampaigns}
+      preloadedInboxTradePriceMappings={preloadedInboxTradePriceMappings}
       preloadedInboxTrades={preloadedInboxTrades}
       preloadedOpenTradePlans={preloadedOpenTradePlans}
       preloadedPortfolios={preloadedPortfolios}

@@ -1,4 +1,5 @@
-import { Check, FileText, Pencil, Plus } from "lucide-react";
+import { useMutation } from "convex/react";
+import { AlertTriangle, Check, FileText, Pencil, Plus } from "lucide-react";
 import { useState } from "react";
 import {
   Badge,
@@ -13,6 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "~/components/ui/popover";
+import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { IMPORTS_INDEX_TEST_IDS } from "../../../../../shared/e2e/testIds";
 import { cn } from "~/lib/utils";
@@ -21,7 +23,11 @@ import {
   isKrakenDefaultAccountId,
 } from "../../../../../shared/imports/constants";
 import { ImportPostDialog } from "../../trade-plans/ImportPostDialog";
-import type { InboxTrade, OpenTradePlanOption } from "../types";
+import type {
+  InboxTrade,
+  InboxTradePriceMapping,
+  OpenTradePlanOption,
+} from "../types";
 import {
   formatCurrency,
   formatDate,
@@ -47,6 +53,7 @@ interface InboxTableProps {
   inlinePortfolioIds: Record<string, string>;
   inlineTradePlanIds: Record<string, string>;
   inboxTrades: InboxTrade[] | undefined;
+  priceMappingByInboxTradeId: Map<Id<"inboxTrades">, InboxTradePriceMapping>;
   onAccept: (inboxTradeId: Id<"inboxTrades">) => void;
   onCancelEdit: () => void;
   onDelete: (inboxTradeId: Id<"inboxTrades">) => void;
@@ -144,14 +151,27 @@ function SkeletonRow() {
 
 type RowStatus = "ready" | "missing-plan" | "needs-review";
 
+function isPriceMappingResolved(
+  mapping: InboxTradePriceMapping | undefined,
+): boolean {
+  return mapping?.state === "resolved" || mapping?.state === "ignored";
+}
+
 function getRowStatus(
   trade: InboxTrade,
   hasPortfolio: boolean,
   hasTradePlan: boolean,
+  priceMapping: InboxTradePriceMapping | undefined,
 ): RowStatus {
   const hasErrors = trade.validationErrors.length > 0;
   const fieldsValid = isTradeReadyForAcceptance(trade);
-  if (hasErrors || !fieldsValid || !hasPortfolio) return "needs-review";
+  if (
+    hasErrors ||
+    !fieldsValid ||
+    !hasPortfolio ||
+    !isPriceMappingResolved(priceMapping)
+  )
+    return "needs-review";
   if (!hasTradePlan) return "missing-plan";
   return "ready";
 }
@@ -159,11 +179,13 @@ function getRowStatus(
 function canAcceptTrade(
   trade: InboxTrade,
   hasPortfolio: boolean,
+  priceMapping: InboxTradePriceMapping | undefined,
 ): boolean {
   return (
     trade.validationErrors.length === 0 &&
     isTradeReadyForAcceptance(trade) &&
-    hasPortfolio
+    hasPortfolio &&
+    isPriceMappingResolved(priceMapping)
   );
 }
 
@@ -189,6 +211,129 @@ function RowStatusDot({
         aria-label={config.label}
       />
     </td>
+  );
+}
+
+function PriceMappingPopover({
+  inboxTradeId,
+  priceMapping,
+  ticker,
+}: {
+  inboxTradeId: Id<"inboxTrades">;
+  priceMapping: InboxTradePriceMapping;
+  ticker: string;
+}) {
+  const setProviderSymbol = useMutation(api.marketData.setProviderSymbol);
+  const [open, setOpen] = useState(false);
+  const initialSymbol =
+    priceMapping.state === "resolved" ? priceMapping.providerSymbol : ticker;
+  const [providerSymbol, setProviderSymbolValue] = useState(initialSymbol);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const lastError =
+    priceMapping.state === "needs_review" ? priceMapping.lastError : undefined;
+  const showInstrumentControls =
+    priceMapping.state === "needs_review" ||
+    priceMapping.state === "resolved";
+
+  const handleSave = async () => {
+    if (!showInstrumentControls) return;
+    const trimmed = providerSymbol.trim();
+    if (!trimmed) {
+      setError("Provider symbol is required");
+      return;
+    }
+    setIsSaving(true);
+    setError(null);
+    try {
+      await setProviderSymbol({
+        instrumentId: priceMapping.instrumentId,
+        providerSymbol: trimmed,
+      });
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex cursor-pointer border-0 bg-transparent p-0 text-left"
+          data-testid={`price-mapping-trigger-${inboxTradeId}`}
+        >
+          <Badge
+            variant="danger"
+            className="flex items-center gap-1 text-[10px]"
+          >
+            <AlertTriangle className="h-3 w-3" />
+            Price mapping required
+          </Badge>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-72 p-3"
+        data-testid={`price-mapping-popover-${inboxTradeId}`}
+      >
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-olive-12">
+            Price mapping required
+          </p>
+          <p className="text-[11px] text-olive-11">
+            We couldn&apos;t auto-resolve <span className="font-mono">{ticker}</span>{" "}
+            against Twelve Data. Set the provider symbol manually to unblock
+            acceptance.
+          </p>
+          {lastError ? (
+            <p className="text-[11px] text-red-11">{lastError}</p>
+          ) : null}
+          {showInstrumentControls ? (
+            <>
+              <input
+                type="text"
+                value={providerSymbol}
+                onChange={(e) => setProviderSymbolValue(e.target.value)}
+                placeholder="e.g. AAPL or AAPL.US"
+                className="h-7 w-full rounded-md border border-slate-6 bg-slate-3 px-2 text-xs text-slate-12 focus:outline-none focus:ring-1 focus:ring-blue-8"
+                data-testid={`price-mapping-symbol-input-${inboxTradeId}`}
+              />
+              {error ? (
+                <p className="text-[11px] text-red-11">{error}</p>
+              ) : null}
+              <div className="flex gap-1">
+                <Button
+                  dataTestId={`price-mapping-save-${inboxTradeId}`}
+                  size="sm"
+                  isLoading={isSaving}
+                  disabled={isSaving || !providerSymbol.trim()}
+                  onClick={() => void handleSave()}
+                >
+                  Save
+                </Button>
+                <Button
+                  dataTestId={`price-mapping-cancel-${inboxTradeId}`}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setOpen(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </>
+          ) : (
+            <p className="text-[11px] text-olive-11">
+              The instrument record is missing. Save the trade with valid asset
+              type and ticker to register it.
+            </p>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -300,6 +445,7 @@ export function InboxTable({
   inlinePortfolioIds,
   inlineTradePlanIds,
   inboxTrades,
+  priceMappingByInboxTradeId,
   onAccept,
   onCancelEdit,
   onDelete,
@@ -453,6 +599,7 @@ export function InboxTable({
                 inlinePortfolioId={inlinePortfolioIds[trade._id] ?? ""}
                 inlineTradePlanId={inlineTradePlanIds[trade._id] ?? ""}
                 isEditing={isEditing}
+                priceMapping={priceMappingByInboxTradeId.get(trade._id)}
                 isQuickCreateLoading={Boolean(
                   quickCreateLoadingByTradeId[trade._id],
                 )}
@@ -527,6 +674,7 @@ function InboxRow({
   onSaveEdit,
   openTradePlans,
   portfolios,
+  priceMapping,
   trade,
 }: {
   accountFriendlyName: string | null;
@@ -558,12 +706,14 @@ function InboxRow({
   portfolios:
     | Array<{ _id: Id<"portfolios">; name: string }>
     | undefined;
+  priceMapping: InboxTradePriceMapping | undefined;
   trade: InboxTrade;
 }) {
   const hasPortfolio = inlinePortfolioId !== "";
   const hasTradePlan = inlineTradePlanId !== "";
-  const acceptable = canAcceptTrade(trade, hasPortfolio);
-  const rowStatus = getRowStatus(trade, hasPortfolio, hasTradePlan);
+  const acceptable = canAcceptTrade(trade, hasPortfolio, priceMapping);
+  const rowStatus = getRowStatus(trade, hasPortfolio, hasTradePlan, priceMapping);
+  const priceMappingBlocking = !isPriceMappingResolved(priceMapping);
   const ticker = trade.ticker?.toUpperCase();
   const matchingPlans =
     openTradePlans?.filter(
@@ -595,6 +745,15 @@ function InboxRow({
         {/* Ticker + validation */}
         <td className="whitespace-nowrap px-4 py-2 text-sm font-medium text-slate-12">
           {trade.ticker ?? "---"}
+          {priceMappingBlocking && priceMapping !== undefined && trade.ticker ? (
+            <div className="mt-1">
+              <PriceMappingPopover
+                inboxTradeId={trade._id}
+                priceMapping={priceMapping}
+                ticker={trade.ticker}
+              />
+            </div>
+          ) : null}
           {(trade.validationErrors.length > 0 ||
             trade.validationWarnings.length > 0) && (
             <div className="mt-1 space-y-0.5">
@@ -777,7 +936,13 @@ function InboxRow({
               onClick={onAccept}
               disabled={!acceptable}
               className="rounded p-1 text-grass-9 hover:bg-grass-3 disabled:cursor-not-allowed disabled:opacity-40"
-              title={acceptable ? "Accept trade" : "Missing required fields or portfolio"}
+              title={
+                acceptable
+                  ? "Accept trade"
+                  : priceMappingBlocking
+                    ? "Price mapping required"
+                    : "Missing required fields or portfolio"
+              }
             >
               <Check className="h-4 w-4" />
             </button>
