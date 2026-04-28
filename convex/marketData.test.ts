@@ -271,7 +271,7 @@ describe("market data instruments", () => {
     const microsoftInstrumentId = await insertResolvedInstrument({
       symbol: "MSFT",
     });
-    await insertResolvedInstrument({ symbol: "TSLA" });
+    const tslaInstrumentId = await insertResolvedInstrument({ symbol: "TSLA" });
     await insertTrade({ portfolioId, ticker: "AAPL" });
     await insertTrade({ portfolioId, ticker: "MSFT" });
     await insertTrade({ ticker: "TSLA" });
@@ -342,7 +342,7 @@ describe("market data instruments", () => {
     expect(snapshots).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          symbol: "TSLA",
+          instrumentId: tslaInstrumentId,
         }),
       ]),
     );
