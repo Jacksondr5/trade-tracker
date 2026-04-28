@@ -68,6 +68,7 @@ describe("market data instruments", () => {
 
   async function insertTrade(args: {
     assetType?: "crypto" | "stock";
+    date?: number;
     portfolioId?: Id<"portfolios">;
     quantity?: number;
     side?: "buy" | "sell";
@@ -76,7 +77,7 @@ describe("market data instruments", () => {
     return await t.run(async (ctx) => {
       return await ctx.db.insert("trades", {
         assetType: args.assetType ?? "stock",
-        date: Date.UTC(2026, 3, 24),
+        date: args.date ?? Date.UTC(2026, 3, 24),
         direction: "long",
         ownerId,
         portfolioId: args.portfolioId,
@@ -653,6 +654,215 @@ describe("market data instruments", () => {
     expect(snapshots[0]).toMatchObject({
       close: 205.5,
       status: "ok",
+    });
+  });
+
+  it("backfills historical snapshots for portfolio trades and benchmark instruments idempotently", async () => {
+    const portfolioId = await insertPortfolio();
+    await insertTrade({
+      date: Date.UTC(2026, 3, 22),
+      portfolioId,
+      ticker: "AAPL",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+        const parsed = new URL(url);
+        const symbol = parsed.searchParams.get("symbol");
+
+        if (parsed.pathname.endsWith("/symbol_search")) {
+          return new Response(
+            JSON.stringify({
+              data: [
+                {
+                  country: "United States",
+                  currency: "USD",
+                  exchange: "NASDAQ",
+                  instrument_type:
+                    symbol === "SPY" ? "ETF" : "Common Stock",
+                  symbol,
+                },
+              ],
+              status: "ok",
+            }),
+            { status: 200 },
+          );
+        }
+
+        const baseClose = symbol === "SPY" ? 500 : 200;
+        return new Response(
+          JSON.stringify({
+            status: "ok",
+            values: [
+              { close: `${baseClose + 2}`, datetime: "2026-04-24" },
+              { close: `${baseClose + 1}`, datetime: "2026-04-23" },
+            ],
+          }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    const firstRun = await asUser().action(
+      api.marketData.backfillHistoricalPriceSnapshots,
+      {
+        endDate: "2026-04-24",
+      },
+    );
+    const secondRun = await asUser().action(
+      api.marketData.backfillHistoricalPriceSnapshots,
+      {
+        endDate: "2026-04-24",
+      },
+    );
+
+    const snapshots = await t.run(async (ctx) => {
+      return await ctx.db.query("marketPriceSnapshots").collect();
+    });
+    const runs = await t.run(async (ctx) => {
+      return await ctx.db.query("marketDataRefreshRuns").collect();
+    });
+
+    expect(firstRun).toMatchObject({
+      endDate: "2026-04-24",
+      startDate: "2026-04-22",
+      symbolsFailed: 0,
+      symbolsRequested: 2,
+      symbolsSucceeded: 2,
+    });
+    expect(secondRun).toMatchObject({
+      symbolsFailed: 0,
+      symbolsRequested: 2,
+      symbolsSucceeded: 2,
+    });
+    expect(snapshots).toHaveLength(4);
+    expect(snapshots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          close: 202,
+          date: "2026-04-24",
+          status: "ok",
+        }),
+        expect.objectContaining({
+          close: 501,
+          date: "2026-04-23",
+          status: "ok",
+        }),
+      ]),
+    );
+    expect(runs).toHaveLength(2);
+    expect(runs[0]).toMatchObject({
+      provider: "twelve_data",
+      status: "completed",
+      symbolsFailed: 0,
+      symbolsRequested: 2,
+      symbolsSucceeded: 2,
+    });
+  });
+
+  it("records failed historical backfill symbols for follow-up", async () => {
+    const portfolioId = await insertPortfolio();
+    await insertTrade({
+      date: Date.UTC(2026, 3, 22),
+      portfolioId,
+      ticker: "NOPE",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+        const parsed = new URL(url);
+        const symbol = parsed.searchParams.get("symbol");
+
+        if (parsed.pathname.endsWith("/symbol_search")) {
+          return new Response(
+            JSON.stringify({
+              data:
+                symbol === "SPY"
+                  ? [
+                      {
+                        country: "United States",
+                        currency: "USD",
+                        exchange: "NYSE",
+                        instrument_type: "ETF",
+                        symbol: "SPY",
+                      },
+                    ]
+                  : [],
+              status: "ok",
+            }),
+            { status: 200 },
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            status: "ok",
+            values: [{ close: "503.25", datetime: "2026-04-24" }],
+          }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    const result = await asUser().action(
+      api.marketData.backfillHistoricalPriceSnapshots,
+      {
+        endDate: "2026-04-24",
+      },
+    );
+
+    const nopeInstrument = await asUser().query(
+      api.marketData.getInstrumentBySymbol,
+      {
+        assetType: "stock",
+        ticker: "NOPE",
+      },
+    );
+    const snapshots = await t.run(async (ctx) => {
+      return await ctx.db.query("marketPriceSnapshots").collect();
+    });
+    const runs = await t.run(async (ctx) => {
+      return await ctx.db.query("marketDataRefreshRuns").collect();
+    });
+
+    expect(result).toMatchObject({
+      symbolsFailed: 1,
+      symbolsRequested: 2,
+      symbolsSucceeded: 1,
+    });
+    expect(result.failedSymbols[0]).toMatchObject({
+      symbol: "NOPE",
+    });
+    expect(nopeInstrument).toMatchObject({
+      lastError: expect.stringContaining("No Twelve Data symbol match found"),
+      resolutionStatus: "needs_review",
+      symbol: "NOPE",
+    });
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]).toMatchObject({
+      close: 503.25,
+      status: "ok",
+    });
+    expect(runs[0]).toMatchObject({
+      errorMessage: expect.stringContaining("NOPE"),
+      status: "partial",
+      symbolsFailed: 1,
+      symbolsRequested: 2,
+      symbolsSucceeded: 1,
     });
   });
 });
