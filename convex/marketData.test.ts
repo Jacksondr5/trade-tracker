@@ -2,7 +2,8 @@
 
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
 
 interface ImportMetaWithGlob extends ImportMeta {
@@ -32,6 +33,57 @@ describe("market data instruments", () => {
 
   function asUser() {
     return t.withIdentity({ tokenIdentifier: ownerId });
+  }
+
+  async function insertPortfolio(): Promise<Id<"portfolios">> {
+    return await t.run(async (ctx) => {
+      return await ctx.db.insert("portfolios", {
+        name: "Long-term",
+        ownerId,
+      });
+    });
+  }
+
+  async function insertResolvedInstrument(args: {
+    assetType?: "crypto" | "stock";
+    providerSymbol?: string;
+    symbol: string;
+  }): Promise<Id<"marketDataInstruments">> {
+    return await t.run(async (ctx) => {
+      return await ctx.db.insert("marketDataInstruments", {
+        assetType: args.assetType ?? "stock",
+        createdAt: Date.UTC(2026, 3, 24),
+        lastResolvedAt: Date.UTC(2026, 3, 24),
+        ownerId,
+        provider: "twelve_data",
+        providerSymbol: args.providerSymbol ?? args.symbol,
+        resolutionStatus: "resolved",
+        symbol: args.symbol,
+        updatedAt: Date.UTC(2026, 3, 24),
+      });
+    });
+  }
+
+  async function insertTrade(args: {
+    assetType?: "crypto" | "stock";
+    portfolioId?: Id<"portfolios">;
+    quantity?: number;
+    side?: "buy" | "sell";
+    ticker: string;
+  }): Promise<Id<"trades">> {
+    return await t.run(async (ctx) => {
+      return await ctx.db.insert("trades", {
+        assetType: args.assetType ?? "stock",
+        date: Date.UTC(2026, 3, 24),
+        direction: "long",
+        ownerId,
+        portfolioId: args.portfolioId,
+        price: 100,
+        quantity: args.quantity ?? 1,
+        side: args.side ?? "buy",
+        ticker: args.ticker,
+      });
+    });
   }
 
   it("resolves a stock ticker to a Twelve Data provider symbol", async () => {
@@ -208,6 +260,213 @@ describe("market data instruments", () => {
       provider: "twelve_data",
       resolutionStatus: "needs_review",
       symbol: "BTC",
+    });
+  });
+
+  it("refreshes daily snapshots for resolved instruments used by open portfolio positions", async () => {
+    const portfolioId = await insertPortfolio();
+    const appleInstrumentId = await insertResolvedInstrument({
+      symbol: "AAPL",
+    });
+    const microsoftInstrumentId = await insertResolvedInstrument({
+      symbol: "MSFT",
+    });
+    const tslaInstrumentId = await insertResolvedInstrument({ symbol: "TSLA" });
+    await insertTrade({ portfolioId, ticker: "AAPL" });
+    await insertTrade({ portfolioId, ticker: "MSFT" });
+    await insertTrade({ ticker: "TSLA" });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const symbol = new URL(url).searchParams.get("symbol");
+        if (symbol === "MSFT") {
+          return new Response(JSON.stringify({ status: "ok", values: [] }), {
+            status: 200,
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            status: "ok",
+            values: [{ close: "202.25", datetime: "2026-04-24" }],
+          }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    const result = await t.action(
+      internal.marketData.refreshDailyPriceSnapshots,
+      {
+        date: "2026-04-24",
+      },
+    );
+
+    const snapshots = await t.run(async (ctx) => {
+      const rows = await ctx.db.query("marketPriceSnapshots").collect();
+      return rows.filter(
+        (row) => row.ownerId === ownerId && row.date === "2026-04-24",
+      );
+    });
+    const run = await t.run(async (ctx) => {
+      const rows = await ctx.db.query("marketDataRefreshRuns").collect();
+      return (
+        rows.find(
+          (row) => row.ownerId === ownerId && row.runDate === "2026-04-24",
+        ) ?? null
+      );
+    });
+
+    expect(result).toMatchObject({
+      ownersProcessed: 1,
+      runDate: "2026-04-24",
+      symbolsFailed: 1,
+      symbolsRequested: 2,
+      symbolsSucceeded: 1,
+    });
+    expect(snapshots).toHaveLength(2);
+    expect(snapshots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          close: 202.25,
+          instrumentId: appleInstrumentId,
+          status: "ok",
+        }),
+        expect.objectContaining({
+          errorMessage: expect.stringContaining("No daily close returned"),
+          instrumentId: microsoftInstrumentId,
+          status: "missing",
+        }),
+      ]),
+    );
+    expect(snapshots).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          instrumentId: tslaInstrumentId,
+        }),
+      ]),
+    );
+    expect(run).toMatchObject({
+      completedAt: expect.any(Number),
+      provider: "twelve_data",
+      status: "partial",
+      symbolsFailed: 1,
+      symbolsRequested: 2,
+      symbolsSucceeded: 1,
+    });
+  });
+
+  it("includes open positions older than the most recent trades in refresh universe", async () => {
+    const portfolioId = await insertPortfolio();
+    const appleInstrumentId = await insertResolvedInstrument({
+      symbol: "AAPL",
+    });
+    await insertTrade({ portfolioId, ticker: "AAPL" });
+
+    for (let index = 0; index < 1_005; index += 1) {
+      const side = index % 2 === 0 ? "buy" : "sell";
+      await insertTrade({
+        portfolioId,
+        quantity: 1,
+        side,
+        ticker: "TSLA",
+      });
+    }
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const symbol = new URL(url).searchParams.get("symbol");
+        if (symbol !== "AAPL") {
+          return new Response(JSON.stringify({ status: "ok", values: [] }), {
+            status: 200,
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            status: "ok",
+            values: [{ close: "215.75", datetime: "2026-04-24" }],
+          }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    const result = await t.action(
+      internal.marketData.refreshDailyPriceSnapshots,
+      {
+        date: "2026-04-24",
+      },
+    );
+
+    const snapshots = await t.run(async (ctx) => {
+      const rows = await ctx.db.query("marketPriceSnapshots").collect();
+      return rows.filter(
+        (row) =>
+          row.ownerId === ownerId &&
+          row.instrumentId === appleInstrumentId &&
+          row.date === "2026-04-24",
+      );
+    });
+
+    expect(result).toMatchObject({
+      ownersProcessed: 1,
+      symbolsRequested: 1,
+      symbolsSucceeded: 1,
+    });
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]).toMatchObject({
+      close: 215.75,
+      status: "ok",
+    });
+  });
+
+  it("upserts existing daily snapshots during refresh", async () => {
+    const portfolioId = await insertPortfolio();
+    const instrumentId = await insertResolvedInstrument({ symbol: "AAPL" });
+    await insertTrade({ portfolioId, ticker: "AAPL" });
+    await t.run(async (ctx) => {
+      await ctx.db.insert("marketPriceSnapshots", {
+        close: 190,
+        date: "2026-04-24",
+        fetchedAt: Date.UTC(2026, 3, 24),
+        instrumentId,
+        ownerId,
+        status: "ok",
+      });
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            status: "ok",
+            values: [{ close: "205.50", datetime: "2026-04-24" }],
+          }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    await t.action(internal.marketData.refreshDailyPriceSnapshots, {
+      date: "2026-04-24",
+    });
+
+    const snapshots = await t.run(async (ctx) => {
+      const rows = await ctx.db.query("marketPriceSnapshots").collect();
+      return rows.filter(
+        (row) =>
+          row.ownerId === ownerId &&
+          row.instrumentId === instrumentId &&
+          row.date === "2026-04-24",
+      );
+    });
+
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]).toMatchObject({
+      close: 205.5,
+      status: "ok",
     });
   });
 });
