@@ -561,7 +561,17 @@ async function fetchHistoricalDailyClosesForInstrument(args: {
     );
   }
 
-  if (oldestCoveredDate === null || oldestCoveredDate > args.startDate) {
+  const startDateDay = new Date(`${args.startDate}T00:00:00Z`).getUTCDay();
+  const startDateIsWeekend = startDateDay === 0 || startDateDay === 6;
+  const hasCoveredDateOnOrAfterStart = [...closeByDate.keys()].some(
+    (date) => date >= args.startDate,
+  );
+  const isTruncated =
+    oldestCoveredDate === null ||
+    (oldestCoveredDate > args.startDate &&
+      !startDateIsWeekend &&
+      !hasCoveredDateOnOrAfterStart);
+  if (isTruncated) {
     throw new DailyCloseMissingError(
       `Historical daily closes are truncated for ${providerSymbol}: earliest returned date ${oldestCoveredDate ?? "none"} is after requested start date ${args.startDate}`,
     );
@@ -798,11 +808,14 @@ export const getHistoricalBackfillUniverse = internalQuery({
 
     if (earliestTradeDate !== null) {
       for (const benchmark of BENCHMARK_INSTRUMENTS) {
-        candidateByKey.set(`${benchmark.assetType}:${benchmark.symbol}`, {
-          assetType: benchmark.assetType,
-          sourceTradeIds: [],
-          symbol: benchmark.symbol,
-        });
+        const key = `${benchmark.assetType}:${benchmark.symbol}`;
+        if (!candidateByKey.has(key)) {
+          candidateByKey.set(key, {
+            assetType: benchmark.assetType,
+            sourceTradeIds: [],
+            symbol: benchmark.symbol,
+          });
+        }
       }
     }
 
