@@ -21,7 +21,6 @@ import {
 const MARKET_DATA_PROVIDER = "twelve_data";
 const TWELVE_DATA_BASE_URL = "https://api.twelvedata.com";
 const TWELVE_DATA_TIMEOUT_MS = 8_000;
-const PORTFOLIO_TRADE_SCAN_PAGE_SIZE = 256;
 const HISTORICAL_PRICE_OUTPUT_SIZE = 5_000;
 const HISTORICAL_PRICE_BATCH_SIZE = 2_000;
 const POSITION_EPSILON = 0.00000001;
@@ -667,39 +666,29 @@ export const getPortfolioValuationUniverse = internalQuery({
       }
     >();
 
-    let cursor: string | null = null;
-    let isDone = false;
+    // Use one non-paginated read because Convex only supports a single
+    // paginated query execution per function, and this scan must cover all
+    // portfolio trades to compute open positions.
+    const trades = await ctx.db.query("trades").order("desc").collect();
 
-    while (!isDone) {
-      const page = await ctx.db
-        .query("trades")
-        .order("desc")
-        .paginate({
-          cursor,
-          numItems: PORTFOLIO_TRADE_SCAN_PAGE_SIZE,
-        });
-      cursor = page.continueCursor;
-      isDone = page.isDone;
-
-      for (const trade of page.page) {
-        if (trade.portfolioId === undefined) {
-          continue;
-        }
-
-        const symbol = normalizeMarketDataSymbol(trade.ticker);
-        if (!symbol) {
-          continue;
-        }
-
-        const key = `${trade.ownerId}:${trade.assetType}:${symbol}`;
-        const current = positionQuantities.get(key);
-        positionQuantities.set(key, {
-          assetType: trade.assetType,
-          ownerId: trade.ownerId,
-          quantity: (current?.quantity ?? 0) + getSignedPositionQuantity(trade),
-          symbol,
-        });
+    for (const trade of trades) {
+      if (trade.portfolioId === undefined) {
+        continue;
       }
+
+      const symbol = normalizeMarketDataSymbol(trade.ticker);
+      if (!symbol) {
+        continue;
+      }
+
+      const key = `${trade.ownerId}:${trade.assetType}:${symbol}`;
+      const current = positionQuantities.get(key);
+      positionQuantities.set(key, {
+        assetType: trade.assetType,
+        ownerId: trade.ownerId,
+        quantity: (current?.quantity ?? 0) + getSignedPositionQuantity(trade),
+        symbol,
+      });
     }
 
     const instrumentsByOwner = new Map<
@@ -763,46 +752,39 @@ export const getHistoricalBackfillUniverse = internalQuery({
     const candidateByKey = new Map<string, HistoricalBackfillCandidate>();
     let earliestTradeDate: number | null = null;
 
-    let cursor: string | null = null;
-    let isDone = false;
+    // Use one non-paginated read because Convex only supports a single
+    // paginated query execution per function, and historical backfill needs
+    // the complete owner trade history to derive the backfill universe.
+    const trades = await ctx.db
+      .query("trades")
+      .withIndex("by_owner_date", (q) => q.eq("ownerId", args.ownerId))
+      .order("asc")
+      .collect();
 
-    while (!isDone) {
-      const page = await ctx.db
-        .query("trades")
-        .withIndex("by_owner_date", (q) => q.eq("ownerId", args.ownerId))
-        .order("asc")
-        .paginate({
-          cursor,
-          numItems: PORTFOLIO_TRADE_SCAN_PAGE_SIZE,
+    for (const trade of trades) {
+      if (trade.portfolioId === undefined) {
+        continue;
+      }
+
+      const symbol = normalizeMarketDataSymbol(trade.ticker);
+      if (!symbol) {
+        continue;
+      }
+
+      earliestTradeDate =
+        earliestTradeDate === null
+          ? trade.date
+          : Math.min(earliestTradeDate, trade.date);
+      const candidateKey = `${trade.assetType}:${symbol}`;
+      const existingCandidate = candidateByKey.get(candidateKey);
+      if (existingCandidate === undefined) {
+        candidateByKey.set(candidateKey, {
+          assetType: trade.assetType,
+          sourceTradeIds: [trade._id],
+          symbol,
         });
-      cursor = page.continueCursor;
-      isDone = page.isDone;
-
-      for (const trade of page.page) {
-        if (trade.portfolioId === undefined) {
-          continue;
-        }
-
-        const symbol = normalizeMarketDataSymbol(trade.ticker);
-        if (!symbol) {
-          continue;
-        }
-
-        earliestTradeDate =
-          earliestTradeDate === null
-            ? trade.date
-            : Math.min(earliestTradeDate, trade.date);
-        const candidateKey = `${trade.assetType}:${symbol}`;
-        const existingCandidate = candidateByKey.get(candidateKey);
-        if (existingCandidate === undefined) {
-          candidateByKey.set(candidateKey, {
-            assetType: trade.assetType,
-            sourceTradeIds: [trade._id],
-            symbol,
-          });
-        } else {
-          existingCandidate.sourceTradeIds.push(trade._id);
-        }
+      } else {
+        existingCandidate.sourceTradeIds.push(trade._id);
       }
     }
 
