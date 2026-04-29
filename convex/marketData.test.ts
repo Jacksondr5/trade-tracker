@@ -452,6 +452,17 @@ describe("market data instruments", () => {
 
   it("refreshes daily snapshots for resolved instruments used by open portfolio positions", async () => {
     const portfolioId = await insertPortfolio();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("portfolioCashLedgerEntries", {
+        amount: 10_000,
+        createdAt: Date.UTC(2026, 3, 24),
+        date: Date.UTC(2026, 3, 24),
+        entryType: "deposit",
+        ownerId,
+        portfolioId,
+        updatedAt: Date.UTC(2026, 3, 24),
+      });
+    });
     await insertResolvedInstrument({
       symbol: "AAPL",
     });
@@ -494,6 +505,7 @@ describe("market data instruments", () => {
         budgetCredits: 8,
       },
     );
+    await t.finishInProgressScheduledFunctions();
 
     const snapshots = await t.run(async (ctx) => {
       const rows = await ctx.db.query("marketPriceSnapshots").collect();
@@ -509,6 +521,15 @@ describe("market data instruments", () => {
     });
     const jobs = await t.run(async (ctx) => {
       return await ctx.db.query("marketDataFetchJobs").collect();
+    });
+    const valuations = await t.run(async (ctx) => {
+      const rows = await ctx.db.query("portfolioDailyValuations").collect();
+      return rows.filter(
+        (row) =>
+          row.ownerId === ownerId &&
+          row.portfolioId === portfolioId &&
+          row.date === "2026-04-24",
+      );
     });
 
     expect(result).toMatchObject({
@@ -561,6 +582,14 @@ describe("market data instruments", () => {
       status: "failed",
       symbol: "MSFT",
     });
+    expect(valuations).toHaveLength(1);
+    expect(valuations[0]).toMatchObject({
+      cashBalance: 9_800,
+      marketValue: 202.25,
+      missingSymbols: ["MSFT"],
+      priceCoverageStatus: "partial",
+      totalEquity: 10_002.25,
+    });
   });
 
   it("includes open positions older than the most recent trades in refresh universe", async () => {
@@ -612,8 +641,7 @@ describe("market data instruments", () => {
     const snapshots = await t.run(async (ctx) => {
       const rows = await ctx.db.query("marketPriceSnapshots").collect();
       return rows.filter(
-        (row) =>
-          row.providerSymbol === "AAPL" && row.date === "2026-04-24",
+        (row) => row.providerSymbol === "AAPL" && row.date === "2026-04-24",
       );
     });
 
@@ -667,8 +695,7 @@ describe("market data instruments", () => {
     const snapshots = await t.run(async (ctx) => {
       const rows = await ctx.db.query("marketPriceSnapshots").collect();
       return rows.filter(
-        (row) =>
-          row.providerSymbol === "AAPL" && row.date === "2026-04-24",
+        (row) => row.providerSymbol === "AAPL" && row.date === "2026-04-24",
       );
     });
 
@@ -707,8 +734,7 @@ describe("market data instruments", () => {
                   country: "United States",
                   currency: "USD",
                   exchange: "NASDAQ",
-                  instrument_type:
-                    symbol === "SPY" ? "ETF" : "Common Stock",
+                  instrument_type: symbol === "SPY" ? "ETF" : "Common Stock",
                   symbol,
                 },
               ],
