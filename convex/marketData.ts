@@ -880,6 +880,7 @@ export const getHistoricalBackfillUniversePaged = internalAction({
     candidates: v.array(
       v.object({
         assetType: assetTypeValidator,
+        sourceTradeCount: v.number(),
         sourceTradeIds: v.array(v.id("trades")),
         symbol: v.string(),
       }),
