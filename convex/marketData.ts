@@ -1175,35 +1175,17 @@ export const completeMarketDataFetchJob = internalMutation({
 
     const run = await ctx.db.get(job.runId);
     if (run !== null) {
-      const completedJobs = await ctx.db
-        .query("marketDataFetchJobs")
-        .withIndex("by_runId_and_status", (q) =>
-          q.eq("runId", job.runId).eq("status", "completed"),
-        )
-        .collect();
-      const failedJobs = await ctx.db
-        .query("marketDataFetchJobs")
-        .withIndex("by_runId_and_status", (q) =>
-          q.eq("runId", job.runId).eq("status", "failed"),
-        )
-        .collect();
-      const symbolsSucceeded = completedJobs.length;
-      const symbolsFailed = failedJobs.length;
-      const activeJobs = [
-        ...(await ctx.db
-          .query("marketDataFetchJobs")
-          .withIndex("by_runId_and_status", (q) =>
-            q.eq("runId", job.runId).eq("status", "pending"),
-          )
-          .take(1)),
-        ...(await ctx.db
-          .query("marketDataFetchJobs")
-          .withIndex("by_runId_and_status", (q) =>
-            q.eq("runId", job.runId).eq("status", "leased"),
-          )
-          .take(1)),
-      ];
-      const isRunComplete = activeJobs.length === 0;
+      const jobWasSucceeded = job.status === "completed";
+      const jobWasFailed = job.status === "failed";
+      const shouldCountResult = !jobWasSucceeded && !jobWasFailed;
+      const symbolsSucceeded =
+        run.symbolsSucceeded +
+        (shouldCountResult && args.resultStatus === "succeeded" ? 1 : 0);
+      const symbolsFailed =
+        run.symbolsFailed +
+        (shouldCountResult && args.resultStatus === "failed" ? 1 : 0);
+      const isRunComplete =
+        symbolsSucceeded + symbolsFailed >= run.symbolsRequested;
       await ctx.db.patch(job.runId, {
         completedAt: isRunComplete ? now : run.completedAt,
         errorMessage:
