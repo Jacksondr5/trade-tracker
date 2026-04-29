@@ -7,6 +7,7 @@ import {
   internalAction,
   internalMutation,
   internalQuery,
+  mutation,
   query,
   type ActionCtx,
   type MutationCtx,
@@ -641,6 +642,98 @@ export const getInstrumentBySymbol = query({
       args.assetType,
       args.ticker,
     );
+  },
+});
+
+const MARKET_DATA_INSTRUMENT_LIST_LIMIT = 500;
+
+const resolutionStatusValidator = v.union(
+  v.literal("resolved"),
+  v.literal("needs_review"),
+  v.literal("ignored"),
+);
+
+const RESOLUTION_STATUS_SORT_ORDER: Record<
+  Doc<"marketDataInstruments">["resolutionStatus"],
+  number
+> = {
+  needs_review: 0,
+  resolved: 1,
+  ignored: 2,
+};
+const RESOLUTION_STATUS_PRIORITY: Array<
+  Doc<"marketDataInstruments">["resolutionStatus"]
+> = ["needs_review", "resolved", "ignored"];
+
+export const listInstruments = query({
+  args: {
+    status: v.optional(resolutionStatusValidator),
+  },
+  returns: v.array(marketDataInstrumentValidator),
+  handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+
+    let instruments: Doc<"marketDataInstruments">[] = [];
+
+    if (args.status !== undefined) {
+      const status: Doc<"marketDataInstruments">["resolutionStatus"] =
+        args.status;
+      instruments = await ctx.db
+        .query("marketDataInstruments")
+        .withIndex("by_ownerId_and_resolutionStatus", (q) =>
+          q.eq("ownerId", ownerId).eq("resolutionStatus", status),
+        )
+        .take(MARKET_DATA_INSTRUMENT_LIST_LIMIT);
+    } else {
+      for (const status of RESOLUTION_STATUS_PRIORITY) {
+        const remaining = MARKET_DATA_INSTRUMENT_LIST_LIMIT - instruments.length;
+        if (remaining <= 0) {
+          break;
+        }
+        const chunk = await ctx.db
+          .query("marketDataInstruments")
+          .withIndex("by_ownerId_and_resolutionStatus", (q) =>
+            q.eq("ownerId", ownerId).eq("resolutionStatus", status),
+          )
+          .take(remaining);
+        instruments.push(...chunk);
+      }
+    }
+
+    return [...instruments].sort((a, b) => {
+      const statusDelta =
+        RESOLUTION_STATUS_SORT_ORDER[a.resolutionStatus] -
+        RESOLUTION_STATUS_SORT_ORDER[b.resolutionStatus];
+      if (statusDelta !== 0) return statusDelta;
+      const assetTypeDelta = a.assetType.localeCompare(b.assetType);
+      if (assetTypeDelta !== 0) return assetTypeDelta;
+      return a.symbol.localeCompare(b.symbol);
+    });
+  },
+});
+
+export const setInstrumentIgnored = mutation({
+  args: {
+    instrumentId: v.id("marketDataInstruments"),
+  },
+  returns: marketDataInstrumentValidator,
+  handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const existing = assertOwner(
+      await ctx.db.get(args.instrumentId),
+      ownerId,
+      "Market data instrument not found",
+    );
+    await ctx.db.patch(existing._id, {
+      lastError: undefined,
+      resolutionStatus: "ignored",
+      updatedAt: Date.now(),
+    });
+    const updated = await ctx.db.get(existing._id);
+    if (updated === null) {
+      throw new ConvexError("Market data instrument not found after update");
+    }
+    return updated;
   },
 });
 

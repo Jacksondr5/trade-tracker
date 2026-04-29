@@ -12,6 +12,7 @@ export const APP_PAGE_TITLES = {
   dashboard: "dashboard-page-title",
   imports: "imports-page-title",
   importsBravos: "bravos-review-page-title",
+  marketData: "market-data-page-title",
   notes: "notes-page-title",
   portfolios: "portfolios-page-title",
   positions: "positions-page-title",
@@ -26,6 +27,7 @@ export const NAVIGATION_TEST_IDS = {
   dashboard: "nav-dashboard-link",
   importsBravos: "nav-imports-bravos-link",
   importsTrades: "nav-imports-trades-link",
+  marketData: "nav-market-data-link",
   notes: "nav-notes-link",
   portfolios: "nav-portfolios-link",
   positions: "nav-positions-link",
@@ -155,6 +157,65 @@ export const IMPORTS_INDEX_TEST_IDS = {
   emptyState: "imports-empty-state",
   brokerageSelect: "brokerage-select",
 } as const;
+
+export const MARKET_DATA_TEST_IDS = {
+  emptyState: "market-data-empty-state",
+  errorAlert: "market-data-error-alert",
+  noReviewState: "market-data-no-review-state",
+  reviewSection: "market-data-review-section",
+  resolvedSection: "market-data-resolved-section",
+  tableNeedsReview: "market-data-instruments-table-needs-review",
+  tableAllInstruments: "market-data-instruments-table-all-instruments",
+} as const;
+
+export function getMarketDataInstrumentRowTestId(
+  assetType: string,
+  symbol: string,
+): string {
+  return `market-data-row-${normalizeSegment(assetType)}-${normalizeSegment(symbol)}`;
+}
+
+export function getMarketDataEditProviderSymbolButtonTestId(
+  assetType: string,
+  symbol: string,
+): string {
+  return `market-data-edit-provider-symbol-${normalizeSegment(assetType)}-${normalizeSegment(symbol)}`;
+}
+
+export function getMarketDataProviderSymbolInputTestId(
+  assetType: string,
+  symbol: string,
+): string {
+  return `market-data-provider-symbol-input-${normalizeSegment(assetType)}-${normalizeSegment(symbol)}`;
+}
+
+export function getMarketDataSaveProviderSymbolButtonTestId(
+  assetType: string,
+  symbol: string,
+): string {
+  return `market-data-save-provider-symbol-${normalizeSegment(assetType)}-${normalizeSegment(symbol)}`;
+}
+
+export function getMarketDataCancelProviderSymbolButtonTestId(
+  assetType: string,
+  symbol: string,
+): string {
+  return `market-data-cancel-provider-symbol-${normalizeSegment(assetType)}-${normalizeSegment(symbol)}`;
+}
+
+export function getMarketDataIgnoreInstrumentButtonTestId(
+  assetType: string,
+  symbol: string,
+): string {
+  return `market-data-ignore-${normalizeSegment(assetType)}-${normalizeSegment(symbol)}`;
+}
+
+export function getMarketDataInstrumentStatusTestId(
+  assetType: string,
+  symbol: string,
+): string {
+  return `market-data-status-${normalizeSegment(assetType)}-${normalizeSegment(symbol)}`;
+}
 
 export const BRAVOS_REVIEW_TEST_IDS = {
   approveButton: "bravos-review-approve-button",
