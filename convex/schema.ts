@@ -84,6 +84,18 @@ const marketDataRefreshRunStatusValidator = v.union(
   v.literal("partial"),
 );
 
+const marketDataFetchJobKindValidator = v.union(
+  v.literal("daily_snapshot"),
+  v.literal("historical_backfill"),
+);
+
+const marketDataFetchJobStatusValidator = v.union(
+  v.literal("pending"),
+  v.literal("leased"),
+  v.literal("completed"),
+  v.literal("failed"),
+);
+
 const bravosClassificationValidator = v.union(
   v.literal("initiate"),
   v.literal("follow_up"),
@@ -351,6 +363,33 @@ export default defineSchema({
   })
     .index("by_ownerId_and_runDate", ["ownerId", "runDate"])
     .index("by_ownerId_and_status", ["ownerId", "status"]),
+
+  marketDataFetchJobs: defineTable({
+    assetType: marketDataAssetTypeValidator,
+    attempts: v.number(),
+    completedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    date: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    estimatedCredits: v.number(),
+    kind: marketDataFetchJobKindValidator,
+    leasedAt: v.optional(v.number()),
+    leaseExpiresAt: v.optional(v.number()),
+    ownerId: v.string(),
+    provider: marketDataProviderValidator,
+    providerSymbol: v.optional(v.string()),
+    runId: v.id("marketDataRefreshRuns"),
+    sourceTradeIds: v.array(v.id("trades")),
+    startDate: v.optional(v.string()),
+    status: marketDataFetchJobStatusValidator,
+    symbol: v.string(),
+    updatedAt: v.number(),
+  })
+    .index("by_status_and_createdAt", ["status", "createdAt"])
+    .index("by_status_and_leaseExpiresAt", ["status", "leaseExpiresAt"])
+    .index("by_runId", ["runId"])
+    .index("by_runId_and_status", ["runId", "status"]),
 
   tradePlans: defineTable({
     campaignId: v.optional(v.id("campaigns")),

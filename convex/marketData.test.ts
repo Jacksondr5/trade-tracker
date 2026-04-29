@@ -488,6 +488,12 @@ describe("market data instruments", () => {
         date: "2026-04-24",
       },
     );
+    const workerResult = await t.action(
+      internal.marketData.processMarketDataFetchJobs,
+      {
+        budgetCredits: 8,
+      },
+    );
 
     const snapshots = await t.run(async (ctx) => {
       const rows = await ctx.db.query("marketPriceSnapshots").collect();
@@ -503,11 +509,16 @@ describe("market data instruments", () => {
     });
 
     expect(result).toMatchObject({
+      jobsQueued: 2,
       ownersProcessed: 1,
       runDate: "2026-04-24",
-      symbolsFailed: 1,
       symbolsRequested: 2,
-      symbolsSucceeded: 1,
+    });
+    expect(workerResult).toMatchObject({
+      creditsUsed: 2,
+      jobsFailed: 1,
+      jobsProcessed: 2,
+      jobsSucceeded: 1,
     });
     expect(snapshots).toHaveLength(2);
     expect(snapshots).toEqual(
@@ -585,6 +596,9 @@ describe("market data instruments", () => {
         date: "2026-04-24",
       },
     );
+    await t.action(internal.marketData.processMarketDataFetchJobs, {
+      budgetCredits: 8,
+    });
 
     const snapshots = await t.run(async (ctx) => {
       const rows = await ctx.db.query("marketPriceSnapshots").collect();
@@ -595,9 +609,9 @@ describe("market data instruments", () => {
     });
 
     expect(result).toMatchObject({
+      jobsQueued: 1,
       ownersProcessed: 1,
       symbolsRequested: 1,
-      symbolsSucceeded: 1,
     });
     expect(snapshots).toHaveLength(1);
     expect(snapshots[0]).toMatchObject({
@@ -636,6 +650,9 @@ describe("market data instruments", () => {
 
     await t.action(internal.marketData.refreshDailyPriceSnapshots, {
       date: "2026-04-24",
+    });
+    await t.action(internal.marketData.processMarketDataFetchJobs, {
+      budgetCredits: 8,
     });
 
     const snapshots = await t.run(async (ctx) => {
@@ -713,10 +730,22 @@ describe("market data instruments", () => {
         endDate: "2026-04-24",
       },
     );
+    const firstWorkerRun = await t.action(
+      internal.marketData.processMarketDataFetchJobs,
+      {
+        budgetCredits: 8,
+      },
+    );
     const secondRun = await asUser().action(
       api.marketData.backfillHistoricalPriceSnapshots,
       {
         endDate: "2026-04-24",
+      },
+    );
+    const secondWorkerRun = await t.action(
+      internal.marketData.processMarketDataFetchJobs,
+      {
+        budgetCredits: 8,
       },
     );
 
@@ -729,15 +758,25 @@ describe("market data instruments", () => {
 
     expect(firstRun).toMatchObject({
       endDate: "2026-04-24",
+      jobsQueued: 2,
       startDate: "2026-04-22",
-      symbolsFailed: 0,
       symbolsRequested: 2,
-      symbolsSucceeded: 2,
+    });
+    expect(firstWorkerRun).toMatchObject({
+      creditsUsed: 4,
+      jobsFailed: 0,
+      jobsProcessed: 2,
+      jobsSucceeded: 2,
     });
     expect(secondRun).toMatchObject({
-      symbolsFailed: 0,
+      jobsQueued: 2,
       symbolsRequested: 2,
-      symbolsSucceeded: 2,
+    });
+    expect(secondWorkerRun).toMatchObject({
+      creditsUsed: 2,
+      jobsFailed: 0,
+      jobsProcessed: 2,
+      jobsSucceeded: 2,
     });
     expect(snapshots).toHaveLength(6);
     expect(snapshots).toEqual(
@@ -824,6 +863,12 @@ describe("market data instruments", () => {
         endDate: "2026-04-24",
       },
     );
+    const workerResult = await t.action(
+      internal.marketData.processMarketDataFetchJobs,
+      {
+        budgetCredits: 8,
+      },
+    );
 
     const nopeInstrument = await asUser().query(
       api.marketData.getInstrumentBySymbol,
@@ -838,15 +883,34 @@ describe("market data instruments", () => {
     const runs = await t.run(async (ctx) => {
       return await ctx.db.query("marketDataRefreshRuns").collect();
     });
+    const jobs = await t.run(async (ctx) => {
+      return await ctx.db.query("marketDataFetchJobs").collect();
+    });
 
     expect(result).toMatchObject({
-      symbolsFailed: 1,
+      jobsQueued: 2,
       symbolsRequested: 2,
-      symbolsSucceeded: 1,
     });
-    expect(result.failedSymbols[0]).toMatchObject({
+    expect(workerResult).toMatchObject({
+      creditsUsed: 4,
+      jobsFailed: 1,
+      jobsProcessed: 2,
+      jobsSucceeded: 1,
+    });
+    expect(jobs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          errorMessage: expect.stringContaining(tradeId),
+          sourceTradeIds: [tradeId],
+          status: "failed",
+          symbol: "NOPE",
+        }),
+      ]),
+    );
+    expect(jobs.find((job) => job.symbol === "NOPE")).toMatchObject({
       errorMessage: expect.stringContaining(tradeId),
       sourceTradeIds: [tradeId],
+      status: "failed",
       symbol: "NOPE",
     });
     expect(nopeInstrument).toMatchObject({
