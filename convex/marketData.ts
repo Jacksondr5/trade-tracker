@@ -1175,10 +1175,20 @@ export const completeMarketDataFetchJob = internalMutation({
 
     const run = await ctx.db.get(job.runId);
     if (run !== null) {
-      const symbolsSucceeded =
-        run.symbolsSucceeded + (args.resultStatus === "succeeded" ? 1 : 0);
-      const symbolsFailed =
-        run.symbolsFailed + (args.resultStatus === "failed" ? 1 : 0);
+      const completedJobs = await ctx.db
+        .query("marketDataFetchJobs")
+        .withIndex("by_runId_and_status", (q) =>
+          q.eq("runId", job.runId).eq("status", "completed"),
+        )
+        .collect();
+      const failedJobs = await ctx.db
+        .query("marketDataFetchJobs")
+        .withIndex("by_runId_and_status", (q) =>
+          q.eq("runId", job.runId).eq("status", "failed"),
+        )
+        .collect();
+      const symbolsSucceeded = completedJobs.length;
+      const symbolsFailed = failedJobs.length;
       const activeJobs = [
         ...(await ctx.db
           .query("marketDataFetchJobs")

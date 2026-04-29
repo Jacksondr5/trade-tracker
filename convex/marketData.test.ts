@@ -897,16 +897,6 @@ describe("market data instruments", () => {
       jobsProcessed: 2,
       jobsSucceeded: 1,
     });
-    expect(jobs).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          errorMessage: expect.stringContaining(tradeId),
-          sourceTradeIds: [tradeId],
-          status: "failed",
-          symbol: "NOPE",
-        }),
-      ]),
-    );
     expect(jobs.find((job) => job.symbol === "NOPE")).toMatchObject({
       errorMessage: expect.stringContaining(tradeId),
       sourceTradeIds: [tradeId],
