@@ -220,6 +220,7 @@ export default function MarketDataPageClient({
                 />
               ) : (
                 <InstrumentTable
+                  tableTestId={MARKET_DATA_TEST_IDS.tableNeedsReview}
                   instruments={needsReview}
                   editingInstrumentId={editingInstrumentId}
                   pendingInstrumentId={pendingInstrumentId}
@@ -245,6 +246,7 @@ export default function MarketDataPageClient({
               </CardHeader>
               <CardContent>
                 <InstrumentTable
+                  tableTestId={MARKET_DATA_TEST_IDS.tableAllInstruments}
                   instruments={others}
                   editingInstrumentId={editingInstrumentId}
                   pendingInstrumentId={pendingInstrumentId}
@@ -265,6 +267,7 @@ export default function MarketDataPageClient({
 }
 
 interface InstrumentTableProps {
+  tableTestId: string;
   instruments: Instrument[];
   editingInstrumentId: Id<"marketDataInstruments"> | null;
   pendingInstrumentId: Id<"marketDataInstruments"> | null;
@@ -277,6 +280,7 @@ interface InstrumentTableProps {
 }
 
 function InstrumentTable({
+  tableTestId,
   instruments,
   editingInstrumentId,
   pendingInstrumentId,
@@ -291,7 +295,7 @@ function InstrumentTable({
     <div className="overflow-x-auto rounded-lg border border-slate-6">
       <table
         className="w-full table-auto"
-        data-testid={MARKET_DATA_TEST_IDS.table}
+        data-testid={tableTestId}
       >
         <thead className="bg-slate-3">
           <tr>
@@ -408,6 +412,7 @@ function InstrumentTable({
                     <div className="flex justify-end gap-1">
                       <Button
                         dataTestId={saveTestId}
+                        aria-label={`Save provider symbol for ${instrument.symbol}`}
                         size="sm"
                         isLoading={isPending}
                         disabled={isPending || !providerSymbolDraft.trim()}
@@ -417,6 +422,7 @@ function InstrumentTable({
                       </Button>
                       <Button
                         dataTestId={cancelTestId}
+                        aria-label={`Cancel editing provider symbol for ${instrument.symbol}`}
                         size="sm"
                         variant="ghost"
                         disabled={isPending}
@@ -429,11 +435,11 @@ function InstrumentTable({
                     <div className="flex justify-end gap-1">
                       <Button
                         dataTestId={editTestId}
+                        aria-label={`Edit provider symbol for ${instrument.symbol}`}
                         size="sm"
                         variant="ghost"
                         disabled={isPending}
                         onClick={() => onStartEditing(instrument)}
-                        title="Set provider symbol"
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>

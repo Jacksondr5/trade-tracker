@@ -164,7 +164,8 @@ export const MARKET_DATA_TEST_IDS = {
   noReviewState: "market-data-no-review-state",
   reviewSection: "market-data-review-section",
   resolvedSection: "market-data-resolved-section",
-  table: "market-data-instruments-table",
+  tableNeedsReview: "market-data-instruments-table-needs-review",
+  tableAllInstruments: "market-data-instruments-table-all-instruments",
 } as const;
 
 export function getMarketDataInstrumentRowTestId(
