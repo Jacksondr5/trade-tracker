@@ -517,7 +517,7 @@ export const getPortfolioOverview = query({
         continue;
       }
       const campaignId = tradePlanToCampaign.get(trade.tradePlanId) ?? null;
-      if (!campaignId) {
+      if (!campaignId || !exposureByCampaign.has(campaignId)) {
         uncoveredCampaignTradeCount += 1;
       }
     }
