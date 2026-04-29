@@ -148,19 +148,27 @@ Do not store open, high, low, volume, currency, or adjusted close in the first v
 
 ## Scheduled Market Data Refresh
 
-The first version should use a single scheduled daily refresh after market close.
+Scheduled market data refresh should separate planning from provider I/O so
+external API usage can respect provider credit limits.
 
 Recommended timing:
 
-- one run around 9:00 p.m. Eastern Time
+- one planner run around 9:00 p.m. Eastern Time
+- one rate-limited worker run every few minutes
 
-The scheduled job should:
+The planner should:
 
 1. Find instruments needed for portfolio valuation.
-2. Fetch daily close prices from the configured provider.
+2. Create an operational refresh run record.
+3. Enqueue durable market data fetch jobs.
+
+The worker should:
+
+1. Lease pending market data fetch jobs up to the configured provider credit budget.
+2. Fetch prices from the configured provider.
 3. Store market price snapshots.
-4. Compute and upsert daily portfolio valuations.
-5. Store an operational refresh run record.
+4. Mark jobs complete or failed.
+5. Update the operational refresh run record as jobs finish.
 
 Portfolio pages should read stored price snapshots and daily valuations. They should not call market data providers directly.
 
@@ -260,6 +268,8 @@ This does not make portfolios the parent of campaigns or trade plans.
 ## Operational Audit
 
 The market data refresh should store a run record for troubleshooting.
+Provider calls should also be represented by durable fetch jobs so rate limits,
+retries, and partial failures can be audited independently of the planner.
 
 Each run should include:
 

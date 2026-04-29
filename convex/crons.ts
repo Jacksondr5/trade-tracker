@@ -10,10 +10,17 @@ crons.interval(
   {},
 );
 
-crons.daily(
-  "nightly portfolio price snapshot refresh",
-  { hourUTC: 1, minuteUTC: 0 },
+crons.cron(
+  "nightly portfolio price snapshot planning",
+  "0 1 * * *",
   internal.marketData.refreshDailyPriceSnapshots,
+  {},
+);
+
+crons.interval(
+  "rate-limited market data fetch worker",
+  { minutes: 2 },
+  internal.marketData.processMarketDataFetchJobs,
   {},
 );
 
