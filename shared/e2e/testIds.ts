@@ -482,6 +482,10 @@ export function getPortfolioRecentTradeRowTestId(tradeId: string): string {
   return `portfolio-recent-trade-row-${normalizeSegment(tradeId)}`;
 }
 
+export function getPortfolioLinkTestId(portfolioKey: string): string {
+  return `portfolio-link-${normalizeSegment(portfolioKey)}`;
+}
+
 export function getPortfolioRowTestId(name: string): string {
   return `portfolio-row-${normalizeSegment(name)}`;
 }

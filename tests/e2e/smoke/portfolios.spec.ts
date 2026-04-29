@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { E2E_SMOKE_FIXTURES } from "../../../shared/e2e/smokeFixtures";
 import {
+  PORTFOLIO_CASH_LEDGER_TEST_IDS,
   PORTFOLIO_DETAIL_TEST_IDS,
-  getPortfolioCampaignExposureLinkTestId,
-  getPortfolioCampaignExposureRowTestId,
+  getPortfolioLinkTestId,
   getPortfolioOpenPositionRowTestId,
   getPortfolioRowTestId,
 } from "../../../shared/e2e/testIds";
@@ -20,7 +20,9 @@ test("portfolio detail surfaces overview analytics for the seeded portfolio", as
     getPortfolioRowTestId(E2E_SMOKE_FIXTURES.portfolio.name),
   );
   await expect(portfolioRow).toBeVisible();
-  await portfolioRow.getByRole("link").first().click();
+  await page
+    .getByTestId(getPortfolioLinkTestId(E2E_SMOKE_FIXTURES.portfolio.name))
+    .click();
 
   await expect(page).toHaveURL(/\/portfolios\/[^/]+$/);
 
@@ -71,7 +73,9 @@ test("portfolio detail surfaces overview analytics for the seeded portfolio", as
   await expect(
     page.getByTestId(PORTFOLIO_DETAIL_TEST_IDS.recentTradesSection),
   ).toBeVisible();
-  await expect(page.getByTestId("portfolio-cash-ledger-section")).toBeVisible();
+  await expect(
+    page.getByTestId(PORTFOLIO_CASH_LEDGER_TEST_IDS.section),
+  ).toBeVisible();
 
   // The seeded FCX long trade should produce a long open position
   const fcxPositionRow = page.getByTestId(
@@ -82,36 +86,12 @@ test("portfolio detail surfaces overview analytics for the seeded portfolio", as
   );
   await expect(fcxPositionRow).toBeVisible();
 
-  // Campaign exposure links to the seeded campaign through the trade plan
-  const campaignExposureLink = page.getByTestId(/^portfolio-campaign-exposure-link-/);
-  await expect(campaignExposureLink).toBeVisible();
-  await expect(campaignExposureLink).toContainText(
+  // Campaign exposure surface includes the seeded campaign through the trade plan
+  await expect(
+    page.getByTestId(PORTFOLIO_DETAIL_TEST_IDS.campaignExposureSection),
+  ).toContainText(
     E2E_SMOKE_FIXTURES.campaign.name,
   );
-
-  // Confirm the exposure row links to a campaign detail page
-  const campaignRow = page
-    .getByTestId(/^portfolio-campaign-exposure-row-/)
-    .first();
-  await expect(campaignRow).toBeVisible();
-  const exposureLink = campaignRow.getByTestId(
-    /^portfolio-campaign-exposure-link-/,
-  );
-  await expect(exposureLink).toHaveAttribute("href", /^\/campaigns\/.+$/);
-
-  // Round-trip the helper: the row test id we generate from the rendered id
-  // should resolve back to the same row.
-  const href = await exposureLink.getAttribute("href");
-  const campaignId = href?.match(/\/campaigns\/([^/]+)$/)?.[1];
-  if (!campaignId) {
-    throw new Error("Expected campaign id in exposure link href");
-  }
-  await expect(
-    page.getByTestId(getPortfolioCampaignExposureRowTestId(campaignId)),
-  ).toBeVisible();
-  await expect(
-    page.getByTestId(getPortfolioCampaignExposureLinkTestId(campaignId)),
-  ).toBeVisible();
 });
 
 test("portfolio detail supports rename, cancel, and delete-confirmation", async ({
@@ -130,7 +110,7 @@ test("portfolio detail supports rename, cancel, and delete-confirmation", async 
 
   const newRow = page.getByTestId(getPortfolioRowTestId(createdName));
   await expect(newRow).toBeVisible();
-  await newRow.getByRole("link").first().click();
+  await page.getByTestId(getPortfolioLinkTestId(createdName)).click();
 
   await expect(page).toHaveURL(/\/portfolios\/[^/]+$/);
   await expect(

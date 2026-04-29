@@ -217,6 +217,31 @@ export const getPortfolioDetail = query({
   },
 });
 
+export const getRecentTrades = query({
+  args: {
+    limit: v.number(),
+    portfolioId: v.id("portfolios"),
+  },
+  returns: v.union(v.array(tradeValidator), v.null()),
+  handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const portfolio = await ctx.db.get(args.portfolioId);
+    if (!portfolio || portfolio.ownerId !== ownerId) {
+      return null;
+    }
+
+    const portfolioTrades = await ctx.db
+      .query("trades")
+      .withIndex("by_owner_portfolioId", (q) =>
+        q.eq("ownerId", ownerId).eq("portfolioId", args.portfolioId),
+      )
+      .order("desc")
+      .take(Math.max(0, Math.floor(args.limit)));
+
+    return portfolioTrades;
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Portfolio overview (analytics-focused detail page)
 // ---------------------------------------------------------------------------
@@ -416,6 +441,7 @@ export const getPortfolioOverview = query({
     }> = [];
     const missingSymbols = new Set<string>();
     let totalMarketValue = 0;
+    let totalGrossMarketValue = 0;
 
     for (const position of openPositions) {
       const close = asOfDate
@@ -432,10 +458,12 @@ export const getPortfolioOverview = query({
           : (position.direction === "short" ? -1 : 1) *
             position.quantity *
             close;
-      if (positionValue === null) {
+      if (asOfDate !== null && positionValue === null) {
         missingSymbols.add(position.ticker);
       } else {
-        totalMarketValue += positionValue;
+        const resolvedPositionValue = positionValue ?? 0;
+        totalMarketValue += resolvedPositionValue;
+        totalGrossMarketValue += Math.abs(resolvedPositionValue);
       }
       overviewPositions.push({
         assetType: position.assetType,
@@ -525,8 +553,8 @@ export const getPortfolioOverview = query({
     const denominator =
       latestValuationRow !== null && latestValuationRow.marketValue !== 0
         ? Math.abs(latestValuationRow.marketValue)
-        : totalMarketValue !== 0
-          ? Math.abs(totalMarketValue)
+        : totalGrossMarketValue !== 0
+          ? totalGrossMarketValue
           : 0;
 
     const campaignExposure = [...exposureByCampaign.values()]

@@ -904,8 +904,10 @@ function RecentTradesSection({
 }: {
   portfolioId: Id<"portfolios">;
 }) {
-  const detail = useQuery(api.portfolios.getPortfolioDetail, { portfolioId });
-  const trades = detail?.trades?.slice(0, RECENT_TRADES_LIMIT) ?? [];
+  const recentTrades = useQuery(api.portfolios.getRecentTrades, {
+    limit: RECENT_TRADES_LIMIT,
+    portfolioId,
+  });
 
   return (
     <section
@@ -914,16 +916,11 @@ function RecentTradesSection({
     >
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-olive-12">Recent trades</h2>
-        {detail && detail.trades.length > RECENT_TRADES_LIMIT ? (
-          <span className="text-sm text-olive-11">
-            Showing {RECENT_TRADES_LIMIT} of {detail.trades.length}
-          </span>
-        ) : null}
       </div>
 
-      {detail === undefined ? (
+      {recentTrades === undefined ? (
         <p className="text-sm text-olive-11">Loading trades…</p>
-      ) : trades.length === 0 ? (
+      ) : recentTrades === null || recentTrades.length === 0 ? (
         <p
           className="text-sm text-olive-11"
           data-testid={PORTFOLIO_DETAIL_TEST_IDS.recentTradesEmpty}
@@ -945,7 +942,7 @@ function RecentTradesSection({
               </tr>
             </thead>
             <tbody>
-              {trades.map((trade) => (
+              {recentTrades.map((trade) => (
                 <tr
                   className="border-b border-slate-6/60 last:border-b-0"
                   data-testid={getPortfolioRecentTradeRowTestId(trade._id)}

@@ -9,6 +9,7 @@ import { Alert, useAppForm } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import {
   APP_PAGE_TITLES,
+  getPortfolioLinkTestId,
   getPortfolioRowTestId,
 } from "../../../../shared/e2e/testIds";
 
@@ -142,7 +143,7 @@ export default function PortfolioPageClient({
                       href={`/portfolios/${portfolio._id}`}
                       className="text-slate-12 hover:underline"
                       aria-label={`View portfolio ${portfolio.name}`}
-                      data-testid={`portfolio-link-${portfolio._id}`}
+                      data-testid={getPortfolioLinkTestId(portfolio.name)}
                     >
                       {portfolio.name}
                     </Link>
