@@ -922,4 +922,23 @@ describe("market data instruments", () => {
     });
     expect(runs[0]?.errorMessage).toContain(tradeId);
   });
+
+  it("does not require Twelve Data API key when no jobs are queued", async () => {
+    delete process.env.TWELVE_DATA_API_KEY;
+
+    const workerResult = await t.action(
+      internal.marketData.processMarketDataFetchJobs,
+      {
+        budgetCredits: 8,
+      },
+    );
+
+    expect(workerResult).toEqual({
+      budgetCredits: 8,
+      creditsUsed: 0,
+      jobsFailed: 0,
+      jobsProcessed: 0,
+      jobsSucceeded: 0,
+    });
+  });
 });

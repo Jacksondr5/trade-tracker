@@ -1594,6 +1594,16 @@ export const processMarketDataFetchJobs = internalAction({
         budgetCredits,
       },
     );
+    if (jobs.length === 0) {
+      return {
+        budgetCredits,
+        creditsUsed: 0,
+        jobsFailed: 0,
+        jobsProcessed: 0,
+        jobsSucceeded: 0,
+      };
+    }
+
     const apiKey = requireTwelveDataApiKey();
     let jobsSucceeded = 0;
     let jobsFailed = 0;
