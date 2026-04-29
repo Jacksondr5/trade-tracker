@@ -676,7 +676,8 @@ export const listInstruments = query({
     let instruments: Doc<"marketDataInstruments">[] = [];
 
     if (args.status !== undefined) {
-      const status = args.status;
+      const status: Doc<"marketDataInstruments">["resolutionStatus"] =
+        args.status;
       instruments = await ctx.db
         .query("marketDataInstruments")
         .withIndex("by_ownerId_and_resolutionStatus", (q) =>
