@@ -1,6 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
+  internalMutation,
   mutation,
   query,
   type MutationCtx,
@@ -267,6 +268,50 @@ async function computeValuation(
   };
 }
 
+async function upsertDailyValuation(args: {
+  ctx: MutationCtx;
+  date: string;
+  ownerId: string;
+  portfolioId: Id<"portfolios">;
+}): Promise<Doc<"portfolioDailyValuations">> {
+  const computed = await computeValuation(
+    args.ctx,
+    args.ownerId,
+    args.portfolioId,
+    args.date,
+  );
+  const computedAt = Date.now();
+  const existing = await args.ctx.db
+    .query("portfolioDailyValuations")
+    .withIndex("by_ownerId_and_portfolioId_and_date", (q) =>
+      q
+        .eq("ownerId", args.ownerId)
+        .eq("portfolioId", args.portfolioId)
+        .eq("date", args.date),
+    )
+    .unique();
+  const row = {
+    ...computed,
+    computedAt,
+    ownerId: args.ownerId,
+    portfolioId: args.portfolioId,
+  };
+
+  const valuationId =
+    existing === null
+      ? await args.ctx.db.insert("portfolioDailyValuations", row)
+      : existing._id;
+  if (existing !== null) {
+    await args.ctx.db.replace(existing._id, row);
+  }
+
+  const valuation = await args.ctx.db.get(valuationId);
+  if (valuation === null) {
+    throw new ConvexError("Portfolio valuation not found after compute");
+  }
+  return valuation;
+}
+
 export const computeDailyValuation = mutation({
   args: {
     date: v.string(),
@@ -279,42 +324,67 @@ export const computeDailyValuation = mutation({
     const portfolio = await ctx.db.get(args.portfolioId);
     assertOwner(portfolio, ownerId, "Portfolio not found");
 
-    const computed = await computeValuation(
+    return await upsertDailyValuation({
       ctx,
-      ownerId,
-      args.portfolioId,
-      args.date,
-    );
-    const computedAt = Date.now();
-    const existing = await ctx.db
-      .query("portfolioDailyValuations")
-      .withIndex("by_ownerId_and_portfolioId_and_date", (q) =>
-        q
-          .eq("ownerId", ownerId)
-          .eq("portfolioId", args.portfolioId)
-          .eq("date", args.date),
-      )
-      .unique();
-    const row = {
-      ...computed,
-      computedAt,
+      date: args.date,
       ownerId,
       portfolioId: args.portfolioId,
+    });
+  },
+});
+
+export const computeDailyValuationForOwner = internalMutation({
+  args: {
+    date: v.string(),
+    ownerId: v.string(),
+    portfolioId: v.id("portfolios"),
+  },
+  returns: portfolioDailyValuationValidator,
+  handler: async (ctx, args) => {
+    assertIsoDate(args.date, "date");
+    const portfolio = await ctx.db.get(args.portfolioId);
+    assertOwner(portfolio, args.ownerId, "Portfolio not found");
+
+    return await upsertDailyValuation({
+      ctx,
+      date: args.date,
+      ownerId: args.ownerId,
+      portfolioId: args.portfolioId,
+    });
+  },
+});
+
+export const computeDailyValuationsForOwner = internalMutation({
+  args: {
+    date: v.string(),
+    ownerId: v.string(),
+  },
+  returns: v.object({
+    date: v.string(),
+    ownerId: v.string(),
+    portfoliosComputed: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    assertIsoDate(args.date, "date");
+    const portfolios = await ctx.db
+      .query("portfolios")
+      .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
+      .collect();
+
+    for (const portfolio of portfolios) {
+      await upsertDailyValuation({
+        ctx,
+        date: args.date,
+        ownerId: args.ownerId,
+        portfolioId: portfolio._id,
+      });
+    }
+
+    return {
+      date: args.date,
+      ownerId: args.ownerId,
+      portfoliosComputed: portfolios.length,
     };
-
-    const valuationId =
-      existing === null
-        ? await ctx.db.insert("portfolioDailyValuations", row)
-        : existing._id;
-    if (existing !== null) {
-      await ctx.db.replace(existing._id, row);
-    }
-
-    const valuation = await ctx.db.get(valuationId);
-    if (valuation === null) {
-      throw new ConvexError("Portfolio valuation not found after compute");
-    }
-    return valuation;
   },
 });
 

@@ -1169,12 +1169,18 @@ export const completeMarketDataFetchJob = internalMutation({
       }),
     ),
   },
-  returns: v.null(),
+  returns: v.object({
+    completedDailyValuationDate: v.union(v.string(), v.null()),
+    ownerId: v.union(v.string(), v.null()),
+  }),
   handler: async (ctx, args) => {
     const now = Date.now();
     const job = await ctx.db.get(args.jobId);
     if (job === null) {
-      return null;
+      return {
+        completedDailyValuationDate: null,
+        ownerId: null,
+      };
     }
     const leaseExpiresAt = job.leaseExpiresAt;
     if (
@@ -1183,10 +1189,15 @@ export const completeMarketDataFetchJob = internalMutation({
       leaseExpiresAt === undefined ||
       leaseExpiresAt <= now
     ) {
-      return null;
+      return {
+        completedDailyValuationDate: null,
+        ownerId: null,
+      };
     }
 
     await upsertMarketPriceSnapshots(ctx, args.snapshots, now);
+    let completedDailyValuationDate: string | null = null;
+    let completedRunOwnerId: string | null = null;
 
     const run = await ctx.db.get(job.runId);
     if (run !== null) {
@@ -1196,6 +1207,12 @@ export const completeMarketDataFetchJob = internalMutation({
         run.symbolsFailed + (args.resultStatus === "failed" ? 1 : 0);
       const isRunComplete =
         symbolsSucceeded + symbolsFailed >= run.symbolsRequested;
+      completedDailyValuationDate =
+        isRunComplete && job.kind === "daily_snapshot" && job.date !== undefined
+          ? job.date
+          : null;
+      completedRunOwnerId =
+        completedDailyValuationDate !== null ? job.ownerId : null;
 
       await ctx.db.patch(job.runId, {
         completedAt: isRunComplete ? now : run.completedAt,
@@ -1228,7 +1245,10 @@ export const completeMarketDataFetchJob = internalMutation({
       });
     }
 
-    return null;
+    return {
+      completedDailyValuationDate: completedDailyValuationDate ?? null,
+      ownerId: completedRunOwnerId,
+    };
   },
 });
 
@@ -1593,7 +1613,8 @@ export const processMarketDataFetchJobs = internalAction({
     jobsSucceeded: v.number(),
   }),
   handler: async (ctx, args) => {
-    const budgetCredits = args.budgetCredits ?? MARKET_DATA_WORKER_CREDIT_BUDGET;
+    const budgetCredits =
+      args.budgetCredits ?? MARKET_DATA_WORKER_CREDIT_BUDGET;
     const jobs: Doc<"marketDataFetchJobs">[] = await ctx.runMutation(
       internal.marketData.leaseMarketDataFetchJobs,
       {
@@ -1627,26 +1648,43 @@ export const processMarketDataFetchJobs = internalAction({
             date: job.date,
             providerSymbol: job.providerSymbol,
           });
-          await ctx.runMutation(internal.marketData.completeMarketDataFetchJob, {
-            expectedAttempt: job.attempts,
-            jobId: job._id,
-            resultStatus: "succeeded",
-            snapshots: [
+          const completion = await ctx.runMutation(
+            internal.marketData.completeMarketDataFetchJob,
+            {
+              expectedAttempt: job.attempts,
+              jobId: job._id,
+              resultStatus: "succeeded",
+              snapshots: [
+                {
+                  close: close.close,
+                  date: close.date,
+                  provider: close.provider,
+                  providerSymbol: close.providerSymbol,
+                  status: "ok",
+                },
+              ],
+            },
+          );
+          if (
+            completion.completedDailyValuationDate !== null &&
+            completion.ownerId !== null
+          ) {
+            await ctx.runMutation(
+              internal.portfolioAnalytics.computeDailyValuationsForOwner,
               {
-                close: close.close,
-                date: close.date,
-                provider: close.provider,
-                providerSymbol: close.providerSymbol,
-                status: "ok",
+                date: completion.completedDailyValuationDate,
+                ownerId: completion.ownerId,
               },
-            ],
-          });
+            );
+          }
           jobsSucceeded += 1;
           continue;
         }
 
         if (!job.startDate || !job.endDate) {
-          throw new ConvexError("Historical backfill job is missing date range");
+          throw new ConvexError(
+            "Historical backfill job is missing date range",
+          );
         }
         let providerSymbol = job.providerSymbol;
         if (!providerSymbol) {
@@ -1714,13 +1752,28 @@ export const processMarketDataFetchJobs = internalAction({
                 },
               ]
             : [];
-        await ctx.runMutation(internal.marketData.completeMarketDataFetchJob, {
-          errorMessage,
-          expectedAttempt: job.attempts,
-          jobId: job._id,
-          resultStatus: "failed",
-          snapshots,
-        });
+        const completion = await ctx.runMutation(
+          internal.marketData.completeMarketDataFetchJob,
+          {
+            errorMessage,
+            expectedAttempt: job.attempts,
+            jobId: job._id,
+            resultStatus: "failed",
+            snapshots,
+          },
+        );
+        if (
+          completion.completedDailyValuationDate !== null &&
+          completion.ownerId !== null
+        ) {
+          await ctx.runMutation(
+            internal.portfolioAnalytics.computeDailyValuationsForOwner,
+            {
+              date: completion.completedDailyValuationDate,
+              ownerId: completion.ownerId,
+            },
+          );
+        }
         jobsFailed += 1;
       }
     }
@@ -1782,12 +1835,14 @@ export const backfillHistoricalPriceSnapshots = action({
 
     const jobs: MarketDataFetchJobInput[] = [];
     for (const candidate of universe.candidates) {
-      const existing: Doc<"marketDataInstruments"> | null =
-        await ctx.runQuery(internal.marketData.getInstrumentBySymbolInternal, {
+      const existing: Doc<"marketDataInstruments"> | null = await ctx.runQuery(
+        internal.marketData.getInstrumentBySymbolInternal,
+        {
           assetType: candidate.assetType,
           ownerId,
           ticker: candidate.symbol,
-        });
+        },
+      );
       const providerSymbol =
         existing?.resolutionStatus === "resolved"
           ? existing.providerSymbol
