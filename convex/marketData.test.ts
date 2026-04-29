@@ -68,6 +68,7 @@ describe("market data instruments", () => {
 
   async function insertTrade(args: {
     assetType?: "crypto" | "stock";
+    date?: number;
     portfolioId?: Id<"portfolios">;
     quantity?: number;
     side?: "buy" | "sell";
@@ -76,7 +77,7 @@ describe("market data instruments", () => {
     return await t.run(async (ctx) => {
       return await ctx.db.insert("trades", {
         assetType: args.assetType ?? "stock",
-        date: Date.UTC(2026, 3, 24),
+        date: args.date ?? Date.UTC(2026, 3, 24),
         direction: "long",
         ownerId,
         portfolioId: args.portfolioId,
@@ -451,13 +452,13 @@ describe("market data instruments", () => {
 
   it("refreshes daily snapshots for resolved instruments used by open portfolio positions", async () => {
     const portfolioId = await insertPortfolio();
-    const appleInstrumentId = await insertResolvedInstrument({
+    await insertResolvedInstrument({
       symbol: "AAPL",
     });
-    const microsoftInstrumentId = await insertResolvedInstrument({
+    await insertResolvedInstrument({
       symbol: "MSFT",
     });
-    const tslaInstrumentId = await insertResolvedInstrument({ symbol: "TSLA" });
+    await insertResolvedInstrument({ symbol: "TSLA" });
     await insertTrade({ portfolioId, ticker: "AAPL" });
     await insertTrade({ portfolioId, ticker: "MSFT" });
     await insertTrade({ ticker: "TSLA" });
@@ -490,9 +491,7 @@ describe("market data instruments", () => {
 
     const snapshots = await t.run(async (ctx) => {
       const rows = await ctx.db.query("marketPriceSnapshots").collect();
-      return rows.filter(
-        (row) => row.ownerId === ownerId && row.date === "2026-04-24",
-      );
+      return rows.filter((row) => row.date === "2026-04-24");
     });
     const run = await t.run(async (ctx) => {
       const rows = await ctx.db.query("marketDataRefreshRuns").collect();
@@ -515,12 +514,14 @@ describe("market data instruments", () => {
       expect.arrayContaining([
         expect.objectContaining({
           close: 202.25,
-          instrumentId: appleInstrumentId,
+          provider: "twelve_data",
+          providerSymbol: "AAPL",
           status: "ok",
         }),
         expect.objectContaining({
           errorMessage: expect.stringContaining("No daily close returned"),
-          instrumentId: microsoftInstrumentId,
+          provider: "twelve_data",
+          providerSymbol: "MSFT",
           status: "missing",
         }),
       ]),
@@ -528,7 +529,7 @@ describe("market data instruments", () => {
     expect(snapshots).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          instrumentId: tslaInstrumentId,
+          providerSymbol: "TSLA",
         }),
       ]),
     );
@@ -544,7 +545,7 @@ describe("market data instruments", () => {
 
   it("includes open positions older than the most recent trades in refresh universe", async () => {
     const portfolioId = await insertPortfolio();
-    const appleInstrumentId = await insertResolvedInstrument({
+    await insertResolvedInstrument({
       symbol: "AAPL",
     });
     await insertTrade({ portfolioId, ticker: "AAPL" });
@@ -589,9 +590,7 @@ describe("market data instruments", () => {
       const rows = await ctx.db.query("marketPriceSnapshots").collect();
       return rows.filter(
         (row) =>
-          row.ownerId === ownerId &&
-          row.instrumentId === appleInstrumentId &&
-          row.date === "2026-04-24",
+          row.providerSymbol === "AAPL" && row.date === "2026-04-24",
       );
     });
 
@@ -609,15 +608,15 @@ describe("market data instruments", () => {
 
   it("upserts existing daily snapshots during refresh", async () => {
     const portfolioId = await insertPortfolio();
-    const instrumentId = await insertResolvedInstrument({ symbol: "AAPL" });
+    await insertResolvedInstrument({ symbol: "AAPL" });
     await insertTrade({ portfolioId, ticker: "AAPL" });
     await t.run(async (ctx) => {
       await ctx.db.insert("marketPriceSnapshots", {
         close: 190,
         date: "2026-04-24",
         fetchedAt: Date.UTC(2026, 3, 24),
-        instrumentId,
-        ownerId,
+        provider: "twelve_data",
+        providerSymbol: "AAPL",
         status: "ok",
       });
     });
@@ -643,9 +642,7 @@ describe("market data instruments", () => {
       const rows = await ctx.db.query("marketPriceSnapshots").collect();
       return rows.filter(
         (row) =>
-          row.ownerId === ownerId &&
-          row.instrumentId === instrumentId &&
-          row.date === "2026-04-24",
+          row.providerSymbol === "AAPL" && row.date === "2026-04-24",
       );
     });
 
@@ -654,5 +651,221 @@ describe("market data instruments", () => {
       close: 205.5,
       status: "ok",
     });
+  });
+
+  it("backfills historical snapshots for portfolio trades and benchmark instruments idempotently", async () => {
+    const portfolioId = await insertPortfolio();
+    await insertTrade({
+      date: Date.UTC(2026, 3, 22),
+      portfolioId,
+      ticker: "AAPL",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+        const parsed = new URL(url);
+        const symbol = parsed.searchParams.get("symbol");
+
+        if (parsed.pathname.endsWith("/symbol_search")) {
+          return new Response(
+            JSON.stringify({
+              data: [
+                {
+                  country: "United States",
+                  currency: "USD",
+                  exchange: "NASDAQ",
+                  instrument_type:
+                    symbol === "SPY" ? "ETF" : "Common Stock",
+                  symbol,
+                },
+              ],
+              status: "ok",
+            }),
+            { status: 200 },
+          );
+        }
+
+        const baseClose = symbol === "SPY" ? 500 : 200;
+        return new Response(
+          JSON.stringify({
+            status: "ok",
+            values: [
+              { close: `${baseClose + 2}`, datetime: "2026-04-24" },
+              { close: `${baseClose + 1}`, datetime: "2026-04-23" },
+              { close: `${baseClose}`, datetime: "2026-04-22" },
+            ],
+          }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    const firstRun = await asUser().action(
+      api.marketData.backfillHistoricalPriceSnapshots,
+      {
+        endDate: "2026-04-24",
+      },
+    );
+    const secondRun = await asUser().action(
+      api.marketData.backfillHistoricalPriceSnapshots,
+      {
+        endDate: "2026-04-24",
+      },
+    );
+
+    const snapshots = await t.run(async (ctx) => {
+      return await ctx.db.query("marketPriceSnapshots").collect();
+    });
+    const runs = await t.run(async (ctx) => {
+      return await ctx.db.query("marketDataRefreshRuns").collect();
+    });
+
+    expect(firstRun).toMatchObject({
+      endDate: "2026-04-24",
+      startDate: "2026-04-22",
+      symbolsFailed: 0,
+      symbolsRequested: 2,
+      symbolsSucceeded: 2,
+    });
+    expect(secondRun).toMatchObject({
+      symbolsFailed: 0,
+      symbolsRequested: 2,
+      symbolsSucceeded: 2,
+    });
+    expect(snapshots).toHaveLength(6);
+    expect(snapshots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          close: 202,
+          date: "2026-04-24",
+          status: "ok",
+        }),
+        expect.objectContaining({
+          close: 501,
+          date: "2026-04-23",
+          status: "ok",
+        }),
+      ]),
+    );
+    expect(runs).toHaveLength(2);
+    expect(runs[0]).toMatchObject({
+      provider: "twelve_data",
+      status: "completed",
+      symbolsFailed: 0,
+      symbolsRequested: 2,
+      symbolsSucceeded: 2,
+    });
+  });
+
+  it("records failed historical backfill symbols for follow-up", async () => {
+    const portfolioId = await insertPortfolio();
+    const tradeId = await insertTrade({
+      date: Date.UTC(2026, 3, 22),
+      portfolioId,
+      ticker: "NOPE",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+        const parsed = new URL(url);
+        const symbol = parsed.searchParams.get("symbol");
+
+        if (parsed.pathname.endsWith("/symbol_search")) {
+          return new Response(
+            JSON.stringify({
+              data:
+                symbol === "SPY"
+                  ? [
+                      {
+                        country: "United States",
+                        currency: "USD",
+                        exchange: "NYSE",
+                        instrument_type: "ETF",
+                        symbol: "SPY",
+                      },
+                    ]
+                  : [],
+              status: "ok",
+            }),
+            { status: 200 },
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            status: "ok",
+            values: [
+              { close: "503.25", datetime: "2026-04-24" },
+              { close: "501.00", datetime: "2026-04-22" },
+            ],
+          }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    const result = await asUser().action(
+      api.marketData.backfillHistoricalPriceSnapshots,
+      {
+        endDate: "2026-04-24",
+      },
+    );
+
+    const nopeInstrument = await asUser().query(
+      api.marketData.getInstrumentBySymbol,
+      {
+        assetType: "stock",
+        ticker: "NOPE",
+      },
+    );
+    const snapshots = await t.run(async (ctx) => {
+      return await ctx.db.query("marketPriceSnapshots").collect();
+    });
+    const runs = await t.run(async (ctx) => {
+      return await ctx.db.query("marketDataRefreshRuns").collect();
+    });
+
+    expect(result).toMatchObject({
+      symbolsFailed: 1,
+      symbolsRequested: 2,
+      symbolsSucceeded: 1,
+    });
+    expect(result.failedSymbols[0]).toMatchObject({
+      errorMessage: expect.stringContaining(tradeId),
+      sourceTradeIds: [tradeId],
+      symbol: "NOPE",
+    });
+    expect(nopeInstrument).toMatchObject({
+      lastError: expect.stringContaining("No Twelve Data symbol match found"),
+      resolutionStatus: "needs_review",
+      symbol: "NOPE",
+    });
+    expect(snapshots).toHaveLength(2);
+    expect(snapshots[0]).toMatchObject({
+      close: 503.25,
+      status: "ok",
+    });
+    expect(runs[0]).toMatchObject({
+      errorMessage: expect.stringContaining("NOPE"),
+      status: "partial",
+      symbolsFailed: 1,
+      symbolsRequested: 2,
+      symbolsSucceeded: 1,
+    });
+    expect(runs[0]?.errorMessage).toContain(tradeId);
   });
 });

@@ -96,15 +96,13 @@ describe("portfolio analytics schema", () => {
   });
 
   it("stores daily market price snapshots", async () => {
-    const instrumentId = await insertInstrument();
-
     const snapshotId = await t.run(async (ctx) => {
       return await ctx.db.insert("marketPriceSnapshots", {
         close: 202.25,
         date: "2026-04-28",
         fetchedAt: now,
-        instrumentId,
-        ownerId,
+        provider: "twelve_data",
+        providerSymbol: "AAPL",
         status: "ok",
       });
     });
@@ -116,8 +114,8 @@ describe("portfolio analytics schema", () => {
     expect(snapshot).toMatchObject({
       close: 202.25,
       date: "2026-04-28",
-      instrumentId,
-      ownerId,
+      provider: "twelve_data",
+      providerSymbol: "AAPL",
       status: "ok",
     });
   });

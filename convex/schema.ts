@@ -308,16 +308,16 @@ export default defineSchema({
     date: v.string(),
     errorMessage: v.optional(v.string()),
     fetchedAt: v.number(),
-    instrumentId: v.id("marketDataInstruments"),
-    ownerId: v.string(),
+    provider: marketDataProviderValidator,
+    providerSymbol: v.string(),
     status: marketPriceSnapshotStatusValidator,
   })
-    .index("by_ownerId_and_instrumentId_and_date", [
-      "ownerId",
-      "instrumentId",
+    .index("by_provider_and_providerSymbol_and_date", [
+      "provider",
+      "providerSymbol",
       "date",
     ])
-    .index("by_ownerId_and_date", ["ownerId", "date"]),
+    .index("by_date", ["date"]),
 
   portfolioDailyValuations: defineTable({
     cashBalance: v.number(),

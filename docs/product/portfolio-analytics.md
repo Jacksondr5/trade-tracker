@@ -121,10 +121,15 @@ Closed positions do not delete instrument records. Historical valuations and fut
 
 Market price snapshots are cached external price observations.
 
+Price snapshots are global cached market data keyed by provider symbol and date.
+They are not user-owned and do not point at owner-specific instrument records;
+user-specific ownership stays on trades, portfolios, cash ledger entries,
+valuations, instrument mappings, and operational run records.
+
 Each record should include:
 
-- `ownerId`
-- `instrumentId`
+- `provider`
+- `providerSymbol`
 - `date`
 - `close`
 - `fetchedAt`

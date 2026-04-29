@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   action,
   internalAction,
@@ -8,6 +8,7 @@ import {
   internalQuery,
   query,
   type ActionCtx,
+  type MutationCtx,
 } from "./_generated/server";
 import { assertOwner, requireUser } from "./lib/auth";
 import {
@@ -21,7 +22,13 @@ const MARKET_DATA_PROVIDER = "twelve_data";
 const TWELVE_DATA_BASE_URL = "https://api.twelvedata.com";
 const TWELVE_DATA_TIMEOUT_MS = 8_000;
 const PORTFOLIO_TRADE_SCAN_PAGE_SIZE = 256;
+const HISTORICAL_PRICE_OUTPUT_SIZE = 5_000;
+const HISTORICAL_PRICE_BATCH_SIZE = 2_000;
 const POSITION_EPSILON = 0.00000001;
+const BENCHMARK_INSTRUMENTS: Array<{
+  assetType: MarketDataAssetType;
+  symbol: string;
+}> = [{ assetType: "stock", symbol: "SPY" }];
 
 const assetTypeValidator = v.union(v.literal("crypto"), v.literal("stock"));
 
@@ -97,13 +104,33 @@ type DailyCloseResult = {
   providerSymbol: string;
 };
 
+type HistoricalCloseResult = DailyCloseResult;
+
 type PriceSnapshotWrite = {
   close?: number;
   date: string;
   errorMessage?: string;
-  instrumentId: Doc<"marketDataInstruments">["_id"];
-  ownerId: string;
+  provider: typeof MARKET_DATA_PROVIDER;
+  providerSymbol: string;
   status: "error" | "missing" | "ok";
+};
+
+type HistoricalBackfillCandidate = {
+  assetType: MarketDataAssetType;
+  sourceTradeIds: Id<"trades">[];
+  symbol: string;
+};
+
+type HistoricalBackfillUniverse = {
+  candidates: HistoricalBackfillCandidate[];
+  startDate: string | null;
+};
+
+type HistoricalBackfillFailedSymbol = {
+  assetType: MarketDataAssetType;
+  errorMessage: string;
+  sourceTradeIds: Id<"trades">[];
+  symbol: string;
 };
 
 class DailyCloseMissingError extends Error {
@@ -290,6 +317,10 @@ function getEasternDateString(now: number): string {
   return `${partByType.get("year")}-${partByType.get("month")}-${partByType.get("day")}`;
 }
 
+function getUtcDateString(timestamp: number): string {
+  return new Date(timestamp).toISOString().slice(0, 10);
+}
+
 function getSignedPositionQuantity(trade: Doc<"trades">): number {
   const openingSide = trade.direction === "long" ? "buy" : "sell";
   return trade.side === openingSide ? trade.quantity : -trade.quantity;
@@ -300,6 +331,91 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
   return "Unknown market data refresh error";
+}
+
+function formatSourceTradeContext(sourceTradeIds: Id<"trades">[]): string {
+  if (sourceTradeIds.length === 0) {
+    return "";
+  }
+  return ` Source trade IDs: ${sourceTradeIds.join(", ")}`;
+}
+
+function assertIsoDateStringInEastern(
+  value: string,
+  paramName: "endDate" | "startDate",
+): void {
+  const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
+  if (!isoDatePattern.test(value)) {
+    throw new ConvexError(`${paramName} must use YYYY-MM-DD format`);
+  }
+
+  const [yearRaw, monthRaw, dayRaw] = value.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  const utcNoon = Date.UTC(year, month - 1, day, 12, 0, 0);
+  const parsedDate = new Date(utcNoon);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "America/New_York",
+    year: "numeric",
+  }).formatToParts(parsedDate);
+  const partByType = new Map(parts.map((part) => [part.type, part.value]));
+  const canonical = `${partByType.get("year")}-${partByType.get("month")}-${partByType.get("day")}`;
+
+  if (canonical !== value) {
+    throw new ConvexError(
+      `${paramName} must be a valid calendar date in YYYY-MM-DD format`,
+    );
+  }
+}
+
+function formatFailedSymbolsForRun(
+  failedSymbols: HistoricalBackfillFailedSymbol[],
+): string {
+  return failedSymbols
+    .map(
+      (failed) =>
+        `${failed.symbol}${formatSourceTradeContext(failed.sourceTradeIds)}`,
+    )
+    .join(", ");
+}
+
+async function upsertMarketPriceSnapshots(
+  ctx: MutationCtx,
+  snapshots: PriceSnapshotWrite[],
+  fetchedAt: number,
+): Promise<void> {
+  for (const snapshot of snapshots) {
+    const existing = await ctx.db
+      .query("marketPriceSnapshots")
+      .withIndex("by_provider_and_providerSymbol_and_date", (q) =>
+        q
+          .eq("provider", snapshot.provider)
+          .eq("providerSymbol", snapshot.providerSymbol)
+          .eq("date", snapshot.date),
+      )
+      .unique();
+
+    const snapshotDoc = {
+      ...(snapshot.close !== undefined ? { close: snapshot.close } : {}),
+      date: snapshot.date,
+      ...(snapshot.errorMessage !== undefined
+        ? { errorMessage: snapshot.errorMessage }
+        : {}),
+      fetchedAt,
+      provider: snapshot.provider,
+      providerSymbol: snapshot.providerSymbol,
+      status: snapshot.status,
+    };
+
+    if (existing === null) {
+      await ctx.db.insert("marketPriceSnapshots", snapshotDoc);
+    } else {
+      await ctx.db.replace(existing._id, snapshotDoc);
+    }
+  }
 }
 
 async function fetchDailyCloseForInstrument(args: {
@@ -353,6 +469,115 @@ async function fetchDailyCloseForInstrument(args: {
     provider: MARKET_DATA_PROVIDER,
     providerSymbol: args.instrument.providerSymbol,
   };
+}
+
+async function fetchHistoricalDailyClosesForInstrument(args: {
+  apiKey: string;
+  endDate: string;
+  instrument: Doc<"marketDataInstruments">;
+  startDate: string;
+}): Promise<HistoricalCloseResult[]> {
+  if (
+    args.instrument.resolutionStatus !== "resolved" ||
+    !args.instrument.providerSymbol
+  ) {
+    throw new ConvexError("Market data instrument is not resolved");
+  }
+  const providerSymbol = args.instrument.providerSymbol;
+  const closeByDate = new Map<string, HistoricalCloseResult>();
+  let oldestCoveredDate: string | null = null;
+  let requestEndDate = args.endDate;
+
+  while (oldestCoveredDate === null || oldestCoveredDate > args.startDate) {
+    const result = await fetchTwelveDataJson<TwelveDataTimeSeriesResponse>({
+      context: "historical time series",
+      url: buildTwelveDataUrl("time_series", {
+        apikey: args.apiKey,
+        end_date: requestEndDate,
+        interval: "1day",
+        outputsize: String(HISTORICAL_PRICE_OUTPUT_SIZE),
+        start_date: args.startDate,
+        symbol: providerSymbol,
+      }),
+    });
+    if ("error" in result) {
+      throw new ConvexError(result.error);
+    }
+
+    const payload = result.payload;
+    const providerError = getTwelveDataError(payload);
+    if (providerError !== null) {
+      throw new ConvexError(
+        `Twelve Data historical time series failed: ${providerError}`,
+      );
+    }
+
+    const closes =
+      payload.values
+        ?.map((value) => ({
+          close: Number(value.close),
+          date: value.datetime,
+        }))
+        .filter(
+          (value): value is { close: number; date: string } =>
+            typeof value.date === "string" && Number.isFinite(value.close),
+        )
+        .map((value) => ({
+          close: value.close,
+          date: value.date,
+          provider: MARKET_DATA_PROVIDER as typeof MARKET_DATA_PROVIDER,
+          providerSymbol,
+        })) ?? [];
+
+    if (closes.length === 0) {
+      break;
+    }
+
+    let windowEarliestDate = closes[0].date;
+    for (const close of closes) {
+      closeByDate.set(close.date, close);
+      if (close.date < windowEarliestDate) {
+        windowEarliestDate = close.date;
+      }
+    }
+
+    if (oldestCoveredDate !== null && windowEarliestDate >= oldestCoveredDate) {
+      break;
+    }
+
+    oldestCoveredDate = windowEarliestDate;
+    if (oldestCoveredDate <= args.startDate) {
+      break;
+    }
+
+    const previousDay = new Date(`${oldestCoveredDate}T00:00:00Z`);
+    previousDay.setUTCDate(previousDay.getUTCDate() - 1);
+    requestEndDate = previousDay.toISOString().slice(0, 10);
+  }
+
+  if (closeByDate.size === 0) {
+    throw new DailyCloseMissingError(
+      `No historical daily closes returned for ${providerSymbol}`,
+    );
+  }
+
+  const startDateDay = new Date(`${args.startDate}T00:00:00Z`).getUTCDay();
+  const startDateIsWeekend = startDateDay === 0 || startDateDay === 6;
+  const hasCoveredDateOnOrAfterStart = [...closeByDate.keys()].some(
+    (date) => date >= args.startDate,
+  );
+  const isTruncated =
+    oldestCoveredDate === null ||
+    (oldestCoveredDate > args.startDate &&
+      !startDateIsWeekend &&
+      !hasCoveredDateOnOrAfterStart);
+  if (isTruncated) {
+    throw new DailyCloseMissingError(
+      `Historical daily closes are truncated for ${providerSymbol}: earliest returned date ${oldestCoveredDate ?? "none"} is after requested start date ${args.startDate}`,
+    );
+  }
+
+  return [...closeByDate.values()].sort((a, b) => b.date.localeCompare(a.date));
 }
 
 export const getInstrumentBySymbol = query({
@@ -520,6 +745,90 @@ export const getPortfolioValuationUniverse = internalQuery({
   },
 });
 
+export const getHistoricalBackfillUniverse = internalQuery({
+  args: {
+    ownerId: v.string(),
+  },
+  returns: v.object({
+    candidates: v.array(
+      v.object({
+        assetType: assetTypeValidator,
+        sourceTradeIds: v.array(v.id("trades")),
+        symbol: v.string(),
+      }),
+    ),
+    startDate: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args): Promise<HistoricalBackfillUniverse> => {
+    const candidateByKey = new Map<string, HistoricalBackfillCandidate>();
+    let earliestTradeDate: number | null = null;
+
+    let cursor: string | null = null;
+    let isDone = false;
+
+    while (!isDone) {
+      const page = await ctx.db
+        .query("trades")
+        .withIndex("by_owner_date", (q) => q.eq("ownerId", args.ownerId))
+        .order("asc")
+        .paginate({
+          cursor,
+          numItems: PORTFOLIO_TRADE_SCAN_PAGE_SIZE,
+        });
+      cursor = page.continueCursor;
+      isDone = page.isDone;
+
+      for (const trade of page.page) {
+        if (trade.portfolioId === undefined) {
+          continue;
+        }
+
+        const symbol = normalizeMarketDataSymbol(trade.ticker);
+        if (!symbol) {
+          continue;
+        }
+
+        earliestTradeDate =
+          earliestTradeDate === null
+            ? trade.date
+            : Math.min(earliestTradeDate, trade.date);
+        const candidateKey = `${trade.assetType}:${symbol}`;
+        const existingCandidate = candidateByKey.get(candidateKey);
+        if (existingCandidate === undefined) {
+          candidateByKey.set(candidateKey, {
+            assetType: trade.assetType,
+            sourceTradeIds: [trade._id],
+            symbol,
+          });
+        } else {
+          existingCandidate.sourceTradeIds.push(trade._id);
+        }
+      }
+    }
+
+    if (earliestTradeDate !== null) {
+      for (const benchmark of BENCHMARK_INSTRUMENTS) {
+        const key = `${benchmark.assetType}:${benchmark.symbol}`;
+        if (!candidateByKey.has(key)) {
+          candidateByKey.set(key, {
+            assetType: benchmark.assetType,
+            sourceTradeIds: [],
+            symbol: benchmark.symbol,
+          });
+        }
+      }
+    }
+
+    return {
+      candidates: [...candidateByKey.values()].sort((a, b) =>
+        a.symbol.localeCompare(b.symbol),
+      ),
+      startDate:
+        earliestTradeDate === null ? null : getUtcDateString(earliestTradeDate),
+    };
+  },
+});
+
 export const startMarketDataRefreshRun = internalMutation({
   args: {
     ownerId: v.string(),
@@ -543,14 +852,15 @@ export const startMarketDataRefreshRun = internalMutation({
 
 export const completeMarketDataRefreshRun = internalMutation({
   args: {
+    errorMessage: v.optional(v.string()),
     runId: v.id("marketDataRefreshRuns"),
     snapshots: v.array(
       v.object({
         close: v.optional(v.number()),
         date: v.string(),
         errorMessage: v.optional(v.string()),
-        instrumentId: v.id("marketDataInstruments"),
-        ownerId: v.string(),
+        provider: v.literal("twelve_data"),
+        providerSymbol: v.string(),
         status: v.union(
           v.literal("ok"),
           v.literal("missing"),
@@ -564,39 +874,11 @@ export const completeMarketDataRefreshRun = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const fetchedAt = Date.now();
-
-    for (const snapshot of args.snapshots) {
-      const existing = await ctx.db
-        .query("marketPriceSnapshots")
-        .withIndex("by_ownerId_and_instrumentId_and_date", (q) =>
-          q
-            .eq("ownerId", snapshot.ownerId)
-            .eq("instrumentId", snapshot.instrumentId)
-            .eq("date", snapshot.date),
-        )
-        .unique();
-
-      const snapshotDoc = {
-        ...(snapshot.close !== undefined ? { close: snapshot.close } : {}),
-        date: snapshot.date,
-        ...(snapshot.errorMessage !== undefined
-          ? { errorMessage: snapshot.errorMessage }
-          : {}),
-        fetchedAt,
-        instrumentId: snapshot.instrumentId,
-        ownerId: snapshot.ownerId,
-        status: snapshot.status,
-      };
-
-      if (existing === null) {
-        await ctx.db.insert("marketPriceSnapshots", snapshotDoc);
-      } else {
-        await ctx.db.replace(existing._id, snapshotDoc);
-      }
-    }
+    await upsertMarketPriceSnapshots(ctx, args.snapshots, fetchedAt);
 
     await ctx.db.patch(args.runId, {
       completedAt: fetchedAt,
+      errorMessage: args.errorMessage,
       status:
         args.symbolsFailed === 0
           ? "completed"
@@ -606,6 +888,32 @@ export const completeMarketDataRefreshRun = internalMutation({
       symbolsFailed: args.symbolsFailed,
       symbolsSucceeded: args.symbolsSucceeded,
     });
+
+    return null;
+  },
+});
+
+export const appendMarketDataRefreshRunSnapshots = internalMutation({
+  args: {
+    snapshots: v.array(
+      v.object({
+        close: v.optional(v.number()),
+        date: v.string(),
+        errorMessage: v.optional(v.string()),
+        provider: v.literal("twelve_data"),
+        providerSymbol: v.string(),
+        status: v.union(
+          v.literal("ok"),
+          v.literal("missing"),
+          v.literal("error"),
+        ),
+      }),
+    ),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const fetchedAt = Date.now();
+    await upsertMarketPriceSnapshots(ctx, args.snapshots, fetchedAt);
 
     return null;
   },
@@ -943,8 +1251,8 @@ export const refreshDailyPriceSnapshots = internalAction({
           snapshots.push({
             close: close.close,
             date: close.date,
-            instrumentId: instrument._id,
-            ownerId: instrument.ownerId,
+            provider: close.provider,
+            providerSymbol: close.providerSymbol,
             status: "ok",
           });
           symbolsSucceeded += 1;
@@ -953,8 +1261,8 @@ export const refreshDailyPriceSnapshots = internalAction({
           snapshots.push({
             date: runDate,
             errorMessage: getErrorMessage(error),
-            instrumentId: instrument._id,
-            ownerId: instrument.ownerId,
+            provider: MARKET_DATA_PROVIDER,
+            providerSymbol: instrument.providerSymbol ?? instrument.symbol,
             status: isMissing ? "missing" : "error",
           });
           symbolsFailed += 1;
@@ -978,6 +1286,173 @@ export const refreshDailyPriceSnapshots = internalAction({
       runDate,
       symbolsFailed,
       symbolsRequested,
+      symbolsSucceeded,
+    };
+  },
+});
+
+export const backfillHistoricalPriceSnapshots = action({
+  args: {
+    endDate: v.optional(v.string()),
+    startDate: v.optional(v.string()),
+  },
+  returns: v.object({
+    endDate: v.string(),
+    failedSymbols: v.array(
+      v.object({
+        assetType: assetTypeValidator,
+        errorMessage: v.string(),
+        sourceTradeIds: v.array(v.id("trades")),
+        symbol: v.string(),
+      }),
+    ),
+    snapshotsWritten: v.number(),
+    startDate: v.union(v.string(), v.null()),
+    symbolsFailed: v.number(),
+    symbolsRequested: v.number(),
+    symbolsSucceeded: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const endDate = args.endDate ?? getEasternDateString(Date.now());
+    assertIsoDateStringInEastern(endDate, "endDate");
+    const universe: HistoricalBackfillUniverse = await ctx.runQuery(
+      internal.marketData.getHistoricalBackfillUniverse,
+      { ownerId },
+    );
+    const startDate = args.startDate ?? universe.startDate;
+
+    if (startDate === null || universe.candidates.length === 0) {
+      return {
+        endDate,
+        failedSymbols: [],
+        snapshotsWritten: 0,
+        startDate,
+        symbolsFailed: 0,
+        symbolsRequested: 0,
+        symbolsSucceeded: 0,
+      };
+    }
+    assertIsoDateStringInEastern(startDate, "startDate");
+    if (startDate > endDate) {
+      throw new ConvexError("startDate must be on or before endDate");
+    }
+
+    const runId = await ctx.runMutation(
+      internal.marketData.startMarketDataRefreshRun,
+      {
+        ownerId,
+        runDate: `${startDate}:${endDate}`,
+        symbolsRequested: universe.candidates.length,
+      },
+    );
+
+    const failedSymbols: HistoricalBackfillFailedSymbol[] = [];
+    const snapshotBatch: PriceSnapshotWrite[] = [];
+    let snapshotsWritten = 0;
+    let symbolsSucceeded = 0;
+    let runCompleted = false;
+
+    const flushSnapshotBatch = async () => {
+      if (snapshotBatch.length === 0) {
+        return;
+      }
+      await ctx.runMutation(internal.marketData.appendMarketDataRefreshRunSnapshots, {
+        snapshots: snapshotBatch,
+      });
+      snapshotsWritten += snapshotBatch.length;
+      snapshotBatch.length = 0;
+    };
+
+    try {
+      for (const candidate of universe.candidates) {
+        try {
+          const resolution = await resolveInstrumentForOwner(ctx, ownerId, {
+            assetType: candidate.assetType,
+            ticker: candidate.symbol,
+          });
+          if (
+            resolution.status !== "resolved" ||
+            !resolution.instrument.providerSymbol
+          ) {
+            const errorMessage =
+              resolution.instrument.lastError ??
+              `Market data instrument ${candidate.symbol} is not resolved`;
+            failedSymbols.push({
+              assetType: candidate.assetType,
+              errorMessage: `${errorMessage}${formatSourceTradeContext(candidate.sourceTradeIds)}`,
+              sourceTradeIds: candidate.sourceTradeIds,
+              symbol: candidate.symbol,
+            });
+            continue;
+          }
+
+          const closes = await fetchHistoricalDailyClosesForInstrument({
+            apiKey: requireTwelveDataApiKey(),
+            endDate,
+            instrument: resolution.instrument,
+            startDate,
+          });
+          for (const close of closes) {
+            snapshotBatch.push({
+              close: close.close,
+              date: close.date,
+              provider: close.provider,
+              providerSymbol: close.providerSymbol,
+              status: "ok",
+            });
+            if (snapshotBatch.length >= HISTORICAL_PRICE_BATCH_SIZE) {
+              await flushSnapshotBatch();
+            }
+          }
+          symbolsSucceeded += 1;
+        } catch (error) {
+          failedSymbols.push({
+            assetType: candidate.assetType,
+            errorMessage: `${getErrorMessage(error)}${formatSourceTradeContext(candidate.sourceTradeIds)}`,
+            sourceTradeIds: candidate.sourceTradeIds,
+            symbol: candidate.symbol,
+          });
+        }
+      }
+
+      await flushSnapshotBatch();
+      await ctx.runMutation(internal.marketData.completeMarketDataRefreshRun, {
+        errorMessage:
+          failedSymbols.length > 0
+            ? `Historical backfill failed for ${formatFailedSymbolsForRun(failedSymbols)}`
+            : undefined,
+        runId,
+        snapshots: [],
+        symbolsFailed: failedSymbols.length,
+        symbolsSucceeded,
+      });
+      runCompleted = true;
+    } catch (error) {
+      if (!runCompleted) {
+        const fatalMessage = getErrorMessage(error);
+        const failedSymbolsMessage = formatFailedSymbolsForRun(failedSymbols);
+        await ctx.runMutation(internal.marketData.completeMarketDataRefreshRun, {
+          errorMessage:
+            failedSymbolsMessage.length > 0
+              ? `Historical backfill aborted: ${fatalMessage}. Failed symbols: ${failedSymbolsMessage}`
+              : `Historical backfill aborted: ${fatalMessage}`,
+          runId,
+          snapshots: [],
+          symbolsFailed: failedSymbols.length,
+          symbolsSucceeded,
+        });
+      }
+      throw error;
+    }
+
+    return {
+      endDate,
+      failedSymbols,
+      snapshotsWritten,
+      startDate,
+      symbolsFailed: failedSymbols.length,
+      symbolsRequested: universe.candidates.length,
       symbolsSucceeded,
     };
   },
