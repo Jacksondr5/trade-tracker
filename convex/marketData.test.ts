@@ -998,6 +998,39 @@ describe("market data instruments", () => {
     expect(review[0]?.symbol).toBe("WEIRD");
   });
 
+  it("keeps needs_review instruments in the limited list even with many resolved rows", async () => {
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      for (let index = 0; index < 520; index += 1) {
+        await ctx.db.insert("marketDataInstruments", {
+          assetType: "stock",
+          createdAt: now,
+          ownerId,
+          provider: "twelve_data",
+          providerSymbol: `A${index}`,
+          resolutionStatus: "resolved",
+          symbol: `A${index}`,
+          updatedAt: now,
+        });
+      }
+      await ctx.db.insert("marketDataInstruments", {
+        assetType: "stock",
+        createdAt: now,
+        lastError: "No symbol match",
+        ownerId,
+        provider: "twelve_data",
+        resolutionStatus: "needs_review",
+        symbol: "ZZZREVIEW",
+        updatedAt: now,
+      });
+    });
+
+    const all = await asUser().query(api.marketData.listInstruments, {});
+    expect(all).toHaveLength(500);
+    expect(all[0]?.resolutionStatus).toBe("needs_review");
+    expect(all[0]?.symbol).toBe("ZZZREVIEW");
+  });
+
   it("marks an owned instrument ignored and clears any review error", async () => {
     const instrumentId = await t.run(async (ctx) => {
       const now = Date.now();

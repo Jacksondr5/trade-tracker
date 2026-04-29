@@ -661,6 +661,9 @@ const RESOLUTION_STATUS_SORT_ORDER: Record<
   resolved: 1,
   ignored: 2,
 };
+const RESOLUTION_STATUS_PRIORITY: Array<
+  Doc<"marketDataInstruments">["resolutionStatus"]
+> = ["needs_review", "resolved", "ignored"];
 
 export const listInstruments = query({
   args: {
@@ -670,20 +673,30 @@ export const listInstruments = query({
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
 
-    const instruments =
-      args.status !== undefined
-        ? await ctx.db
-            .query("marketDataInstruments")
-            .withIndex("by_ownerId_and_resolutionStatus", (q) =>
-              q.eq("ownerId", ownerId).eq("resolutionStatus", args.status!),
-            )
-            .take(MARKET_DATA_INSTRUMENT_LIST_LIMIT)
-        : await ctx.db
-            .query("marketDataInstruments")
-            .withIndex("by_ownerId_and_assetType_and_symbol", (q) =>
-              q.eq("ownerId", ownerId),
-            )
-            .take(MARKET_DATA_INSTRUMENT_LIST_LIMIT);
+    let instruments: Doc<"marketDataInstruments">[] = [];
+
+    if (args.status !== undefined) {
+      instruments = await ctx.db
+        .query("marketDataInstruments")
+        .withIndex("by_ownerId_and_resolutionStatus", (q) =>
+          q.eq("ownerId", ownerId).eq("resolutionStatus", args.status),
+        )
+        .take(MARKET_DATA_INSTRUMENT_LIST_LIMIT);
+    } else {
+      for (const status of RESOLUTION_STATUS_PRIORITY) {
+        const remaining = MARKET_DATA_INSTRUMENT_LIST_LIMIT - instruments.length;
+        if (remaining <= 0) {
+          break;
+        }
+        const chunk = await ctx.db
+          .query("marketDataInstruments")
+          .withIndex("by_ownerId_and_resolutionStatus", (q) =>
+            q.eq("ownerId", ownerId).eq("resolutionStatus", status),
+          )
+          .take(remaining);
+        instruments.push(...chunk);
+      }
+    }
 
     return [...instruments].sort((a, b) => {
       const statusDelta =
