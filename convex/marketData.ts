@@ -24,6 +24,7 @@ const TWELVE_DATA_BASE_URL = "https://api.twelvedata.com";
 const TWELVE_DATA_TIMEOUT_MS = 8_000;
 const HISTORICAL_PRICE_OUTPUT_SIZE = 5_000;
 const TRADE_SCAN_PAGE_SIZE = 256;
+const MAX_SOURCE_TRADE_CONTEXT_IDS = 100;
 const MARKET_DATA_WORKER_CREDIT_BUDGET = 8;
 const MARKET_DATA_JOB_LEASE_MS = 90_000;
 const POSITION_EPSILON = 0.00000001;
@@ -154,6 +155,7 @@ type PriceSnapshotWrite = {
 
 type HistoricalBackfillCandidate = {
   assetType: MarketDataAssetType;
+  sourceTradeCount: number;
   sourceTradeIds: Id<"trades">[];
   symbol: string;
 };
@@ -609,13 +611,13 @@ async function fetchHistoricalDailyClosesForProviderSymbol(args: {
   );
   const startDateDay = new Date(`${args.startDate}T00:00:00Z`).getUTCDay();
   const startDateIsWeekend = startDateDay === 0 || startDateDay === 6;
-  const hasCoveredDateOnOrAfterStart = closes.some(
-    (close) => close.date >= args.startDate,
+  const hasCoveredDateOnOrBeforeStart = closes.some(
+    (close) => close.date <= args.startDate,
   );
   const isTruncated =
     oldestCoveredDate > args.startDate &&
     !startDateIsWeekend &&
-    !hasCoveredDateOnOrAfterStart;
+    !hasCoveredDateOnOrBeforeStart;
   if (isTruncated) {
     throw new DailyCloseMissingError(
       `Historical daily closes are truncated for ${args.providerSymbol}: earliest returned date ${oldestCoveredDate} is after requested start date ${args.startDate}`,
@@ -919,11 +921,18 @@ export const getHistoricalBackfillUniversePaged = internalAction({
         if (existingCandidate === undefined) {
           candidateByKey.set(candidateKey, {
             assetType: trade.assetType,
+            sourceTradeCount: 1,
             sourceTradeIds: [trade._id],
             symbol,
           });
         } else {
-          existingCandidate.sourceTradeIds.push(trade._id);
+          existingCandidate.sourceTradeCount += 1;
+          if (
+            existingCandidate.sourceTradeIds.length <
+            MAX_SOURCE_TRADE_CONTEXT_IDS
+          ) {
+            existingCandidate.sourceTradeIds.push(trade._id);
+          }
         }
       }
     }
@@ -934,6 +943,7 @@ export const getHistoricalBackfillUniversePaged = internalAction({
         if (!candidateByKey.has(key)) {
           candidateByKey.set(key, {
             assetType: benchmark.assetType,
+            sourceTradeCount: 0,
             sourceTradeIds: [],
             symbol: benchmark.symbol,
           });
@@ -1140,6 +1150,7 @@ export const leaseMarketDataFetchJobs = internalMutation({
 export const completeMarketDataFetchJob = internalMutation({
   args: {
     errorMessage: v.optional(v.string()),
+    expectedAttempt: v.number(),
     jobId: v.id("marketDataFetchJobs"),
     resultStatus: v.union(v.literal("succeeded"), v.literal("failed")),
     snapshots: v.array(
@@ -1164,6 +1175,13 @@ export const completeMarketDataFetchJob = internalMutation({
     if (job === null) {
       return null;
     }
+    if (
+      job.status !== "leased" ||
+      job.attempts !== args.expectedAttempt ||
+      job.leaseExpiresAt <= now
+    ) {
+      return null;
+    }
 
     await upsertMarketPriceSnapshots(ctx, args.snapshots, now);
     await ctx.db.patch(job._id, {
@@ -1175,16 +1193,37 @@ export const completeMarketDataFetchJob = internalMutation({
 
     const run = await ctx.db.get(job.runId);
     if (run !== null) {
-      const jobWasSucceeded = job.status === "completed";
-      const jobWasFailed = job.status === "failed";
-      const shouldCountResult = !jobWasSucceeded && !jobWasFailed;
-      const symbolsSucceeded =
-        run.symbolsSucceeded +
-        (shouldCountResult && args.resultStatus === "succeeded" ? 1 : 0);
-      const symbolsFailed =
-        run.symbolsFailed +
-        (shouldCountResult && args.resultStatus === "failed" ? 1 : 0);
+      const [succeededJobs, failedJobs, pendingJobs, leasedJobs] =
+        await Promise.all([
+          ctx.db
+            .query("marketDataFetchJobs")
+            .withIndex("by_runId_and_status", (q) =>
+              q.eq("runId", job.runId).eq("status", "completed"),
+            )
+            .collect(),
+          ctx.db
+            .query("marketDataFetchJobs")
+            .withIndex("by_runId_and_status", (q) =>
+              q.eq("runId", job.runId).eq("status", "failed"),
+            )
+            .collect(),
+          ctx.db
+            .query("marketDataFetchJobs")
+            .withIndex("by_runId_and_status", (q) =>
+              q.eq("runId", job.runId).eq("status", "pending"),
+            )
+            .collect(),
+          ctx.db
+            .query("marketDataFetchJobs")
+            .withIndex("by_runId_and_status", (q) =>
+              q.eq("runId", job.runId).eq("status", "leased"),
+            )
+            .collect(),
+        ]);
+      const symbolsSucceeded = succeededJobs.length;
+      const symbolsFailed = failedJobs.length;
       const isRunComplete =
+        pendingJobs.length + leasedJobs.length === 0 ||
         symbolsSucceeded + symbolsFailed >= run.symbolsRequested;
       await ctx.db.patch(job.runId, {
         completedAt: isRunComplete ? now : run.completedAt,
@@ -1596,6 +1635,7 @@ export const processMarketDataFetchJobs = internalAction({
             providerSymbol: job.providerSymbol,
           });
           await ctx.runMutation(internal.marketData.completeMarketDataFetchJob, {
+            expectedAttempt: job.attempts,
             jobId: job._id,
             resultStatus: "succeeded",
             snapshots: [
@@ -1649,6 +1689,7 @@ export const processMarketDataFetchJobs = internalAction({
           startDate: job.startDate,
         });
         await ctx.runMutation(internal.marketData.completeMarketDataFetchJob, {
+          expectedAttempt: job.attempts,
           jobId: job._id,
           resultStatus: "succeeded",
           snapshots: closes.map((close) => ({
@@ -1682,6 +1723,7 @@ export const processMarketDataFetchJobs = internalAction({
             : [];
         await ctx.runMutation(internal.marketData.completeMarketDataFetchJob, {
           errorMessage,
+          expectedAttempt: job.attempts,
           jobId: job._id,
           resultStatus: "failed",
           snapshots,
@@ -1763,7 +1805,10 @@ export const backfillHistoricalPriceSnapshots = action({
         estimatedCredits: providerSymbol ? 1 : 2,
         kind: "historical_backfill",
         providerSymbol,
-        sourceTradeIds: candidate.sourceTradeIds,
+        sourceTradeIds: candidate.sourceTradeIds.slice(
+          0,
+          MAX_SOURCE_TRADE_CONTEXT_IDS,
+        ),
         startDate,
         symbol: candidate.symbol,
       });
