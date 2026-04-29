@@ -1193,38 +1193,13 @@ export const completeMarketDataFetchJob = internalMutation({
 
     const run = await ctx.db.get(job.runId);
     if (run !== null) {
-      const [succeededJobs, failedJobs, pendingJobs, leasedJobs] =
-        await Promise.all([
-          ctx.db
-            .query("marketDataFetchJobs")
-            .withIndex("by_runId_and_status", (q) =>
-              q.eq("runId", job.runId).eq("status", "completed"),
-            )
-            .collect(),
-          ctx.db
-            .query("marketDataFetchJobs")
-            .withIndex("by_runId_and_status", (q) =>
-              q.eq("runId", job.runId).eq("status", "failed"),
-            )
-            .collect(),
-          ctx.db
-            .query("marketDataFetchJobs")
-            .withIndex("by_runId_and_status", (q) =>
-              q.eq("runId", job.runId).eq("status", "pending"),
-            )
-            .collect(),
-          ctx.db
-            .query("marketDataFetchJobs")
-            .withIndex("by_runId_and_status", (q) =>
-              q.eq("runId", job.runId).eq("status", "leased"),
-            )
-            .collect(),
-        ]);
-      const symbolsSucceeded = succeededJobs.length;
-      const symbolsFailed = failedJobs.length;
+      const symbolsSucceeded =
+        run.symbolsSucceeded + (args.resultStatus === "succeeded" ? 1 : 0);
+      const symbolsFailed =
+        run.symbolsFailed + (args.resultStatus === "failed" ? 1 : 0);
       const isRunComplete =
-        pendingJobs.length + leasedJobs.length === 0 ||
         symbolsSucceeded + symbolsFailed >= run.symbolsRequested;
+
       await ctx.db.patch(job.runId, {
         completedAt: isRunComplete ? now : run.completedAt,
         errorMessage:
