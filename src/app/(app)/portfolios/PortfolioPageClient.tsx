@@ -7,7 +7,10 @@ import { useState } from "react";
 import { z } from "zod";
 import { Alert, useAppForm } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
-import { APP_PAGE_TITLES } from "../../../../shared/e2e/testIds";
+import {
+  APP_PAGE_TITLES,
+  getPortfolioRowTestId,
+} from "../../../../shared/e2e/testIds";
 
 const createPortfolioSchema = z.object({
   name: z
@@ -129,12 +132,17 @@ export default function PortfolioPageClient({
             </thead>
             <tbody className="divide-y divide-slate-700 bg-slate-900">
               {portfolios.map((portfolio) => (
-                <tr key={portfolio._id} className="hover:bg-slate-800/50">
+                <tr
+                  key={portfolio._id}
+                  className="hover:bg-slate-800/50"
+                  data-testid={getPortfolioRowTestId(portfolio.name)}
+                >
                   <td className="px-4 py-3 text-sm font-medium whitespace-nowrap">
                     <Link
                       href={`/portfolios/${portfolio._id}`}
                       className="text-slate-12 hover:underline"
                       aria-label={`View portfolio ${portfolio.name}`}
+                      data-testid={`portfolio-link-${portfolio._id}`}
                     >
                       {portfolio.name}
                     </Link>
