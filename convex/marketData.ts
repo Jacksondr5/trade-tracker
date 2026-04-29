@@ -1175,10 +1175,12 @@ export const completeMarketDataFetchJob = internalMutation({
     if (job === null) {
       return null;
     }
+    const leaseExpiresAt = job.leaseExpiresAt;
     if (
       job.status !== "leased" ||
       job.attempts !== args.expectedAttempt ||
-      job.leaseExpiresAt <= now
+      leaseExpiresAt === undefined ||
+      leaseExpiresAt <= now
     ) {
       return null;
     }
