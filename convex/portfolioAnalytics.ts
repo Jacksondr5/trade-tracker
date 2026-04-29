@@ -1,4 +1,5 @@
 import { ConvexError, v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   internalMutation,
@@ -12,6 +13,7 @@ import { assertOwner, requireUser } from "./lib/auth";
 const MARKET_DATA_PROVIDER = "twelve_data";
 const POSITION_EPSILON = 0.00000001;
 const MAX_SERIES_ROWS = 2_000;
+const OWNER_VALUATION_RECOMPUTE_BATCH_SIZE = 25;
 
 const priceCoverageStatusValidator = v.union(
   v.literal("complete"),
@@ -356,22 +358,28 @@ export const computeDailyValuationForOwner = internalMutation({
 
 export const computeDailyValuationsForOwner = internalMutation({
   args: {
+    continueCursor: v.optional(v.union(v.string(), v.null())),
     date: v.string(),
     ownerId: v.string(),
   },
   returns: v.object({
+    continueCursor: v.union(v.string(), v.null()),
     date: v.string(),
+    isDone: v.boolean(),
     ownerId: v.string(),
     portfoliosComputed: v.number(),
   }),
   handler: async (ctx, args) => {
     assertIsoDate(args.date, "date");
-    const portfolios = await ctx.db
+    const page = await ctx.db
       .query("portfolios")
       .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
-      .collect();
+      .paginate({
+        cursor: args.continueCursor ?? null,
+        numItems: OWNER_VALUATION_RECOMPUTE_BATCH_SIZE,
+      });
 
-    for (const portfolio of portfolios) {
+    for (const portfolio of page.page) {
       await upsertDailyValuation({
         ctx,
         date: args.date,
@@ -380,10 +388,24 @@ export const computeDailyValuationsForOwner = internalMutation({
       });
     }
 
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.portfolioAnalytics.computeDailyValuationsForOwner,
+        {
+          continueCursor: page.continueCursor,
+          date: args.date,
+          ownerId: args.ownerId,
+        },
+      );
+    }
+
     return {
+      continueCursor: page.continueCursor,
       date: args.date,
+      isDone: page.isDone,
       ownerId: args.ownerId,
-      portfoliosComputed: portfolios.length,
+      portfoliosComputed: page.page.length,
     };
   },
 });
