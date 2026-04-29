@@ -91,6 +91,13 @@ export default function MarketDataPageClient({
         others.push(instrument);
       }
     }
+    const bySymbol = (a: Instrument, b: Instrument) => {
+      const symbolDelta = a.symbol.localeCompare(b.symbol);
+      if (symbolDelta !== 0) return symbolDelta;
+      return a.assetType.localeCompare(b.assetType);
+    };
+    needsReview.sort(bySymbol);
+    others.sort(bySymbol);
     return { needsReview, others };
   }, [instruments]);
 
