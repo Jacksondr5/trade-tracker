@@ -1,4 +1,5 @@
 import { ConvexError, v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -23,6 +24,7 @@ const TWELVE_DATA_BASE_URL = "https://api.twelvedata.com";
 const TWELVE_DATA_TIMEOUT_MS = 8_000;
 const HISTORICAL_PRICE_OUTPUT_SIZE = 5_000;
 const HISTORICAL_PRICE_BATCH_SIZE = 2_000;
+const TRADE_SCAN_PAGE_SIZE = 256;
 const POSITION_EPSILON = 0.00000001;
 const BENCHMARK_INSTRUMENTS: Array<{
   assetType: MarketDataAssetType;
@@ -130,6 +132,16 @@ type HistoricalBackfillFailedSymbol = {
   errorMessage: string;
   sourceTradeIds: Id<"trades">[];
   symbol: string;
+};
+
+type PositionScanTrade = {
+  assetType: MarketDataAssetType;
+  direction: "long" | "short";
+  ownerId: string;
+  portfolioId?: Id<"portfolios">;
+  quantity: number;
+  side: "buy" | "sell";
+  ticker: string;
 };
 
 class DailyCloseMissingError extends Error {
@@ -320,7 +332,7 @@ function getUtcDateString(timestamp: number): string {
   return new Date(timestamp).toISOString().slice(0, 10);
 }
 
-function getSignedPositionQuantity(trade: Doc<"trades">): number {
+function getSignedPositionQuantity(trade: PositionScanTrade): number {
   const openingSide = trade.direction === "long" ? "buy" : "sell";
   return trade.side === openingSide ? trade.quantity : -trade.quantity;
 }
@@ -648,6 +660,47 @@ export const ensureNeedsReviewInstrument = internalMutation({
 });
 
 export const getPortfolioValuationUniverse = internalQuery({
+  args: {
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: v.object({
+    continueCursor: v.string(),
+    isDone: v.boolean(),
+    page: v.array(
+      v.object({
+        assetType: assetTypeValidator,
+        direction: v.union(v.literal("long"), v.literal("short")),
+        ownerId: v.string(),
+        portfolioId: v.optional(v.id("portfolios")),
+        quantity: v.number(),
+        side: v.union(v.literal("buy"), v.literal("sell")),
+        ticker: v.string(),
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query("trades")
+      .order("desc")
+      .paginate(args.paginationOpts);
+
+    return {
+      continueCursor: page.continueCursor,
+      isDone: page.isDone,
+      page: page.page.map((trade) => ({
+        assetType: trade.assetType,
+        direction: trade.direction,
+        ownerId: trade.ownerId,
+        portfolioId: trade.portfolioId,
+        quantity: trade.quantity,
+        side: trade.side,
+        ticker: trade.ticker,
+      })),
+    };
+  },
+});
+
+export const getPortfolioValuationUniversePaged = internalAction({
   args: {},
   returns: v.array(
     v.object({
@@ -666,29 +719,37 @@ export const getPortfolioValuationUniverse = internalQuery({
       }
     >();
 
-    // Use one non-paginated read because Convex only supports a single
-    // paginated query execution per function, and this scan must cover all
-    // portfolio trades to compute open positions.
-    const trades = await ctx.db.query("trades").order("desc").collect();
+    let cursor: string | null = null;
+    let done = false;
+    while (!done) {
+      const page = await ctx.runQuery(
+        internal.marketData.getPortfolioValuationUniverse,
+        {
+          paginationOpts: { cursor, numItems: TRADE_SCAN_PAGE_SIZE },
+        },
+      );
+      cursor = page.continueCursor;
+      done = page.isDone;
 
-    for (const trade of trades) {
-      if (trade.portfolioId === undefined) {
-        continue;
+      for (const trade of page.page) {
+        if (trade.portfolioId === undefined) {
+          continue;
+        }
+
+        const symbol = normalizeMarketDataSymbol(trade.ticker);
+        if (!symbol) {
+          continue;
+        }
+
+        const key = `${trade.ownerId}:${trade.assetType}:${symbol}`;
+        const current = positionQuantities.get(key);
+        positionQuantities.set(key, {
+          assetType: trade.assetType,
+          ownerId: trade.ownerId,
+          quantity: (current?.quantity ?? 0) + getSignedPositionQuantity(trade),
+          symbol,
+        });
       }
-
-      const symbol = normalizeMarketDataSymbol(trade.ticker);
-      if (!symbol) {
-        continue;
-      }
-
-      const key = `${trade.ownerId}:${trade.assetType}:${symbol}`;
-      const current = positionQuantities.get(key);
-      positionQuantities.set(key, {
-        assetType: trade.assetType,
-        ownerId: trade.ownerId,
-        quantity: (current?.quantity ?? 0) + getSignedPositionQuantity(trade),
-        symbol,
-      });
     }
 
     const instrumentsByOwner = new Map<
@@ -737,6 +798,47 @@ export const getPortfolioValuationUniverse = internalQuery({
 export const getHistoricalBackfillUniverse = internalQuery({
   args: {
     ownerId: v.string(),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: v.object({
+    continueCursor: v.string(),
+    isDone: v.boolean(),
+    page: v.array(
+      v.object({
+        _id: v.id("trades"),
+        assetType: assetTypeValidator,
+        date: v.number(),
+        ownerId: v.string(),
+        portfolioId: v.optional(v.id("portfolios")),
+        ticker: v.string(),
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query("trades")
+      .withIndex("by_owner_date", (q) => q.eq("ownerId", args.ownerId))
+      .order("asc")
+      .paginate(args.paginationOpts);
+
+    return {
+      continueCursor: page.continueCursor,
+      isDone: page.isDone,
+      page: page.page.map((trade) => ({
+        _id: trade._id,
+        assetType: trade.assetType,
+        date: trade.date,
+        ownerId: trade.ownerId,
+        portfolioId: trade.portfolioId,
+        ticker: trade.ticker,
+      })),
+    };
+  },
+});
+
+export const getHistoricalBackfillUniversePaged = internalAction({
+  args: {
+    ownerId: v.string(),
   },
   returns: v.object({
     candidates: v.array(
@@ -751,40 +853,44 @@ export const getHistoricalBackfillUniverse = internalQuery({
   handler: async (ctx, args): Promise<HistoricalBackfillUniverse> => {
     const candidateByKey = new Map<string, HistoricalBackfillCandidate>();
     let earliestTradeDate: number | null = null;
+    let cursor: string | null = null;
+    let done = false;
+    while (!done) {
+      const page = await ctx.runQuery(
+        internal.marketData.getHistoricalBackfillUniverse,
+        {
+          ownerId: args.ownerId,
+          paginationOpts: { cursor, numItems: TRADE_SCAN_PAGE_SIZE },
+        },
+      );
+      cursor = page.continueCursor;
+      done = page.isDone;
 
-    // Use one non-paginated read because Convex only supports a single
-    // paginated query execution per function, and historical backfill needs
-    // the complete owner trade history to derive the backfill universe.
-    const trades = await ctx.db
-      .query("trades")
-      .withIndex("by_owner_date", (q) => q.eq("ownerId", args.ownerId))
-      .order("asc")
-      .collect();
+      for (const trade of page.page) {
+        if (trade.portfolioId === undefined) {
+          continue;
+        }
 
-    for (const trade of trades) {
-      if (trade.portfolioId === undefined) {
-        continue;
-      }
+        const symbol = normalizeMarketDataSymbol(trade.ticker);
+        if (!symbol) {
+          continue;
+        }
 
-      const symbol = normalizeMarketDataSymbol(trade.ticker);
-      if (!symbol) {
-        continue;
-      }
-
-      earliestTradeDate =
-        earliestTradeDate === null
-          ? trade.date
-          : Math.min(earliestTradeDate, trade.date);
-      const candidateKey = `${trade.assetType}:${symbol}`;
-      const existingCandidate = candidateByKey.get(candidateKey);
-      if (existingCandidate === undefined) {
-        candidateByKey.set(candidateKey, {
-          assetType: trade.assetType,
-          sourceTradeIds: [trade._id],
-          symbol,
-        });
-      } else {
-        existingCandidate.sourceTradeIds.push(trade._id);
+        earliestTradeDate =
+          earliestTradeDate === null
+            ? trade.date
+            : Math.min(earliestTradeDate, trade.date);
+        const candidateKey = `${trade.assetType}:${symbol}`;
+        const existingCandidate = candidateByKey.get(candidateKey);
+        if (existingCandidate === undefined) {
+          candidateByKey.set(candidateKey, {
+            assetType: trade.assetType,
+            sourceTradeIds: [trade._id],
+            symbol,
+          });
+        } else {
+          existingCandidate.sourceTradeIds.push(trade._id);
+        }
       }
     }
 
@@ -1202,8 +1308,8 @@ export const refreshDailyPriceSnapshots = internalAction({
     const ownerUniverses: Array<{
       instruments: Doc<"marketDataInstruments">[];
       ownerId: string;
-    }> = await ctx.runQuery(
-      internal.marketData.getPortfolioValuationUniverse,
+    }> = await ctx.runAction(
+      internal.marketData.getPortfolioValuationUniversePaged,
       {},
     );
 
@@ -1298,8 +1404,8 @@ export const backfillHistoricalPriceSnapshots = action({
     const ownerId = await requireUser(ctx);
     const endDate = args.endDate ?? getEasternDateString(Date.now());
     assertIsoDateStringInEastern(endDate, "endDate");
-    const universe: HistoricalBackfillUniverse = await ctx.runQuery(
-      internal.marketData.getHistoricalBackfillUniverse,
+    const universe: HistoricalBackfillUniverse = await ctx.runAction(
+      internal.marketData.getHistoricalBackfillUniversePaged,
       { ownerId },
     );
     const startDate = args.startDate ?? universe.startDate;
