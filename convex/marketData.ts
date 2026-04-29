@@ -1187,12 +1187,6 @@ export const completeMarketDataFetchJob = internalMutation({
     }
 
     await upsertMarketPriceSnapshots(ctx, args.snapshots, now);
-    await ctx.db.patch(job._id, {
-      completedAt: now,
-      errorMessage: args.errorMessage,
-      status: args.resultStatus === "succeeded" ? "completed" : "failed",
-      updatedAt: now,
-    });
 
     const run = await ctx.db.get(job.runId);
     if (run !== null) {
@@ -1220,6 +1214,17 @@ export const completeMarketDataFetchJob = internalMutation({
           : run.status,
         symbolsFailed,
         symbolsSucceeded,
+      });
+    }
+
+    if (args.resultStatus === "succeeded") {
+      await ctx.db.delete(job._id);
+    } else {
+      await ctx.db.patch(job._id, {
+        completedAt: now,
+        errorMessage: args.errorMessage,
+        status: "failed",
+        updatedAt: now,
       });
     }
 

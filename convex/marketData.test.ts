@@ -507,6 +507,9 @@ describe("market data instruments", () => {
         ) ?? null
       );
     });
+    const jobs = await t.run(async (ctx) => {
+      return await ctx.db.query("marketDataFetchJobs").collect();
+    });
 
     expect(result).toMatchObject({
       jobsQueued: 2,
@@ -551,6 +554,12 @@ describe("market data instruments", () => {
       symbolsFailed: 1,
       symbolsRequested: 2,
       symbolsSucceeded: 1,
+    });
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      providerSymbol: "MSFT",
+      status: "failed",
+      symbol: "MSFT",
     });
   });
 
@@ -903,6 +912,20 @@ describe("market data instruments", () => {
       status: "failed",
       symbol: "NOPE",
     });
+    expect(jobs).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: "completed",
+        }),
+      ]),
+    );
+    expect(jobs).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          symbol: "SPY",
+        }),
+      ]),
+    );
     expect(nopeInstrument).toMatchObject({
       lastError: expect.stringContaining("No Twelve Data symbol match found"),
       resolutionStatus: "needs_review",
