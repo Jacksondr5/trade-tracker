@@ -676,10 +676,11 @@ export const listInstruments = query({
     let instruments: Doc<"marketDataInstruments">[] = [];
 
     if (args.status !== undefined) {
+      const status = args.status;
       instruments = await ctx.db
         .query("marketDataInstruments")
         .withIndex("by_ownerId_and_resolutionStatus", (q) =>
-          q.eq("ownerId", ownerId).eq("resolutionStatus", args.status),
+          q.eq("ownerId", ownerId).eq("resolutionStatus", status),
         )
         .take(MARKET_DATA_INSTRUMENT_LIST_LIMIT);
     } else {
