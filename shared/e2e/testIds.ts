@@ -424,6 +424,83 @@ export function getNoteContentTestId(prefix: string, noteId: string): string {
   return `${prefix}-note-content-${noteId}`;
 }
 
+export const PORTFOLIO_DATA_ISSUES_TEST_IDS = {
+  awaitingSnapshotGroup: "portfolio-data-issues-awaiting-snapshot",
+  needsMappingGroup: "portfolio-data-issues-needs-mapping",
+  panel: "portfolio-data-issues-panel",
+  uncoveredTradesGroup: "portfolio-data-issues-uncovered-trades",
+} as const;
+
+export const PORTFOLIO_CAMPAIGN_EXPOSURE_UNCOVERED_ROW_TEST_ID =
+  "portfolio-campaign-exposure-uncovered-row";
+
+export const PORTFOLIO_DETAIL_TEST_IDS = {
+  allocationCash: "portfolio-allocation-cash",
+  allocationMarketValue: "portfolio-allocation-market-value",
+  allocationSection: "portfolio-allocation-section",
+  asOfDate: "portfolio-as-of-date",
+  backLink: "portfolio-back-link",
+  campaignExposureEmpty: "portfolio-campaign-exposure-empty",
+  campaignExposureSection: "portfolio-campaign-exposure-section",
+  campaignExposureUncovered: "portfolio-campaign-exposure-uncovered",
+  cancelDeleteButton: "portfolio-cancel-delete-button",
+  cancelEditNameButton: "portfolio-cancel-edit-name-button",
+  confirmDeleteButton: "portfolio-confirm-delete-button",
+  deleteButton: "portfolio-delete-button",
+  editNameButton: "portfolio-edit-name-button",
+  emptyValuationState: "portfolio-empty-valuation-state",
+  equityChartSection: "portfolio-equity-chart-section",
+  equityChartEmpty: "portfolio-equity-chart-empty",
+  equityChartSvg: "portfolio-equity-chart-svg",
+  missingPricesAlert: "portfolio-missing-prices-alert",
+  nameDisplay: "portfolio-name-display",
+  nameInput: "portfolio-name-input",
+  openPositionsEmpty: "portfolio-open-positions-empty",
+  openPositionsSection: "portfolio-open-positions-section",
+  recentTradesEmpty: "portfolio-recent-trades-empty",
+  recentTradesSection: "portfolio-recent-trades-section",
+  returnPercent: "portfolio-return-percent",
+  returnSection: "portfolio-return-section",
+  saveNameButton: "portfolio-save-name-button",
+  summaryCash: "portfolio-summary-cash",
+  summaryMarketValue: "portfolio-summary-market-value",
+  summaryTotalEquity: "portfolio-summary-total-equity",
+  summarySection: "portfolio-summary-section",
+  timeframeSelect: "portfolio-timeframe-select",
+} as const;
+
+export function getPortfolioCampaignExposureRowTestId(
+  campaignId: string,
+): string {
+  return `portfolio-campaign-exposure-row-${normalizeSegment(campaignId)}`;
+}
+
+export function getPortfolioCampaignExposureLinkTestId(
+  campaignId: string,
+): string {
+  return `portfolio-campaign-exposure-link-${normalizeSegment(campaignId)}`;
+}
+
+export function getPortfolioOpenPositionRowTestId(
+  assetType: string,
+  ticker: string,
+  direction: string,
+): string {
+  return `portfolio-open-position-row-${normalizeSegment(assetType)}-${normalizeSegment(ticker)}-${normalizeSegment(direction)}`;
+}
+
+export function getPortfolioRecentTradeRowTestId(tradeId: string): string {
+  return `portfolio-recent-trade-row-${normalizeSegment(tradeId)}`;
+}
+
+export function getPortfolioLinkTestId(portfolioKey: string): string {
+  return `portfolio-link-${normalizeSegment(portfolioKey)}`;
+}
+
+export function getPortfolioRowTestId(name: string): string {
+  return `portfolio-row-${normalizeSegment(name)}`;
+}
+
 export const PORTFOLIO_CASH_LEDGER_TEST_IDS = {
   addAmountInput: "cash-ledger-amount-input",
   addDateInput: "cash-ledger-date-input",

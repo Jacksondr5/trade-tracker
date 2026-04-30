@@ -14,10 +14,10 @@ export default async function PortfolioDetailPage({
   const token = await getConvexTokenOrThrow();
   const portfolioId = id as Id<"portfolios">;
 
-  let preloadedPortfolioDetail;
+  let preloadedPortfolioOverview;
   try {
-    preloadedPortfolioDetail = await preloadQuery(
-      api.portfolios.getPortfolioDetail,
+    preloadedPortfolioOverview = await preloadQuery(
+      api.portfolios.getPortfolioOverview,
       { portfolioId },
       { token },
     );
@@ -34,7 +34,7 @@ export default async function PortfolioDetailPage({
   return (
     <PortfolioDetailPageClient
       portfolioId={portfolioId}
-      preloadedPortfolioDetail={preloadedPortfolioDetail}
+      preloadedPortfolioOverview={preloadedPortfolioOverview}
     />
   );
 }
