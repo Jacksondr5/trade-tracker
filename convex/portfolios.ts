@@ -564,10 +564,10 @@ export const getPortfolioOverview = query({
     }
 
     const denominator =
-      latestValuationRow !== null && latestValuationRow.marketValue !== 0
-        ? Math.abs(latestValuationRow.marketValue)
-        : totalGrossMarketValue !== 0
-          ? totalGrossMarketValue
+      totalGrossMarketValue !== 0
+        ? totalGrossMarketValue
+        : latestValuationRow !== null && latestValuationRow.marketValue !== 0
+          ? Math.abs(latestValuationRow.marketValue)
           : 0;
 
     const campaignExposure = [...exposureByCampaign.values()]
