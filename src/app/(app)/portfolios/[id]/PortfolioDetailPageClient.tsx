@@ -23,6 +23,7 @@ import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { capitalize, formatCurrency, formatDate } from "~/lib/format";
 import {
+  PORTFOLIO_DATA_ISSUES_TEST_IDS,
   PORTFOLIO_DETAIL_TEST_IDS,
   getPortfolioCampaignExposureLinkTestId,
   getPortfolioCampaignExposureRowTestId,
@@ -80,6 +81,43 @@ function formatIsoDateForDisplay(isoDate: string): string {
     timeZone: "UTC",
     year: "numeric",
   });
+}
+
+type PositionPriceStatus =
+  | "ok"
+  | "needs_mapping"
+  | "awaiting_snapshot"
+  | "no_valuation";
+
+function getPriceStatusTitle(status: PositionPriceStatus): string {
+  switch (status) {
+    case "needs_mapping":
+      return "Needs Market Data mapping. See Data issues at the top of this page.";
+    case "awaiting_snapshot":
+      return "Mapped, awaiting next daily price refresh. See Data issues at the top of this page.";
+    case "no_valuation":
+      return "Market value will appear after the first daily valuation runs.";
+    case "ok":
+    default:
+      return "Market value priced from the latest daily snapshot.";
+  }
+}
+
+function getPriceStatusAriaLabel(
+  status: PositionPriceStatus,
+  ticker: string,
+): string {
+  switch (status) {
+    case "needs_mapping":
+      return `${ticker} market value pending: needs Market Data mapping.`;
+    case "awaiting_snapshot":
+      return `${ticker} market value pending: awaiting next daily price refresh.`;
+    case "no_valuation":
+      return `${ticker} market value pending: portfolio has no valuation yet.`;
+    case "ok":
+    default:
+      return `${ticker} market value`;
+  }
 }
 
 function describeError(error: unknown, fallback: string): string {
@@ -236,7 +274,6 @@ export default function PortfolioDetailPageClient({
     awaitingSnapshotSymbols,
     campaignExposure,
     latestValuation,
-    missingSymbols,
     needsMappingSymbols,
     openPositions,
   } = overview;
@@ -397,39 +434,13 @@ export default function PortfolioDetailPageClient({
         </Alert>
       )}
 
-      {missingSymbols.length > 0 && (
-        <Alert
-          variant="warning"
-          className="mb-4"
-          data-testid={PORTFOLIO_DETAIL_TEST_IDS.missingPricesAlert}
-        >
-          <span className="block">
-            Market value is incomplete for this portfolio.
-            {needsMappingSymbols.length > 0 ? (
-              <span className="mt-1 block">
-                <strong>Needs mapping:</strong>{" "}
-                {needsMappingSymbols.join(", ")} —{" "}
-                <Link
-                  href="/market-data"
-                  className="font-medium underline underline-offset-2"
-                >
-                  open Market Data
-                </Link>{" "}
-                and pick a provider symbol so prices can be fetched.
-              </span>
-            ) : null}
-            {awaitingSnapshotSymbols.length > 0 ? (
-              <span className="mt-1 block">
-                <strong>Awaiting prices:</strong>{" "}
-                {awaitingSnapshotSymbols.join(", ")} — these symbols are mapped
-                but no daily close has been fetched yet for{" "}
-                {overview.asOfDate ?? "the latest valuation date"}. The next
-                nightly refresh should fill these in.
-              </span>
-            ) : null}
-          </span>
-        </Alert>
-      )}
+      <DataIssuesPanel
+        asOfDate={overview.asOfDate}
+        awaitingSnapshotSymbols={awaitingSnapshotSymbols}
+        campaignExposure={campaignExposure}
+        needsMappingSymbols={needsMappingSymbols}
+        uncoveredTradeCount={overview.uncoveredCampaignTradeCount}
+      />
 
       {/* Summary cards */}
       <section
@@ -629,26 +640,16 @@ export default function PortfolioDetailPageClient({
                     <td className="px-3 py-2 text-right text-slate-12">
                       {position.hasPrice && position.marketValue !== null ? (
                         formatCurrency(position.marketValue)
-                      ) : position.priceStatus === "needs_mapping" ? (
-                        <span
-                          className="text-amber-11"
-                          title="Map a provider symbol in Market Data so prices can be fetched."
-                        >
-                          Needs mapping
-                        </span>
-                      ) : position.priceStatus === "awaiting_snapshot" ? (
-                        <span
-                          className="text-blue-11"
-                          title="The symbol is mapped, but a daily close hasn't been fetched yet."
-                        >
-                          Awaiting price
-                        </span>
                       ) : (
                         <span
-                          className="text-olive-11"
-                          title="Market value will appear after the first daily valuation runs."
+                          aria-label={getPriceStatusAriaLabel(
+                            position.priceStatus,
+                            position.ticker,
+                          )}
+                          className="text-slate-11"
+                          title={getPriceStatusTitle(position.priceStatus)}
                         >
-                          Awaiting valuation
+                          —
                         </span>
                       )}
                     </td>
@@ -665,23 +666,9 @@ export default function PortfolioDetailPageClient({
         className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4"
         data-testid={PORTFOLIO_DETAIL_TEST_IDS.campaignExposureSection}
       >
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold text-olive-12">
-            Campaign exposure
-          </h2>
-          {overview.uncoveredCampaignTradeCount > 0 ? (
-            <span
-              className="text-xs text-olive-11"
-              data-testid={
-                PORTFOLIO_DETAIL_TEST_IDS.campaignExposureUncovered
-              }
-            >
-              {overview.uncoveredCampaignTradeCount} trade
-              {overview.uncoveredCampaignTradeCount === 1 ? "" : "s"} not linked
-              to a campaign
-            </span>
-          ) : null}
-        </div>
+        <h2 className="mb-3 text-lg font-semibold text-olive-12">
+          Campaign exposure
+        </h2>
 
         {campaignExposure.length === 0 ? (
           <p
@@ -713,23 +700,6 @@ export default function PortfolioDetailPageClient({
                     <Badge variant={getCampaignStatusVariant(row.status)}>
                       {capitalize(row.status)}
                     </Badge>
-                    {row.needsMappingSymbols.length > 0 ? (
-                      <Badge
-                        variant="warning"
-                        title={`Map a provider symbol in Market Data so prices can be fetched: ${row.needsMappingSymbols.join(", ")}.`}
-                      >
-                        Needs mapping ({row.needsMappingSymbols.join(", ")})
-                      </Badge>
-                    ) : null}
-                    {row.awaitingSnapshotSymbols.length > 0 ? (
-                      <Badge
-                        variant="info"
-                        title={`Mapped, waiting on the next daily price refresh: ${row.awaitingSnapshotSymbols.join(", ")}.`}
-                      >
-                        Awaiting prices (
-                        {row.awaitingSnapshotSymbols.join(", ")})
-                      </Badge>
-                    ) : null}
                   </div>
                   <p className="mt-0.5 text-xs text-olive-11">
                     {row.openPositionCount} open position
@@ -770,6 +740,159 @@ export default function PortfolioDetailPageClient({
       {/* Recent trades */}
       <RecentTradesSection portfolioId={portfolioId} />
     </div>
+  );
+}
+
+type CampaignExposureRow = {
+  _id: Id<"campaigns">;
+  awaitingSnapshotSymbols: string[];
+  name: string;
+  needsMappingSymbols: string[];
+};
+
+function DataIssuesPanel({
+  asOfDate,
+  awaitingSnapshotSymbols,
+  campaignExposure,
+  needsMappingSymbols,
+  uncoveredTradeCount,
+}: {
+  asOfDate: string | null;
+  awaitingSnapshotSymbols: string[];
+  campaignExposure: ReadonlyArray<CampaignExposureRow>;
+  needsMappingSymbols: string[];
+  uncoveredTradeCount: number;
+}) {
+  const totalIssues =
+    needsMappingSymbols.length +
+    awaitingSnapshotSymbols.length +
+    (uncoveredTradeCount > 0 ? 1 : 0);
+  if (totalIssues === 0) {
+    return null;
+  }
+
+  const campaignsBySymbol = (symbol: string): CampaignExposureRow[] => {
+    return campaignExposure.filter(
+      (row) =>
+        row.needsMappingSymbols.includes(symbol) ||
+        row.awaitingSnapshotSymbols.includes(symbol),
+    );
+  };
+
+  const renderSymbolList = (symbols: string[]) => (
+    <ul className="mt-2 space-y-1.5">
+      {symbols.map((symbol) => {
+        const campaigns = campaignsBySymbol(symbol);
+        return (
+          <li
+            key={symbol}
+            className="flex flex-col gap-1 text-sm text-olive-12 sm:flex-row sm:items-baseline sm:gap-2"
+          >
+            <span className="font-medium tabular-nums">{symbol}</span>
+            <span className="text-olive-11">
+              {campaigns.length === 0 ? (
+                "Not linked to a campaign"
+              ) : (
+                <>
+                  Used by{" "}
+                  {campaigns.map((campaign, index) => (
+                    <span key={campaign._id}>
+                      {index > 0 ? ", " : null}
+                      <Link
+                        className="text-olive-12 underline underline-offset-2 hover:text-blue-11"
+                        href={`/campaigns/${campaign._id}`}
+                      >
+                        {campaign.name}
+                      </Link>
+                    </span>
+                  ))}
+                </>
+              )}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+
+  return (
+    <section
+      className="mb-6 rounded-lg border border-amber-7 bg-amber-3/40 p-4"
+      data-testid={PORTFOLIO_DATA_ISSUES_TEST_IDS.panel}
+    >
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold text-amber-12">
+          Data issues ({totalIssues})
+        </h2>
+        <span className="text-xs text-amber-11">
+          Resolve these to get accurate market value, allocation, and exposure.
+        </span>
+      </div>
+      <div className="space-y-4">
+        {needsMappingSymbols.length > 0 ? (
+          <div
+            className="rounded-md border border-amber-6 bg-amber-2 p-3"
+            data-testid={PORTFOLIO_DATA_ISSUES_TEST_IDS.needsMappingGroup}
+          >
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <p className="font-semibold text-amber-12">
+                Symbols need Market Data mapping ({needsMappingSymbols.length})
+              </p>
+              <Link
+                className="text-sm font-medium text-amber-11 underline underline-offset-2 hover:text-amber-12"
+                href="/market-data"
+              >
+                Open Market Data →
+              </Link>
+            </div>
+            <p className="mt-1 text-sm text-olive-11">
+              Pick a provider symbol so daily prices can be fetched. Until
+              this is resolved, market value treats these positions as
+              unpriced.
+            </p>
+            {renderSymbolList(needsMappingSymbols)}
+          </div>
+        ) : null}
+        {awaitingSnapshotSymbols.length > 0 ? (
+          <div
+            className="rounded-md border border-blue-6 bg-blue-2 p-3"
+            data-testid={PORTFOLIO_DATA_ISSUES_TEST_IDS.awaitingSnapshotGroup}
+          >
+            <p className="font-semibold text-blue-12">
+              Symbols awaiting next price refresh (
+              {awaitingSnapshotSymbols.length})
+            </p>
+            <p className="mt-1 text-sm text-olive-11">
+              These symbols are mapped, but no daily close has been fetched
+              yet
+              {asOfDate ? (
+                <>
+                  {" "}
+                  for <span className="font-medium">{asOfDate}</span>
+                </>
+              ) : null}
+              . The next nightly refresh should fill these in.
+            </p>
+            {renderSymbolList(awaitingSnapshotSymbols)}
+          </div>
+        ) : null}
+        {uncoveredTradeCount > 0 ? (
+          <div
+            className="rounded-md border border-olive-6 bg-olive-1 p-3"
+            data-testid={PORTFOLIO_DATA_ISSUES_TEST_IDS.uncoveredTradesGroup}
+          >
+            <p className="font-semibold text-olive-12">
+              Trades not linked to a campaign ({uncoveredTradeCount})
+            </p>
+            <p className="mt-1 text-sm text-olive-11">
+              These trades count toward the portfolio total but don&apos;t
+              show up in campaign exposure. Link them to a trade plan to
+              include them.
+            </p>
+          </div>
+        ) : null}
+      </div>
+    </section>
   );
 }
 

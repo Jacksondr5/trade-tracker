@@ -424,6 +424,13 @@ export function getNoteContentTestId(prefix: string, noteId: string): string {
   return `${prefix}-note-content-${noteId}`;
 }
 
+export const PORTFOLIO_DATA_ISSUES_TEST_IDS = {
+  awaitingSnapshotGroup: "portfolio-data-issues-awaiting-snapshot",
+  needsMappingGroup: "portfolio-data-issues-needs-mapping",
+  panel: "portfolio-data-issues-panel",
+  uncoveredTradesGroup: "portfolio-data-issues-uncovered-trades",
+} as const;
+
 export const PORTFOLIO_DETAIL_TEST_IDS = {
   allocationCash: "portfolio-allocation-cash",
   allocationMarketValue: "portfolio-allocation-market-value",
