@@ -296,6 +296,16 @@ const overviewCampaignExposureValidator = v.object({
   tradeCount: v.number(),
 });
 
+const uncoveredExposureValidator = v.object({
+  awaitingSnapshotSymbols: v.array(v.string()),
+  exposureValue: v.union(v.number(), v.null()),
+  needsMappingSymbols: v.array(v.string()),
+  openPositionCount: v.number(),
+  sharePercent: v.union(v.number(), v.null()),
+  tickers: v.array(v.string()),
+  tradeCount: v.number(),
+});
+
 type PositionKey = `${"crypto" | "stock"}:${string}:${"long" | "short"}`;
 
 type AggregatedPosition = {
@@ -305,6 +315,7 @@ type AggregatedPosition = {
   quantity: number;
   ticker: string;
   tradeCount: number;
+  uncoveredQuantity: number;
 };
 
 function getSignedPositionQuantity(trade: Doc<"trades">): number {
@@ -373,7 +384,7 @@ export const getPortfolioOverview = query({
       openPositions: v.array(overviewPositionValidator),
       portfolio: portfolioValidator,
       tradeCount: v.number(),
-      uncoveredCampaignTradeCount: v.number(),
+      uncoveredExposure: uncoveredExposureValidator,
     }),
     v.null(),
   ),
@@ -420,11 +431,13 @@ export const getPortfolioOverview = query({
           quantity: 0,
           ticker: trade.ticker,
           tradeCount: 0,
+          uncoveredQuantity: 0,
         } satisfies AggregatedPosition);
       const signedQuantity = getSignedPositionQuantity(trade);
       existing.quantity += signedQuantity;
       existing.tradeCount += 1;
 
+      let attributedToCampaign: Id<"campaigns"> | null = null;
       if (trade.tradePlanId) {
         if (!tradePlanToCampaign.has(trade.tradePlanId)) {
           const tradePlan = await ctx.db.get(trade.tradePlanId);
@@ -433,13 +446,18 @@ export const getPortfolioOverview = query({
             tradePlan?.campaignId ?? null,
           );
         }
-        const campaignId = tradePlanToCampaign.get(trade.tradePlanId);
-        if (campaignId) {
+        attributedToCampaign =
+          tradePlanToCampaign.get(trade.tradePlanId) ?? null;
+        if (attributedToCampaign) {
           existing.campaignQuantities.set(
-            campaignId,
-            (existing.campaignQuantities.get(campaignId) ?? 0) + signedQuantity,
+            attributedToCampaign,
+            (existing.campaignQuantities.get(attributedToCampaign) ?? 0) +
+              signedQuantity,
           );
         }
+      }
+      if (attributedToCampaign === null) {
+        existing.uncoveredQuantity += signedQuantity;
       }
 
       positions.set(key, existing);
@@ -466,6 +484,7 @@ export const getPortfolioOverview = query({
       priceStatus: PositionPriceStatus;
       quantity: number;
       ticker: string;
+      uncoveredQuantity: number;
     }> = [];
     const missingSymbols = new Set<string>();
     const needsMappingSymbols = new Set<string>();
@@ -512,6 +531,7 @@ export const getPortfolioOverview = query({
         priceStatus,
         quantity: position.quantity,
         ticker: position.ticker,
+        uncoveredQuantity: position.uncoveredQuantity,
       });
     }
 
@@ -536,7 +556,15 @@ export const getPortfolioOverview = query({
       tradeCount: number;
     };
     const exposureByCampaign = new Map<Id<"campaigns">, ExposureBucket>();
-    let uncoveredCampaignTradeCount = 0;
+    const uncoveredBucket = {
+      awaitingSnapshotSymbols: new Set<string>(),
+      exposure: 0,
+      hasUnpricedSlice: false,
+      needsMappingSymbols: new Set<string>(),
+      openPositionCount: 0,
+      tickers: new Set<string>(),
+      tradeCount: 0,
+    };
 
     for (const trade of trades) {
       if (!trade.tradePlanId) continue;
@@ -588,17 +616,37 @@ export const getPortfolioOverview = query({
           bucket.exposure += Math.abs(campaignPositionValue);
         }
       }
+
+      if (Math.abs(position.uncoveredQuantity) > POSITION_EPSILON) {
+        uncoveredBucket.openPositionCount += 1;
+        uncoveredBucket.tickers.add(position.ticker);
+        if (position.marketValue === null) {
+          uncoveredBucket.hasUnpricedSlice = true;
+          if (position.priceStatus === "needs_mapping") {
+            uncoveredBucket.needsMappingSymbols.add(position.ticker);
+          } else if (position.priceStatus === "awaiting_snapshot") {
+            uncoveredBucket.awaitingSnapshotSymbols.add(position.ticker);
+          }
+        } else {
+          const uncoveredPositionValue =
+            (position.direction === "short" ? -1 : 1) *
+            position.uncoveredQuantity *
+            position.close!;
+          uncoveredBucket.exposure += Math.abs(uncoveredPositionValue);
+        }
+      }
     }
 
-    // Trades whose campaigns we couldn't link (e.g. trade plan has no campaign).
+    // Tally trades whose campaigns we couldn't link (no trade plan, or trade
+    // plan has no campaign).
     for (const trade of trades) {
       if (!trade.tradePlanId) {
-        uncoveredCampaignTradeCount += 1;
+        uncoveredBucket.tradeCount += 1;
         continue;
       }
       const campaignId = tradePlanToCampaign.get(trade.tradePlanId) ?? null;
       if (!campaignId || !exposureByCampaign.has(campaignId)) {
-        uncoveredCampaignTradeCount += 1;
+        uncoveredBucket.tradeCount += 1;
       }
     }
 
@@ -648,6 +696,25 @@ export const getPortfolioOverview = query({
         }
       : null;
 
+    const uncoveredExposure = {
+      awaitingSnapshotSymbols: [...uncoveredBucket.awaitingSnapshotSymbols].sort(
+        (a, b) => a.localeCompare(b),
+      ),
+      exposureValue: uncoveredBucket.hasUnpricedSlice
+        ? null
+        : uncoveredBucket.exposure,
+      needsMappingSymbols: [...uncoveredBucket.needsMappingSymbols].sort(
+        (a, b) => a.localeCompare(b),
+      ),
+      openPositionCount: uncoveredBucket.openPositionCount,
+      sharePercent:
+        uncoveredBucket.hasUnpricedSlice || denominator === 0
+          ? null
+          : uncoveredBucket.exposure / denominator,
+      tickers: [...uncoveredBucket.tickers].sort((a, b) => a.localeCompare(b)),
+      tradeCount: uncoveredBucket.tradeCount,
+    };
+
     return {
       asOfDate,
       awaitingSnapshotSymbols: [...awaitingSnapshotSymbols].sort((a, b) =>
@@ -671,7 +738,7 @@ export const getPortfolioOverview = query({
       })),
       portfolio,
       tradeCount: trades.length,
-      uncoveredCampaignTradeCount,
+      uncoveredExposure,
     };
   },
 });

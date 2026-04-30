@@ -24,6 +24,7 @@ import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { capitalize, formatCurrency, formatDate } from "~/lib/format";
 import {
+  PORTFOLIO_CAMPAIGN_EXPOSURE_UNCOVERED_ROW_TEST_ID,
   PORTFOLIO_DATA_ISSUES_TEST_IDS,
   PORTFOLIO_DETAIL_TEST_IDS,
   getPortfolioCampaignExposureLinkTestId,
@@ -440,7 +441,7 @@ export default function PortfolioDetailPageClient({
         awaitingSnapshotSymbols={awaitingSnapshotSymbols}
         campaignExposure={campaignExposure}
         needsMappingSymbols={needsMappingSymbols}
-        uncoveredTradeCount={overview.uncoveredCampaignTradeCount}
+        uncoveredTradeCount={overview.uncoveredExposure.tradeCount}
       />
 
       {/* Summary cards */}
@@ -671,7 +672,8 @@ export default function PortfolioDetailPageClient({
           Campaign exposure
         </h2>
 
-        {campaignExposure.length === 0 ? (
+        {campaignExposure.length === 0 &&
+        overview.uncoveredExposure.tradeCount === 0 ? (
           <p
             className="text-sm text-olive-11"
             data-testid={PORTFOLIO_DETAIL_TEST_IDS.campaignExposureEmpty}
@@ -732,6 +734,61 @@ export default function PortfolioDetailPageClient({
                 </div>
               </li>
             ))}
+            {overview.uncoveredExposure.tradeCount > 0 ||
+            overview.uncoveredExposure.openPositionCount > 0 ? (
+              <li
+                className="flex flex-col gap-2 rounded-md border border-dashed border-olive-6 bg-olive-1 p-3 sm:flex-row sm:items-center sm:justify-between"
+                data-testid={
+                  PORTFOLIO_CAMPAIGN_EXPOSURE_UNCOVERED_ROW_TEST_ID
+                }
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className="font-medium text-olive-12 italic"
+                      title="Trades whose trade plan has no campaign — included in the portfolio total but not in any campaign."
+                    >
+                      Trades not in a campaign
+                    </span>
+                    <Badge variant="neutral">Unlinked</Badge>
+                  </div>
+                  <p className="mt-0.5 text-xs text-olive-11">
+                    {overview.uncoveredExposure.openPositionCount} open
+                    position
+                    {overview.uncoveredExposure.openPositionCount === 1
+                      ? ""
+                      : "s"}{" "}
+                    · {overview.uncoveredExposure.tradeCount} trade
+                    {overview.uncoveredExposure.tradeCount === 1 ? "" : "s"}
+                    {overview.uncoveredExposure.tickers.length > 0
+                      ? ` · ${overview.uncoveredExposure.tickers.join(", ")}`
+                      : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-4 text-sm tabular-nums sm:text-right">
+                  <div>
+                    <p className="text-xs text-olive-11">Exposure</p>
+                    <p className="font-medium text-olive-12">
+                      {overview.uncoveredExposure.exposureValue !== null
+                        ? formatCurrency(
+                            overview.uncoveredExposure.exposureValue,
+                          )
+                        : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-olive-11">Share</p>
+                    <p className="font-medium text-olive-12">
+                      {overview.uncoveredExposure.sharePercent !== null
+                        ? formatPercent(
+                            overview.uncoveredExposure.sharePercent,
+                          )
+                        : "—"}
+                    </p>
+                  </div>
+                </div>
+              </li>
+            ) : null}
           </ul>
         )}
       </section>

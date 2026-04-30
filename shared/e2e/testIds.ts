@@ -431,6 +431,9 @@ export const PORTFOLIO_DATA_ISSUES_TEST_IDS = {
   uncoveredTradesGroup: "portfolio-data-issues-uncovered-trades",
 } as const;
 
+export const PORTFOLIO_CAMPAIGN_EXPOSURE_UNCOVERED_ROW_TEST_ID =
+  "portfolio-campaign-exposure-uncovered-row";
+
 export const PORTFOLIO_DETAIL_TEST_IDS = {
   allocationCash: "portfolio-allocation-cash",
   allocationMarketValue: "portfolio-allocation-market-value",
