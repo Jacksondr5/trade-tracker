@@ -12,6 +12,7 @@ export const APP_PAGE_TITLES = {
   dashboard: "dashboard-page-title",
   imports: "imports-page-title",
   importsBravos: "bravos-review-page-title",
+  marketData: "market-data-page-title",
   notes: "notes-page-title",
   portfolios: "portfolios-page-title",
   positions: "positions-page-title",
@@ -26,6 +27,7 @@ export const NAVIGATION_TEST_IDS = {
   dashboard: "nav-dashboard-link",
   importsBravos: "nav-imports-bravos-link",
   importsTrades: "nav-imports-trades-link",
+  marketData: "nav-market-data-link",
   notes: "nav-notes-link",
   portfolios: "nav-portfolios-link",
   positions: "nav-positions-link",
@@ -155,6 +157,65 @@ export const IMPORTS_INDEX_TEST_IDS = {
   emptyState: "imports-empty-state",
   brokerageSelect: "brokerage-select",
 } as const;
+
+export const MARKET_DATA_TEST_IDS = {
+  emptyState: "market-data-empty-state",
+  errorAlert: "market-data-error-alert",
+  noReviewState: "market-data-no-review-state",
+  reviewSection: "market-data-review-section",
+  resolvedSection: "market-data-resolved-section",
+  tableNeedsReview: "market-data-instruments-table-needs-review",
+  tableAllInstruments: "market-data-instruments-table-all-instruments",
+} as const;
+
+export function getMarketDataInstrumentRowTestId(
+  assetType: string,
+  symbol: string,
+): string {
+  return `market-data-row-${normalizeSegment(assetType)}-${normalizeSegment(symbol)}`;
+}
+
+export function getMarketDataEditProviderSymbolButtonTestId(
+  assetType: string,
+  symbol: string,
+): string {
+  return `market-data-edit-provider-symbol-${normalizeSegment(assetType)}-${normalizeSegment(symbol)}`;
+}
+
+export function getMarketDataProviderSymbolInputTestId(
+  assetType: string,
+  symbol: string,
+): string {
+  return `market-data-provider-symbol-input-${normalizeSegment(assetType)}-${normalizeSegment(symbol)}`;
+}
+
+export function getMarketDataSaveProviderSymbolButtonTestId(
+  assetType: string,
+  symbol: string,
+): string {
+  return `market-data-save-provider-symbol-${normalizeSegment(assetType)}-${normalizeSegment(symbol)}`;
+}
+
+export function getMarketDataCancelProviderSymbolButtonTestId(
+  assetType: string,
+  symbol: string,
+): string {
+  return `market-data-cancel-provider-symbol-${normalizeSegment(assetType)}-${normalizeSegment(symbol)}`;
+}
+
+export function getMarketDataIgnoreInstrumentButtonTestId(
+  assetType: string,
+  symbol: string,
+): string {
+  return `market-data-ignore-${normalizeSegment(assetType)}-${normalizeSegment(symbol)}`;
+}
+
+export function getMarketDataInstrumentStatusTestId(
+  assetType: string,
+  symbol: string,
+): string {
+  return `market-data-status-${normalizeSegment(assetType)}-${normalizeSegment(symbol)}`;
+}
 
 export const BRAVOS_REVIEW_TEST_IDS = {
   approveButton: "bravos-review-approve-button",
@@ -361,6 +422,83 @@ export function getCancelNoteButtonTestId(
 
 export function getNoteContentTestId(prefix: string, noteId: string): string {
   return `${prefix}-note-content-${noteId}`;
+}
+
+export const PORTFOLIO_DATA_ISSUES_TEST_IDS = {
+  awaitingSnapshotGroup: "portfolio-data-issues-awaiting-snapshot",
+  needsMappingGroup: "portfolio-data-issues-needs-mapping",
+  panel: "portfolio-data-issues-panel",
+  uncoveredTradesGroup: "portfolio-data-issues-uncovered-trades",
+} as const;
+
+export const PORTFOLIO_CAMPAIGN_EXPOSURE_UNCOVERED_ROW_TEST_ID =
+  "portfolio-campaign-exposure-uncovered-row";
+
+export const PORTFOLIO_DETAIL_TEST_IDS = {
+  allocationCash: "portfolio-allocation-cash",
+  allocationMarketValue: "portfolio-allocation-market-value",
+  allocationSection: "portfolio-allocation-section",
+  asOfDate: "portfolio-as-of-date",
+  backLink: "portfolio-back-link",
+  campaignExposureEmpty: "portfolio-campaign-exposure-empty",
+  campaignExposureSection: "portfolio-campaign-exposure-section",
+  campaignExposureUncovered: "portfolio-campaign-exposure-uncovered",
+  cancelDeleteButton: "portfolio-cancel-delete-button",
+  cancelEditNameButton: "portfolio-cancel-edit-name-button",
+  confirmDeleteButton: "portfolio-confirm-delete-button",
+  deleteButton: "portfolio-delete-button",
+  editNameButton: "portfolio-edit-name-button",
+  emptyValuationState: "portfolio-empty-valuation-state",
+  equityChartSection: "portfolio-equity-chart-section",
+  equityChartEmpty: "portfolio-equity-chart-empty",
+  equityChartSvg: "portfolio-equity-chart-svg",
+  missingPricesAlert: "portfolio-missing-prices-alert",
+  nameDisplay: "portfolio-name-display",
+  nameInput: "portfolio-name-input",
+  openPositionsEmpty: "portfolio-open-positions-empty",
+  openPositionsSection: "portfolio-open-positions-section",
+  recentTradesEmpty: "portfolio-recent-trades-empty",
+  recentTradesSection: "portfolio-recent-trades-section",
+  returnPercent: "portfolio-return-percent",
+  returnSection: "portfolio-return-section",
+  saveNameButton: "portfolio-save-name-button",
+  summaryCash: "portfolio-summary-cash",
+  summaryMarketValue: "portfolio-summary-market-value",
+  summaryTotalEquity: "portfolio-summary-total-equity",
+  summarySection: "portfolio-summary-section",
+  timeframeSelect: "portfolio-timeframe-select",
+} as const;
+
+export function getPortfolioCampaignExposureRowTestId(
+  campaignId: string,
+): string {
+  return `portfolio-campaign-exposure-row-${normalizeSegment(campaignId)}`;
+}
+
+export function getPortfolioCampaignExposureLinkTestId(
+  campaignId: string,
+): string {
+  return `portfolio-campaign-exposure-link-${normalizeSegment(campaignId)}`;
+}
+
+export function getPortfolioOpenPositionRowTestId(
+  assetType: string,
+  ticker: string,
+  direction: string,
+): string {
+  return `portfolio-open-position-row-${normalizeSegment(assetType)}-${normalizeSegment(ticker)}-${normalizeSegment(direction)}`;
+}
+
+export function getPortfolioRecentTradeRowTestId(tradeId: string): string {
+  return `portfolio-recent-trade-row-${normalizeSegment(tradeId)}`;
+}
+
+export function getPortfolioLinkTestId(portfolioKey: string): string {
+  return `portfolio-link-${normalizeSegment(portfolioKey)}`;
+}
+
+export function getPortfolioRowTestId(name: string): string {
+  return `portfolio-row-${normalizeSegment(name)}`;
 }
 
 export const PORTFOLIO_CASH_LEDGER_TEST_IDS = {

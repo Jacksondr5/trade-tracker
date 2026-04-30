@@ -6,6 +6,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   ChartCandlestick,
   ChessKnight,
+  Database,
   FolderKanban,
   GalleryVerticalEnd,
   Import as ImportIcon,
@@ -138,6 +139,13 @@ export const appNavigationSections: AppNavigationSection[] = [
         label: "Accounts",
         matchPrefixes: ["/accounts"],
         testId: NAVIGATION_TEST_IDS.accounts,
+      },
+      {
+        href: "/market-data",
+        icon: Database,
+        label: "Market Data",
+        matchPrefixes: ["/market-data"],
+        testId: NAVIGATION_TEST_IDS.marketData,
       },
     ],
   },

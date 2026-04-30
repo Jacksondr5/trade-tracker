@@ -310,10 +310,7 @@ export default defineSchema({
       "assetType",
       "symbol",
     ])
-    .index("by_ownerId_and_resolutionStatus", [
-      "ownerId",
-      "resolutionStatus",
-    ]),
+    .index("by_ownerId_and_resolutionStatus", ["ownerId", "resolutionStatus"]),
 
   marketPriceSnapshots: defineTable({
     close: v.optional(v.number()),
@@ -445,6 +442,7 @@ export default defineSchema({
     .index("by_owner", ["ownerId"])
     .index("by_owner_date", ["ownerId", "date"])
     .index("by_owner_portfolioId", ["ownerId", "portfolioId"])
+    .index("by_owner_portfolioId_date", ["ownerId", "portfolioId", "date"])
     .index("by_owner_tradePlanId", ["ownerId", "tradePlanId"]),
 
   inboxTrades: defineTable({

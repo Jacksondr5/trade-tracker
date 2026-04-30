@@ -9,6 +9,7 @@ import {
   Alert,
   Badge,
   ConfirmDeleteButton,
+  Skeleton,
   useAppForm,
 } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
@@ -183,13 +184,13 @@ export default function PortfolioCashLedgerSection({
 
   return (
     <section
-      className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4"
+      className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4"
       data-testid={PORTFOLIO_CASH_LEDGER_TEST_IDS.section}
     >
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-12">Cash Ledger</h2>
+        <h2 className="text-lg font-semibold text-olive-12">Cash Ledger</h2>
         {entries && entries.length > 0 && (
-          <span className="text-sm text-slate-11">
+          <span className="text-sm text-olive-11">
             Net cash {formatCurrency(totalCash)}
           </span>
         )}
@@ -254,10 +255,25 @@ export default function PortfolioCashLedgerSection({
       )}
 
       {entries === undefined ? (
-        <p className="text-sm text-slate-11">Loading entries…</p>
+        <ul
+          aria-busy="true"
+          className="divide-y divide-olive-6/60"
+          data-testid={PORTFOLIO_CASH_LEDGER_TEST_IDS.list}
+        >
+          {Array.from({ length: 3 }).map((_, index) => (
+            <li
+              key={index}
+              className="flex flex-wrap items-center gap-3 py-3"
+            >
+              <Skeleton height="sm" className="w-24" />
+              <Skeleton height="sm" className="w-20 rounded-md" />
+              <Skeleton height="sm" className="ml-auto w-28" />
+            </li>
+          ))}
+        </ul>
       ) : entries.length === 0 ? (
         <p
-          className="text-sm text-slate-11"
+          className="text-sm text-olive-11"
           data-testid={PORTFOLIO_CASH_LEDGER_TEST_IDS.emptyState}
         >
           No cash ledger entries yet. Record an initial deposit to start
@@ -265,7 +281,7 @@ export default function PortfolioCashLedgerSection({
         </p>
       ) : (
         <ul
-          className="divide-y divide-slate-700/60"
+          className="divide-y divide-olive-6/60"
           data-testid={PORTFOLIO_CASH_LEDGER_TEST_IDS.list}
         >
           {entries.map((entry) => (
@@ -407,7 +423,7 @@ function CashLedgerRow({ entry }: { entry: CashLedgerEntry }) {
                 form.reset(getEditFormValues());
                 setIsEditing(false);
               }}
-              className="flex h-9 w-9 items-center justify-center rounded border border-slate-600 text-slate-11 hover:bg-slate-700 hover:text-slate-12"
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-olive-6 text-olive-11 hover:bg-olive-4 hover:text-olive-12"
               title="Cancel"
               aria-label="Cancel"
             >
@@ -435,7 +451,7 @@ function CashLedgerRow({ entry }: { entry: CashLedgerEntry }) {
       className="flex flex-wrap items-center gap-3 py-3"
       data-testid={getCashLedgerRowTestId(entry._id)}
     >
-      <span className="w-24 shrink-0 text-sm text-slate-11">
+      <span className="w-24 shrink-0 text-sm text-olive-11 tabular-nums">
         {formatDateOnly(entry.date)}
       </span>
       <Badge variant={entryTypeBadgeVariant(entry.entryType)}>
@@ -444,13 +460,13 @@ function CashLedgerRow({ entry }: { entry: CashLedgerEntry }) {
       <span
         className={
           amountIsNegative
-            ? "min-w-[7rem] text-right font-mono text-sm text-red-10"
-            : "min-w-[7rem] text-right font-mono text-sm text-grass-10"
+            ? "min-w-[7rem] text-right font-medium text-sm text-red-11 tabular-nums"
+            : "min-w-[7rem] text-right font-medium text-sm text-grass-11 tabular-nums"
         }
       >
         {formatCurrency(entry.amount)}
       </span>
-      <span className="min-w-0 flex-1 truncate text-sm text-slate-11">
+      <span className="min-w-0 flex-1 truncate text-sm text-olive-11">
         {entry.note ?? ""}
       </span>
       <div className="ml-auto flex items-center gap-1">
@@ -461,7 +477,7 @@ function CashLedgerRow({ entry }: { entry: CashLedgerEntry }) {
             form.reset(getEditFormValues());
             setIsEditing(true);
           }}
-          className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-11 hover:bg-slate-700 hover:text-slate-12"
+          className="rounded-md border border-olive-6 px-2 py-1 text-xs text-olive-11 hover:bg-olive-4 hover:text-olive-12"
         >
           Edit
         </button>

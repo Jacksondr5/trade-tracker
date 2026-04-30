@@ -146,6 +146,8 @@ The first version should store regular close prices only.
 
 Do not store open, high, low, volume, currency, or adjusted close in the first version. Multi-currency valuation, stock splits, dividends, and adjusted historical series are long-term follow-ups.
 
+Manual pricing is a future follow-up for instruments that a market data provider does not support. It should not require daily user-entered prices. The model should allow lower-resolution entries, such as weekly or monthly prices, and define how daily valuations interpolate, carry forward, or otherwise use those manual observations before it is implemented.
+
 ## Scheduled Market Data Refresh
 
 Scheduled market data refresh should separate planning from provider I/O so

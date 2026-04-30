@@ -452,6 +452,17 @@ describe("market data instruments", () => {
 
   it("refreshes daily snapshots for resolved instruments used by open portfolio positions", async () => {
     const portfolioId = await insertPortfolio();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("portfolioCashLedgerEntries", {
+        amount: 10_000,
+        createdAt: Date.UTC(2026, 3, 24),
+        date: Date.UTC(2026, 3, 24),
+        entryType: "deposit",
+        ownerId,
+        portfolioId,
+        updatedAt: Date.UTC(2026, 3, 24),
+      });
+    });
     await insertResolvedInstrument({
       symbol: "AAPL",
     });
@@ -494,6 +505,7 @@ describe("market data instruments", () => {
         budgetCredits: 8,
       },
     );
+    await t.finishInProgressScheduledFunctions();
 
     const snapshots = await t.run(async (ctx) => {
       const rows = await ctx.db.query("marketPriceSnapshots").collect();
@@ -509,6 +521,15 @@ describe("market data instruments", () => {
     });
     const jobs = await t.run(async (ctx) => {
       return await ctx.db.query("marketDataFetchJobs").collect();
+    });
+    const valuations = await t.run(async (ctx) => {
+      const rows = await ctx.db.query("portfolioDailyValuations").collect();
+      return rows.filter(
+        (row) =>
+          row.ownerId === ownerId &&
+          row.portfolioId === portfolioId &&
+          row.date === "2026-04-24",
+      );
     });
 
     expect(result).toMatchObject({
@@ -561,6 +582,14 @@ describe("market data instruments", () => {
       status: "failed",
       symbol: "MSFT",
     });
+    expect(valuations).toHaveLength(1);
+    expect(valuations[0]).toMatchObject({
+      cashBalance: 9_800,
+      marketValue: 202.25,
+      missingSymbols: ["MSFT"],
+      priceCoverageStatus: "partial",
+      totalEquity: 10_002.25,
+    });
   });
 
   it("includes open positions older than the most recent trades in refresh universe", async () => {
@@ -612,8 +641,7 @@ describe("market data instruments", () => {
     const snapshots = await t.run(async (ctx) => {
       const rows = await ctx.db.query("marketPriceSnapshots").collect();
       return rows.filter(
-        (row) =>
-          row.providerSymbol === "AAPL" && row.date === "2026-04-24",
+        (row) => row.providerSymbol === "AAPL" && row.date === "2026-04-24",
       );
     });
 
@@ -667,8 +695,7 @@ describe("market data instruments", () => {
     const snapshots = await t.run(async (ctx) => {
       const rows = await ctx.db.query("marketPriceSnapshots").collect();
       return rows.filter(
-        (row) =>
-          row.providerSymbol === "AAPL" && row.date === "2026-04-24",
+        (row) => row.providerSymbol === "AAPL" && row.date === "2026-04-24",
       );
     });
 
@@ -707,8 +734,7 @@ describe("market data instruments", () => {
                   country: "United States",
                   currency: "USD",
                   exchange: "NASDAQ",
-                  instrument_type:
-                    symbol === "SPY" ? "ETF" : "Common Stock",
+                  instrument_type: symbol === "SPY" ? "ETF" : "Common Stock",
                   symbol,
                 },
               ],
@@ -963,5 +989,147 @@ describe("market data instruments", () => {
       jobsProcessed: 0,
       jobsSucceeded: 0,
     });
+  });
+
+  it("lists owned instruments with needs_review prioritized first", async () => {
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      await ctx.db.insert("marketDataInstruments", {
+        assetType: "stock",
+        createdAt: now,
+        ownerId,
+        provider: "twelve_data",
+        providerSymbol: "AAPL",
+        resolutionStatus: "resolved",
+        symbol: "AAPL",
+        updatedAt: now,
+      });
+      await ctx.db.insert("marketDataInstruments", {
+        assetType: "stock",
+        createdAt: now,
+        lastError: "No symbol match",
+        ownerId,
+        provider: "twelve_data",
+        resolutionStatus: "needs_review",
+        symbol: "WEIRD",
+        updatedAt: now,
+      });
+      await ctx.db.insert("marketDataInstruments", {
+        assetType: "crypto",
+        createdAt: now,
+        ownerId,
+        provider: "twelve_data",
+        resolutionStatus: "ignored",
+        symbol: "OBSCURE",
+        updatedAt: now,
+      });
+      // Different owner - must not appear.
+      await ctx.db.insert("marketDataInstruments", {
+        assetType: "stock",
+        createdAt: now,
+        ownerId: "owner-b",
+        provider: "twelve_data",
+        providerSymbol: "MSFT",
+        resolutionStatus: "resolved",
+        symbol: "MSFT",
+        updatedAt: now,
+      });
+    });
+
+    const all = await asUser().query(api.marketData.listInstruments, {});
+    expect(all.map((row) => row.symbol)).toEqual(["WEIRD", "AAPL", "OBSCURE"]);
+    expect(all.every((row) => row.ownerId === ownerId)).toBe(true);
+
+    const review = await asUser().query(api.marketData.listInstruments, {
+      status: "needs_review",
+    });
+    expect(review).toHaveLength(1);
+    expect(review[0]?.symbol).toBe("WEIRD");
+  });
+
+  it("keeps needs_review instruments in the limited list even with many resolved rows", async () => {
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      for (let index = 0; index < 520; index += 1) {
+        await ctx.db.insert("marketDataInstruments", {
+          assetType: "stock",
+          createdAt: now,
+          ownerId,
+          provider: "twelve_data",
+          providerSymbol: `A${index}`,
+          resolutionStatus: "resolved",
+          symbol: `A${index}`,
+          updatedAt: now,
+        });
+      }
+      await ctx.db.insert("marketDataInstruments", {
+        assetType: "stock",
+        createdAt: now,
+        lastError: "No symbol match",
+        ownerId,
+        provider: "twelve_data",
+        resolutionStatus: "needs_review",
+        symbol: "ZZZREVIEW",
+        updatedAt: now,
+      });
+    });
+
+    const all = await asUser().query(api.marketData.listInstruments, {});
+    expect(all).toHaveLength(500);
+    expect(all[0]?.resolutionStatus).toBe("needs_review");
+    expect(all[0]?.symbol).toBe("ZZZREVIEW");
+  });
+
+  it("marks an owned instrument ignored and clears any review error", async () => {
+    const instrumentId = await t.run(async (ctx) => {
+      const now = Date.now();
+      return await ctx.db.insert("marketDataInstruments", {
+        assetType: "stock",
+        createdAt: now,
+        lastError: "No symbol match",
+        ownerId,
+        provider: "twelve_data",
+        resolutionStatus: "needs_review",
+        symbol: "WEIRD",
+        updatedAt: now,
+      });
+    });
+
+    const updated = await asUser().mutation(
+      api.marketData.setInstrumentIgnored,
+      { instrumentId },
+    );
+
+    expect(updated.resolutionStatus).toBe("ignored");
+    expect(updated.lastError).toBeUndefined();
+
+    const stored = await t.run(async (ctx) => ctx.db.get(instrumentId));
+    expect(stored?.resolutionStatus).toBe("ignored");
+    expect(stored?.lastError).toBeUndefined();
+  });
+
+  it("rejects ignoring an instrument owned by another user", async () => {
+    const instrumentId = await t.run(async (ctx) => {
+      const now = Date.now();
+      return await ctx.db.insert("marketDataInstruments", {
+        assetType: "stock",
+        createdAt: now,
+        ownerId: "owner-b",
+        provider: "twelve_data",
+        providerSymbol: "MSFT",
+        resolutionStatus: "resolved",
+        symbol: "MSFT",
+        updatedAt: now,
+      });
+    });
+
+    await expect(
+      asUser().mutation(api.marketData.setInstrumentIgnored, {
+        instrumentId,
+      }),
+    ).rejects.toThrow(/not found/);
+
+    const stored = await t.run(async (ctx) => ctx.db.get(instrumentId));
+    expect(stored?.resolutionStatus).toBe("resolved");
   });
 });
