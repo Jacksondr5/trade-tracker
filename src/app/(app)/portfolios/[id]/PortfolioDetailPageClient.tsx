@@ -1,5 +1,6 @@
 "use client";
 
+import * as Plot from "@observablehq/plot";
 import { ConvexError } from "convex/values";
 import {
   Preloaded,
@@ -10,7 +11,7 @@ import {
 import { Check, Loader2, Pencil, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Badge,
@@ -1003,82 +1004,155 @@ function AllocationBar({
   );
 }
 
-function EquityChart({
-  series,
-}: {
-  series: Array<{
-    cashBalance: number;
-    date: string;
-    marketValue: number;
-    priceCoverageStatus: "complete" | "missing" | "partial";
-    totalEquity: number;
-  }>;
-}) {
-  const width = 720;
-  const height = 200;
-  const padding = { bottom: 24, left: 8, right: 8, top: 12 };
-  const innerWidth = width - padding.left - padding.right;
-  const innerHeight = height - padding.top - padding.bottom;
+type EquityChartRow = {
+  cashBalance: number;
+  date: string;
+  marketValue: number;
+  priceCoverageStatus: "complete" | "missing" | "partial";
+  totalEquity: number;
+};
 
-  const equities = series.map((row) => row.totalEquity);
-  const minEquity = Math.min(...equities);
-  const maxEquity = Math.max(...equities);
-  const span = maxEquity - minEquity || 1;
+function EquityChart({ series }: { series: Array<EquityChartRow> }) {
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const xFor = (index: number) => {
-    if (series.length === 1) return padding.left + innerWidth / 2;
-    return padding.left + (innerWidth * index) / (series.length - 1);
-  };
-  const yFor = (value: number) =>
-    padding.top + innerHeight - ((value - minEquity) / span) * innerHeight;
+  const data = useMemo(
+    () =>
+      series.map((row) => ({
+        cashBalance: row.cashBalance,
+        date: new Date(`${row.date}T00:00:00.000Z`),
+        isoDate: row.date,
+        marketValue: row.marketValue,
+        priceCoverageStatus: row.priceCoverageStatus,
+        totalEquity: row.totalEquity,
+      })),
+    [series],
+  );
 
-  const linePoints = series
-    .map((row, index) => `${xFor(index)},${yFor(row.totalEquity)}`)
-    .join(" ");
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || data.length === 0) {
+      return;
+    }
 
-  const areaPath = [
-    `M ${xFor(0)},${padding.top + innerHeight}`,
-    ...series.map(
-      (row, index) => `L ${xFor(index)},${yFor(row.totalEquity)}`,
-    ),
-    `L ${xFor(series.length - 1)},${padding.top + innerHeight}`,
-    "Z",
-  ].join(" ");
+    let chart: Element | null = null;
+
+    const render = () => {
+      const width = Math.max(container.clientWidth, 240);
+      const useDots = data.length === 1;
+      const tipFormat = (d: (typeof data)[number]) =>
+        [
+          d.isoDate,
+          `Total equity ${formatCurrency(d.totalEquity)}`,
+          `Cash ${formatCurrency(d.cashBalance)}`,
+          `Market value ${formatCurrency(d.marketValue)}`,
+          d.priceCoverageStatus !== "complete"
+            ? `Coverage: ${d.priceCoverageStatus}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join("\n");
+
+      const next = Plot.plot({
+        width,
+        height: 200,
+        marginTop: 12,
+        marginBottom: 28,
+        marginLeft: 64,
+        marginRight: 16,
+        style: {
+          background: "transparent",
+          color: "var(--color-olive-11)",
+          fontFamily: "inherit",
+          fontSize: "11px",
+        },
+        x: {
+          type: "utc",
+          label: null,
+          ticks: 5,
+        },
+        y: {
+          label: null,
+          grid: true,
+          tickFormat: (value: number) =>
+            new Intl.NumberFormat("en-US", {
+              currency: "USD",
+              maximumFractionDigits: 0,
+              notation: "compact",
+              style: "currency",
+            }).format(value),
+        },
+        marks: [
+          Plot.areaY(data, {
+            x: "date",
+            y: "totalEquity",
+            fill: "var(--color-blue-9)",
+            fillOpacity: 0.18,
+            curve: "monotone-x",
+          }),
+          Plot.lineY(data, {
+            x: "date",
+            y: "totalEquity",
+            stroke: "var(--color-blue-10)",
+            strokeWidth: 2,
+            curve: "monotone-x",
+          }),
+          ...(useDots
+            ? [
+                Plot.dot(data, {
+                  x: "date",
+                  y: "totalEquity",
+                  fill: "var(--color-blue-10)",
+                  r: 3,
+                }),
+              ]
+            : []),
+          Plot.ruleY([0], { stroke: "var(--color-olive-6)" }),
+          Plot.tip(
+            data,
+            Plot.pointerX({
+              x: "date",
+              y: "totalEquity",
+              title: tipFormat,
+            }),
+          ),
+        ],
+      });
+
+      next.setAttribute("aria-label", "Total equity history");
+      next.setAttribute("role", "img");
+      next.setAttribute(
+        "data-testid",
+        PORTFOLIO_DETAIL_TEST_IDS.equityChartSvg,
+      );
+      next.classList.add("h-48", "w-full");
+
+      if (chart) {
+        chart.remove();
+      }
+      container.appendChild(next);
+      chart = next;
+    };
+
+    render();
+
+    const observer =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => render())
+        : null;
+    observer?.observe(container);
+
+    return () => {
+      observer?.disconnect();
+      chart?.remove();
+    };
+  }, [data]);
 
   const startRow = series[0]!;
   const endRow = series[series.length - 1]!;
 
   return (
     <div className="space-y-2">
-      <svg
-        aria-label="Total equity history"
-        className="h-48 w-full"
-        data-testid={PORTFOLIO_DETAIL_TEST_IDS.equityChartSvg}
-        preserveAspectRatio="none"
-        role="img"
-        viewBox={`0 0 ${width} ${height}`}
-      >
-        <path
-          className="fill-blue-9/20"
-          d={areaPath}
-        />
-        {series.length > 1 ? (
-          <polyline
-            className="fill-none stroke-blue-10"
-            points={linePoints}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-          />
-        ) : (
-          <circle
-            className="fill-blue-10"
-            cx={xFor(0)}
-            cy={yFor(equities[0]!)}
-            r={3}
-          />
-        )}
-      </svg>
+      <div ref={containerRef} className="w-full" />
       <div className="flex justify-between text-xs text-olive-11 tabular-nums">
         <span>
           {formatIsoDateForDisplay(startRow.date)} ·{" "}
