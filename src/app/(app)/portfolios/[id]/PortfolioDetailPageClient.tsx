@@ -16,6 +16,7 @@ import {
   Badge,
   Button,
   Select,
+  Skeleton,
   type BadgeProps,
 } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
@@ -477,21 +478,23 @@ export default function PortfolioDetailPageClient({
             >
               Timeframe
             </label>
-            <Select
-              dataTestId={PORTFOLIO_DETAIL_TEST_IDS.timeframeSelect}
-              id="portfolio-timeframe-select"
-              onChange={(event) =>
-                setTimeframe(event.target.value as TimeframeValue)
-              }
-              size="sm"
-              value={timeframe}
-            >
-              {TIMEFRAME_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
+            <div className="w-44">
+              <Select
+                dataTestId={PORTFOLIO_DETAIL_TEST_IDS.timeframeSelect}
+                id="portfolio-timeframe-select"
+                onChange={(event) =>
+                  setTimeframe(event.target.value as TimeframeValue)
+                }
+                size="sm"
+                value={timeframe}
+              >
+                {TIMEFRAME_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
           </div>
         </div>
 
@@ -504,7 +507,11 @@ export default function PortfolioDetailPageClient({
             daily valuation runs for this portfolio.
           </p>
         ) : equitySeries === undefined ? (
-          <p className="text-sm text-olive-11">Loading equity history…</p>
+          <Skeleton
+            aria-busy="true"
+            aria-label="Loading equity history"
+            className="h-48 w-full rounded-md"
+          />
         ) : equitySeries.length === 0 ? (
           <p
             className="text-sm text-olive-11"
@@ -920,7 +927,32 @@ function RecentTradesSection({
       </div>
 
       {recentTrades === undefined ? (
-        <p className="text-sm text-olive-11">Loading trades…</p>
+        <div
+          aria-busy="true"
+          aria-label="Loading recent trades"
+          className="overflow-hidden rounded-md border border-slate-6 bg-slate-2"
+        >
+          <table className="w-full">
+            <tbody>
+              {Array.from({ length: 4 }).map((_, rowIndex) => (
+                <tr
+                  key={rowIndex}
+                  className="border-b border-slate-6/60 last:border-b-0"
+                >
+                  {Array.from({ length: 6 }).map((_, colIndex) => (
+                    <td key={colIndex} className="px-3 py-3">
+                      <Skeleton
+                        surface="dense"
+                        height="sm"
+                        className="w-full"
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : recentTrades === null || recentTrades.length === 0 ? (
         <p
           className="text-sm text-olive-11"

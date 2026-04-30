@@ -65,31 +65,37 @@ export default function PortfolioPageClient({
   });
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-6 flex items-center justify-between">
-        <h1
-          className="text-2xl font-bold text-slate-12"
-          data-testid={APP_PAGE_TITLES.portfolios}
-        >
-          Portfolios
-        </h1>
+    <div className="container mx-auto max-w-5xl px-4 py-6 md:px-6 md:py-8">
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <div>
+          <h1
+            className="text-2xl font-bold text-olive-12 md:text-3xl"
+            data-testid={APP_PAGE_TITLES.portfolios}
+          >
+            Portfolios
+          </h1>
+          <p className="mt-1 text-sm text-olive-11">
+            Capital-allocation overlays on your trades. Open a portfolio to
+            review its allocation, equity, and campaign exposure.
+          </p>
+        </div>
       </div>
 
       {/* Inline create form */}
-      <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
+      <section className="mb-6 rounded-lg border border-olive-6 bg-olive-2 p-4">
         <form
           onSubmit={(event) => {
             event.preventDefault();
             event.stopPropagation();
             void form.handleSubmit();
           }}
-          className="flex items-end gap-3"
+          className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-end"
         >
           <div className="flex-1">
             <form.AppField name="name">
               {(field) => (
                 <field.FieldInput
-                  label="New Portfolio"
+                  label="New portfolio"
                   maxLength={120}
                   placeholder="Portfolio name"
                 />
@@ -106,49 +112,55 @@ export default function PortfolioPageClient({
         {errorMessage && (
           <Alert
             variant="error"
-            className="mt-2"
+            className="mt-3"
             onDismiss={() => setErrorMessage(null)}
           >
             {errorMessage}
           </Alert>
         )}
-      </div>
+      </section>
 
       {portfolios.length === 0 ? (
-        <div className="rounded-lg border border-slate-700 bg-slate-800 p-8 text-center">
-          <p className="text-slate-11">No portfolios yet.</p>
+        <div className="rounded-lg border border-olive-6 bg-olive-2 p-6">
+          <p className="text-sm font-medium text-olive-12">
+            No portfolios yet
+          </p>
+          <p className="mt-1 text-sm text-olive-11">
+            Create a portfolio above to start grouping trades for allocation
+            and exposure review.
+          </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-700">
+        <div className="overflow-x-auto rounded-lg border border-slate-6 bg-slate-2">
           <table className="w-full table-auto">
-            <thead className="bg-slate-800">
-              <tr>
-                <th className="px-4 py-3 text-left text-sm font-medium text-slate-11">
+            <thead>
+              <tr className="border-b border-slate-6">
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-11 uppercase tracking-wide">
                   Name
                 </th>
-                <th className="px-4 py-3 text-right text-sm font-medium text-slate-11">
-                  Trade Count
+                <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-11 uppercase tracking-wide">
+                  Trades
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-700 bg-slate-900">
+            <tbody>
               {portfolios.map((portfolio) => (
                 <tr
                   key={portfolio._id}
-                  className="hover:bg-slate-800/50"
+                  className="border-b border-slate-6/60 last:border-b-0 hover:bg-slate-3"
                   data-testid={getPortfolioRowTestId(portfolio.name)}
                 >
                   <td className="px-4 py-3 text-sm font-medium whitespace-nowrap">
                     <Link
                       href={`/portfolios/${portfolio._id}`}
-                      className="text-slate-12 hover:underline"
+                      className="text-slate-12 hover:text-blue-11 hover:underline"
                       aria-label={`View portfolio ${portfolio.name}`}
                       data-testid={getPortfolioLinkTestId(portfolio.name)}
                     >
                       {portfolio.name}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-right text-sm whitespace-nowrap text-slate-11">
+                  <td className="px-4 py-3 text-right text-sm whitespace-nowrap text-slate-11 tabular-nums">
                     {portfolio.tradeCount}
                   </td>
                 </tr>
