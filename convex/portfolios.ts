@@ -291,7 +291,7 @@ type PositionKey = `${"crypto" | "stock"}:${string}:${"long" | "short"}`;
 
 type AggregatedPosition = {
   assetType: "crypto" | "stock";
-  campaignIds: Set<Id<"campaigns">>;
+  campaignQuantities: Map<Id<"campaigns">, number>;
   direction: "long" | "short";
   quantity: number;
   ticker: string;
@@ -398,13 +398,14 @@ export const getPortfolioOverview = query({
         positions.get(key) ??
         ({
           assetType: trade.assetType,
-          campaignIds: new Set<Id<"campaigns">>(),
+          campaignQuantities: new Map<Id<"campaigns">, number>(),
           direction: trade.direction,
           quantity: 0,
           ticker: trade.ticker,
           tradeCount: 0,
         } satisfies AggregatedPosition);
-      existing.quantity += getSignedPositionQuantity(trade);
+      const signedQuantity = getSignedPositionQuantity(trade);
+      existing.quantity += signedQuantity;
       existing.tradeCount += 1;
 
       if (trade.tradePlanId) {
@@ -417,7 +418,10 @@ export const getPortfolioOverview = query({
         }
         const campaignId = tradePlanToCampaign.get(trade.tradePlanId);
         if (campaignId) {
-          existing.campaignIds.add(campaignId);
+          existing.campaignQuantities.set(
+            campaignId,
+            (existing.campaignQuantities.get(campaignId) ?? 0) + signedQuantity,
+          );
         }
       }
 
@@ -432,7 +436,8 @@ export const getPortfolioOverview = query({
     // date so the page reflects what the materialized rows already show.
     const overviewPositions: Array<{
       assetType: "crypto" | "stock";
-      campaignIds: Set<Id<"campaigns">>;
+      campaignQuantities: Map<Id<"campaigns">, number>;
+      close: number | null;
       direction: "long" | "short";
       hasPrice: boolean;
       marketValue: number | null;
@@ -467,7 +472,8 @@ export const getPortfolioOverview = query({
       }
       overviewPositions.push({
         assetType: position.assetType,
-        campaignIds: position.campaignIds,
+        campaignQuantities: position.campaignQuantities,
+        close,
         direction: position.direction,
         hasPrice: positionValue !== null,
         marketValue: positionValue,
@@ -524,7 +530,10 @@ export const getPortfolioOverview = query({
     }
 
     for (const position of overviewPositions) {
-      for (const campaignId of position.campaignIds) {
+      for (const [campaignId, campaignQuantity] of position.campaignQuantities) {
+        if (Math.abs(campaignQuantity) <= POSITION_EPSILON) {
+          continue;
+        }
         const bucket = exposureByCampaign.get(campaignId);
         if (!bucket) continue;
         bucket.openPositionCount += 1;
@@ -533,7 +542,11 @@ export const getPortfolioOverview = query({
           bucket.hasMissingPrices = true;
           bucket.hasUnpricedSlice = true;
         } else {
-          bucket.exposure += Math.abs(position.marketValue);
+          const campaignPositionValue =
+            (position.direction === "short" ? -1 : 1) *
+            campaignQuantity *
+            position.close!;
+          bucket.exposure += Math.abs(campaignPositionValue);
         }
       }
     }
