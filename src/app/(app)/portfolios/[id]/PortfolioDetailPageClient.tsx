@@ -567,10 +567,11 @@ export default function PortfolioDetailPageClient({
                   <tr
                     className="border-b border-slate-6/60 last:border-b-0"
                     data-testid={getPortfolioOpenPositionRowTestId(
+                      position.assetType,
                       position.ticker,
                       position.direction,
                     )}
-                    key={`${position.ticker}-${position.direction}`}
+                    key={`${position.assetType}-${position.ticker}-${position.direction}`}
                   >
                     <td className="px-3 py-2 font-medium text-slate-12">
                       {position.ticker}

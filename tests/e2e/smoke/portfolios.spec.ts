@@ -80,6 +80,7 @@ test("portfolio detail surfaces overview analytics for the seeded portfolio", as
   // The seeded FCX long trade should produce a long open position
   const fcxPositionRow = page.getByTestId(
     getPortfolioOpenPositionRowTestId(
+      "stock",
       E2E_SMOKE_FIXTURES.linkedTradePlan.instrumentSymbol,
       "long",
     ),

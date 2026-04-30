@@ -472,10 +472,11 @@ export function getPortfolioCampaignExposureLinkTestId(
 }
 
 export function getPortfolioOpenPositionRowTestId(
+  assetType: string,
   ticker: string,
   direction: string,
 ): string {
-  return `portfolio-open-position-row-${normalizeSegment(ticker)}-${normalizeSegment(direction)}`;
+  return `portfolio-open-position-row-${normalizeSegment(assetType)}-${normalizeSegment(ticker)}-${normalizeSegment(direction)}`;
 }
 
 export function getPortfolioRecentTradeRowTestId(tradeId: string): string {

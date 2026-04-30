@@ -232,7 +232,7 @@ export const getRecentTrades = query({
 
     const portfolioTrades = await ctx.db
       .query("trades")
-      .withIndex("by_owner_portfolioId", (q) =>
+      .withIndex("by_owner_portfolioId_date", (q) =>
         q.eq("ownerId", ownerId).eq("portfolioId", args.portfolioId),
       )
       .order("desc")
