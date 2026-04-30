@@ -232,8 +232,14 @@ export default function PortfolioDetailPageClient({
     );
   }
 
-  const { latestValuation, openPositions, campaignExposure, missingSymbols } =
-    overview;
+  const {
+    awaitingSnapshotSymbols,
+    campaignExposure,
+    latestValuation,
+    missingSymbols,
+    needsMappingSymbols,
+    openPositions,
+  } = overview;
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-6 md:px-6 md:py-8">
@@ -397,9 +403,31 @@ export default function PortfolioDetailPageClient({
           className="mb-4"
           data-testid={PORTFOLIO_DETAIL_TEST_IDS.missingPricesAlert}
         >
-          Market value is incomplete. Missing prices for{" "}
-          {missingSymbols.join(", ")}. Resolve these instruments in Market Data
-          to see full coverage.
+          <span className="block">
+            Market value is incomplete for this portfolio.
+            {needsMappingSymbols.length > 0 ? (
+              <span className="mt-1 block">
+                <strong>Needs mapping:</strong>{" "}
+                {needsMappingSymbols.join(", ")} —{" "}
+                <Link
+                  href="/market-data"
+                  className="font-medium underline underline-offset-2"
+                >
+                  open Market Data
+                </Link>{" "}
+                and pick a provider symbol so prices can be fetched.
+              </span>
+            ) : null}
+            {awaitingSnapshotSymbols.length > 0 ? (
+              <span className="mt-1 block">
+                <strong>Awaiting prices:</strong>{" "}
+                {awaitingSnapshotSymbols.join(", ")} — these symbols are mapped
+                but no daily close has been fetched yet for{" "}
+                {overview.asOfDate ?? "the latest valuation date"}. The next
+                nightly refresh should fill these in.
+              </span>
+            ) : null}
+          </span>
         </Alert>
       )}
 
@@ -599,9 +627,30 @@ export default function PortfolioDetailPageClient({
                       {position.quantity}
                     </td>
                     <td className="px-3 py-2 text-right text-slate-12">
-                      {position.hasPrice && position.marketValue !== null
-                        ? formatCurrency(position.marketValue)
-                        : "Price pending"}
+                      {position.hasPrice && position.marketValue !== null ? (
+                        formatCurrency(position.marketValue)
+                      ) : position.priceStatus === "needs_mapping" ? (
+                        <span
+                          className="text-amber-11"
+                          title="Map a provider symbol in Market Data so prices can be fetched."
+                        >
+                          Needs mapping
+                        </span>
+                      ) : position.priceStatus === "awaiting_snapshot" ? (
+                        <span
+                          className="text-blue-11"
+                          title="The symbol is mapped, but a daily close hasn't been fetched yet."
+                        >
+                          Awaiting price
+                        </span>
+                      ) : (
+                        <span
+                          className="text-olive-11"
+                          title="Market value will appear after the first daily valuation runs."
+                        >
+                          Awaiting valuation
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -664,8 +713,22 @@ export default function PortfolioDetailPageClient({
                     <Badge variant={getCampaignStatusVariant(row.status)}>
                       {capitalize(row.status)}
                     </Badge>
-                    {row.hasMissingPrices ? (
-                      <Badge variant="warning">Pending prices</Badge>
+                    {row.needsMappingSymbols.length > 0 ? (
+                      <Badge
+                        variant="warning"
+                        title={`Map a provider symbol in Market Data so prices can be fetched: ${row.needsMappingSymbols.join(", ")}.`}
+                      >
+                        Needs mapping ({row.needsMappingSymbols.join(", ")})
+                      </Badge>
+                    ) : null}
+                    {row.awaitingSnapshotSymbols.length > 0 ? (
+                      <Badge
+                        variant="info"
+                        title={`Mapped, waiting on the next daily price refresh: ${row.awaitingSnapshotSymbols.join(", ")}.`}
+                      >
+                        Awaiting prices (
+                        {row.awaitingSnapshotSymbols.join(", ")})
+                      </Badge>
                     ) : null}
                   </div>
                   <p className="mt-0.5 text-xs text-olive-11">

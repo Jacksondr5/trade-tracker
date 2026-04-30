@@ -262,20 +262,29 @@ const overviewValuationValidator = v.object({
   totalEquity: v.number(),
 });
 
+const positionPriceStatusValidator = v.union(
+  v.literal("ok"),
+  v.literal("needs_mapping"),
+  v.literal("awaiting_snapshot"),
+  v.literal("no_valuation"),
+);
+
 const overviewPositionValidator = v.object({
   assetType: v.union(v.literal("crypto"), v.literal("stock")),
   direction: v.union(v.literal("long"), v.literal("short")),
   hasPrice: v.boolean(),
   marketValue: v.union(v.number(), v.null()),
+  priceStatus: positionPriceStatusValidator,
   quantity: v.number(),
   ticker: v.string(),
 });
 
 const overviewCampaignExposureValidator = v.object({
   _id: v.id("campaigns"),
+  awaitingSnapshotSymbols: v.array(v.string()),
   exposureValue: v.union(v.number(), v.null()),
-  hasMissingPrices: v.boolean(),
   name: v.string(),
+  needsMappingSymbols: v.array(v.string()),
   openPositionCount: v.number(),
   sharePercent: v.union(v.number(), v.null()),
   status: v.union(
@@ -303,12 +312,16 @@ function getSignedPositionQuantity(trade: Doc<"trades">): number {
   return trade.side === openingSide ? trade.quantity : -trade.quantity;
 }
 
+type PriceLookup =
+  | { close: number; reason: "ok" }
+  | { close: null; reason: "needs_mapping" | "awaiting_snapshot" };
+
 async function getCloseForPosition(
   ctx: QueryCtx,
   ownerId: string,
   position: { assetType: "crypto" | "stock"; ticker: string },
   date: string,
-): Promise<number | null> {
+): Promise<PriceLookup> {
   const instrument = await ctx.db
     .query("marketDataInstruments")
     .withIndex("by_ownerId_and_assetType_and_symbol", (q) =>
@@ -324,7 +337,7 @@ async function getCloseForPosition(
     instrument.resolutionStatus !== "resolved" ||
     !instrument.providerSymbol
   ) {
-    return null;
+    return { close: null, reason: "needs_mapping" };
   }
 
   const snapshot = await ctx.db
@@ -337,9 +350,11 @@ async function getCloseForPosition(
     )
     .unique();
 
-  return snapshot?.status === "ok" && snapshot.close !== undefined
-    ? snapshot.close
-    : null;
+  if (snapshot?.status === "ok" && snapshot.close !== undefined) {
+    return { close: snapshot.close, reason: "ok" };
+  }
+
+  return { close: null, reason: "awaiting_snapshot" };
 }
 
 export const getPortfolioOverview = query({
@@ -349,10 +364,12 @@ export const getPortfolioOverview = query({
   returns: v.union(
     v.object({
       asOfDate: v.union(v.string(), v.null()),
+      awaitingSnapshotSymbols: v.array(v.string()),
       campaignExposure: v.array(overviewCampaignExposureValidator),
       hasOpenPositions: v.boolean(),
       latestValuation: v.union(overviewValuationValidator, v.null()),
       missingSymbols: v.array(v.string()),
+      needsMappingSymbols: v.array(v.string()),
       openPositions: v.array(overviewPositionValidator),
       portfolio: portfolioValidator,
       tradeCount: v.number(),
@@ -434,6 +451,11 @@ export const getPortfolioOverview = query({
 
     // Resolve current price per open position. We use the latest valuation
     // date so the page reflects what the materialized rows already show.
+    type PositionPriceStatus =
+      | "ok"
+      | "needs_mapping"
+      | "awaiting_snapshot"
+      | "no_valuation";
     const overviewPositions: Array<{
       assetType: "crypto" | "stock";
       campaignQuantities: Map<Id<"campaigns">, number>;
@@ -441,22 +463,28 @@ export const getPortfolioOverview = query({
       direction: "long" | "short";
       hasPrice: boolean;
       marketValue: number | null;
+      priceStatus: PositionPriceStatus;
       quantity: number;
       ticker: string;
     }> = [];
     const missingSymbols = new Set<string>();
+    const needsMappingSymbols = new Set<string>();
+    const awaitingSnapshotSymbols = new Set<string>();
     let totalMarketValue = 0;
     let totalGrossMarketValue = 0;
 
     for (const position of openPositions) {
-      const close = asOfDate
+      const lookup: PriceLookup = asOfDate
         ? await getCloseForPosition(
             ctx,
             ownerId,
             { assetType: position.assetType, ticker: position.ticker },
             asOfDate,
           )
-        : null;
+        : { close: null, reason: "needs_mapping" };
+      const close = lookup.close;
+      const priceStatus: PositionPriceStatus =
+        asOfDate === null ? "no_valuation" : lookup.reason;
       const positionValue =
         close === null
           ? null
@@ -465,10 +493,14 @@ export const getPortfolioOverview = query({
             close;
       if (asOfDate !== null && positionValue === null) {
         missingSymbols.add(position.ticker);
-      } else {
-        const resolvedPositionValue = positionValue ?? 0;
-        totalMarketValue += resolvedPositionValue;
-        totalGrossMarketValue += Math.abs(resolvedPositionValue);
+        if (priceStatus === "needs_mapping") {
+          needsMappingSymbols.add(position.ticker);
+        } else if (priceStatus === "awaiting_snapshot") {
+          awaitingSnapshotSymbols.add(position.ticker);
+        }
+      } else if (positionValue !== null) {
+        totalMarketValue += positionValue;
+        totalGrossMarketValue += Math.abs(positionValue);
       }
       overviewPositions.push({
         assetType: position.assetType,
@@ -477,6 +509,7 @@ export const getPortfolioOverview = query({
         direction: position.direction,
         hasPrice: positionValue !== null,
         marketValue: positionValue,
+        priceStatus,
         quantity: position.quantity,
         ticker: position.ticker,
       });
@@ -493,10 +526,11 @@ export const getPortfolioOverview = query({
 
     // Campaign exposure rollup.
     type ExposureBucket = {
+      awaitingSnapshotSymbols: Set<string>;
       campaign: Doc<"campaigns">;
       exposure: number;
-      hasMissingPrices: boolean;
       hasUnpricedSlice: boolean;
+      needsMappingSymbols: Set<string>;
       openPositionCount: number;
       tickers: Set<string>;
       tradeCount: number;
@@ -516,10 +550,11 @@ export const getPortfolioOverview = query({
           continue;
         }
         bucket = {
+          awaitingSnapshotSymbols: new Set<string>(),
           campaign,
           exposure: 0,
-          hasMissingPrices: false,
           hasUnpricedSlice: false,
+          needsMappingSymbols: new Set<string>(),
           openPositionCount: 0,
           tickers: new Set<string>(),
           tradeCount: 0,
@@ -539,8 +574,12 @@ export const getPortfolioOverview = query({
         bucket.openPositionCount += 1;
         bucket.tickers.add(position.ticker);
         if (position.marketValue === null) {
-          bucket.hasMissingPrices = true;
           bucket.hasUnpricedSlice = true;
+          if (position.priceStatus === "needs_mapping") {
+            bucket.needsMappingSymbols.add(position.ticker);
+          } else if (position.priceStatus === "awaiting_snapshot") {
+            bucket.awaitingSnapshotSymbols.add(position.ticker);
+          }
         } else {
           const campaignPositionValue =
             (position.direction === "short" ? -1 : 1) *
@@ -573,9 +612,14 @@ export const getPortfolioOverview = query({
     const campaignExposure = [...exposureByCampaign.values()]
       .map((bucket) => ({
         _id: bucket.campaign._id,
+        awaitingSnapshotSymbols: [...bucket.awaitingSnapshotSymbols].sort(
+          (a, b) => a.localeCompare(b),
+        ),
         exposureValue: bucket.hasUnpricedSlice ? null : bucket.exposure,
-        hasMissingPrices: bucket.hasMissingPrices,
         name: bucket.campaign.name,
+        needsMappingSymbols: [...bucket.needsMappingSymbols].sort((a, b) =>
+          a.localeCompare(b),
+        ),
         openPositionCount: bucket.openPositionCount,
         sharePercent:
           bucket.hasUnpricedSlice || denominator === 0
@@ -606,15 +650,22 @@ export const getPortfolioOverview = query({
 
     return {
       asOfDate,
+      awaitingSnapshotSymbols: [...awaitingSnapshotSymbols].sort((a, b) =>
+        a.localeCompare(b),
+      ),
       campaignExposure,
       hasOpenPositions: overviewPositions.length > 0,
       latestValuation,
       missingSymbols: [...missingSymbols].sort((a, b) => a.localeCompare(b)),
+      needsMappingSymbols: [...needsMappingSymbols].sort((a, b) =>
+        a.localeCompare(b),
+      ),
       openPositions: sortedPositions.map((position) => ({
         assetType: position.assetType,
         direction: position.direction,
         hasPrice: position.hasPrice,
         marketValue: position.marketValue,
+        priceStatus: position.priceStatus,
         quantity: position.quantity,
         ticker: position.ticker,
       })),
