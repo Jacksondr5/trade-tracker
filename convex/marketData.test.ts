@@ -186,25 +186,38 @@ describe("market data instruments", () => {
       ticker: "MSFT",
     });
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        return new Response(
-          JSON.stringify({
-            meta: { symbol: "MSFT" },
-            status: "ok",
-            values: [{ close: "427.50", datetime: "2026-04-24" }],
-          }),
-          { status: 200 },
-        );
-      }),
-    );
+    const dailyCloseFetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+      const parsed = new URL(url);
+      expect(parsed.pathname).toBe("/eod");
+      expect(parsed.searchParams.get("date")).toBe("2026-04-24");
+      expect(parsed.searchParams.get("symbol")).toBe("MSFT");
+
+      return new Response(
+        JSON.stringify({
+          close: "427.50",
+          datetime: "2026-04-24",
+          exchange: "NASDAQ",
+          mic_code: "XNAS",
+          status: "ok",
+          symbol: "MSFT",
+        }),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal("fetch", dailyCloseFetch);
 
     const close = await asUser().action(api.marketData.fetchDailyClose, {
       date: "2026-04-24",
       instrumentId: resolution.instrument._id,
     });
 
+    expect(dailyCloseFetch).toHaveBeenCalledTimes(1);
     expect(close).toEqual({
       close: 427.5,
       date: "2026-04-24",
@@ -477,16 +490,21 @@ describe("market data instruments", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) => {
-        const symbol = new URL(url).searchParams.get("symbol");
+        const parsed = new URL(url);
+        const symbol = parsed.searchParams.get("symbol");
+        expect(parsed.pathname).toBe("/eod");
+        expect(parsed.searchParams.get("date")).toBe("2026-04-24");
         if (symbol === "MSFT") {
-          return new Response(JSON.stringify({ status: "ok", values: [] }), {
+          return new Response(JSON.stringify({ status: "ok" }), {
             status: 200,
           });
         }
         return new Response(
           JSON.stringify({
+            close: "202.25",
+            datetime: "2026-04-24",
             status: "ok",
-            values: [{ close: "202.25", datetime: "2026-04-24" }],
+            symbol,
           }),
           { status: 200 },
         );
@@ -612,16 +630,21 @@ describe("market data instruments", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) => {
-        const symbol = new URL(url).searchParams.get("symbol");
+        const parsed = new URL(url);
+        const symbol = parsed.searchParams.get("symbol");
+        expect(parsed.pathname).toBe("/eod");
+        expect(parsed.searchParams.get("date")).toBe("2026-04-24");
         if (symbol !== "AAPL") {
-          return new Response(JSON.stringify({ status: "ok", values: [] }), {
+          return new Response(JSON.stringify({ status: "ok" }), {
             status: 200,
           });
         }
         return new Response(
           JSON.stringify({
+            close: "215.75",
+            datetime: "2026-04-24",
             status: "ok",
-            values: [{ close: "215.75", datetime: "2026-04-24" }],
+            symbol,
           }),
           { status: 200 },
         );
@@ -677,8 +700,10 @@ describe("market data instruments", () => {
       vi.fn(async () => {
         return new Response(
           JSON.stringify({
+            close: "205.50",
+            datetime: "2026-04-24",
             status: "ok",
-            values: [{ close: "205.50", datetime: "2026-04-24" }],
+            symbol: "AAPL",
           }),
           { status: 200 },
         );
