@@ -131,6 +131,15 @@ type TwelveDataTimeSeriesResponse = {
   }>;
 };
 
+type TwelveDataEndOfDayResponse = {
+  close?: string;
+  code?: number;
+  datetime?: string;
+  message?: string;
+  status?: string;
+  symbol?: string;
+};
+
 type ResolutionResult = {
   instrument: Doc<"marketDataInstruments">;
   status: "ignored" | "needs_review" | "resolved";
@@ -231,7 +240,7 @@ function requireTwelveDataApiKey(): string {
 }
 
 function buildTwelveDataUrl(
-  path: "symbol_search" | "time_series",
+  path: "eod" | "symbol_search" | "time_series",
   params: Record<string, string>,
 ): string {
   const url = new URL(`${TWELVE_DATA_BASE_URL}/${path}`);
@@ -496,18 +505,15 @@ async function fetchDailyCloseForProviderSymbol(args: {
 }): Promise<DailyCloseResult> {
   const params: Record<string, string> = {
     apikey: args.apiKey,
-    interval: "1day",
-    outputsize: "1",
     symbol: args.providerSymbol,
   };
   if (args.date) {
-    params.end_date = args.date;
-    params.start_date = args.date;
+    params.date = args.date;
   }
 
-  const result = await fetchTwelveDataJson<TwelveDataTimeSeriesResponse>({
-    context: "time series",
-    url: buildTwelveDataUrl("time_series", params),
+  const result = await fetchTwelveDataJson<TwelveDataEndOfDayResponse>({
+    context: "end of day price",
+    url: buildTwelveDataUrl("eod", params),
   });
   if ("error" in result) {
     throw new ConvexError(result.error);
@@ -516,12 +522,13 @@ async function fetchDailyCloseForProviderSymbol(args: {
   const payload = result.payload;
   const providerError = getTwelveDataError(payload);
   if (providerError !== null) {
-    throw new ConvexError(`Twelve Data time series failed: ${providerError}`);
+    throw new ConvexError(
+      `Twelve Data end of day price failed: ${providerError}`,
+    );
   }
 
-  const value = payload.values?.[0];
-  const close = Number(value?.close);
-  if (!value?.datetime || !Number.isFinite(close)) {
+  const close = Number(payload.close);
+  if (!payload.datetime || !Number.isFinite(close)) {
     throw new DailyCloseMissingError(
       `No daily close returned for ${args.providerSymbol}`,
     );
@@ -529,7 +536,7 @@ async function fetchDailyCloseForProviderSymbol(args: {
 
   return {
     close,
-    date: value.datetime,
+    date: payload.datetime,
     provider: MARKET_DATA_PROVIDER,
     providerSymbol: args.providerSymbol,
   };
