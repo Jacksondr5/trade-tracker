@@ -176,6 +176,7 @@ export default function MarketDataHealthPageClient() {
 
   const [backfillStartDate, setBackfillStartDate] = useState("");
   const [backfillEndDate, setBackfillEndDate] = useState("");
+  const [fallbackNow] = useState(() => Date.now());
 
   const handleTriggerDailyRefresh = async () => {
     setActionError(null);
@@ -258,7 +259,7 @@ export default function MarketDataHealthPageClient() {
     coverage === undefined;
   const failingJobsLoading = failingJobs === undefined;
 
-  const serverNow = summary?.serverNow ?? Date.now();
+  const serverNow = summary?.serverNow ?? fallbackNow;
 
   return (
     <div className="container mx-auto space-y-6 px-4 py-8">
