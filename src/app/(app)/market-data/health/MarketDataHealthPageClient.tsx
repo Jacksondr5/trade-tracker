@@ -211,6 +211,7 @@ export default function MarketDataHealthPageClient() {
 
   const handleTriggerBackfill = async () => {
     if (!backfillEndDate) {
+      setActionStatus(null);
       setActionError("Pick an end date for the backfill.");
       return;
     }
@@ -254,8 +255,8 @@ export default function MarketDataHealthPageClient() {
   const isLoading =
     summary === undefined ||
     recentRuns === undefined ||
-    coverage === undefined ||
-    failingJobs === undefined;
+    coverage === undefined;
+  const failingJobsLoading = failingJobs === undefined;
 
   const serverNow = summary?.serverNow ?? Date.now();
 
@@ -309,7 +310,8 @@ export default function MarketDataHealthPageClient() {
           <RecentRunsSection runs={recentRuns} />
           <FailingJobsSection
             currentStatus={jobStatusFilter}
-            jobs={failingJobs}
+            isLoading={failingJobsLoading}
+            jobs={failingJobs ?? []}
             now={serverNow}
             onRequeue={handleRequeueJob}
             onStatusChange={setJobStatusFilter}
@@ -674,6 +676,7 @@ function RecentRunsSection({ runs }: RecentRunsSectionProps) {
 
 interface FailingJobsSectionProps {
   currentStatus: JobStatus;
+  isLoading: boolean;
   jobs: ReadonlyArray<{
     _id: Id<"marketDataFetchJobs">;
     assetType: "crypto" | "stock";
@@ -696,6 +699,7 @@ interface FailingJobsSectionProps {
 
 function FailingJobsSection({
   currentStatus,
+  isLoading,
   jobs,
   now,
   onRequeue,
@@ -721,6 +725,7 @@ function FailingJobsSection({
                   key={option.value}
                   type="button"
                   onClick={() => onStatusChange(option.value)}
+                  aria-pressed={isActive}
                   data-testid={`market-data-health-jobs-filter-${option.value}`}
                   className={cn(
                     "rounded px-3 py-1 text-xs font-medium transition-colors",
@@ -737,7 +742,12 @@ function FailingJobsSection({
         </div>
       </CardHeader>
       <CardContent>
-        {jobs.length === 0 ? (
+        {isLoading ? (
+          <div className="flex items-center gap-2 py-8 text-sm text-slate-11">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading jobs…
+          </div>
+        ) : jobs.length === 0 ? (
           <EmptyState
             dataTestId={MARKET_DATA_HEALTH_TEST_IDS.failingJobsEmpty}
             title={`No ${JOB_STATUS_LABELS[currentStatus].toLowerCase()} jobs`}
