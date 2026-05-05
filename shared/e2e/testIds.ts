@@ -68,6 +68,7 @@ export const APP_SHELL_TEST_IDS = {
   openCommandPaletteDesktop: "open-command-palette-desktop",
   openNavigationDrawer: "open-navigation-drawer",
   mobileNavigationDrawer: "mobile-navigation-drawer",
+  marketDataFailedJobsBadge: "nav-market-data-failed-jobs-badge",
   commandPaletteInput: "command-palette-input",
 } as const;
 

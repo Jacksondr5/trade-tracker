@@ -4,6 +4,7 @@ import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { isDailyMarketDataRefreshDate } from "./lib/marketCalendar";
 import schema from "./schema";
 
 interface ImportMetaWithGlob extends ImportMeta {
@@ -15,6 +16,17 @@ const modules = (import.meta as ImportMetaWithGlob).glob([
   "!./**/*.test.ts",
   "!./**/*.spec.ts",
 ]);
+
+describe("market calendar", () => {
+  it("treats regular NYSE weekdays as daily refresh dates", () => {
+    expect(isDailyMarketDataRefreshDate("2026-04-24")).toBe(true);
+  });
+
+  it("rejects weekends and checked-in NYSE full-market holidays", () => {
+    expect(isDailyMarketDataRefreshDate("2026-04-25")).toBe(false);
+    expect(isDailyMarketDataRefreshDate("2026-07-03")).toBe(false);
+  });
+});
 
 describe("market data instruments", () => {
   const ownerId = "owner-a";
@@ -608,6 +620,41 @@ describe("market data instruments", () => {
       priceCoverageStatus: "partial",
       totalEquity: 10_002.25,
     });
+  });
+
+  it("skips daily snapshot planning on closed market dates", async () => {
+    const portfolioId = await insertPortfolio();
+    await insertResolvedInstrument({ assetType: "crypto", symbol: "BTC/USD" });
+    await insertResolvedInstrument({ symbol: "AAPL" });
+    await insertTrade({
+      assetType: "crypto",
+      portfolioId,
+      ticker: "BTC/USD",
+    });
+    await insertTrade({ portfolioId, ticker: "AAPL" });
+
+    const result = await t.action(
+      internal.marketData.refreshDailyPriceSnapshots,
+      {
+        date: "2026-07-03",
+      },
+    );
+
+    const runs = await t.run(async (ctx) => {
+      return await ctx.db.query("marketDataRefreshRuns").collect();
+    });
+    const jobs = await t.run(async (ctx) => {
+      return await ctx.db.query("marketDataFetchJobs").collect();
+    });
+
+    expect(result).toEqual({
+      jobsQueued: 0,
+      ownersProcessed: 0,
+      runDate: "2026-07-03",
+      symbolsRequested: 0,
+    });
+    expect(runs).toHaveLength(0);
+    expect(jobs).toHaveLength(0);
   });
 
   it("includes open positions older than the most recent trades in refresh universe", async () => {

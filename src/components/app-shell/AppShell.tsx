@@ -1,6 +1,7 @@
 "use client";
 
 import { UserButton } from "@clerk/nextjs";
+import { useQuery } from "convex/react";
 import { Menu, Search } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -13,12 +14,16 @@ import {
   DialogDescription,
   DialogTitle,
 } from "~/components/ui";
+import { api } from "~/convex/_generated/api";
 import {
   type CampaignTradePlanHierarchy,
   isCampaignTradePlanPathname,
 } from "~/lib/campaign-trade-plan-navigation";
 import { cn } from "~/lib/utils";
-import { APP_SHELL_TEST_IDS } from "../../../shared/e2e/testIds";
+import {
+  APP_SHELL_TEST_IDS,
+  NAVIGATION_TEST_IDS,
+} from "../../../shared/e2e/testIds";
 import { ImportTaskTray } from "./ImportTaskTray";
 import { CampaignTradePlanHierarchyNavigation } from "./campaign-trade-plan-hierarchy";
 import {
@@ -36,6 +41,12 @@ function NavigationSections({
   onNavigate?: () => void;
   pathname: string;
 }) {
+  const failedMarketDataJobs = useQuery(
+    api.marketDataHealth.getFailedFetchJobCount,
+    {},
+  );
+  const failedMarketDataJobCount = failedMarketDataJobs ?? 0;
+
   return (
     <nav aria-label="Primary" className="space-y-6">
       {appNavigationSections.map((section) => (
@@ -51,6 +62,9 @@ function NavigationSections({
             {section.items.map((item) => {
               const isActive = isAppNavigationItemActive(pathname, item);
               const Icon = item.icon;
+              const showFailedMarketDataJobs =
+                item.testId === NAVIGATION_TEST_IDS.marketData &&
+                failedMarketDataJobCount > 0;
 
               return (
                 <Link
@@ -67,7 +81,18 @@ function NavigationSections({
                   )}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
-                  {item.label}
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  {showFailedMarketDataJobs ? (
+                    <span
+                      className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-red-9 px-1.5 py-0.5 text-[0.6875rem] leading-none font-semibold text-red-1 tabular-nums"
+                      data-testid={APP_SHELL_TEST_IDS.marketDataFailedJobsBadge}
+                      title={`${failedMarketDataJobCount} failed market data job${failedMarketDataJobCount === 1 ? "" : "s"}`}
+                    >
+                      {failedMarketDataJobCount > 99
+                        ? "99+"
+                        : failedMarketDataJobCount}
+                    </span>
+                  ) : null}
                 </Link>
               );
             })}

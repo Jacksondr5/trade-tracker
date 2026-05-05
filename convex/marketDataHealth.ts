@@ -1,12 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import {
-  action,
-  mutation,
-  query,
-  type ActionCtx,
-} from "./_generated/server";
+import { action, mutation, query, type ActionCtx } from "./_generated/server";
 import { assertOwner, requireUser } from "./lib/auth";
 
 const MARKET_DATA_PROVIDER = "twelve_data";
@@ -221,6 +216,23 @@ export const getCurrentRunSummary = query({
   },
 });
 
+export const getFailedFetchJobCount = query({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    const ownerId = await requireUser(ctx);
+    const failedJobs = await ctx.db
+      .query("marketDataFetchJobs")
+      .withIndex("by_ownerId_and_status_and_updatedAt", (q) =>
+        q.eq("ownerId", ownerId).eq("status", "failed"),
+      )
+      .order("desc")
+      .take(1_000);
+
+    return failedJobs.length;
+  },
+});
+
 export const listRecentRefreshRuns = query({
   args: {
     limit: v.optional(v.number()),
@@ -248,11 +260,7 @@ export const listFetchJobs = query({
     limit: v.optional(v.number()),
     runId: v.optional(v.id("marketDataRefreshRuns")),
     status: v.optional(
-      v.union(
-        v.literal("pending"),
-        v.literal("leased"),
-        v.literal("failed"),
-      ),
+      v.union(v.literal("pending"), v.literal("leased"), v.literal("failed")),
     ),
   },
   returns: v.array(fetchJobRowValidator),
@@ -429,7 +437,9 @@ function parseMarketDataHealthOperatorIds(): string[] {
     .filter((value) => value.length > 0);
 }
 
-async function requireMarketDataHealthOperator(ctx: ActionCtx): Promise<string> {
+async function requireMarketDataHealthOperator(
+  ctx: ActionCtx,
+): Promise<string> {
   const ownerId = await requireUser(ctx);
   const allowedOperatorIds = parseMarketDataHealthOperatorIds();
   if (!allowedOperatorIds.includes(ownerId)) {
@@ -450,7 +460,10 @@ export const triggerDailyRefresh = action({
   }),
   handler: async (ctx: ActionCtx): Promise<DailyRefreshResult> => {
     await requireMarketDataHealthOperator(ctx);
-    return await ctx.runAction(internal.marketData.refreshDailyPriceSnapshots, {});
+    return await ctx.runAction(
+      internal.marketData.refreshDailyPriceSnapshots,
+      {},
+    );
   },
 });
 

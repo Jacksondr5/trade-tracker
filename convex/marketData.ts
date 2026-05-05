@@ -19,6 +19,7 @@ import {
   normalizeMarketDataSymbol,
   type MarketDataAssetType,
 } from "./lib/marketDataInstruments";
+import { isDailyMarketDataRefreshDate } from "./lib/marketCalendar";
 
 const MARKET_DATA_PROVIDER = "twelve_data";
 const TWELVE_DATA_BASE_URL = "https://api.twelvedata.com";
@@ -693,7 +694,8 @@ export const listInstruments = query({
         .take(MARKET_DATA_INSTRUMENT_LIST_LIMIT);
     } else {
       for (const status of RESOLUTION_STATUS_PRIORITY) {
-        const remaining = MARKET_DATA_INSTRUMENT_LIST_LIMIT - instruments.length;
+        const remaining =
+          MARKET_DATA_INSTRUMENT_LIST_LIMIT - instruments.length;
         if (remaining <= 0) {
           break;
         }
@@ -1649,6 +1651,15 @@ export const refreshDailyPriceSnapshots = internalAction({
   }),
   handler: async (ctx, args) => {
     const runDate = args.date ?? getEasternDateString(Date.now());
+    if (!isDailyMarketDataRefreshDate(runDate)) {
+      return {
+        jobsQueued: 0,
+        ownersProcessed: 0,
+        runDate,
+        symbolsRequested: 0,
+      };
+    }
+
     const ownerUniverses: Array<{
       instruments: Doc<"marketDataInstruments">[];
       ownerId: string;
