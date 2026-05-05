@@ -168,6 +168,67 @@ export const MARKET_DATA_TEST_IDS = {
   tableAllInstruments: "market-data-instruments-table-all-instruments",
 } as const;
 
+export const MARKET_DATA_TABS_TEST_IDS = {
+  health: "market-data-tab-health",
+  mappings: "market-data-tab-mappings",
+} as const;
+
+export const MARKET_DATA_HEALTH_TEST_IDS = {
+  actionError: "market-data-health-action-error",
+  actionStatus: "market-data-health-action-status",
+  backfillEndDate: "market-data-health-backfill-end-date",
+  backfillStartDate: "market-data-health-backfill-start-date",
+  backfillSubmit: "market-data-health-backfill-submit",
+  coverageEmpty: "market-data-health-coverage-empty",
+  coverageSection: "market-data-health-coverage-section",
+  failingJobsEmpty: "market-data-health-failing-jobs-empty",
+  failingJobsSection: "market-data-health-failing-jobs-section",
+  failingJobsTable: "market-data-health-failing-jobs-table",
+  inFlightSection: "market-data-health-in-flight-section",
+  inFlightFailedTotal: "market-data-health-in-flight-failed-total",
+  inFlightLeased: "market-data-health-in-flight-leased",
+  inFlightPending: "market-data-health-in-flight-pending",
+  inFlightStuck: "market-data-health-in-flight-stuck",
+  latestRunCompletedAt: "market-data-health-latest-run-completed-at",
+  latestRunErrorMessage: "market-data-health-latest-run-error",
+  latestRunSection: "market-data-health-latest-run-section",
+  latestRunStartedAt: "market-data-health-latest-run-started-at",
+  latestRunStatus: "market-data-health-latest-run-status",
+  noRunsState: "market-data-health-no-runs-state",
+  pageTitle: "market-data-health-page-title",
+  recentRunsEmpty: "market-data-health-recent-runs-empty",
+  recentRunsSection: "market-data-health-recent-runs-section",
+  recentRunsTable: "market-data-health-recent-runs-table",
+  runWorkerTickButton: "market-data-health-run-worker-tick-button",
+  triggerDailyRefreshButton: "market-data-health-trigger-daily-refresh-button",
+  triggersSection: "market-data-health-triggers-section",
+} as const;
+
+export function getMarketDataHealthRecentRunRowTestId(runId: string): string {
+  return `market-data-health-recent-run-row-${normalizeSegment(runId)}`;
+}
+
+export function getMarketDataHealthFailingJobRowTestId(jobId: string): string {
+  return `market-data-health-failing-job-row-${normalizeSegment(jobId)}`;
+}
+
+export function getMarketDataHealthRequeueButtonTestId(jobId: string): string {
+  return `market-data-health-requeue-job-${normalizeSegment(jobId)}`;
+}
+
+export function getMarketDataHealthCoverageRowTestId(
+  portfolioId: string,
+): string {
+  return `market-data-health-coverage-row-${normalizeSegment(portfolioId)}`;
+}
+
+export function getMarketDataHealthCoverageDayTestId(
+  portfolioId: string,
+  date: string,
+): string {
+  return `market-data-health-coverage-day-${normalizeSegment(portfolioId)}-${normalizeSegment(date)}`;
+}
+
 export function getMarketDataInstrumentRowTestId(
   assetType: string,
   symbol: string,
@@ -426,6 +487,7 @@ export function getNoteContentTestId(prefix: string, noteId: string): string {
 
 export const PORTFOLIO_DATA_ISSUES_TEST_IDS = {
   awaitingSnapshotGroup: "portfolio-data-issues-awaiting-snapshot",
+  marketDataHealthLink: "nav-market-data-health-link",
   needsMappingGroup: "portfolio-data-issues-needs-mapping",
   panel: "portfolio-data-issues-panel",
   uncoveredTradesGroup: "portfolio-data-issues-uncovered-trades",
