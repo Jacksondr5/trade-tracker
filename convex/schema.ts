@@ -386,7 +386,12 @@ export default defineSchema({
     .index("by_status_and_createdAt", ["status", "createdAt"])
     .index("by_status_and_leaseExpiresAt", ["status", "leaseExpiresAt"])
     .index("by_runId", ["runId"])
-    .index("by_runId_and_status", ["runId", "status"]),
+    .index("by_runId_and_status", ["runId", "status"])
+    .index("by_ownerId_and_status_and_updatedAt", [
+      "ownerId",
+      "status",
+      "updatedAt",
+    ]),
 
   tradePlans: defineTable({
     campaignId: v.optional(v.id("campaigns")),

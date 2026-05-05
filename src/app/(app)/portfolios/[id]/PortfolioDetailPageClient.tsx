@@ -882,9 +882,18 @@ function DataIssuesPanel({
         <h2 className="text-lg font-semibold text-amber-12">
           Data issues ({totalIssues})
         </h2>
-        <span className="text-xs text-amber-11">
-          Resolve these to get accurate market value, allocation, and exposure.
-        </span>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-amber-11">
+          <span>
+            Resolve these to get accurate market value, allocation, and
+            exposure.
+          </span>
+          <Link
+            className="font-medium text-amber-11 underline underline-offset-2 hover:text-amber-12"
+            href="/market-data/health"
+          >
+            Open Market Data Health →
+          </Link>
+        </div>
       </div>
       <div className="space-y-4">
         {needsMappingSymbols.length > 0 ? (
