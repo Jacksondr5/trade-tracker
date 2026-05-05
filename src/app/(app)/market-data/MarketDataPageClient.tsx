@@ -28,6 +28,7 @@ import {
   getMarketDataProviderSymbolInputTestId,
   getMarketDataSaveProviderSymbolButtonTestId,
 } from "../../../../shared/e2e/testIds";
+import { MarketDataTabs } from "./MarketDataTabs";
 
 type Instrument = Doc<"marketDataInstruments">;
 type ResolutionStatus = Instrument["resolutionStatus"];
@@ -183,6 +184,8 @@ export default function MarketDataPageClient({
           coverage.
         </p>
       </div>
+
+      <MarketDataTabs />
 
       {errorMessage ? (
         <Alert

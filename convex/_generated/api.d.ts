@@ -21,6 +21,7 @@ import type * as lib_marketDataInstruments from "../lib/marketDataInstruments.js
 import type * as lib_statuses from "../lib/statuses.js";
 import type * as lib_tradeValidator from "../lib/tradeValidator.js";
 import type * as marketData from "../marketData.js";
+import type * as marketDataHealth from "../marketDataHealth.js";
 import type * as navigation from "../navigation.js";
 import type * as notes from "../notes.js";
 import type * as portfolioAnalytics from "../portfolioAnalytics.js";
@@ -53,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   "lib/statuses": typeof lib_statuses;
   "lib/tradeValidator": typeof lib_tradeValidator;
   marketData: typeof marketData;
+  marketDataHealth: typeof marketDataHealth;
   navigation: typeof navigation;
   notes: typeof notes;
   portfolioAnalytics: typeof portfolioAnalytics;

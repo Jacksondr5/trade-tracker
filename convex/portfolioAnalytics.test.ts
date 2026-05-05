@@ -1,8 +1,8 @@
 // @vitest-environment edge-runtime
 
 import { convexTest } from "convex-test";
-import { beforeEach, describe, expect, it } from "vitest";
-import { api } from "./_generated/api";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
 
@@ -196,6 +196,10 @@ describe("portfolio analytics calculations", () => {
 
   beforeEach(() => {
     t = convexTest(schema, modules);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   function asUser() {
@@ -450,6 +454,145 @@ describe("portfolio analytics calculations", () => {
       returnPercent: 0,
       startingEquity: 10_000,
     });
+  });
+
+  it("backfills historical daily valuations for an owner", async () => {
+    const portfolioId = await insertPortfolio();
+    await insertLedgerEntry({
+      amount: 10_000,
+      date: "2026-04-27",
+      portfolioId,
+    });
+    await insertResolvedInstrument({ symbol: "AAPL" });
+    await insertSnapshot({
+      close: 100,
+      date: "2026-04-27",
+      providerSymbol: "AAPL",
+    });
+    await insertSnapshot({
+      close: 125,
+      date: "2026-04-28",
+      providerSymbol: "AAPL",
+    });
+    await insertTrade({
+      date: "2026-04-27",
+      portfolioId,
+      price: 90,
+      quantity: 10,
+      side: "buy",
+      ticker: "AAPL",
+    });
+
+    vi.useFakeTimers();
+    const result = await t.mutation(
+      internal.portfolioAnalytics.backfillHistoricalDailyValuationsForOwner,
+      {
+        endDate: "2026-04-28",
+        ownerId,
+        startDate: "2026-04-27",
+      },
+    );
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    const rows = await asUser().query(api.portfolioAnalytics.listEquitySeries, {
+      endDate: "2026-04-28",
+      portfolioId,
+      startDate: "2026-04-27",
+    });
+
+    expect(result).toMatchObject({
+      datesQueued: 2,
+      endDate: "2026-04-28",
+      isDone: true,
+      ownerId,
+      startDate: "2026-04-27",
+    });
+    expect(rows).toHaveLength(2);
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          cashBalance: 9_100,
+          date: "2026-04-27",
+          marketValue: 1_000,
+          totalEquity: 10_100,
+        }),
+        expect.objectContaining({
+          cashBalance: 9_100,
+          date: "2026-04-28",
+          marketValue: 1_250,
+          totalEquity: 10_350,
+        }),
+      ]),
+    );
+  });
+
+  it("backfill recomputes existing valuation rows without duplicating them", async () => {
+    const portfolioId = await insertPortfolio();
+    await insertLedgerEntry({
+      amount: 10_000,
+      date: "2026-04-27",
+      portfolioId,
+    });
+
+    vi.useFakeTimers();
+    const firstRun = await t.mutation(
+      internal.portfolioAnalytics.backfillHistoricalDailyValuationsForOwner,
+      {
+        endDate: "2026-04-28",
+        ownerId,
+        startDate: "2026-04-27",
+      },
+    );
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    await insertLedgerEntry({
+      amount: 1_000,
+      date: "2026-04-28",
+      portfolioId,
+    });
+    const secondRun = await t.mutation(
+      internal.portfolioAnalytics.backfillHistoricalDailyValuationsForOwner,
+      {
+        endDate: "2026-04-28",
+        ownerId,
+        startDate: "2026-04-27",
+      },
+    );
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    const rows = await asUser().query(api.portfolioAnalytics.listEquitySeries, {
+      endDate: "2026-04-28",
+      portfolioId,
+      startDate: "2026-04-27",
+    });
+
+    expect(firstRun).toMatchObject({ datesQueued: 2, isDone: true });
+    expect(secondRun).toMatchObject({ datesQueued: 2, isDone: true });
+    expect(rows).toHaveLength(2);
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          date: "2026-04-27",
+          totalEquity: 10_000,
+        }),
+        expect.objectContaining({
+          date: "2026-04-28",
+          totalEquity: 11_000,
+        }),
+      ]),
+    );
+  });
+
+  it("rejects invalid historical valuation backfill ranges", async () => {
+    await expect(
+      t.mutation(
+        internal.portfolioAnalytics.backfillHistoricalDailyValuationsForOwner,
+        {
+          endDate: "2026-04-27",
+          ownerId,
+          startDate: "2026-04-28",
+        },
+      ),
+    ).rejects.toThrow("startDate must be on or before endDate");
   });
 
   it("does not expose another owner's valuation series", async () => {

@@ -14,6 +14,7 @@ const MARKET_DATA_PROVIDER = "twelve_data";
 const POSITION_EPSILON = 0.00000001;
 const MAX_SERIES_ROWS = 2_000;
 const OWNER_VALUATION_RECOMPUTE_BATCH_SIZE = 25;
+const HISTORICAL_VALUATION_BACKFILL_DATE_BATCH_SIZE = 31;
 
 const priceCoverageStatusValidator = v.union(
   v.literal("complete"),
@@ -68,6 +69,12 @@ function assertIsoDate(value: string, name: "date" | "endDate" | "startDate") {
 
 function endOfUtcDate(date: string): number {
   return Date.parse(`${date}T23:59:59.999Z`);
+}
+
+function addUtcDays(date: string, days: number): string {
+  const timestamp = Date.parse(`${date}T00:00:00.000Z`);
+  const next = new Date(timestamp + days * 24 * 60 * 60 * 1_000);
+  return next.toISOString().slice(0, 10);
 }
 
 function getTradeCashFlow(trade: Doc<"trades">): number {
@@ -406,6 +413,78 @@ export const computeDailyValuationsForOwner = internalMutation({
       isDone: page.isDone,
       ownerId: args.ownerId,
       portfoliosComputed: page.page.length,
+    };
+  },
+});
+
+export const backfillHistoricalDailyValuationsForOwner = internalMutation({
+  args: {
+    continueDate: v.optional(v.union(v.string(), v.null())),
+    endDate: v.string(),
+    ownerId: v.string(),
+    startDate: v.string(),
+  },
+  returns: v.object({
+    continueDate: v.union(v.string(), v.null()),
+    datesQueued: v.number(),
+    endDate: v.string(),
+    isDone: v.boolean(),
+    ownerId: v.string(),
+    startDate: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertIsoDate(args.startDate, "startDate");
+    assertIsoDate(args.endDate, "endDate");
+    if (args.startDate > args.endDate) {
+      throw new ConvexError("startDate must be on or before endDate");
+    }
+
+    const firstDate = args.continueDate ?? args.startDate;
+    assertIsoDate(firstDate, "date");
+    if (firstDate < args.startDate || firstDate > args.endDate) {
+      throw new ConvexError("continueDate must be within the backfill range");
+    }
+
+    let currentDate = firstDate;
+    let datesQueued = 0;
+    while (
+      currentDate <= args.endDate &&
+      datesQueued < HISTORICAL_VALUATION_BACKFILL_DATE_BATCH_SIZE
+    ) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.portfolioAnalytics.computeDailyValuationsForOwner,
+        {
+          date: currentDate,
+          ownerId: args.ownerId,
+        },
+      );
+      currentDate = addUtcDays(currentDate, 1);
+      datesQueued += 1;
+    }
+
+    const isDone = currentDate > args.endDate;
+    const continueDate = isDone ? null : currentDate;
+    if (!isDone) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.portfolioAnalytics.backfillHistoricalDailyValuationsForOwner,
+        {
+          continueDate,
+          endDate: args.endDate,
+          ownerId: args.ownerId,
+          startDate: args.startDate,
+        },
+      );
+    }
+
+    return {
+      continueDate,
+      datesQueued,
+      endDate: args.endDate,
+      isDone,
+      ownerId: args.ownerId,
+      startDate: args.startDate,
     };
   },
 });
