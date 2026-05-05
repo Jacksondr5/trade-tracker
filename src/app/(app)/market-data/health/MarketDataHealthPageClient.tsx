@@ -50,13 +50,15 @@ const RUN_STATUS_LABELS: Record<RunStatus, string> = {
   running: "Running",
 };
 
-const RUN_STATUS_VARIANT: Record<RunStatus, NonNullable<BadgeProps["variant"]>> =
-  {
-    completed: "success",
-    failed: "danger",
-    partial: "warning",
-    running: "info",
-  };
+const RUN_STATUS_VARIANT: Record<
+  RunStatus,
+  NonNullable<BadgeProps["variant"]>
+> = {
+  completed: "success",
+  failed: "danger",
+  partial: "warning",
+  running: "info",
+};
 
 const JOB_STATUS_LABELS: Record<JobStatus, string> = {
   failed: "Failed",
@@ -134,6 +136,24 @@ function formatDateLabel(isoDate: string): string {
   });
 }
 
+function formatJobDate(job: {
+  date: string | null;
+  endDate: string | null;
+  startDate: string | null;
+}): string {
+  if (job.date !== null) return job.date;
+  if (job.startDate !== null && job.endDate !== null) {
+    return `${job.startDate} - ${job.endDate}`;
+  }
+  if (job.startDate !== null) return `${job.startDate} -`;
+  if (job.endDate !== null) return `- ${job.endDate}`;
+  return "—";
+}
+
+function formatRunDate(runDate: string, isBackfill: boolean): string {
+  return isBackfill ? runDate.replace(":", " - ") : runDate;
+}
+
 function describeError(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) return error.message;
   return fallback;
@@ -176,6 +196,7 @@ export default function MarketDataHealthPageClient() {
 
   const [backfillStartDate, setBackfillStartDate] = useState("");
   const [backfillEndDate, setBackfillEndDate] = useState("");
+  const [fallbackNow] = useState(() => Date.now());
 
   const handleTriggerDailyRefresh = async () => {
     setActionError(null);
@@ -239,7 +260,9 @@ export default function MarketDataHealthPageClient() {
     setActionPending({ kind: "requeue", jobId });
     try {
       await requeueFetchJob({ jobId });
-      setActionStatus("Job re-queued. The worker picks it up on the next tick.");
+      setActionStatus(
+        "Job re-queued. The worker picks it up on the next tick.",
+      );
     } catch (error) {
       setActionError(describeError(error, "Failed to re-queue job."));
     } finally {
@@ -253,12 +276,10 @@ export default function MarketDataHealthPageClient() {
     actionPending === "triggerBackfill";
 
   const isLoading =
-    summary === undefined ||
-    recentRuns === undefined ||
-    coverage === undefined;
+    summary === undefined || recentRuns === undefined || coverage === undefined;
   const failingJobsLoading = failingJobs === undefined;
 
-  const serverNow = summary?.serverNow ?? Date.now();
+  const serverNow = summary?.serverNow ?? fallbackNow;
 
   return (
     <div className="container mx-auto space-y-6 px-4 py-8">
@@ -470,7 +491,7 @@ function RunStatBlock({
 }) {
   return (
     <div className="space-y-0.5">
-      <div className="text-xs uppercase tracking-wide text-slate-11">
+      <div className="text-xs tracking-wide text-slate-11 uppercase">
         {label}
       </div>
       <div
@@ -554,7 +575,7 @@ function CounterBlock({
 }) {
   return (
     <div className="rounded-md border border-olive-6 bg-olive-2 p-3">
-      <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-11">
+      <div className="flex items-center gap-2 text-xs tracking-wide text-slate-11 uppercase">
         {icon}
         {label}
       </div>
@@ -631,7 +652,11 @@ function RecentRunsSection({ runs }: RecentRunsSectionProps) {
                     data-testid={getMarketDataHealthRecentRunRowTestId(run._id)}
                     className="hover:bg-slate-3/40"
                   >
-                    <Td className="font-mono text-slate-12">{run.runDate}</Td>
+                    <Td className="font-mono text-slate-12">
+                      <span title={run.runDate}>
+                        {formatRunDate(run.runDate, run.isBackfill)}
+                      </span>
+                    </Td>
                     <Td>
                       <Badge variant="neutral">
                         {run.isBackfill ? "Backfill" : "Daily"}
@@ -682,11 +707,14 @@ interface FailingJobsSectionProps {
     assetType: "crypto" | "stock";
     attempts: number;
     completedAt: number | null;
+    date: string | null;
+    endDate: string | null;
     errorMessage: string | null;
     isStuck: boolean;
     kind: JobKind;
     runId: Id<"marketDataRefreshRuns">;
     sourceTradeIds: Id<"trades">[];
+    startDate: string | null;
     status: JobStatus | "completed";
     symbol: string;
     updatedAt: number;
@@ -770,6 +798,7 @@ function FailingJobsSection({
                   <Th>Symbol</Th>
                   <Th>Asset</Th>
                   <Th>Kind</Th>
+                  <Th>Date</Th>
                   <Th>Attempts</Th>
                   <Th>Updated</Th>
                   <Th>Source trades</Th>
@@ -783,7 +812,9 @@ function FailingJobsSection({
                   return (
                     <tr
                       key={job._id}
-                      data-testid={getMarketDataHealthFailingJobRowTestId(job._id)}
+                      data-testid={getMarketDataHealthFailingJobRowTestId(
+                        job._id,
+                      )}
                       className="hover:bg-slate-3/40"
                     >
                       <Td className="font-mono text-slate-12">
@@ -801,6 +832,9 @@ function FailingJobsSection({
                         <Badge variant="neutral">
                           {JOB_KIND_LABELS[job.kind]}
                         </Badge>
+                      </Td>
+                      <Td className="font-mono text-xs">
+                        {formatJobDate(job)}
                       </Td>
                       <Td className="font-mono">{job.attempts}</Td>
                       <Td>
@@ -870,8 +904,8 @@ function CoverageSection({ coverage }: CoverageSectionProps) {
       <CardHeader>
         <CardTitle>Per-portfolio coverage</CardTitle>
         <CardDescription>
-          Last {COVERAGE_DAYS} days of valuation coverage by portfolio. Hover
-          a cell to see missing symbols.
+          Last {COVERAGE_DAYS} days of valuation coverage by portfolio. Hover a
+          cell to see missing symbols.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -952,7 +986,13 @@ function CoverageLegend() {
   );
 }
 
-function LegendSwatch({ className, label }: { className: string; label: string }) {
+function LegendSwatch({
+  className,
+  label,
+}: {
+  className: string;
+  label: string;
+}) {
   return (
     <span className="flex items-center gap-1.5">
       <span className={cn("h-3 w-3 rounded-sm", className)} />
@@ -993,16 +1033,14 @@ function TriggersSection({
       <CardHeader>
         <CardTitle>Manual triggers</CardTitle>
         <CardDescription>
-          Use these for debugging. The nightly planner and 2-minute worker
-          fire automatically.
+          Use these for debugging. The nightly planner and 2-minute worker fire
+          automatically.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap gap-3">
           <Button
-            dataTestId={
-              MARKET_DATA_HEALTH_TEST_IDS.triggerDailyRefreshButton
-            }
+            dataTestId={MARKET_DATA_HEALTH_TEST_IDS.triggerDailyRefreshButton}
             variant="outline"
             isLoading={triggerDailyPending}
             disabled={isAnyPending}
@@ -1098,7 +1136,10 @@ function Td({
 }) {
   return (
     <td
-      className={cn("whitespace-nowrap px-3 py-2 text-sm text-slate-11", className)}
+      className={cn(
+        "px-3 py-2 text-sm whitespace-nowrap text-slate-11",
+        className,
+      )}
     >
       {children}
     </td>

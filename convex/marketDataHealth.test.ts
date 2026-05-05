@@ -31,10 +31,12 @@ describe("market data health", () => {
     return t.withIdentity({ tokenIdentifier: token });
   }
 
-  async function insertPortfolio(args: {
-    name?: string;
-    owner?: string;
-  } = {}): Promise<Id<"portfolios">> {
+  async function insertPortfolio(
+    args: {
+      name?: string;
+      owner?: string;
+    } = {},
+  ): Promise<Id<"portfolios">> {
     return await t.run(async (ctx) => {
       return await ctx.db.insert("portfolios", {
         name: args.name ?? "Long-term",
@@ -220,7 +222,10 @@ describe("market data health", () => {
     });
 
     it("flags backfill-style runDates", async () => {
-      await insertRun({ runDate: "2026-04-01:2026-05-01", status: "completed" });
+      await insertRun({
+        runDate: "2026-04-01:2026-05-01",
+        status: "completed",
+      });
       const summary = await asOwner().query(
         api.marketDataHealth.getCurrentRunSummary,
         {},
@@ -307,10 +312,9 @@ describe("market data health", () => {
         updatedAt: now + 1,
       });
 
-      const jobs = await asOwner().query(
-        api.marketDataHealth.listFetchJobs,
-        { runId: runA },
-      );
+      const jobs = await asOwner().query(api.marketDataHealth.listFetchJobs, {
+        runId: runA,
+      });
       expect(jobs.map((job) => job.symbol)).toEqual(["ONLYA"]);
     });
 
@@ -321,10 +325,9 @@ describe("market data health", () => {
         runId: run,
         status: "failed",
       });
-      const jobs = await asOwner().query(
-        api.marketDataHealth.listFetchJobs,
-        { runId: run },
-      );
+      const jobs = await asOwner().query(api.marketDataHealth.listFetchJobs, {
+        runId: run,
+      });
       expect(jobs).toEqual([]);
     });
 
@@ -343,6 +346,29 @@ describe("market data health", () => {
       });
       expect(jobs).toHaveLength(1);
       expect(jobs[0].isStuck).toBe(true);
+    });
+  });
+
+  describe("getFailedFetchJobCount", () => {
+    it("counts failed jobs for the current owner only", async () => {
+      const run = await insertRun({});
+      const otherRun = await insertRun({ owner: otherOwnerId });
+      await insertJob({ runId: run, status: "failed", symbol: "AAPL" });
+      await insertJob({ runId: run, status: "failed", symbol: "MSFT" });
+      await insertJob({ runId: run, status: "pending", symbol: "GOOG" });
+      await insertJob({
+        owner: otherOwnerId,
+        runId: otherRun,
+        status: "failed",
+        symbol: "TSLA",
+      });
+
+      const count = await asOwner().query(
+        api.marketDataHealth.getFailedFetchJobCount,
+        {},
+      );
+
+      expect(count).toBe(2);
     });
   });
 
