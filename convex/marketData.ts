@@ -1799,6 +1799,23 @@ export const processMarketDataFetchJobs = internalAction({
         }
         let providerSymbol = job.providerSymbol;
         if (!providerSymbol) {
+          const existing: Doc<"marketDataInstruments"> | null =
+            await ctx.runQuery(
+              internal.marketData.getInstrumentBySymbolInternal,
+              {
+                assetType: job.assetType,
+                ownerId: job.ownerId,
+                ticker: job.symbol,
+              },
+            );
+          if (
+            existing?.resolutionStatus === "resolved" &&
+            existing.providerSymbol
+          ) {
+            providerSymbol = existing.providerSymbol;
+          }
+        }
+        if (!providerSymbol) {
           const resolution = await resolveProviderSymbol({
             apiKey,
             assetType: job.assetType,

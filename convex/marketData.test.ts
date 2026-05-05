@@ -1044,6 +1044,154 @@ describe("market data instruments", () => {
     expect(runs[0]?.errorMessage).toContain(tradeId);
   });
 
+  it("uses a manual mapping when reprocessing a stale historical backfill job", async () => {
+    const portfolioId = await insertPortfolio();
+    await insertTrade({
+      date: Date.UTC(2026, 3, 22),
+      portfolioId,
+      ticker: "WEIRD",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+        const parsed = new URL(url);
+        const symbol = parsed.searchParams.get("symbol");
+
+        if (parsed.pathname.endsWith("/symbol_search")) {
+          return new Response(
+            JSON.stringify({
+              data:
+                symbol === "SPY"
+                  ? [
+                      {
+                        country: "United States",
+                        currency: "USD",
+                        exchange: "NYSE",
+                        instrument_type: "ETF",
+                        symbol: "SPY",
+                      },
+                    ]
+                  : [],
+              status: "ok",
+            }),
+            { status: 200 },
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            status: "ok",
+            values: [
+              {
+                close: symbol === "WEIRD.MANUAL" ? "42.00" : "503.25",
+                datetime: "2026-04-24",
+              },
+              {
+                close: symbol === "WEIRD.MANUAL" ? "41.00" : "501.00",
+                datetime: "2026-04-22",
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    await asUser().action(api.marketData.backfillHistoricalPriceSnapshots, {
+      endDate: "2026-04-24",
+    });
+    await t.action(internal.marketData.processMarketDataFetchJobs, {
+      budgetCredits: 8,
+    });
+
+    const failedJob = await t.run(async (ctx) => {
+      const jobs = await ctx.db.query("marketDataFetchJobs").collect();
+      return jobs.find((job) => job.symbol === "WEIRD") ?? null;
+    });
+    expect(failedJob).toMatchObject({
+      status: "failed",
+      symbol: "WEIRD",
+    });
+    expect(failedJob?.providerSymbol).toBeUndefined();
+
+    const reviewInstrument = await asUser().query(
+      api.marketData.getInstrumentBySymbol,
+      {
+        assetType: "stock",
+        ticker: "WEIRD",
+      },
+    );
+    expect(reviewInstrument).toMatchObject({
+      resolutionStatus: "needs_review",
+      symbol: "WEIRD",
+    });
+
+    await asUser().action(api.marketData.setProviderSymbol, {
+      instrumentId: reviewInstrument!._id,
+      providerSymbol: "WEIRD.MANUAL",
+    });
+    await asUser().mutation(api.marketDataHealth.requeueFetchJob, {
+      jobId: failedJob!._id,
+    });
+    const retryResult = await t.action(
+      internal.marketData.processMarketDataFetchJobs,
+      {
+        budgetCredits: 8,
+      },
+    );
+
+    const finalInstrument = await asUser().query(
+      api.marketData.getInstrumentBySymbol,
+      {
+        assetType: "stock",
+        ticker: "WEIRD",
+      },
+    );
+    const snapshots = await t.run(async (ctx) => {
+      const rows = await ctx.db.query("marketPriceSnapshots").collect();
+      return rows.filter((row) => row.providerSymbol === "WEIRD.MANUAL");
+    });
+    const remainingJobs = await t.run(async (ctx) => {
+      return await ctx.db.query("marketDataFetchJobs").collect();
+    });
+
+    expect(retryResult).toMatchObject({
+      jobsFailed: 0,
+      jobsProcessed: 1,
+      jobsSucceeded: 1,
+    });
+    expect(finalInstrument).toMatchObject({
+      providerSymbol: "WEIRD.MANUAL",
+      resolutionStatus: "resolved",
+      symbol: "WEIRD",
+    });
+    expect(finalInstrument?.lastError).toBeUndefined();
+    expect(snapshots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          close: 42,
+          date: "2026-04-24",
+          providerSymbol: "WEIRD.MANUAL",
+          status: "ok",
+        }),
+      ]),
+    );
+    expect(remainingJobs).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          symbol: "WEIRD",
+        }),
+      ]),
+    );
+  });
+
   it("does not require Twelve Data API key when no jobs are queued", async () => {
     delete process.env.TWELVE_DATA_API_KEY;
 
