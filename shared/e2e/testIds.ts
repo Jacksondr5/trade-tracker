@@ -487,6 +487,7 @@ export function getNoteContentTestId(prefix: string, noteId: string): string {
 
 export const PORTFOLIO_DATA_ISSUES_TEST_IDS = {
   awaitingSnapshotGroup: "portfolio-data-issues-awaiting-snapshot",
+  marketDataHealthLink: "nav-market-data-health-link",
   needsMappingGroup: "portfolio-data-issues-needs-mapping",
   panel: "portfolio-data-issues-panel",
   uncoveredTradesGroup: "portfolio-data-issues-uncovered-trades",

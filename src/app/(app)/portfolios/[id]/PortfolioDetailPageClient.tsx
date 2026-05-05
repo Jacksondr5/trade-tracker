@@ -889,6 +889,7 @@ function DataIssuesPanel({
           </span>
           <Link
             className="font-medium text-amber-11 underline underline-offset-2 hover:text-amber-12"
+            data-testid={PORTFOLIO_DATA_ISSUES_TEST_IDS.marketDataHealthLink}
             href="/market-data/health"
           >
             Open Market Data Health →

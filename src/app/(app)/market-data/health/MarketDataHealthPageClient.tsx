@@ -210,8 +210,8 @@ export default function MarketDataHealthPageClient() {
   };
 
   const handleTriggerBackfill = async () => {
-    if (!backfillStartDate || !backfillEndDate) {
-      setActionError("Pick both a start and end date for the backfill.");
+    if (!backfillEndDate) {
+      setActionError("Pick an end date for the backfill.");
       return;
     }
     setActionError(null);
@@ -219,7 +219,7 @@ export default function MarketDataHealthPageClient() {
     setActionPending("triggerBackfill");
     try {
       const result = await triggerBackfill({
-        startDate: backfillStartDate,
+        startDate: backfillStartDate || undefined,
         endDate: backfillEndDate,
       });
       setActionStatus(

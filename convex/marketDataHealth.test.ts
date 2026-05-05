@@ -231,9 +231,9 @@ describe("market data health", () => {
 
   describe("listRecentRefreshRuns", () => {
     it("returns runs newest-first and respects the limit", async () => {
-      await insertRun({ runDate: "2026-04-29" });
-      await insertRun({ runDate: "2026-04-30" });
-      await insertRun({ runDate: "2026-05-01" });
+      await insertRun({ runDate: "2026-04-29", startedAt: now - 2_000 });
+      await insertRun({ runDate: "2026-04-30", startedAt: now - 1_000 });
+      await insertRun({ runDate: "2026-05-01", startedAt: now });
 
       const runs = await asOwner().query(
         api.marketDataHealth.listRecentRefreshRuns,
