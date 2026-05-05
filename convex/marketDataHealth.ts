@@ -418,6 +418,28 @@ type WorkerTickResult = {
   jobsSucceeded: number;
 };
 
+function parseMarketDataHealthOperatorIds(): string[] {
+  const raw = process.env.MARKET_DATA_HEALTH_OPERATOR_IDS;
+  if (!raw) {
+    return [];
+  }
+  return raw
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+}
+
+async function requireMarketDataHealthOperator(ctx: ActionCtx): Promise<string> {
+  const ownerId = await requireUser(ctx);
+  const allowedOperatorIds = parseMarketDataHealthOperatorIds();
+  if (!allowedOperatorIds.includes(ownerId)) {
+    throw new ConvexError(
+      "Forbidden: market data health controls require operator access",
+    );
+  }
+  return ownerId;
+}
+
 export const triggerDailyRefresh = action({
   args: {},
   returns: v.object({
@@ -427,9 +449,7 @@ export const triggerDailyRefresh = action({
     symbolsRequested: v.number(),
   }),
   handler: async (ctx: ActionCtx): Promise<DailyRefreshResult> => {
-    // Owner check: even though the underlying planner walks every owner,
-    // we still gate the action so unauthenticated callers can't hit it.
-    await requireUser(ctx);
+    await requireMarketDataHealthOperator(ctx);
     return await ctx.runAction(internal.marketData.refreshDailyPriceSnapshots, {});
   },
 });
@@ -446,7 +466,7 @@ export const runWorkerTick = action({
     jobsSucceeded: v.number(),
   }),
   handler: async (ctx: ActionCtx, args): Promise<WorkerTickResult> => {
-    await requireUser(ctx);
+    await requireMarketDataHealthOperator(ctx);
     return await ctx.runAction(internal.marketData.processMarketDataFetchJobs, {
       budgetCredits: args.budgetCredits,
     });

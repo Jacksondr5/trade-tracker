@@ -485,4 +485,59 @@ describe("market data health", () => {
       ).rejects.toThrow(/not found/);
     });
   });
+
+  describe("operator controls", () => {
+    it("rejects triggerDailyRefresh for non-operators", async () => {
+      const previous = process.env.MARKET_DATA_HEALTH_OPERATOR_IDS;
+      process.env.MARKET_DATA_HEALTH_OPERATOR_IDS = "ops-user";
+      try {
+        await expect(
+          asOwner().action(api.marketDataHealth.triggerDailyRefresh, {}),
+        ).rejects.toThrow(/operator access/);
+      } finally {
+        process.env.MARKET_DATA_HEALTH_OPERATOR_IDS = previous;
+      }
+    });
+
+    it("rejects runWorkerTick for non-operators", async () => {
+      const previous = process.env.MARKET_DATA_HEALTH_OPERATOR_IDS;
+      process.env.MARKET_DATA_HEALTH_OPERATOR_IDS = "ops-user";
+      try {
+        await expect(
+          asOwner().action(api.marketDataHealth.runWorkerTick, {}),
+        ).rejects.toThrow(/operator access/);
+      } finally {
+        process.env.MARKET_DATA_HEALTH_OPERATOR_IDS = previous;
+      }
+    });
+
+    it("allows configured operators", async () => {
+      const previous = process.env.MARKET_DATA_HEALTH_OPERATOR_IDS;
+      process.env.MARKET_DATA_HEALTH_OPERATOR_IDS = ownerId;
+      try {
+        const refreshResult = await asOwner().action(
+          api.marketDataHealth.triggerDailyRefresh,
+          {},
+        );
+        expect(refreshResult).toMatchObject({
+          jobsQueued: 0,
+          ownersProcessed: 0,
+          symbolsRequested: 0,
+        });
+
+        const workerResult = await asOwner().action(
+          api.marketDataHealth.runWorkerTick,
+          {},
+        );
+        expect(workerResult).toMatchObject({
+          creditsUsed: 0,
+          jobsFailed: 0,
+          jobsProcessed: 0,
+          jobsSucceeded: 0,
+        });
+      } finally {
+        process.env.MARKET_DATA_HEALTH_OPERATOR_IDS = previous;
+      }
+    });
+  });
 });
