@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Market Calendar Helper
+## Task 1: Market Calendar Helper
 
 **Files:**
 
@@ -23,7 +23,7 @@
 2. Add `isDailyMarketDataRefreshDate(date: string): boolean`.
 3. Test weekday open, weekend closed, and NYSE holiday closed.
 
-### Task 2: Skip Closed Daily Refresh Dates
+## Task 2: Skip Closed Daily Refresh Dates
 
 **Files:**
 
@@ -36,7 +36,7 @@
 2. Return zero jobs before owner universe lookup when the run date is closed.
 3. Assert no refresh run or jobs are created for weekend/holiday dates.
 
-### Task 3: Health Query Count
+## Task 3: Health Query Count
 
 **Files:**
 
@@ -49,7 +49,7 @@
 2. Use the existing bounded status index.
 3. Test owner scoping and failed-only counting.
 
-### Task 4: Health Dashboard Table Formatting
+## Task 4: Health Dashboard Table Formatting
 
 **Files:**
 
@@ -61,7 +61,7 @@
 2. Preserve full error messages in `title`.
 3. Format backfill run labels by replacing `:` with `-` for display only.
 
-### Task 5: Navigation Failed-Job Badge
+## Task 5: Navigation Failed-Job Badge
 
 **Files:**
 
@@ -74,7 +74,7 @@
 2. Render a red count marker on the Market Data nav item when count is greater than zero.
 3. Add a stable test id for the badge.
 
-### Task 6: Verification
+## Task 6: Verification
 
 **Commands:**
 

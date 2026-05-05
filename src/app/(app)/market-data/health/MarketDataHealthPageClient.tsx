@@ -419,7 +419,7 @@ function LatestRunSection({ latestRun, now }: LatestRunSectionProps) {
             </CardTitle>
             <CardDescription>
               {latestRun.isBackfill
-                ? `Range ${latestRun.runDate.replace(":", " → ")}`
+                ? `Range ${formatRunDate(latestRun.runDate, true)}`
                 : `Run date ${latestRun.runDate}`}
             </CardDescription>
           </div>
@@ -1137,7 +1137,7 @@ function Td({
   return (
     <td
       className={cn(
-        "px-3 py-2 text-sm whitespace-nowrap text-slate-11",
+        "px-3 py-2 text-sm text-slate-11",
         className,
       )}
     >
