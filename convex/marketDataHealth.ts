@@ -172,7 +172,7 @@ export const getCurrentRunSummary = query({
 
     const latestRun = await ctx.db
       .query("marketDataRefreshRuns")
-      .withIndex("by_ownerId_and_runDate", (q) => q.eq("ownerId", ownerId))
+      .withIndex("by_ownerId_and_startedAt", (q) => q.eq("ownerId", ownerId))
       .order("desc")
       .first();
 
@@ -235,7 +235,7 @@ export const listRecentRefreshRuns = query({
 
     const runs = await ctx.db
       .query("marketDataRefreshRuns")
-      .withIndex("by_ownerId_and_runDate", (q) => q.eq("ownerId", ownerId))
+      .withIndex("by_ownerId_and_startedAt", (q) => q.eq("ownerId", ownerId))
       .order("desc")
       .take(limit);
 
@@ -274,7 +274,7 @@ export const listFetchJobs = query({
       }
       jobs = await ctx.db
         .query("marketDataFetchJobs")
-        .withIndex("by_runId_and_status", (q) =>
+        .withIndex("by_runId_and_status_and_updatedAt", (q) =>
           q.eq("runId", args.runId!).eq("status", status),
         )
         .order("desc")

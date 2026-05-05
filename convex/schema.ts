@@ -359,6 +359,7 @@ export default defineSchema({
     symbolsSucceeded: v.number(),
   })
     .index("by_ownerId_and_runDate", ["ownerId", "runDate"])
+    .index("by_ownerId_and_startedAt", ["ownerId", "startedAt"])
     .index("by_ownerId_and_status", ["ownerId", "status"]),
 
   marketDataFetchJobs: defineTable({
@@ -387,6 +388,7 @@ export default defineSchema({
     .index("by_status_and_leaseExpiresAt", ["status", "leaseExpiresAt"])
     .index("by_runId", ["runId"])
     .index("by_runId_and_status", ["runId", "status"])
+    .index("by_runId_and_status_and_updatedAt", ["runId", "status", "updatedAt"])
     .index("by_ownerId_and_status_and_updatedAt", [
       "ownerId",
       "status",
