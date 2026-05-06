@@ -53,6 +53,10 @@ const SOURCE_LABELS: Record<BrokerageSource, string> = {
   kraken: "Kraken",
 };
 
+function isBrokerageSource(source: string): source is BrokerageSource {
+  return source === "ibkr" || source === "kraken";
+}
+
 function getAccountBaseLabel(args: {
   accountId: string;
   mappedName?: string;
@@ -175,25 +179,32 @@ export default function TradesPageClient({
 
   const accountOptions = useMemo(() => {
     return knownAccounts
-      .map((account) => {
+      .flatMap((account) => {
+        if (!isBrokerageSource(account.source)) {
+          return [];
+        }
+
+        const source = account.source;
         const mappedName = accountNameByKey.get(
           buildTradeAccountKey({
             accountId: account.accountId,
-            source: account.source,
+            source,
           }),
         );
 
-        return {
-          label: `${getAccountBaseLabel({
-            accountId: account.accountId,
-            mappedName,
-            source: account.source,
-          })} · ${SOURCE_LABELS[account.source]}`,
-          value: buildTradeAccountKey({
-            accountId: account.accountId,
-            source: account.source,
-          }),
-        };
+        return [
+          {
+            label: `${getAccountBaseLabel({
+              accountId: account.accountId,
+              mappedName,
+              source,
+            })} · ${SOURCE_LABELS[source]}`,
+            value: buildTradeAccountKey({
+              accountId: account.accountId,
+              source,
+            }),
+          },
+        ];
       })
       .sort(
         (a, b) =>

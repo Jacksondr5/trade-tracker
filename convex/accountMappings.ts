@@ -6,9 +6,13 @@ import {
   KRAKEN_DEFAULT_ACCOUNT_ID,
 } from "../shared/imports/constants";
 
-type MappingSource = "ibkr" | "kraken";
+type MappingSource = "ibkr" | "kraken" | "manual";
 
-const mappingSourceValidator = v.union(v.literal("ibkr"), v.literal("kraken"));
+const mappingSourceValidator = v.union(
+  v.literal("ibkr"),
+  v.literal("kraken"),
+  v.literal("manual"),
+);
 
 const accountMappingValidator = v.object({
   _creationTime: v.number(),
@@ -35,7 +39,7 @@ function normalizeFriendlyName(value: string): string {
 }
 
 function normalizeSource(value: string): MappingSource {
-  if (value !== "ibkr" && value !== "kraken") {
+  if (value !== "ibkr" && value !== "kraken" && value !== "manual") {
     throw new ConvexError("Invalid brokerage source");
   }
   return value;

@@ -157,6 +157,7 @@ export const TRADES_INDEX_TEST_IDS = {
 export const IMPORTS_INDEX_TEST_IDS = {
   emptyState: "imports-empty-state",
   brokerageSelect: "brokerage-select",
+  templateDownloadButton: "imports-template-download-button",
 } as const;
 
 export const MARKET_DATA_TEST_IDS = {
