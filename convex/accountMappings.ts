@@ -106,7 +106,7 @@ export const listKnownBrokerageAccounts = query({
 
     for (const trade of trades) {
       const source = trade.source;
-      if (source !== "ibkr" && source !== "kraken") {
+      if (source !== "ibkr" && source !== "kraken" && source !== "manual") {
         continue;
       }
       const accountId = normalizeAccountIdForSource(

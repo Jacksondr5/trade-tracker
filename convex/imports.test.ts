@@ -280,6 +280,54 @@ describe("imports review workspace", () => {
     expect(inboxTrades).toHaveLength(1);
   });
 
+  it("includes manual accounts from accepted trades in known accounts", async () => {
+    await insertResolvedInstrument({
+      assetType: "stock",
+      ownerId: ownerA,
+      symbol: "AAPL",
+    });
+
+    const importResult = await asUser(ownerA).mutation(api.imports.importTrades, {
+      trades: [
+        {
+          assetType: "stock",
+          brokerageAccountId: "Manual Ledger",
+          date: 1_771_597_800_000,
+          direction: "long",
+          externalId: "manual-accepted-1",
+          price: 200,
+          quantity: 3,
+          side: "buy",
+          source: "manual",
+          ticker: "AAPL",
+        },
+      ],
+    });
+
+    const inboxTrades = await asUser(ownerA).query(api.imports.listInboxTrades, {});
+    expect(importResult.imported).toBe(1);
+    expect(inboxTrades).toHaveLength(1);
+
+    const accepted = await asUser(ownerA).action(api.imports.acceptTrade, {
+      inboxTradeId: inboxTrades[0]._id,
+    });
+    expect(accepted.accepted).toBe(true);
+
+    const knownAccounts = await asUser(ownerA).query(
+      api.accountMappings.listKnownBrokerageAccounts,
+      {},
+    );
+
+    expect(knownAccounts).toEqual([
+      expect.objectContaining({
+        accountId: "Manual Ledger",
+        inboxTradeCount: 0,
+        source: "manual",
+        tradeCount: 1,
+      }),
+    ]);
+  });
+
   it("returns reference data and explicit review states for pending inbox rows", async () => {
     const activeCampaignId = await insertCampaign({
       name: "Semis",
