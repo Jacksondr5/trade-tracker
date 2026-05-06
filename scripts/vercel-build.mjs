@@ -102,7 +102,12 @@ function runConvexDeploy() {
   ];
 
   if (isVercelPreviewBuild()) {
-    args.push("--preview-run", PREVIEW_SEED_FUNCTION);
+    args.push(
+      "--preview-create",
+      requireEnv("VERCEL_GIT_COMMIT_REF"),
+      "--preview-run",
+      PREVIEW_SEED_FUNCTION,
+    );
   }
 
   run("pnpm", args);

@@ -117,6 +117,10 @@ test("watchlist toggles stay in sync between hierarchy and command palette", asy
 }) => {
   await page.goto("/campaigns");
   await waitForAuthenticatedApp(page, APP_PAGE_TITLES.campaigns);
+  await ensureLinkedTradePlanNotInWatchlist(page);
+
+  await page.goto("/campaigns");
+  await waitForAuthenticatedApp(page, APP_PAGE_TITLES.campaigns);
 
   await getSeededCampaignChildrenToggle(page).click();
   await expect(getSeededWatchlistLinkedTradePlanLink(page)).toHaveCount(0);
@@ -134,6 +138,7 @@ test("watchlist toggles stay in sync between hierarchy and command palette", asy
   await expect(getSeededCommandPaletteLinkedTradePlanItem(page)).toHaveCount(0);
 
   await getSeededCommandPaletteWatchlistLinkedTradePlanItem(page).click();
+  await expect(page).toHaveURL(/\/trade-plans\/[^/]+$/);
   await expect(getTradePlanNameDisplay(page)).toHaveText(
     E2E_SMOKE_FIXTURES.linkedTradePlan.name,
   );

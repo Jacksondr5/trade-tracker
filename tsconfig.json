@@ -8,11 +8,7 @@
     "incremental": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "module": "preserve",
     "moduleDetection": "force",
     "moduleResolution": "bundler",
@@ -23,12 +19,8 @@
     "noUnusedLocals": true,
     "outDir": "dist",
     "paths": {
-      "~/*": [
-        "./src/*"
-      ],
-      "~/convex/*": [
-        "./convex/*"
-      ]
+      "~/*": ["./src/*"],
+      "~/convex/*": ["./convex/*"]
     },
     "plugins": [
       {
@@ -40,6 +32,7 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "es2022",
+    "types": ["node"],
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
   "exclude": [
