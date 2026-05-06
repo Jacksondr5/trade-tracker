@@ -4,6 +4,7 @@ import type { ChangeEvent } from "react";
 import { useRef, useState } from "react";
 import { parseIBKRCSV } from "~/lib/imports/ibkr-parser";
 import { parseKrakenCSV } from "~/lib/imports/kraken-parser";
+import { parseManualCSV } from "~/lib/imports/manual-parser";
 import type {
   BrokerageSource,
   InboxTradeCandidate,
@@ -18,7 +19,9 @@ interface ImportResult {
 
 interface UseImportUploadArgs {
   brokerage: BrokerageSource;
-  importTrades: (args: { trades: InboxTradeCandidate[] }) => Promise<ImportResult>;
+  importTrades: (args: {
+    trades: InboxTradeCandidate[];
+  }) => Promise<ImportResult>;
   setErrorMessage: (message: string | null) => void;
 }
 
@@ -48,7 +51,12 @@ export function useImportUpload({
 
     try {
       const content = await selectedFile.text();
-      const parseResult = brokerage === "ibkr" ? parseIBKRCSV(content) : parseKrakenCSV(content);
+      const parseResult =
+        brokerage === "ibkr"
+          ? parseIBKRCSV(content)
+          : brokerage === "kraken"
+            ? parseKrakenCSV(content)
+            : parseManualCSV(content);
 
       if (parseResult.trades.length === 0) {
         setErrorMessage(

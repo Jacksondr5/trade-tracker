@@ -43,7 +43,11 @@ type PriceMappingState =
     }
   | { state: "ignored"; instrumentId: Id<"marketDataInstruments"> };
 
-const sourceValidator = v.union(v.literal("ibkr"), v.literal("kraken"));
+const sourceValidator = v.union(
+  v.literal("ibkr"),
+  v.literal("kraken"),
+  v.literal("manual"),
+);
 
 const inboxTradeValidator = v.object({
   _creationTime: v.number(),
@@ -189,12 +193,14 @@ const importsReviewWorkspaceValidator = v.object({
   }),
 });
 
-function dedupKey(source: "ibkr" | "kraken", externalId: string): string {
+type ImportSource = "ibkr" | "kraken" | "manual";
+
+function dedupKey(source: ImportSource, externalId: string): string {
   return `${source}|${externalId}`;
 }
 
 function normalizeBrokerageAccountId(
-  source: "ibkr" | "kraken",
+  source: ImportSource,
   accountId: string | undefined,
 ): string | undefined {
   const normalizedAccountId = accountId?.trim() || undefined;
@@ -444,10 +450,12 @@ export const importTrades = mutation({
             t,
           ): t is typeof t & {
             externalId: string;
-            source: "ibkr" | "kraken";
+            source: ImportSource;
           } =>
             t.externalId !== undefined &&
-            (t.source === "ibkr" || t.source === "kraken"),
+            (t.source === "ibkr" ||
+              t.source === "kraken" ||
+              t.source === "manual"),
         )
         .map((t) => dedupKey(t.source, t.externalId)),
       ...existingPendingInboxTrades

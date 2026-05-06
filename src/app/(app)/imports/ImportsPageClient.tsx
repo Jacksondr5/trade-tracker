@@ -6,11 +6,16 @@ import {
   useMutation,
   usePreloadedQuery,
 } from "convex/react";
+import { Download } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { Alert, Button, Select } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
+import { MANUAL_IMPORT_TEMPLATE_CSV } from "~/lib/imports/manual-parser";
 import type { Id } from "~/convex/_generated/dataModel";
-import { APP_PAGE_TITLES } from "../../../../shared/e2e/testIds";
+import {
+  APP_PAGE_TITLES,
+  IMPORTS_INDEX_TEST_IDS,
+} from "../../../../shared/e2e/testIds";
 import type { BrokerageSource } from "../../../../shared/imports/types";
 import { type EditTradeFormValues } from "./components/edit-trade-form";
 import { InboxTable } from "./components/inbox-table";
@@ -190,6 +195,20 @@ export default function ImportsPageClient({
   const onBrokerageChange = (value: BrokerageSource) => {
     setBrokerage(value);
     setImportResult(null);
+  };
+
+  const downloadManualTemplate = () => {
+    const blob = new Blob([`${MANUAL_IMPORT_TEMPLATE_CSV}\n`], {
+      type: "text/csv;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "trade-tracker-manual-import-template.csv";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   };
 
   const persistTradePlanSelection = async (
@@ -441,9 +460,9 @@ export default function ImportsPageClient({
             Select brokerage
           </label>
           <Select
-            dataTestId="brokerage-select"
+            dataTestId={IMPORTS_INDEX_TEST_IDS.brokerageSelect}
             id="brokerage-select"
-            className="w-auto"
+            className="w-[230px]"
             value={brokerage}
             onChange={(e) =>
               onBrokerageChange(e.target.value as BrokerageSource)
@@ -451,7 +470,19 @@ export default function ImportsPageClient({
           >
             <option value="ibkr">Interactive Brokers (IBKR)</option>
             <option value="kraken">Kraken</option>
+            <option value="manual">Manual CSV</option>
           </Select>
+          {brokerage === "manual" && (
+            <Button
+              dataTestId={IMPORTS_INDEX_TEST_IDS.templateDownloadButton}
+              variant="outline"
+              className="h-9"
+              onClick={downloadManualTemplate}
+            >
+              <Download className="size-4" aria-hidden="true" />
+              Download template
+            </Button>
+          )}
           <Button
             dataTestId="import-trades-button"
             className="h-9"

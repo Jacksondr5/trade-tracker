@@ -110,7 +110,11 @@ const tradePlanWorkspaceNoteValidator = v.object({
   tradePlanId: v.optional(v.id("tradePlans")),
 });
 
-const mappingSourceValidator = v.union(v.literal("ibkr"), v.literal("kraken"));
+const mappingSourceValidator = v.union(
+  v.literal("ibkr"),
+  v.literal("kraken"),
+  v.literal("manual"),
+);
 
 const tradePlanWorkspaceAccountMappingValidator = v.object({
   _creationTime: v.number(),

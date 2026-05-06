@@ -18,7 +18,7 @@ import {
 } from "../../../../shared/imports/constants";
 import { APP_PAGE_TITLES } from "../../../../shared/e2e/testIds";
 
-type MappingSource = "ibkr" | "kraken";
+type MappingSource = "ibkr" | "kraken" | "manual";
 
 type KnownAccount = {
   accountId: string;
@@ -30,6 +30,7 @@ type KnownAccount = {
 const SOURCE_LABELS: Record<MappingSource, string> = {
   ibkr: "IBKR",
   kraken: "Kraken",
+  manual: "Manual CSV",
 };
 
 export default function AccountsPageClient({
@@ -124,7 +125,7 @@ export default function AccountsPageClient({
 
       <Card className="bg-slate-800">
         <CardHeader>
-          <CardTitle>Detected Brokerage Accounts</CardTitle>
+          <CardTitle>Detected Accounts</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           {errorMessage && (
@@ -134,7 +135,7 @@ export default function AccountsPageClient({
           )}
           {knownAccounts.length === 0 ? (
             <p className="text-sm text-slate-11">
-              No brokerage account IDs detected in imports or trades yet.
+              No account IDs detected in imports or trades yet.
             </p>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-slate-700">
@@ -142,7 +143,7 @@ export default function AccountsPageClient({
                 <thead className="bg-slate-800">
                   <tr>
                     <th className="px-4 py-3 text-left text-sm font-medium text-slate-11">
-                      Brokerage
+                      Source
                     </th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-slate-11">
                       Account ID
@@ -173,7 +174,8 @@ export default function AccountsPageClient({
                           {SOURCE_LABELS[account.source]}
                         </td>
                         <td className="px-4 py-3 font-mono text-sm text-slate-12">
-                          {isKrakenDefaultAccountId(account.accountId)
+                          {account.source === "kraken" &&
+                          isKrakenDefaultAccountId(account.accountId)
                             ? "Kraken (Default)"
                             : account.accountId}
                         </td>

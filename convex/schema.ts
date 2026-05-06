@@ -421,7 +421,7 @@ export default defineSchema({
     accountId: v.string(),
     friendlyName: v.string(),
     ownerId: v.string(),
-    source: v.union(v.literal("ibkr"), v.literal("kraken")),
+    source: v.union(v.literal("ibkr"), v.literal("kraken"), v.literal("manual")),
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_source_accountId", ["ownerId", "source", "accountId"]),
@@ -465,7 +465,11 @@ export default defineSchema({
     price: v.optional(v.number()),
     quantity: v.optional(v.number()),
     side: v.optional(v.union(v.literal("buy"), v.literal("sell"))),
-    source: v.union(v.literal("ibkr"), v.literal("kraken")),
+    source: v.union(
+      v.literal("ibkr"),
+      v.literal("kraken"),
+      v.literal("manual"),
+    ),
     status: v.literal("pending_review"),
     taxes: v.optional(v.number()),
     ticker: v.optional(v.string()),

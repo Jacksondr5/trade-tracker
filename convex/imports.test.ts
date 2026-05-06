@@ -162,6 +162,172 @@ describe("imports review workspace", () => {
     });
   }
 
+  it("stages manual CSV imports for review", async () => {
+    await insertResolvedInstrument({
+      assetType: "stock",
+      ownerId: ownerA,
+      symbol: "AAPL",
+    });
+
+    const result = await asUser(ownerA).mutation(api.imports.importTrades, {
+      trades: [
+        {
+          assetType: "stock",
+          date: 1_771_597_800_000,
+          direction: "long",
+          externalId: "manual-aapl-1",
+          brokerageAccountId: "Main Account",
+          price: 200,
+          quantity: 3,
+          side: "buy",
+          source: "manual",
+          ticker: "aapl",
+        },
+      ],
+    });
+
+    await t.finishInProgressScheduledFunctions();
+
+    const knownAccounts = await asUser(ownerA).query(
+      api.accountMappings.listKnownBrokerageAccounts,
+      {},
+    );
+    const mappingId = await asUser(ownerA).mutation(
+      api.accountMappings.upsertAccountMapping,
+      {
+        accountId: "Main Account",
+        friendlyName: "Main Trading Account",
+        source: "manual",
+      },
+    );
+    const mappings = await asUser(ownerA).query(
+      api.accountMappings.listAccountMappings,
+      {},
+    );
+    const inboxTrades = await asUser(ownerA).query(
+      api.imports.listInboxTrades,
+      {},
+    );
+
+    expect(result).toEqual({
+      imported: 1,
+      skippedDuplicates: 0,
+      withValidationErrors: 0,
+      withWarnings: 0,
+    });
+    expect(inboxTrades).toHaveLength(1);
+    expect(inboxTrades[0]).toMatchObject({
+      brokerageAccountId: "Main Account",
+      externalId: "manual-aapl-1",
+      source: "manual",
+      ticker: "AAPL",
+    });
+    expect(knownAccounts).toEqual([
+      expect.objectContaining({
+        accountId: "Main Account",
+        inboxTradeCount: 1,
+        source: "manual",
+        tradeCount: 0,
+      }),
+    ]);
+    expect(mappings).toEqual([
+      expect.objectContaining({
+        _id: mappingId,
+        accountId: "Main Account",
+        friendlyName: "Main Trading Account",
+        source: "manual",
+      }),
+    ]);
+  });
+
+  it("skips duplicate manual external ids", async () => {
+    await insertResolvedInstrument({
+      assetType: "stock",
+      ownerId: ownerA,
+      symbol: "AAPL",
+    });
+
+    const trade = {
+      assetType: "stock" as const,
+      date: 1_771_597_800_000,
+      direction: "long" as const,
+      externalId: "manual-duplicate-1",
+      price: 200,
+      quantity: 3,
+      side: "buy" as const,
+      source: "manual" as const,
+      ticker: "AAPL",
+    };
+
+    await asUser(ownerA).mutation(api.imports.importTrades, {
+      trades: [trade],
+    });
+    const result = await asUser(ownerA).mutation(api.imports.importTrades, {
+      trades: [trade],
+    });
+
+    const inboxTrades = await asUser(ownerA).query(
+      api.imports.listInboxTrades,
+      {},
+    );
+
+    expect(result).toEqual({
+      imported: 0,
+      skippedDuplicates: 1,
+      withValidationErrors: 0,
+      withWarnings: 0,
+    });
+    expect(inboxTrades).toHaveLength(1);
+  });
+
+  it("includes manual accounts from accepted trades in known accounts", async () => {
+    await insertResolvedInstrument({
+      assetType: "stock",
+      ownerId: ownerA,
+      symbol: "AAPL",
+    });
+
+    const importResult = await asUser(ownerA).mutation(api.imports.importTrades, {
+      trades: [
+        {
+          assetType: "stock",
+          brokerageAccountId: "Manual Ledger",
+          date: 1_771_597_800_000,
+          direction: "long",
+          externalId: "manual-accepted-1",
+          price: 200,
+          quantity: 3,
+          side: "buy",
+          source: "manual",
+          ticker: "AAPL",
+        },
+      ],
+    });
+
+    const inboxTrades = await asUser(ownerA).query(api.imports.listInboxTrades, {});
+    expect(importResult.imported).toBe(1);
+    expect(inboxTrades).toHaveLength(1);
+
+    const accepted = await asUser(ownerA).action(api.imports.acceptTrade, {
+      inboxTradeId: inboxTrades[0]._id,
+    });
+    expect(accepted.accepted).toBe(true);
+
+    const knownAccounts = await asUser(ownerA).query(
+      api.accountMappings.listKnownBrokerageAccounts,
+      {},
+    );
+
+    expect(knownAccounts).toEqual([
+      expect.objectContaining({
+        accountId: "Manual Ledger",
+        inboxTradeCount: 0,
+        source: "manual",
+        tradeCount: 1,
+      }),
+    ]);
+  });
+
   it("returns reference data and explicit review states for pending inbox rows", async () => {
     const activeCampaignId = await insertCampaign({
       name: "Semis",

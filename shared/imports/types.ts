@@ -1,4 +1,4 @@
-export type BrokerageSource = "ibkr" | "kraken";
+export type BrokerageSource = "ibkr" | "kraken" | "manual";
 
 export interface InboxTradeCandidate {
   assetType?: "stock" | "crypto";
