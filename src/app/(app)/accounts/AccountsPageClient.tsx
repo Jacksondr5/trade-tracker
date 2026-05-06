@@ -174,7 +174,8 @@ export default function AccountsPageClient({
                           {SOURCE_LABELS[account.source]}
                         </td>
                         <td className="px-4 py-3 font-mono text-sm text-slate-12">
-                          {isKrakenDefaultAccountId(account.accountId)
+                          {account.source === "kraken" &&
+                          isKrakenDefaultAccountId(account.accountId)
                             ? "Kraken (Default)"
                             : account.accountId}
                         </td>

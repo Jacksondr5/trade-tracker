@@ -131,4 +131,38 @@ describe("parseManualCSV", () => {
       ]),
     );
   });
+
+  it("rejects malformed numeric fields with trailing text", () => {
+    const csv = [
+      MANUAL_IMPORT_HEADERS.join(","),
+      "AAPL,stock,buy,long,2026-02-20,200usd,3 shares,manual-5,,,,",
+    ].join("\n");
+
+    const result = parseManualCSV(csv);
+
+    expect(result.errors).toEqual([]);
+    expect(result.trades).toHaveLength(1);
+    expect(result.trades[0].validationErrors).toEqual(
+      expect.arrayContaining([
+        "price must be a valid number",
+        "quantity must be a valid number",
+      ]),
+    );
+  });
+
+  it("rejects second-based epoch timestamps", () => {
+    const csv = [
+      MANUAL_IMPORT_HEADERS.join(","),
+      "BTC,crypto,buy,long,1771597800,50000,0.1,manual-6,,,,",
+    ].join("\n");
+
+    const result = parseManualCSV(csv);
+
+    expect(result.errors).toEqual([]);
+    expect(result.trades).toHaveLength(1);
+    expect(result.trades[0].date).toBeUndefined();
+    expect(result.trades[0].validationErrors).toContain(
+      "date must be an ISO date/datetime or millisecond timestamp",
+    );
+  });
 });

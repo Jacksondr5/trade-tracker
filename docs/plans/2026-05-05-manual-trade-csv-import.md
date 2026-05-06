@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Manual Source Type And Parser Tests
+## Task 1: Manual Source Type And Parser Tests
 
 **Files:**
 
@@ -33,7 +33,7 @@ Run: `pnpm test src/lib/imports/manual-parser.test.ts`
 
 Expected: fail because `parseManualCSV` does not exist.
 
-### Task 2: Manual Parser
+## Task 2: Manual Parser
 
 **Files:**
 
@@ -61,7 +61,7 @@ const MANUAL_IMPORT_HEADERS = [
 ] as const;
 ```
 
-Normalize strings with `trim()`, parse `date` as finite milliseconds or `Date.parse`, parse numeric fields with `Number.parseFloat`, map invalid enum values to `undefined`, and append clear validation errors before calling `withParserValidation`.
+Normalize strings with `trim()`, parse `date` as finite milliseconds or `Date.parse`, parse numeric fields with `Number`, map invalid enum values to `undefined`, and append clear validation errors before calling `withParserValidation`.
 
 **Step 2: Route manual selection to parser**
 
@@ -73,7 +73,7 @@ Run: `pnpm test src/lib/imports/manual-parser.test.ts`
 
 Expected: pass.
 
-### Task 3: Convex Source Support
+## Task 3: Convex Source Support
 
 **Files:**
 
@@ -96,7 +96,7 @@ Run: `pnpm test convex/imports.test.ts`
 
 Expected: pass.
 
-### Task 4: Imports UI Template Download
+## Task 4: Imports UI Template Download
 
 **Files:**
 
@@ -109,13 +109,13 @@ Add `templateDownloadButton` to `IMPORTS_INDEX_TEST_IDS`.
 
 **Step 2: Add download action**
 
-Show a `Download template` button next to the import controls. Use a Blob URL with the manual headers. Keep it enabled regardless of selected source because it helps users discover the supported custom format.
+Show a `Download template` button next to the import controls only when `brokerage === "manual"`. Use a Blob URL with the manual headers, and expose it only in the Manual CSV UI so template discovery aligns with the selected source.
 
 **Step 3: Update selector usage**
 
 Use `IMPORTS_INDEX_TEST_IDS.brokerageSelect` for the existing selector and the new template test id for the button.
 
-### Task 5: Validation
+## Task 5: Validation
 
 **Files:**
 

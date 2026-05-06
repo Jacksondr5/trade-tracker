@@ -244,7 +244,7 @@ Prefer summary or digest tables over full source tables when:
 - source documents are large
 - the query is high volume
 
-An 800 byte summary row is materially cheaper than a 3 KB full document on a hot
+An 800-byte summary row is materially cheaper than a 3 KB full document on a hot
 page.
 
 Digest tables are a tradeoff, not a default:

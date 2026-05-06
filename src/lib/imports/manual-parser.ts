@@ -69,7 +69,7 @@ function parseNumberField(
   const normalized = value?.trim();
   if (!normalized) return undefined;
 
-  const parsed = Number.parseFloat(normalized);
+  const parsed = Number(normalized);
   if (!Number.isFinite(parsed)) {
     validationErrors.push(`${fieldName} must be a valid number`);
     return undefined;
@@ -85,9 +85,20 @@ function parseDateField(
   const normalized = value?.trim();
   if (!normalized) return undefined;
 
-  if (/^-?\d+(\.\d+)?$/.test(normalized)) {
+  if (/^-?\d+$/.test(normalized)) {
     const timestamp = Number(normalized);
-    if (Number.isFinite(timestamp)) return timestamp;
+    if (Number.isFinite(timestamp)) {
+      const isLikelySecondsEpoch =
+        normalized.replace(/^-/, "").length === 10 ||
+        (timestamp >= 1e9 && timestamp < 1e11);
+      if (isLikelySecondsEpoch) {
+        validationErrors.push(
+          "date must be an ISO date/datetime or millisecond timestamp",
+        );
+        return undefined;
+      }
+      return timestamp;
+    }
   }
 
   const parsed = Date.parse(normalized);
