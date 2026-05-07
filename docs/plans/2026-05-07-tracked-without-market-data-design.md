@@ -70,7 +70,7 @@ The daily market data refresh keeps two streams:
    `portfolioPriceMarks`.
 
 The internal mark step should derive one mark per open
-`ownerId + portfolioId + assetType + symbol` for the valuation date.
+`ownerId + portfolioId + assetType + symbol + direction` for the valuation date.
 
 The mark price is the most recent trade price at or before the valuation date
 for that same owner, portfolio, asset type, symbol, and direction. Fees and
