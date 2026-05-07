@@ -204,6 +204,10 @@ export const MARKET_DATA_HEALTH_TEST_IDS = {
   runWorkerTickButton: "market-data-health-run-worker-tick-button",
   triggerDailyRefreshButton: "market-data-health-trigger-daily-refresh-button",
   triggersSection: "market-data-health-triggers-section",
+  valuationBackfillEndDate: "market-data-health-valuation-backfill-end-date",
+  valuationBackfillStartDate:
+    "market-data-health-valuation-backfill-start-date",
+  valuationBackfillSubmit: "market-data-health-valuation-backfill-submit",
 } as const;
 
 export function getMarketDataHealthRecentRunRowTestId(runId: string): string {
