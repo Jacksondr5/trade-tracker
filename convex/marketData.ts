@@ -1471,16 +1471,14 @@ export const upsertPortfolioPriceMarksForOwner = internalMutation({
 
       const existing = await ctx.db
         .query("portfolioPriceMarks")
-        .withIndex(
-          "by_ownerId_and_portfolioId_and_assetType_and_symbol_and_direction_and_date",
-          (q) =>
-            q
-              .eq("ownerId", args.ownerId)
-              .eq("portfolioId", position.portfolioId)
-              .eq("assetType", position.assetType)
-              .eq("symbol", position.symbol)
-              .eq("direction", position.direction)
-              .eq("date", args.date),
+        .withIndex("by_portfolio_mark_lookup", (q) =>
+          q
+            .eq("ownerId", args.ownerId)
+            .eq("portfolioId", position.portfolioId)
+            .eq("assetType", position.assetType)
+            .eq("symbol", position.symbol)
+            .eq("direction", position.direction)
+            .eq("date", args.date),
         )
         .unique();
       const row = {

@@ -190,16 +190,14 @@ async function getPriceForPosition(
   if (instrument.resolutionStatus === "ignored") {
     const mark = await ctx.db
       .query("portfolioPriceMarks")
-      .withIndex(
-        "by_ownerId_and_portfolioId_and_assetType_and_symbol_and_direction_and_date",
-        (q) =>
-          q
-            .eq("ownerId", ownerId)
-            .eq("portfolioId", portfolioId)
-            .eq("assetType", position.assetType)
-            .eq("symbol", position.ticker)
-            .eq("direction", position.direction)
-            .eq("date", date),
+      .withIndex("by_portfolio_mark_lookup", (q) =>
+        q
+          .eq("ownerId", ownerId)
+          .eq("portfolioId", portfolioId)
+          .eq("assetType", position.assetType)
+          .eq("symbol", position.ticker)
+          .eq("direction", position.direction)
+          .eq("date", date),
       )
       .unique();
     return mark?.price ?? null;

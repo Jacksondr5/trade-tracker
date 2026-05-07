@@ -341,10 +341,14 @@ export default defineSchema({
     symbol: v.string(),
     updatedAt: v.number(),
   })
-    .index(
-      "by_ownerId_and_portfolioId_and_assetType_and_symbol_and_direction_and_date",
-      ["ownerId", "portfolioId", "assetType", "symbol", "direction", "date"],
-    )
+    .index("by_portfolio_mark_lookup", [
+      "ownerId",
+      "portfolioId",
+      "assetType",
+      "symbol",
+      "direction",
+      "date",
+    ])
     .index("by_ownerId_and_portfolioId_and_date", [
       "ownerId",
       "portfolioId",
