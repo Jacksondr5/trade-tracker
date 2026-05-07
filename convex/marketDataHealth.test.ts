@@ -548,7 +548,11 @@ describe("market data health", () => {
           }),
         ).rejects.toThrow(/operator access/);
       } finally {
-        process.env.MARKET_DATA_HEALTH_OPERATOR_IDS = previous;
+        if (previous === undefined) {
+          delete process.env.MARKET_DATA_HEALTH_OPERATOR_IDS;
+        } else {
+          process.env.MARKET_DATA_HEALTH_OPERATOR_IDS = previous;
+        }
       }
     });
 
@@ -592,7 +596,11 @@ describe("market data health", () => {
           startDate: "2026-05-01",
         });
       } finally {
-        process.env.MARKET_DATA_HEALTH_OPERATOR_IDS = previous;
+        if (previous === undefined) {
+          delete process.env.MARKET_DATA_HEALTH_OPERATOR_IDS;
+        } else {
+          process.env.MARKET_DATA_HEALTH_OPERATOR_IDS = previous;
+        }
       }
     });
   });

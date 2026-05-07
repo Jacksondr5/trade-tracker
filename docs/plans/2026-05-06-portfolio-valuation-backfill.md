@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Backend Action
+## Task 1: Backend Action
 
 **Files:**
 
@@ -25,7 +25,7 @@
 4. Return the internal mutation result.
 5. Add tests for non-operator rejection and configured operator success.
 
-### Task 2: UI Control
+## Task 2: UI Control
 
 **Files:**
 
@@ -40,7 +40,7 @@
 4. Add a "Portfolio valuation recompute" panel under the existing historical price backfill panel.
 5. Submit the date range and show queued date count.
 
-### Task 3: Verification
+## Task 3: Verification
 
 **Commands:**
 
