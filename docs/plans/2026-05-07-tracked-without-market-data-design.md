@@ -38,6 +38,7 @@ portfolioPriceMarks: {
   ownerId: string;
   portfolioId: Id<"portfolios">;
   assetType: "stock" | "crypto";
+  direction: "long" | "short";
   symbol: string;
   date: string;
   price: number;
@@ -51,8 +52,8 @@ portfolioPriceMarks: {
 Recommended indexes:
 
 ```ts
-by_ownerId_and_portfolioId_and_assetType_and_symbol_and_date
-by_ownerId_and_portfolioId_and_date
+by_ownerId_and_portfolioId_and_assetType_and_symbol_and_direction_and_date
+by_ownerId_and_portfolioId_and_direction_and_date
 ```
 
 The table is separate from `marketPriceSnapshots` because fallback marks are

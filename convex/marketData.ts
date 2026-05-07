@@ -1436,35 +1436,56 @@ export const upsertPortfolioPriceMarksForOwner = internalMutation({
     const endTimestamp = endOfUtcDate(args.date);
     let marksWritten = 0;
 
+    const positionsByPortfolio = new Map<
+      Id<"portfolios">,
+      {
+        keys: Set<string>;
+      }
+    >();
     for (const position of args.positions) {
-      let latestTrade: Doc<"trades"> | null = null;
-      let latestTradeDate: number | null = null;
+      const existing = positionsByPortfolio.get(position.portfolioId);
+      const key = `${position.assetType}:${position.symbol}:${position.direction}`;
+      if (existing) {
+        existing.keys.add(key);
+      } else {
+        positionsByPortfolio.set(position.portfolioId, {
+          keys: new Set([key]),
+        });
+      }
+    }
+
+    const latestTradeByPositionKey = new Map<string, Doc<"trades">>();
+    for (const [portfolioId, portfolioGroup] of positionsByPortfolio) {
+      const latestTradeByLocalKey = new Map<string, Doc<"trades">>();
       for await (const trade of ctx.db
         .query("trades")
         .withIndex("by_owner_portfolioId_date", (q) =>
           q
             .eq("ownerId", args.ownerId)
-            .eq("portfolioId", position.portfolioId)
+            .eq("portfolioId", portfolioId)
             .lte("date", endTimestamp),
         )
         .order("desc")) {
-        if (latestTradeDate !== null && trade.date < latestTradeDate) {
+        const key = `${trade.assetType}:${normalizeMarketDataSymbol(trade.ticker)}:${trade.direction}`;
+        if (!portfolioGroup.keys.has(key) || latestTradeByLocalKey.has(key)) {
+          continue;
+        }
+        latestTradeByLocalKey.set(key, trade);
+        if (latestTradeByLocalKey.size === portfolioGroup.keys.size) {
           break;
         }
-        if (
-          trade.assetType === position.assetType &&
-          trade.direction === position.direction &&
-          normalizeMarketDataSymbol(trade.ticker) === position.symbol
-        ) {
-          if (
-            latestTrade === null ||
-            trade._creationTime > latestTrade._creationTime
-          ) {
-            latestTrade = trade;
-            latestTradeDate = trade.date;
-          }
-        }
       }
+
+      for (const [key, trade] of latestTradeByLocalKey) {
+        latestTradeByPositionKey.set(`${portfolioId}:${key}`, trade);
+      }
+    }
+
+    for (const position of args.positions) {
+      const latestTrade =
+        latestTradeByPositionKey.get(
+          `${position.portfolioId}:${position.assetType}:${position.symbol}:${position.direction}`,
+        ) ?? null;
       if (latestTrade === null) {
         continue;
       }
