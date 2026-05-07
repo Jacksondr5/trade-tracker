@@ -97,6 +97,12 @@ Initial resolution statuses:
 - `needs_review`
 - `ignored`
 
+`ignored` is a storage-level status for instruments tracked without provider
+market data. User-facing copy should describe this as "tracked without market
+data" rather than "ignored". These instruments should not enqueue provider
+fetch jobs, but portfolio valuation should still use prepared fallback marks
+derived from the latest trade price when available.
+
 Trades remain the execution record and should continue to store their own `ticker` and `assetType`. Do not add `instrumentId` to trades for the first version.
 
 Instrument records should be created automatically when a new trade ticker appears. There should be no separate "new ticker" workflow.
@@ -146,6 +152,10 @@ The first version should store regular close prices only.
 
 Do not store open, high, low, volume, currency, or adjusted close in the first version. Multi-currency valuation, stock splits, dividends, and adjusted historical series are long-term follow-ups.
 
+Portfolio-scoped fallback price marks are separate from global provider
+snapshots. They are user/portfolio-specific because a latest trade price is a
+derived portfolio mark, not a reusable market observation.
+
 Manual pricing is a future follow-up for instruments that a market data provider does not support. It should not require daily user-entered prices. The model should allow lower-resolution entries, such as weekly or monthly prices, and define how daily valuations interpolate, carry forward, or otherwise use those manual observations before it is implemented.
 
 ## Scheduled Market Data Refresh
@@ -171,6 +181,11 @@ The worker should:
 3. Store market price snapshots.
 4. Mark jobs complete or failed.
 5. Update the operational refresh run record as jobs finish.
+
+Instruments tracked without market data should be handled in the price
+preparation flow without calling the provider. The daily refresh should prepare
+a portfolio-scoped fallback price mark from the latest eligible trade price and
+then let portfolio valuation consume that mark.
 
 Portfolio pages should read stored price snapshots and daily valuations. They should not call market data providers directly.
 
@@ -198,6 +213,11 @@ Meanings:
 - `priceCoverageStatus` records whether all open positions had usable prices.
 - `missingSymbols` lists symbols that prevented full valuation.
 - `computedAt` records when the row was generated.
+
+For instruments tracked without market data, a usable fallback price mark
+counts as a price for valuation coverage. Long positions use
+`quantity * fallbackPrice`; short positions use the same negative market value
+convention as provider-priced shorts.
 
 Initial price coverage statuses:
 

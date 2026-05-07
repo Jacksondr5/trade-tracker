@@ -1,6 +1,11 @@
 "use client";
 
-import { Preloaded, useAction, useMutation, usePreloadedQuery } from "convex/react";
+import {
+  Preloaded,
+  useAction,
+  useMutation,
+  usePreloadedQuery,
+} from "convex/react";
 import { AlertTriangle, Check, Pencil, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
@@ -36,7 +41,7 @@ type ResolutionStatus = Instrument["resolutionStatus"];
 const STATUS_LABELS: Record<ResolutionStatus, string> = {
   needs_review: "Needs review",
   resolved: "Resolved",
-  ignored: "Ignored",
+  ignored: "Tracked without market data",
 };
 
 const STATUS_BADGE_VARIANT: Record<
@@ -70,9 +75,7 @@ export default function MarketDataPageClient({
   const instruments = usePreloadedQuery(preloadedInstruments);
 
   const setProviderSymbol = useAction(api.marketData.setProviderSymbol);
-  const setInstrumentIgnored = useMutation(
-    api.marketData.setInstrumentIgnored,
-  );
+  const setInstrumentIgnored = useMutation(api.marketData.setInstrumentIgnored);
 
   const [editingInstrumentId, setEditingInstrumentId] =
     useState<Id<"marketDataInstruments"> | null>(null);
@@ -130,9 +133,7 @@ export default function MarketDataPageClient({
         instrumentId: instrument._id,
         providerSymbol: trimmed,
       });
-      setStatusMessage(
-        `Saved provider symbol for ${instrument.symbol}.`,
-      );
+      setStatusMessage(`Saved provider symbol for ${instrument.symbol}.`);
       setEditingInstrumentId(null);
       setProviderSymbolDraft("");
     } catch (error) {
@@ -153,7 +154,7 @@ export default function MarketDataPageClient({
     try {
       await setInstrumentIgnored({ instrumentId: instrument._id });
       setStatusMessage(
-        `Marked ${instrument.symbol} as ignored. Valuation coverage may be partial.`,
+        `${instrument.symbol} will be tracked from its latest trade price.`,
       );
       if (editingInstrumentId === instrument._id) {
         setEditingInstrumentId(null);
@@ -161,7 +162,9 @@ export default function MarketDataPageClient({
       }
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Failed to ignore instrument.",
+        error instanceof Error
+          ? error.message
+          : "Failed to track instrument without market data.",
       );
     } finally {
       setPendingInstrumentId(null);
@@ -179,9 +182,8 @@ export default function MarketDataPageClient({
         </h1>
         <p className="text-sm text-slate-11">
           Review instrument mappings used for portfolio valuation. Resolve a
-          provider symbol to unblock pricing, or mark unsupported instruments
-          as ignored. Ignored instruments may produce partial valuation
-          coverage.
+          provider symbol to use market prices, or track unsupported instruments
+          from their latest trade price without fetching market data.
         </p>
       </div>
 
@@ -218,7 +220,7 @@ export default function MarketDataPageClient({
               </CardTitle>
               <CardDescription>
                 Instruments that could not be auto-matched to Twelve Data.
-                Provide a provider symbol or mark them ignored.
+                Provide a provider symbol or track them without market data.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -226,7 +228,7 @@ export default function MarketDataPageClient({
                 <EmptyState
                   dataTestId={MARKET_DATA_TEST_IDS.noReviewState}
                   title="Nothing to review"
-                  description="All known instruments are resolved or have been marked ignored."
+                  description="All known instruments are resolved or tracked without market data."
                 />
               ) : (
                 <InstrumentTable
@@ -250,8 +252,8 @@ export default function MarketDataPageClient({
               <CardHeader>
                 <CardTitle>All instruments</CardTitle>
                 <CardDescription>
-                  Resolved and ignored instruments. Update the provider symbol
-                  here if a mapping changes.
+                  Resolved instruments and instruments tracked without market
+                  data. Update the provider symbol here if a mapping changes.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -303,10 +305,7 @@ function InstrumentTable({
 }: InstrumentTableProps) {
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-6">
-      <table
-        className="w-full table-auto"
-        data-testid={tableTestId}
-      >
+      <table className="w-full table-auto" data-testid={tableTestId}>
         <thead className="bg-slate-3">
           <tr>
             <th className="px-3 py-2 text-left text-xs font-medium text-slate-11">
@@ -412,7 +411,7 @@ function InstrumentTable({
                     {instrument.lastError ?? "—"}
                   </span>
                 </td>
-                <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-11">
+                <td className="px-3 py-2 text-xs whitespace-nowrap text-slate-11">
                   {formatTimestamp(
                     instrument.lastResolvedAt ?? instrument.updatedAt,
                   )}
@@ -458,13 +457,12 @@ function InstrumentTable({
                         size="sm"
                         variant="ghost"
                         disabled={
-                          isPending ||
-                          instrument.resolutionStatus === "ignored"
+                          isPending || instrument.resolutionStatus === "ignored"
                         }
                         onClick={() => void onIgnoreInstrument(instrument)}
-                        title="Mark ignored"
+                        title="Track without market data"
                       >
-                        Ignore
+                        Track without market data
                       </Button>
                     </div>
                   )}
