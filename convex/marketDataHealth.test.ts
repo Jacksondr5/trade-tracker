@@ -521,7 +521,11 @@ describe("market data health", () => {
           asOwner().action(api.marketDataHealth.triggerDailyRefresh, {}),
         ).rejects.toThrow(/operator access/);
       } finally {
-        process.env.MARKET_DATA_HEALTH_OPERATOR_IDS = previous;
+        if (previous === undefined) {
+          delete process.env.MARKET_DATA_HEALTH_OPERATOR_IDS;
+        } else {
+          process.env.MARKET_DATA_HEALTH_OPERATOR_IDS = previous;
+        }
       }
     });
 
@@ -533,7 +537,11 @@ describe("market data health", () => {
           asOwner().action(api.marketDataHealth.runWorkerTick, {}),
         ).rejects.toThrow(/operator access/);
       } finally {
-        process.env.MARKET_DATA_HEALTH_OPERATOR_IDS = previous;
+        if (previous === undefined) {
+          delete process.env.MARKET_DATA_HEALTH_OPERATOR_IDS;
+        } else {
+          process.env.MARKET_DATA_HEALTH_OPERATOR_IDS = previous;
+        }
       }
     });
 
