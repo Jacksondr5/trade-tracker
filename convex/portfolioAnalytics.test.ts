@@ -156,6 +156,55 @@ describe("portfolio analytics schema", () => {
     expect(valuation).not.toHaveProperty("netContributions");
   });
 
+  it("stores portfolio-scoped price marks", async () => {
+    const portfolioId = await insertPortfolio();
+    const tradeId = await t.run(async (ctx) => {
+      return await ctx.db.insert("trades", {
+        assetType: "stock",
+        date: Date.UTC(2026, 3, 28),
+        direction: "long",
+        ownerId,
+        portfolioId,
+        price: 42,
+        quantity: 10,
+        side: "buy",
+        ticker: "PRIVATE",
+      });
+    });
+
+    const markId = await t.run(async (ctx) => {
+      return await ctx.db.insert("portfolioPriceMarks", {
+        assetType: "stock",
+        createdAt: now,
+        date: "2026-04-28",
+        direction: "long",
+        ownerId,
+        portfolioId,
+        price: 42,
+        source: "last_trade",
+        sourceTradeId: tradeId,
+        symbol: "PRIVATE",
+        updatedAt: now,
+      });
+    });
+
+    const mark = await t.run(async (ctx) => {
+      return await ctx.db.get(markId);
+    });
+
+    expect(mark).toMatchObject({
+      assetType: "stock",
+      date: "2026-04-28",
+      direction: "long",
+      ownerId,
+      portfolioId,
+      price: 42,
+      source: "last_trade",
+      sourceTradeId: tradeId,
+      symbol: "PRIVATE",
+    });
+  });
+
   it("stores market data refresh run audit records", async () => {
     const runId = await t.run(async (ctx) => {
       return await ctx.db.insert("marketDataRefreshRuns", {
@@ -253,6 +302,23 @@ describe("portfolio analytics calculations", () => {
     });
   }
 
+  async function insertIgnoredInstrument(args: {
+    assetType?: "crypto" | "stock";
+    symbol: string;
+  }): Promise<Id<"marketDataInstruments">> {
+    return await t.run(async (ctx) => {
+      return await ctx.db.insert("marketDataInstruments", {
+        assetType: args.assetType ?? "stock",
+        createdAt: now,
+        ownerId,
+        provider: "twelve_data",
+        resolutionStatus: "ignored",
+        symbol: args.symbol,
+        updatedAt: now,
+      });
+    });
+  }
+
   async function insertSnapshot(args: {
     close?: number;
     date: string;
@@ -275,6 +341,7 @@ describe("portfolio analytics calculations", () => {
   async function insertTrade(args: {
     assetType?: "crypto" | "stock";
     date?: string;
+    direction?: "long" | "short";
     fees?: number;
     portfolioId: Id<"portfolios">;
     price: number;
@@ -286,7 +353,7 @@ describe("portfolio analytics calculations", () => {
       return await ctx.db.insert("trades", {
         assetType: args.assetType ?? "stock",
         date: Date.parse(`${args.date ?? "2026-04-27"}T15:30:00.000Z`),
-        direction: "long",
+        direction: args.direction ?? "long",
         fees: args.fees,
         ownerId,
         portfolioId: args.portfolioId,
@@ -294,6 +361,32 @@ describe("portfolio analytics calculations", () => {
         quantity: args.quantity,
         side: args.side,
         ticker: args.ticker,
+      });
+    });
+  }
+
+  async function insertPortfolioPriceMark(args: {
+    assetType?: "crypto" | "stock";
+    date: string;
+    direction?: "long" | "short";
+    portfolioId: Id<"portfolios">;
+    price: number;
+    sourceTradeId: Id<"trades">;
+    symbol: string;
+  }): Promise<Id<"portfolioPriceMarks">> {
+    return await t.run(async (ctx) => {
+      return await ctx.db.insert("portfolioPriceMarks", {
+        assetType: args.assetType ?? "stock",
+        createdAt: now,
+        date: args.date,
+        direction: args.direction ?? "long",
+        ownerId,
+        portfolioId: args.portfolioId,
+        price: args.price,
+        source: "last_trade",
+        sourceTradeId: args.sourceTradeId,
+        symbol: args.symbol,
+        updatedAt: now,
       });
     });
   }
@@ -415,6 +508,159 @@ describe("portfolio analytics calculations", () => {
       priceCoverageStatus: "partial",
       totalEquity: 19_250,
     });
+  });
+
+  it("values ignored long positions from portfolio price marks", async () => {
+    const portfolioId = await insertPortfolio();
+    await insertIgnoredInstrument({ symbol: "PRIVATE" });
+    const tradeId = await insertTrade({
+      portfolioId,
+      price: 42,
+      quantity: 10,
+      side: "buy",
+      ticker: "PRIVATE",
+    });
+    await insertPortfolioPriceMark({
+      date: "2026-04-28",
+      portfolioId,
+      price: 42,
+      sourceTradeId: tradeId,
+      symbol: "PRIVATE",
+    });
+
+    const valuation = await asUser().mutation(
+      api.portfolioAnalytics.computeDailyValuation,
+      {
+        date: "2026-04-28",
+        portfolioId,
+      },
+    );
+
+    expect(valuation).toMatchObject({
+      cashBalance: -420,
+      marketValue: 420,
+      missingSymbols: [],
+      priceCoverageStatus: "complete",
+      totalEquity: 0,
+    });
+  });
+
+  it("values ignored short positions from portfolio price marks as liabilities", async () => {
+    const portfolioId = await insertPortfolio();
+    await insertIgnoredInstrument({ symbol: "PRIVATE" });
+    const tradeId = await insertTrade({
+      direction: "short",
+      portfolioId,
+      price: 42,
+      quantity: 10,
+      side: "sell",
+      ticker: "PRIVATE",
+    });
+    await insertPortfolioPriceMark({
+      date: "2026-04-28",
+      direction: "short",
+      portfolioId,
+      price: 42,
+      sourceTradeId: tradeId,
+      symbol: "PRIVATE",
+    });
+
+    const valuation = await asUser().mutation(
+      api.portfolioAnalytics.computeDailyValuation,
+      {
+        date: "2026-04-28",
+        portfolioId,
+      },
+    );
+
+    expect(valuation).toMatchObject({
+      cashBalance: 420,
+      marketValue: -420,
+      missingSymbols: [],
+      priceCoverageStatus: "complete",
+      totalEquity: 0,
+    });
+  });
+
+  it("does not carry fallback market value after an ignored position closes", async () => {
+    const portfolioId = await insertPortfolio();
+    await insertIgnoredInstrument({ symbol: "PRIVATE" });
+    const tradeId = await insertTrade({
+      portfolioId,
+      price: 42,
+      quantity: 10,
+      side: "buy",
+      ticker: "PRIVATE",
+    });
+    await insertTrade({
+      date: "2026-04-28",
+      portfolioId,
+      price: 45,
+      quantity: 10,
+      side: "sell",
+      ticker: "PRIVATE",
+    });
+    await insertPortfolioPriceMark({
+      date: "2026-04-28",
+      portfolioId,
+      price: 42,
+      sourceTradeId: tradeId,
+      symbol: "PRIVATE",
+    });
+
+    const valuation = await asUser().mutation(
+      api.portfolioAnalytics.computeDailyValuation,
+      {
+        date: "2026-04-28",
+        portfolioId,
+      },
+    );
+
+    expect(valuation).toMatchObject({
+      cashBalance: 30,
+      marketValue: 0,
+      missingSymbols: [],
+      priceCoverageStatus: "complete",
+      totalEquity: 30,
+    });
+  });
+
+  it("shows ignored positions with portfolio price marks as priced in overview", async () => {
+    const portfolioId = await insertPortfolio();
+    await insertIgnoredInstrument({ symbol: "PRIVATE" });
+    const tradeId = await insertTrade({
+      portfolioId,
+      price: 42,
+      quantity: 10,
+      side: "buy",
+      ticker: "PRIVATE",
+    });
+    await insertPortfolioPriceMark({
+      date: "2026-04-28",
+      portfolioId,
+      price: 42,
+      sourceTradeId: tradeId,
+      symbol: "PRIVATE",
+    });
+    await asUser().mutation(api.portfolioAnalytics.computeDailyValuation, {
+      date: "2026-04-28",
+      portfolioId,
+    });
+
+    const overview = await asUser().query(api.portfolios.getPortfolioOverview, {
+      portfolioId,
+    });
+
+    expect(overview?.openPositions).toEqual([
+      expect.objectContaining({
+        hasPrice: true,
+        marketValue: 420,
+        priceStatus: "ok",
+        ticker: "PRIVATE",
+      }),
+    ]);
+    expect(overview?.missingSymbols).toEqual([]);
+    expect(overview?.needsMappingSymbols).toEqual([]);
   });
 
   it("computes timeframe return per period and excludes deposits", async () => {

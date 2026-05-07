@@ -176,14 +176,20 @@ export const getPortfolioDetail = query({
     const sortedTrades = [...portfolioTrades].sort((a, b) => b.date - a.date);
 
     // Derive campaigns: trades -> trade plans -> campaigns, counting trades per campaign.
-    const tradePlanToCampaign = new Map<Id<"tradePlans">, Id<"campaigns"> | null>();
+    const tradePlanToCampaign = new Map<
+      Id<"tradePlans">,
+      Id<"campaigns"> | null
+    >();
     const campaignTradeCounts = new Map<Id<"campaigns">, number>();
     for (const trade of portfolioTrades) {
       if (!trade.tradePlanId) continue;
 
       if (!tradePlanToCampaign.has(trade.tradePlanId)) {
         const tradePlan = await ctx.db.get(trade.tradePlanId);
-        tradePlanToCampaign.set(trade.tradePlanId, tradePlan?.campaignId ?? null);
+        tradePlanToCampaign.set(
+          trade.tradePlanId,
+          tradePlan?.campaignId ?? null,
+        );
       }
 
       const campaignId = tradePlanToCampaign.get(trade.tradePlanId);
@@ -330,7 +336,12 @@ type PriceLookup =
 async function getCloseForPosition(
   ctx: QueryCtx,
   ownerId: string,
-  position: { assetType: "crypto" | "stock"; ticker: string },
+  portfolioId: Id<"portfolios">,
+  position: {
+    assetType: "crypto" | "stock";
+    direction: "long" | "short";
+    ticker: string;
+  },
   date: string,
 ): Promise<PriceLookup> {
   const instrument = await ctx.db
@@ -343,8 +354,32 @@ async function getCloseForPosition(
     )
     .unique();
 
+  if (!instrument) {
+    return { close: null, reason: "needs_mapping" };
+  }
+
+  if (instrument.resolutionStatus === "ignored") {
+    const mark = await ctx.db
+      .query("portfolioPriceMarks")
+      .withIndex(
+        "by_ownerId_and_portfolioId_and_assetType_and_symbol_and_direction_and_date",
+        (q) =>
+          q
+            .eq("ownerId", ownerId)
+            .eq("portfolioId", portfolioId)
+            .eq("assetType", position.assetType)
+            .eq("symbol", position.ticker)
+            .eq("direction", position.direction)
+            .eq("date", date),
+      )
+      .unique();
+
+    return mark === null
+      ? { close: null, reason: "awaiting_snapshot" }
+      : { close: mark.price, reason: "ok" };
+  }
+
   if (
-    !instrument ||
     instrument.resolutionStatus !== "resolved" ||
     !instrument.providerSymbol
   ) {
@@ -489,7 +524,6 @@ export const getPortfolioOverview = query({
     const missingSymbols = new Set<string>();
     const needsMappingSymbols = new Set<string>();
     const awaitingSnapshotSymbols = new Set<string>();
-    let totalMarketValue = 0;
     let totalGrossMarketValue = 0;
 
     for (const position of openPositions) {
@@ -497,7 +531,12 @@ export const getPortfolioOverview = query({
         ? await getCloseForPosition(
             ctx,
             ownerId,
-            { assetType: position.assetType, ticker: position.ticker },
+            args.portfolioId,
+            {
+              assetType: position.assetType,
+              direction: position.direction,
+              ticker: position.ticker,
+            },
             asOfDate,
           )
         : { close: null, reason: "needs_mapping" };
@@ -518,7 +557,6 @@ export const getPortfolioOverview = query({
           awaitingSnapshotSymbols.add(position.ticker);
         }
       } else if (positionValue !== null) {
-        totalMarketValue += positionValue;
         totalGrossMarketValue += Math.abs(positionValue);
       }
       overviewPositions.push({
@@ -535,14 +573,12 @@ export const getPortfolioOverview = query({
       });
     }
 
-    const sortedPositions = overviewPositions
-      .slice()
-      .sort((a, b) => {
-        const aValue = Math.abs(a.marketValue ?? 0);
-        const bValue = Math.abs(b.marketValue ?? 0);
-        if (aValue !== bValue) return bValue - aValue;
-        return a.ticker.localeCompare(b.ticker);
-      });
+    const sortedPositions = overviewPositions.slice().sort((a, b) => {
+      const aValue = Math.abs(a.marketValue ?? 0);
+      const bValue = Math.abs(b.marketValue ?? 0);
+      if (aValue !== bValue) return bValue - aValue;
+      return a.ticker.localeCompare(b.ticker);
+    });
 
     // Campaign exposure rollup.
     type ExposureBucket = {
@@ -593,7 +629,10 @@ export const getPortfolioOverview = query({
     }
 
     for (const position of overviewPositions) {
-      for (const [campaignId, campaignQuantity] of position.campaignQuantities) {
+      for (const [
+        campaignId,
+        campaignQuantity,
+      ] of position.campaignQuantities) {
         if (Math.abs(campaignQuantity) <= POSITION_EPSILON) {
           continue;
         }
@@ -697,9 +736,9 @@ export const getPortfolioOverview = query({
       : null;
 
     const uncoveredExposure = {
-      awaitingSnapshotSymbols: [...uncoveredBucket.awaitingSnapshotSymbols].sort(
-        (a, b) => a.localeCompare(b),
-      ),
+      awaitingSnapshotSymbols: [
+        ...uncoveredBucket.awaitingSnapshotSymbols,
+      ].sort((a, b) => a.localeCompare(b)),
       exposureValue: uncoveredBucket.hasUnpricedSlice
         ? null
         : uncoveredBucket.exposure,

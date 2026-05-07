@@ -78,10 +78,29 @@ describe("market data instruments", () => {
     });
   }
 
+  async function insertIgnoredInstrument(args: {
+    assetType?: "crypto" | "stock";
+    symbol: string;
+  }): Promise<Id<"marketDataInstruments">> {
+    return await t.run(async (ctx) => {
+      return await ctx.db.insert("marketDataInstruments", {
+        assetType: args.assetType ?? "stock",
+        createdAt: Date.UTC(2026, 3, 24),
+        ownerId,
+        provider: "twelve_data",
+        resolutionStatus: "ignored",
+        symbol: args.symbol,
+        updatedAt: Date.UTC(2026, 3, 24),
+      });
+    });
+  }
+
   async function insertTrade(args: {
     assetType?: "crypto" | "stock";
     date?: number;
+    direction?: "long" | "short";
     portfolioId?: Id<"portfolios">;
+    price?: number;
     quantity?: number;
     side?: "buy" | "sell";
     ticker: string;
@@ -90,10 +109,10 @@ describe("market data instruments", () => {
       return await ctx.db.insert("trades", {
         assetType: args.assetType ?? "stock",
         date: args.date ?? Date.UTC(2026, 3, 24),
-        direction: "long",
+        direction: args.direction ?? "long",
         ownerId,
         portfolioId: args.portfolioId,
-        price: 100,
+        price: args.price ?? 100,
         quantity: args.quantity ?? 1,
         side: args.side ?? "buy",
         ticker: args.ticker,
@@ -620,6 +639,70 @@ describe("market data instruments", () => {
       priceCoverageStatus: "partial",
       totalEquity: 10_002.25,
     });
+  });
+
+  it("writes portfolio price marks for ignored open positions without provider fetch jobs", async () => {
+    const portfolioId = await insertPortfolio();
+    await insertIgnoredInstrument({ symbol: "PRIVATE" });
+    const tradeId = await insertTrade({
+      date: Date.UTC(2026, 3, 23),
+      portfolioId,
+      price: 42,
+      quantity: 10,
+      ticker: "PRIVATE",
+    });
+
+    const result = await t.action(
+      internal.marketData.refreshDailyPriceSnapshots,
+      {
+        date: "2026-04-24",
+      },
+    );
+    await t.finishInProgressScheduledFunctions();
+
+    const jobs = await t.run(async (ctx) => {
+      return await ctx.db.query("marketDataFetchJobs").collect();
+    });
+    const runs = await t.run(async (ctx) => {
+      return await ctx.db.query("marketDataRefreshRuns").collect();
+    });
+    const marks = await t.run(async (ctx) => {
+      return await ctx.db.query("portfolioPriceMarks").collect();
+    });
+    const valuations = await t.run(async (ctx) => {
+      return await ctx.db.query("portfolioDailyValuations").collect();
+    });
+
+    expect(result).toMatchObject({
+      jobsQueued: 0,
+      ownersProcessed: 1,
+      runDate: "2026-04-24",
+      symbolsRequested: 0,
+    });
+    expect(jobs).toHaveLength(0);
+    expect(runs).toHaveLength(0);
+    expect(marks).toEqual([
+      expect.objectContaining({
+        date: "2026-04-24",
+        direction: "long",
+        ownerId,
+        portfolioId,
+        price: 42,
+        source: "last_trade",
+        sourceTradeId: tradeId,
+        symbol: "PRIVATE",
+      }),
+    ]);
+    expect(valuations).toEqual([
+      expect.objectContaining({
+        cashBalance: -420,
+        date: "2026-04-24",
+        marketValue: 420,
+        missingSymbols: [],
+        priceCoverageStatus: "complete",
+        totalEquity: 0,
+      }),
+    ]);
   });
 
   it("skips daily snapshot planning on closed market dates", async () => {

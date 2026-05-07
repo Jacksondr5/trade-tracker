@@ -328,6 +328,29 @@ export default defineSchema({
     ])
     .index("by_date", ["date"]),
 
+  portfolioPriceMarks: defineTable({
+    assetType: marketDataAssetTypeValidator,
+    createdAt: v.number(),
+    date: v.string(),
+    direction: v.union(v.literal("long"), v.literal("short")),
+    ownerId: v.string(),
+    portfolioId: v.id("portfolios"),
+    price: v.number(),
+    source: v.literal("last_trade"),
+    sourceTradeId: v.id("trades"),
+    symbol: v.string(),
+    updatedAt: v.number(),
+  })
+    .index(
+      "by_ownerId_and_portfolioId_and_assetType_and_symbol_and_direction_and_date",
+      ["ownerId", "portfolioId", "assetType", "symbol", "direction", "date"],
+    )
+    .index("by_ownerId_and_portfolioId_and_date", [
+      "ownerId",
+      "portfolioId",
+      "date",
+    ]),
+
   portfolioDailyValuations: defineTable({
     cashBalance: v.number(),
     computedAt: v.number(),
@@ -388,7 +411,11 @@ export default defineSchema({
     .index("by_status_and_leaseExpiresAt", ["status", "leaseExpiresAt"])
     .index("by_runId", ["runId"])
     .index("by_runId_and_status", ["runId", "status"])
-    .index("by_runId_and_status_and_updatedAt", ["runId", "status", "updatedAt"])
+    .index("by_runId_and_status_and_updatedAt", [
+      "runId",
+      "status",
+      "updatedAt",
+    ])
     .index("by_ownerId_and_status_and_updatedAt", [
       "ownerId",
       "status",

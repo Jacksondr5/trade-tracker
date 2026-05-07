@@ -183,6 +183,13 @@ type MarketDataFetchJobInput = {
   symbol: string;
 };
 
+type TrackedPriceMarkCandidate = {
+  assetType: MarketDataAssetType;
+  direction: "long" | "short";
+  portfolioId: Id<"portfolios">;
+  symbol: string;
+};
+
 type HistoricalBackfillUniverse = {
   candidates: HistoricalBackfillCandidate[];
   startDate: string | null;
@@ -411,6 +418,10 @@ function getEasternDateString(now: number): string {
 
 function getUtcDateString(timestamp: number): string {
   return new Date(timestamp).toISOString().slice(0, 10);
+}
+
+function endOfUtcDate(date: string): number {
+  return Date.parse(`${date}T23:59:59.999Z`);
 }
 
 function getSignedPositionQuantity(trade: PositionScanTrade): number {
@@ -844,6 +855,14 @@ export const getPortfolioValuationUniversePaged = internalAction({
     v.object({
       instruments: v.array(marketDataInstrumentValidator),
       ownerId: v.string(),
+      trackedPositions: v.array(
+        v.object({
+          assetType: assetTypeValidator,
+          direction: v.union(v.literal("long"), v.literal("short")),
+          portfolioId: v.id("portfolios"),
+          symbol: v.string(),
+        }),
+      ),
     }),
   ),
   handler: async (ctx) => {
@@ -851,7 +870,9 @@ export const getPortfolioValuationUniversePaged = internalAction({
       string,
       {
         assetType: MarketDataAssetType;
+        direction: "long" | "short";
         ownerId: string;
+        portfolioId: Id<"portfolios">;
         quantity: number;
         symbol: string;
       }
@@ -879,11 +900,13 @@ export const getPortfolioValuationUniversePaged = internalAction({
           continue;
         }
 
-        const key = `${trade.ownerId}:${trade.assetType}:${symbol}`;
+        const key = `${trade.ownerId}:${trade.portfolioId}:${trade.assetType}:${symbol}:${trade.direction}`;
         const current = positionQuantities.get(key);
         positionQuantities.set(key, {
           assetType: trade.assetType,
+          direction: trade.direction,
           ownerId: trade.ownerId,
+          portfolioId: trade.portfolioId,
           quantity: (current?.quantity ?? 0) + getSignedPositionQuantity(trade),
           symbol,
         });
@@ -893,6 +916,10 @@ export const getPortfolioValuationUniversePaged = internalAction({
     const instrumentsByOwner = new Map<
       string,
       Map<Doc<"marketDataInstruments">["_id"], Doc<"marketDataInstruments">>
+    >();
+    const trackedPositionsByOwner = new Map<
+      string,
+      Map<string, TrackedPriceMarkCandidate>
     >();
 
     for (const position of positionQuantities.values()) {
@@ -906,8 +933,28 @@ export const getPortfolioValuationUniversePaged = internalAction({
           ownerId: position.ownerId,
           ticker: position.symbol,
         });
+      if (instrument === null) {
+        continue;
+      }
+
+      if (instrument.resolutionStatus === "ignored") {
+        const ownerPositions =
+          trackedPositionsByOwner.get(position.ownerId) ??
+          new Map<string, TrackedPriceMarkCandidate>();
+        ownerPositions.set(
+          `${position.portfolioId}:${position.assetType}:${position.symbol}:${position.direction}`,
+          {
+            assetType: position.assetType,
+            direction: position.direction,
+            portfolioId: position.portfolioId,
+            symbol: position.symbol,
+          },
+        );
+        trackedPositionsByOwner.set(position.ownerId, ownerPositions);
+        continue;
+      }
+
       if (
-        instrument === null ||
         instrument.resolutionStatus !== "resolved" ||
         !instrument.providerSymbol
       ) {
@@ -924,12 +971,28 @@ export const getPortfolioValuationUniversePaged = internalAction({
       instrumentsByOwner.set(position.ownerId, ownerInstruments);
     }
 
-    return [...instrumentsByOwner.entries()].map(([ownerId, instruments]) => ({
-      instruments: [...instruments.values()].sort((a, b) =>
-        a.symbol.localeCompare(b.symbol),
-      ),
-      ownerId,
-    }));
+    const ownerIds = new Set([
+      ...instrumentsByOwner.keys(),
+      ...trackedPositionsByOwner.keys(),
+    ]);
+
+    return [...ownerIds]
+      .sort((a, b) => a.localeCompare(b))
+      .map((ownerId) => ({
+        instruments: [
+          ...(instrumentsByOwner.get(ownerId)?.values() ?? []),
+        ].sort((a, b) => a.symbol.localeCompare(b.symbol)),
+        ownerId,
+        trackedPositions: [
+          ...(trackedPositionsByOwner.get(ownerId)?.values() ?? []),
+        ].sort((a, b) => {
+          const symbolDelta = a.symbol.localeCompare(b.symbol);
+          if (symbolDelta !== 0) return symbolDelta;
+          const portfolioDelta = a.portfolioId.localeCompare(b.portfolioId);
+          if (portfolioDelta !== 0) return portfolioDelta;
+          return a.direction.localeCompare(b.direction);
+        }),
+      }));
   },
 });
 
@@ -1354,6 +1417,100 @@ export const completeMarketDataFetchJob = internalMutation({
   },
 });
 
+export const upsertPortfolioPriceMarksForOwner = internalMutation({
+  args: {
+    date: v.string(),
+    ownerId: v.string(),
+    positions: v.array(
+      v.object({
+        assetType: assetTypeValidator,
+        direction: v.union(v.literal("long"), v.literal("short")),
+        portfolioId: v.id("portfolios"),
+        symbol: v.string(),
+      }),
+    ),
+  },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const endTimestamp = endOfUtcDate(args.date);
+    let marksWritten = 0;
+
+    for (const position of args.positions) {
+      let latestTrade: Doc<"trades"> | null = null;
+      let latestTradeDate: number | null = null;
+      for await (const trade of ctx.db
+        .query("trades")
+        .withIndex("by_owner_portfolioId_date", (q) =>
+          q
+            .eq("ownerId", args.ownerId)
+            .eq("portfolioId", position.portfolioId)
+            .lte("date", endTimestamp),
+        )
+        .order("desc")) {
+        if (latestTradeDate !== null && trade.date < latestTradeDate) {
+          break;
+        }
+        if (
+          trade.assetType === position.assetType &&
+          trade.direction === position.direction &&
+          normalizeMarketDataSymbol(trade.ticker) === position.symbol
+        ) {
+          if (
+            latestTrade === null ||
+            trade._creationTime > latestTrade._creationTime
+          ) {
+            latestTrade = trade;
+            latestTradeDate = trade.date;
+          }
+        }
+      }
+      if (latestTrade === null) {
+        continue;
+      }
+
+      const existing = await ctx.db
+        .query("portfolioPriceMarks")
+        .withIndex(
+          "by_ownerId_and_portfolioId_and_assetType_and_symbol_and_direction_and_date",
+          (q) =>
+            q
+              .eq("ownerId", args.ownerId)
+              .eq("portfolioId", position.portfolioId)
+              .eq("assetType", position.assetType)
+              .eq("symbol", position.symbol)
+              .eq("direction", position.direction)
+              .eq("date", args.date),
+        )
+        .unique();
+      const row = {
+        assetType: position.assetType,
+        date: args.date,
+        direction: position.direction,
+        ownerId: args.ownerId,
+        portfolioId: position.portfolioId,
+        price: latestTrade.price,
+        source: "last_trade" as const,
+        sourceTradeId: latestTrade._id,
+        symbol: position.symbol,
+        updatedAt: now,
+      };
+
+      if (existing === null) {
+        await ctx.db.insert("portfolioPriceMarks", {
+          ...row,
+          createdAt: now,
+        });
+      } else {
+        await ctx.db.patch(existing._id, row);
+      }
+      marksWritten += 1;
+    }
+
+    return marksWritten;
+  },
+});
+
 export const storeResolutionResult = internalMutation({
   args: {
     assetType: assetTypeValidator,
@@ -1663,6 +1820,7 @@ export const refreshDailyPriceSnapshots = internalAction({
     const ownerUniverses: Array<{
       instruments: Doc<"marketDataInstruments">[];
       ownerId: string;
+      trackedPositions: TrackedPriceMarkCandidate[];
     }> = await ctx.runAction(
       internal.marketData.getPortfolioValuationUniversePaged,
       {},
@@ -1672,6 +1830,28 @@ export const refreshDailyPriceSnapshots = internalAction({
     let symbolsRequested = 0;
 
     for (const ownerUniverse of ownerUniverses) {
+      if (ownerUniverse.trackedPositions.length > 0) {
+        await ctx.runMutation(
+          internal.marketData.upsertPortfolioPriceMarksForOwner,
+          {
+            date: runDate,
+            ownerId: ownerUniverse.ownerId,
+            positions: ownerUniverse.trackedPositions,
+          },
+        );
+      }
+
+      if (ownerUniverse.instruments.length === 0) {
+        await ctx.runMutation(
+          internal.portfolioAnalytics.computeDailyValuationsForOwner,
+          {
+            date: runDate,
+            ownerId: ownerUniverse.ownerId,
+          },
+        );
+        continue;
+      }
+
       const runId = await ctx.runMutation(
         internal.marketData.startMarketDataRefreshRun,
         {

@@ -175,17 +175,43 @@ async function getInstrumentForPosition(
     .unique();
 }
 
-async function getCloseForInstrument(
+async function getPriceForPosition(
   ctx: QueryCtx | MutationCtx,
-  instrument: Doc<"marketDataInstruments">,
+  ownerId: string,
+  portfolioId: Id<"portfolios">,
+  position: Position,
   date: string,
 ): Promise<number | null> {
+  const instrument = await getInstrumentForPosition(ctx, ownerId, position);
+  if (instrument === null) {
+    return null;
+  }
+
+  if (instrument.resolutionStatus === "ignored") {
+    const mark = await ctx.db
+      .query("portfolioPriceMarks")
+      .withIndex(
+        "by_ownerId_and_portfolioId_and_assetType_and_symbol_and_direction_and_date",
+        (q) =>
+          q
+            .eq("ownerId", ownerId)
+            .eq("portfolioId", portfolioId)
+            .eq("assetType", position.assetType)
+            .eq("symbol", position.ticker)
+            .eq("direction", position.direction)
+            .eq("date", date),
+      )
+      .unique();
+    return mark?.price ?? null;
+  }
+
   if (
     instrument.resolutionStatus !== "resolved" ||
     !instrument.providerSymbol
   ) {
     return null;
   }
+
   const snapshot = await ctx.db
     .query("marketPriceSnapshots")
     .withIndex("by_provider_and_providerSymbol_and_date", (q) =>
@@ -248,10 +274,13 @@ async function computeValuation(
   );
 
   for (const position of openPositions) {
-    const instrument = await getInstrumentForPosition(ctx, ownerId, position);
-    const close = instrument
-      ? await getCloseForInstrument(ctx, instrument, date)
-      : null;
+    const close = await getPriceForPosition(
+      ctx,
+      ownerId,
+      portfolioId,
+      position,
+      date,
+    );
     if (close === null) {
       missingSymbols.add(position.ticker);
       continue;
