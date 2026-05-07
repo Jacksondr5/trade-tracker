@@ -426,6 +426,15 @@ type WorkerTickResult = {
   jobsSucceeded: number;
 };
 
+type ValuationBackfillResult = {
+  continueDate: string | null;
+  datesQueued: number;
+  endDate: string;
+  isDone: boolean;
+  ownerId: string;
+  startDate: string;
+};
+
 function parseMarketDataHealthOperatorIds(): string[] {
   const raw = process.env.MARKET_DATA_HEALTH_OPERATOR_IDS;
   if (!raw) {
@@ -483,6 +492,32 @@ export const runWorkerTick = action({
     return await ctx.runAction(internal.marketData.processMarketDataFetchJobs, {
       budgetCredits: args.budgetCredits,
     });
+  },
+});
+
+export const triggerValuationBackfill = action({
+  args: {
+    endDate: v.string(),
+    startDate: v.string(),
+  },
+  returns: v.object({
+    continueDate: v.union(v.string(), v.null()),
+    datesQueued: v.number(),
+    endDate: v.string(),
+    isDone: v.boolean(),
+    ownerId: v.string(),
+    startDate: v.string(),
+  }),
+  handler: async (ctx: ActionCtx, args): Promise<ValuationBackfillResult> => {
+    const ownerId = await requireMarketDataHealthOperator(ctx);
+    return await ctx.runMutation(
+      internal.portfolioAnalytics.backfillHistoricalDailyValuationsForOwner,
+      {
+        endDate: args.endDate,
+        ownerId,
+        startDate: args.startDate,
+      },
+    );
   },
 });
 

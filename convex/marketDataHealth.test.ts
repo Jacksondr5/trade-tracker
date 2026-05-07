@@ -537,6 +537,21 @@ describe("market data health", () => {
       }
     });
 
+    it("rejects valuation backfill for non-operators", async () => {
+      const previous = process.env.MARKET_DATA_HEALTH_OPERATOR_IDS;
+      process.env.MARKET_DATA_HEALTH_OPERATOR_IDS = "ops-user";
+      try {
+        await expect(
+          asOwner().action(api.marketDataHealth.triggerValuationBackfill, {
+            endDate: "2026-05-02",
+            startDate: "2026-05-01",
+          }),
+        ).rejects.toThrow(/operator access/);
+      } finally {
+        process.env.MARKET_DATA_HEALTH_OPERATOR_IDS = previous;
+      }
+    });
+
     it("allows configured operators", async () => {
       const previous = process.env.MARKET_DATA_HEALTH_OPERATOR_IDS;
       process.env.MARKET_DATA_HEALTH_OPERATOR_IDS = ownerId;
@@ -560,6 +575,21 @@ describe("market data health", () => {
           jobsFailed: 0,
           jobsProcessed: 0,
           jobsSucceeded: 0,
+        });
+
+        const valuationBackfillResult = await asOwner().action(
+          api.marketDataHealth.triggerValuationBackfill,
+          {
+            endDate: "2026-05-02",
+            startDate: "2026-05-01",
+          },
+        );
+        expect(valuationBackfillResult).toMatchObject({
+          datesQueued: 2,
+          endDate: "2026-05-02",
+          isDone: true,
+          ownerId,
+          startDate: "2026-05-01",
         });
       } finally {
         process.env.MARKET_DATA_HEALTH_OPERATOR_IDS = previous;

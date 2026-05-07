@@ -183,6 +183,9 @@ export default function MarketDataHealthPageClient() {
   const triggerBackfill = useAction(
     api.marketData.backfillHistoricalPriceSnapshots,
   );
+  const triggerValuationBackfill = useAction(
+    api.marketDataHealth.triggerValuationBackfill,
+  );
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
@@ -190,12 +193,16 @@ export default function MarketDataHealthPageClient() {
     | "triggerDailyRefresh"
     | "runWorkerTick"
     | "triggerBackfill"
+    | "triggerValuationBackfill"
     | { kind: "requeue"; jobId: Id<"marketDataFetchJobs"> }
     | null
   >(null);
 
   const [backfillStartDate, setBackfillStartDate] = useState("");
   const [backfillEndDate, setBackfillEndDate] = useState("");
+  const [valuationBackfillStartDate, setValuationBackfillStartDate] =
+    useState("");
+  const [valuationBackfillEndDate, setValuationBackfillEndDate] = useState("");
   const [fallbackNow] = useState(() => Date.now());
 
   const handleTriggerDailyRefresh = async () => {
@@ -254,6 +261,34 @@ export default function MarketDataHealthPageClient() {
     }
   };
 
+  const handleTriggerValuationBackfill = async () => {
+    if (!valuationBackfillStartDate || !valuationBackfillEndDate) {
+      setActionStatus(null);
+      setActionError("Pick a start and end date for the valuation recompute.");
+      return;
+    }
+    setActionError(null);
+    setActionStatus(null);
+    setActionPending("triggerValuationBackfill");
+    try {
+      const result = await triggerValuationBackfill({
+        startDate: valuationBackfillStartDate,
+        endDate: valuationBackfillEndDate,
+      });
+      setActionStatus(
+        result.isDone
+          ? `Queued ${result.datesQueued} valuation date${result.datesQueued === 1 ? "" : "s"} for ${result.startDate} → ${result.endDate}.`
+          : `Started valuation recompute for ${result.startDate} → ${result.endDate}. Queued ${result.datesQueued} dates; next batch starts ${result.continueDate ?? "soon"}.`,
+      );
+    } catch (error) {
+      setActionError(
+        describeError(error, "Failed to queue valuation recompute."),
+      );
+    } finally {
+      setActionPending(null);
+    }
+  };
+
   const handleRequeueJob = async (jobId: Id<"marketDataFetchJobs">) => {
     setActionError(null);
     setActionStatus(null);
@@ -273,7 +308,8 @@ export default function MarketDataHealthPageClient() {
   const isAnyTopLevelActionPending =
     actionPending === "triggerDailyRefresh" ||
     actionPending === "runWorkerTick" ||
-    actionPending === "triggerBackfill";
+    actionPending === "triggerBackfill" ||
+    actionPending === "triggerValuationBackfill";
 
   const isLoading =
     summary === undefined || recentRuns === undefined || coverage === undefined;
@@ -351,9 +387,17 @@ export default function MarketDataHealthPageClient() {
             onBackfill={handleTriggerBackfill}
             onChangeBackfillEndDate={setBackfillEndDate}
             onChangeBackfillStartDate={setBackfillStartDate}
+            onChangeValuationBackfillEndDate={setValuationBackfillEndDate}
+            onChangeValuationBackfillStartDate={setValuationBackfillStartDate}
             onTriggerDailyRefresh={handleTriggerDailyRefresh}
+            onValuationBackfill={handleTriggerValuationBackfill}
             onRunWorkerTick={handleRunWorkerTick}
             triggerDailyPending={actionPending === "triggerDailyRefresh"}
+            valuationBackfillEndDate={valuationBackfillEndDate}
+            valuationBackfillPending={
+              actionPending === "triggerValuationBackfill"
+            }
+            valuationBackfillStartDate={valuationBackfillStartDate}
             workerTickPending={actionPending === "runWorkerTick"}
           />
         </>
@@ -1009,9 +1053,15 @@ interface TriggersSectionProps {
   onBackfill: () => Promise<void> | void;
   onChangeBackfillEndDate: (value: string) => void;
   onChangeBackfillStartDate: (value: string) => void;
+  onChangeValuationBackfillEndDate: (value: string) => void;
+  onChangeValuationBackfillStartDate: (value: string) => void;
   onRunWorkerTick: () => Promise<void> | void;
   onTriggerDailyRefresh: () => Promise<void> | void;
+  onValuationBackfill: () => Promise<void> | void;
   triggerDailyPending: boolean;
+  valuationBackfillEndDate: string;
+  valuationBackfillPending: boolean;
+  valuationBackfillStartDate: string;
   workerTickPending: boolean;
 }
 
@@ -1023,9 +1073,15 @@ function TriggersSection({
   onBackfill,
   onChangeBackfillEndDate,
   onChangeBackfillStartDate,
+  onChangeValuationBackfillEndDate,
+  onChangeValuationBackfillStartDate,
   onRunWorkerTick,
   onTriggerDailyRefresh,
+  onValuationBackfill,
   triggerDailyPending,
+  valuationBackfillEndDate,
+  valuationBackfillPending,
+  valuationBackfillStartDate,
   workerTickPending,
 }: TriggersSectionProps) {
   return (
@@ -1103,6 +1159,58 @@ function TriggersSection({
             </Button>
           </div>
         </div>
+        <div className="rounded-md border border-olive-6 bg-olive-2 p-4">
+          <h3 className="mb-2 text-sm font-semibold text-slate-12">
+            Portfolio valuation recompute
+          </h3>
+          <p className="mb-3 text-xs text-slate-11">
+            Recompute stored portfolio valuation rows from trades, cash ledger
+            entries, and cached price snapshots.
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="space-y-1 text-xs text-slate-11">
+              <span>Start date</span>
+              <Input
+                type="date"
+                dataTestId={
+                  MARKET_DATA_HEALTH_TEST_IDS.valuationBackfillStartDate
+                }
+                value={valuationBackfillStartDate}
+                onChange={(event) =>
+                  onChangeValuationBackfillStartDate(event.target.value)
+                }
+                className="dark-date-input"
+              />
+            </label>
+            <label className="space-y-1 text-xs text-slate-11">
+              <span>End date</span>
+              <Input
+                type="date"
+                dataTestId={
+                  MARKET_DATA_HEALTH_TEST_IDS.valuationBackfillEndDate
+                }
+                value={valuationBackfillEndDate}
+                onChange={(event) =>
+                  onChangeValuationBackfillEndDate(event.target.value)
+                }
+                className="dark-date-input"
+              />
+            </label>
+            <Button
+              dataTestId={MARKET_DATA_HEALTH_TEST_IDS.valuationBackfillSubmit}
+              isLoading={valuationBackfillPending}
+              disabled={
+                isAnyPending ||
+                !valuationBackfillStartDate ||
+                !valuationBackfillEndDate
+              }
+              onClick={() => void onValuationBackfill()}
+            >
+              <RotateCw className="h-4 w-4" />
+              Queue recompute
+            </Button>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -1135,12 +1243,7 @@ function Td({
   className?: string;
 }) {
   return (
-    <td
-      className={cn(
-        "px-3 py-2 text-sm text-slate-11",
-        className,
-      )}
-    >
+    <td className={cn("px-3 py-2 text-sm text-slate-11", className)}>
       {children}
     </td>
   );
