@@ -509,7 +509,7 @@ export const triggerValuationBackfill = action({
     startDate: v.string(),
   }),
   handler: async (ctx: ActionCtx, args): Promise<ValuationBackfillResult> => {
-    const ownerId = await requireMarketDataHealthOperator(ctx);
+    const ownerId = await requireUser(ctx);
     return await ctx.runMutation(
       internal.portfolioAnalytics.backfillHistoricalDailyValuationsForOwner,
       {

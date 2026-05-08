@@ -1,7 +1,7 @@
 // @vitest-environment edge-runtime
 
 import { convexTest } from "convex-test";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
@@ -25,6 +25,10 @@ describe("market data health", () => {
 
   beforeEach(() => {
     t = convexTest(schema, modules);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   function asOwner(token = ownerId) {
@@ -545,16 +549,28 @@ describe("market data health", () => {
       }
     });
 
-    it("rejects valuation backfill for non-operators", async () => {
+    it("allows authenticated users to queue valuation backfill", async () => {
       const previous = process.env.MARKET_DATA_HEALTH_OPERATOR_IDS;
       process.env.MARKET_DATA_HEALTH_OPERATOR_IDS = "ops-user";
+      vi.useFakeTimers();
       try {
-        await expect(
-          asOwner().action(api.marketDataHealth.triggerValuationBackfill, {
+        const result = await asOwner().action(
+          api.marketDataHealth.triggerValuationBackfill,
+          {
             endDate: "2026-05-02",
             startDate: "2026-05-01",
-          }),
-        ).rejects.toThrow(/operator access/);
+          },
+        );
+
+        expect(result).toMatchObject({
+          datesQueued: 2,
+          endDate: "2026-05-02",
+          isDone: true,
+          ownerId,
+          startDate: "2026-05-01",
+        });
+
+        await t.finishAllScheduledFunctions(vi.runAllTimers);
       } finally {
         if (previous === undefined) {
           delete process.env.MARKET_DATA_HEALTH_OPERATOR_IDS;
@@ -567,6 +583,7 @@ describe("market data health", () => {
     it("allows configured operators", async () => {
       const previous = process.env.MARKET_DATA_HEALTH_OPERATOR_IDS;
       process.env.MARKET_DATA_HEALTH_OPERATOR_IDS = ownerId;
+      vi.useFakeTimers();
       try {
         const refreshResult = await asOwner().action(
           api.marketDataHealth.triggerDailyRefresh,
@@ -603,6 +620,8 @@ describe("market data health", () => {
           ownerId,
           startDate: "2026-05-01",
         });
+
+        await t.finishAllScheduledFunctions(vi.runAllTimers);
       } finally {
         if (previous === undefined) {
           delete process.env.MARKET_DATA_HEALTH_OPERATOR_IDS;

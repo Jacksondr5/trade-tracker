@@ -2,9 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Add an operator-only Market Data Health control that queues historical portfolio daily valuation recomputation.
+**Goal:** Add an authenticated Market Data Health control that queues historical portfolio daily valuation recomputation for the current user.
 
-**Architecture:** The existing internal valuation backfill mutation remains the computation entry point. A new operator-gated action in `convex/marketDataHealth.ts` exposes it safely to the health UI, and the React page adds a compact date-range form beside the existing operational triggers.
+**Architecture:** The existing internal valuation backfill mutation remains the computation entry point. A new authenticated action in `convex/marketDataHealth.ts` exposes it safely to the health UI for the current user's owner id, and the React page adds a compact date-range form beside the existing operational triggers.
 
 **Tech Stack:** Convex actions/mutations, Next.js client component, shared E2E test ids, Vitest with `convex-test`.
 
@@ -20,10 +20,10 @@
 **Steps:**
 
 1. Add `triggerValuationBackfill` action with `startDate` and `endDate` string args.
-2. Gate it with `requireMarketDataHealthOperator`.
-3. Call `internal.portfolioAnalytics.backfillHistoricalDailyValuationsForOwner` using the authenticated operator id.
+2. Gate it with `requireUser`.
+3. Call `internal.portfolioAnalytics.backfillHistoricalDailyValuationsForOwner` using the authenticated user's owner id.
 4. Return the internal mutation result.
-5. Add tests for non-operator rejection and configured operator success.
+5. Add tests that authenticated non-operators can queue valuation backfill while provider-credit controls stay operator-only.
 
 ## Task 2: UI Control
 
