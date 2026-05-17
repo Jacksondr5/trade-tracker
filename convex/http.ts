@@ -107,19 +107,91 @@ function requireArray(body: JsonObject, key: string): JsonObject[] {
   });
 }
 
+function requireNumber(body: JsonObject, key: string): number {
+  const value = body[key];
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new JsonValidationError(`${key} must be a number`);
+  }
+  return value;
+}
+
+function optionalNumber(body: JsonObject, key: string): number | undefined {
+  const value = body[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new JsonValidationError(`${key} must be a number`);
+  }
+  return value;
+}
+
+function optionalLiteral<T extends string>(
+  body: JsonObject,
+  key: string,
+  allowed: readonly T[],
+): T | undefined {
+  const value = body[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !allowed.includes(value as T)) {
+    throw new JsonValidationError(
+      `${key} must be one of: ${allowed.join(", ")}`,
+    );
+  }
+  return value as T;
+}
+
 function requireTrades(body: JsonObject): HttpTrade[] {
-  return requireArray(body, "trades") as unknown as HttpTrade[];
+  return requireArray(body, "trades").map((trade, index) => {
+    const base = `trades[${index}]`;
+    return {
+      assetType: requireLiteral(trade, `${base}.assetType`, ["stock"]),
+      brokerageAccountId: requireString(trade, `${base}.brokerageAccountId`),
+      currency: optionalString(trade, `${base}.currency`),
+      date: requireNumber(trade, `${base}.date`),
+      direction: optionalLiteral(trade, `${base}.direction`, [
+        "long",
+        "short",
+      ]),
+      executionId: optionalString(trade, `${base}.executionId`),
+      externalId: requireString(trade, `${base}.externalId`),
+      fees: optionalNumber(trade, `${base}.fees`),
+      orderType: optionalString(trade, `${base}.orderType`),
+      price: requireNumber(trade, `${base}.price`),
+      quantity: requireNumber(trade, `${base}.quantity`),
+      side: requireLiteral(trade, `${base}.side`, ["buy", "sell"]),
+      taxes: optionalNumber(trade, `${base}.taxes`),
+      ticker: requireString(trade, `${base}.ticker`),
+    };
+  });
 }
 
 function requirePositionSnapshots(body: JsonObject): HttpPositionSnapshot[] {
-  return requireArray(
-    body,
-    "positionSnapshots",
-  ) as unknown as HttpPositionSnapshot[];
+  return requireArray(body, "positionSnapshots").map((snapshot, index) => {
+    const base = `positionSnapshots[${index}]`;
+    return {
+      assetType: requireLiteral(snapshot, `${base}.assetType`, ["stock"]),
+      brokerageAccountId: requireString(
+        snapshot,
+        `${base}.brokerageAccountId`,
+      ),
+      currency: optionalString(snapshot, `${base}.currency`),
+      marketValue: optionalNumber(snapshot, `${base}.marketValue`),
+      quantity: requireNumber(snapshot, `${base}.quantity`),
+      reportDate: requireString(snapshot, `${base}.reportDate`),
+      ticker: requireString(snapshot, `${base}.ticker`),
+    };
+  });
 }
 
 function requireCashSnapshots(body: JsonObject): HttpCashSnapshot[] {
-  return requireArray(body, "cashSnapshots") as unknown as HttpCashSnapshot[];
+  return requireArray(body, "cashSnapshots").map((snapshot, index) => {
+    const base = `cashSnapshots[${index}]`;
+    return {
+      brokerageAccountId: requireString(snapshot, `${base}.brokerageAccountId`),
+      cash: requireNumber(snapshot, `${base}.cash`),
+      currency: requireString(snapshot, `${base}.currency`),
+      reportDate: requireString(snapshot, `${base}.reportDate`),
+    };
+  });
 }
 
 function optionalStringArray(
