@@ -6,6 +6,9 @@ This document defines the intended product model for portfolio analytics in Trad
 
 Use it when changing portfolios, imports, trades, positions, market data, or portfolio review surfaces.
 
+Use [brokerage-ingestion.md](brokerage-ingestion.md) for automated brokerage
+sync, reconciliation, and valuation freshness rules.
+
 Portfolios remain capital-allocation overlays on trades. They should become analytically useful without becoming the main thesis hierarchy or a replacement for brokerage tools.
 
 ## Product Job
@@ -35,6 +38,11 @@ The canonical sources for portfolio analytics are:
 - market price snapshots, for cached daily close prices
 
 Daily portfolio valuations are derived from those sources. They are stored for performance and charting, but they must remain recomputable.
+
+Automated brokerage sync is operational evidence for keeping those canonical
+inputs current. Synced brokerage snapshots should be used for reconciliation and
+freshness status, not as a replacement for accepted trades or portfolio cash
+ledger entries.
 
 Benchmark comparisons also use market data instruments and market price snapshots. Benchmarks are analytical reference series, not portfolios and not cash-ledger participants.
 
@@ -165,8 +173,15 @@ external API usage can respect provider credit limits.
 
 Recommended timing:
 
-- one planner run around 9:00 p.m. Eastern Time
+- one planner run after market close prices are expected to be available
 - one rate-limited worker run every few minutes
+
+When automated brokerage ingestion is configured, the daily valuation date
+should be explicit and should normally follow the 1:00 a.m. Eastern Time IBKR
+Activity Flex sync for the prior business day. A market-data refresh may fetch
+prices earlier, but final portfolio valuation freshness should wait for the
+brokerage sync/reconciliation result or be recomputed after that result is
+known.
 
 The planner should:
 
@@ -224,6 +239,11 @@ Initial price coverage statuses:
 - `complete`
 - `partial`
 - `missing`
+
+Portfolio review should also account for brokerage sync freshness when an
+automated brokerage connection is configured. A valuation can have complete
+price coverage while still being operationally stale if the expected brokerage
+sync has not succeeded or reconciled for that valuation date.
 
 Do not store cost basis, realized profit and loss, unrealized profit and loss, net contributions, or cumulative return in the first version of the daily valuation row.
 

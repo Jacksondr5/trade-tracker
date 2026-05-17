@@ -82,6 +82,12 @@ An internal worker runtime may be introduced when the work is primarily:
 
 In those cases, Convex remains the system of record and workflow coordinator. The worker should receive bounded job identifiers, perform capture or processing, and write results back through explicit Convex functions. It must not own a separate data model, authorization model, or canonical mutation path.
 
+Temporal may be used as the orchestration runtime for long-running ingestion
+workflows with durable delays and retry semantics, such as IBKR Flex report
+generation. Temporal workflows should orchestrate deterministic steps only;
+external API calls, parsing, storage writes, and Convex API calls belong in
+activities. Convex remains the product database and user-facing source of truth.
+
 Prefer this split:
 
 - Convex owns durable state, dedupe, review workflow, authorization, and canonical domain mutations.

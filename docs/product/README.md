@@ -14,6 +14,7 @@ Unlike the dated documents in `docs/plans/`, these docs are meant to stay curren
 - `navigation-model.md` - where things live and how movement through the product should work
 - `ux-principles.md` - interaction-level rules about context, visibility, reviewability, and friction
 - `feature-philosophy.md` - what each major surface is for and what it should avoid becoming
+- `brokerage-ingestion.md` - automated brokerage sync, reconciliation, and valuation freshness guidance
 - `portfolio-analytics.md` - portfolio analytics, cash ledger, market data, valuation, and exposure guidance
 - `content-and-copy-principles.md` - naming, labels, actions, helper text, and feedback wording
 - `visual-design-system.md` - concrete visual implementation guidance
