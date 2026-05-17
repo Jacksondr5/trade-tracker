@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FlexQueryResponse queryName="Trade Tracker Activity" type="AF">
+  <FlexStatements count="1">
+    <FlexStatement accountId="U1234567" fromDate="20260514" toDate="20260514" whenGenerated="20260515;010000">
+      <Trades>
+        <Trade accountId="U1234567" assetCategory="STK" symbol="aapl" dateTime="20260514;093005" buySell="BUY" openCloseIndicator="O" quantity="10" tradePrice="189.50" ibCommission="-1.25" taxes="0" orderType="LMT" ibExecID="0000e1.12345.01" currency="USD" />
+        <Trade accountId="U1234567" assetCategory="STK" symbol="MSFT" dateTime="20260514;103012" buySell="SELL" openCloseIndicator="C" quantity="-2" tradePrice="420.10" ibCommission="-0.75" taxes="0.03" orderType="MKT" currency="USD" />
+      </Trades>
+      <OpenPositions>
+        <OpenPosition accountId="U1234567" assetCategory="STK" symbol="AAPL" position="10" marketValue="1895.00" currency="USD" />
+        <OpenPosition accountId="U1234567" assetCategory="STK" symbol="MSFT" position="3" marketValue="1260.30" currency="USD" />
+      </OpenPositions>
+      <CashReport>
+        <CashReportCurrency accountId="U1234567" currency="USD" endingCash="12500.25" />
+      </CashReport>
+    </FlexStatement>
+  </FlexStatements>
+</FlexQueryResponse>

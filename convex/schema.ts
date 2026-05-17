@@ -96,6 +96,74 @@ const marketDataFetchJobStatusValidator = v.union(
   v.literal("failed"),
 );
 
+const portfolioPipelineModeValidator = v.union(
+  v.literal("daily"),
+  v.literal("backfill"),
+  v.literal("recompute"),
+);
+
+const portfolioPipelineRunStatusValidator = v.union(
+  v.literal("queued"),
+  v.literal("running"),
+  v.literal("succeeded"),
+  v.literal("partial"),
+  v.literal("failed"),
+  v.literal("cancelled"),
+);
+
+const portfolioPipelineDateRunStatusValidator = v.union(
+  v.literal("queued"),
+  v.literal("running"),
+  v.literal("succeeded"),
+  v.literal("partial"),
+  v.literal("failed"),
+  v.literal("skipped"),
+);
+
+const brokerageSourceValidator = v.literal("ibkr");
+
+const brokerageConnectionStatusValidator = v.union(
+  v.literal("active"),
+  v.literal("paused"),
+  v.literal("needs_setup"),
+  v.literal("error"),
+);
+
+const brokerageSyncReportTypeValidator = v.union(
+  v.literal("activity"),
+  v.literal("trade_confirmation"),
+);
+
+const brokerageSyncRunStatusValidator = v.union(
+  v.literal("queued"),
+  v.literal("requesting"),
+  v.literal("waiting_for_statement"),
+  v.literal("processing"),
+  v.literal("succeeded"),
+  v.literal("failed_retryable"),
+  v.literal("failed_terminal"),
+);
+
+const brokerageReconciliationIssueStatusValidator = v.union(
+  v.literal("open"),
+  v.literal("resolved"),
+  v.literal("dismissed"),
+);
+
+const brokerageReconciliationIssueTypeValidator = v.union(
+  v.literal("position_mismatch"),
+  v.literal("missing_local_position"),
+  v.literal("missing_brokerage_position"),
+  v.literal("cash_mismatch"),
+  v.literal("pending_import_review"),
+);
+
+const brokerageReconciliationIssueSeverityValidator = v.union(
+  v.literal("info"),
+  v.literal("warning"),
+  v.literal("error"),
+);
+
 const bravosClassificationValidator = v.union(
   v.literal("initiate"),
   v.literal("follow_up"),
@@ -426,6 +494,200 @@ export default defineSchema({
       "updatedAt",
     ]),
 
+  portfolioPipelineRuns: defineTable({
+    completedAt: v.optional(v.number()),
+    errorMessage: v.optional(v.string()),
+    mode: portfolioPipelineModeValidator,
+    ownerId: v.string(),
+    requestedAt: v.number(),
+    requestedByOwnerId: v.optional(v.string()),
+    startedAt: v.optional(v.number()),
+    status: portfolioPipelineRunStatusValidator,
+    updatedAt: v.number(),
+  })
+    .index("by_ownerId_and_status", ["ownerId", "status"])
+    .index("by_ownerId_and_requestedAt", ["ownerId", "requestedAt"])
+    .index("by_status_and_updatedAt", ["status", "updatedAt"]),
+
+  portfolioPipelineDateRuns: defineTable({
+    completedAt: v.optional(v.number()),
+    date: v.string(),
+    errorMessage: v.optional(v.string()),
+    mode: portfolioPipelineModeValidator,
+    ownerId: v.string(),
+    pipelineRunId: v.id("portfolioPipelineRuns"),
+    startedAt: v.optional(v.number()),
+    status: portfolioPipelineDateRunStatusValidator,
+    updatedAt: v.number(),
+  })
+    .index("by_pipelineRunId", ["pipelineRunId"])
+    .index("by_ownerId_and_date", ["ownerId", "date"])
+    .index("by_ownerId_and_date_and_mode", ["ownerId", "date", "mode"])
+    .index("by_ownerId_and_status", ["ownerId", "status"]),
+
+  brokerageConnections: defineTable({
+    accountId: v.optional(v.string()),
+    connectionError: v.optional(v.string()),
+    createdAt: v.number(),
+    label: v.optional(v.string()),
+    lastFailedSyncAt: v.optional(v.number()),
+    lastSuccessfulSyncAt: v.optional(v.number()),
+    ownerId: v.string(),
+    queryId: v.optional(v.string()),
+    source: brokerageSourceValidator,
+    status: brokerageConnectionStatusValidator,
+    tokenExpiresAt: v.optional(v.number()),
+    tokenLabel: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_ownerId", ["ownerId"])
+    .index("by_ownerId_and_source", ["ownerId", "source"])
+    .index("by_ownerId_and_source_and_status", ["ownerId", "source", "status"])
+    .index("by_source_and_status", ["source", "status"]),
+
+  brokerageSyncRuns: defineTable({
+    completedAt: v.optional(v.number()),
+    connectionId: v.id("brokerageConnections"),
+    errorMessage: v.optional(v.string()),
+    importedTrades: v.number(),
+    ownerId: v.string(),
+    positionSnapshotCount: v.number(),
+    queryId: v.string(),
+    rawReportId: v.optional(v.id("brokerageRawReports")),
+    reconciliationIssueCount: v.number(),
+    referenceCode: v.optional(v.string()),
+    reportDate: v.string(),
+    reportType: brokerageSyncReportTypeValidator,
+    requestedAt: v.number(),
+    skippedDuplicateTrades: v.number(),
+    source: brokerageSourceValidator,
+    startedAt: v.optional(v.number()),
+    status: brokerageSyncRunStatusValidator,
+    updatedAt: v.number(),
+  })
+    .index("by_connectionId_and_reportType_and_reportDate_and_queryId", [
+      "connectionId",
+      "reportType",
+      "reportDate",
+      "queryId",
+    ])
+    .index("by_connectionId_and_status", ["connectionId", "status"])
+    .index("by_ownerId_and_reportDate_and_reportType", [
+      "ownerId",
+      "reportDate",
+      "reportType",
+    ])
+    .index("by_ownerId_and_startedAt", ["ownerId", "startedAt"])
+    .index("by_ownerId_and_status", ["ownerId", "status"]),
+
+  brokerageRawReports: defineTable({
+    byteLength: v.number(),
+    connectionId: v.id("brokerageConnections"),
+    contentHash: v.string(),
+    createdAt: v.number(),
+    ownerId: v.string(),
+    reportDate: v.string(),
+    reportType: brokerageSyncReportTypeValidator,
+    source: brokerageSourceValidator,
+    storageId: v.id("_storage"),
+    syncRunId: v.id("brokerageSyncRuns"),
+  })
+    .index("by_syncRunId", ["syncRunId"])
+    .index("by_contentHash", ["contentHash"])
+    .index("by_connectionId_and_reportDate_and_reportType", [
+      "connectionId",
+      "reportDate",
+      "reportType",
+    ])
+    .index("by_ownerId_and_reportDate", ["ownerId", "reportDate"]),
+
+  brokeragePositionSnapshots: defineTable({
+    assetType: marketDataAssetTypeValidator,
+    brokerageAccountId: v.string(),
+    connectionId: v.id("brokerageConnections"),
+    createdAt: v.number(),
+    currency: v.optional(v.string()),
+    marketValue: v.optional(v.number()),
+    ownerId: v.string(),
+    quantity: v.number(),
+    reportDate: v.string(),
+    syncRunId: v.id("brokerageSyncRuns"),
+    ticker: v.string(),
+  })
+    .index("by_syncRunId", ["syncRunId"])
+    .index("by_syncRunId_and_account_and_assetType_and_ticker_and_reportDate", [
+      "syncRunId",
+      "brokerageAccountId",
+      "assetType",
+      "ticker",
+      "reportDate",
+    ])
+    .index("by_ownerId_and_account_and_assetType_and_ticker_and_reportDate", [
+      "ownerId",
+      "brokerageAccountId",
+      "assetType",
+      "ticker",
+      "reportDate",
+    ]),
+
+  brokerageCashSnapshots: defineTable({
+    brokerageAccountId: v.string(),
+    cash: v.number(),
+    connectionId: v.id("brokerageConnections"),
+    createdAt: v.number(),
+    currency: v.string(),
+    ownerId: v.string(),
+    reportDate: v.string(),
+    syncRunId: v.id("brokerageSyncRuns"),
+  })
+    .index("by_syncRunId", ["syncRunId"])
+    .index("by_syncRunId_and_account_and_currency_and_reportDate", [
+      "syncRunId",
+      "brokerageAccountId",
+      "currency",
+      "reportDate",
+    ])
+    .index("by_ownerId_and_account_and_currency_and_reportDate", [
+      "ownerId",
+      "brokerageAccountId",
+      "currency",
+      "reportDate",
+    ]),
+
+  brokerageReconciliationIssues: defineTable({
+    actualQuantity: v.optional(v.number()),
+    assetType: v.optional(marketDataAssetTypeValidator),
+    brokerageAccountId: v.optional(v.string()),
+    connectionId: v.id("brokerageConnections"),
+    createdAt: v.number(),
+    currency: v.optional(v.string()),
+    expectedQuantity: v.optional(v.number()),
+    issueType: brokerageReconciliationIssueTypeValidator,
+    message: v.string(),
+    ownerId: v.string(),
+    reportDate: v.string(),
+    resolvedAt: v.optional(v.number()),
+    severity: brokerageReconciliationIssueSeverityValidator,
+    status: brokerageReconciliationIssueStatusValidator,
+    syncRunId: v.id("brokerageSyncRuns"),
+    ticker: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_syncRunId", ["syncRunId"])
+    .index("by_ownerId_and_status", ["ownerId", "status"])
+    .index("by_ownerId_and_status_and_reportDate", [
+      "ownerId",
+      "status",
+      "reportDate",
+    ])
+    .index("by_owner_connection_reportDate_issueType_status", [
+      "ownerId",
+      "connectionId",
+      "reportDate",
+      "issueType",
+      "status",
+    ]),
+
   tradePlans: defineTable({
     campaignId: v.optional(v.id("campaigns")),
     closedAt: v.optional(v.number()),
@@ -452,7 +714,11 @@ export default defineSchema({
     accountId: v.string(),
     friendlyName: v.string(),
     ownerId: v.string(),
-    source: v.union(v.literal("ibkr"), v.literal("kraken"), v.literal("manual")),
+    source: v.union(
+      v.literal("ibkr"),
+      v.literal("kraken"),
+      v.literal("manual"),
+    ),
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_source_accountId", ["ownerId", "source", "accountId"]),
