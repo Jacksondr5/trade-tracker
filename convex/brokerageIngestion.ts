@@ -564,7 +564,7 @@ export const ingestParsedFlexReport = internalMutation({
     await ctx.db.patch(syncRun._id, {
       importedTrades: (syncRun.importedTrades ?? 0) + importResult.imported,
       positionSnapshotCount:
-        (syncRun.positionSnapshotCount ?? 0) + args.positionSnapshots.length,
+        (syncRun.positionSnapshotCount ?? 0) + positionSnapshotsWritten,
       reconciliationIssueCount:
         (syncRun.reconciliationIssueCount ?? 0) + newIssueCount,
       skippedDuplicateTrades:

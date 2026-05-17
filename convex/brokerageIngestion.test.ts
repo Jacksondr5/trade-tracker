@@ -218,6 +218,7 @@ describe("brokerage ingestion", () => {
         (snapshot) => snapshot.syncRunId === syncRunId,
       ),
     );
+    const syncRun = await t.run(async (ctx) => await ctx.db.get(syncRunId));
 
     expect(first).toMatchObject({
       cashSnapshotsWritten: 1,
@@ -246,6 +247,11 @@ describe("brokerage ingestion", () => {
     expect(cash[0]).toMatchObject({
       cash: 12500.25,
       currency: "USD",
+    });
+    expect(syncRun).toMatchObject({
+      importedTrades: 1,
+      positionSnapshotCount: 1,
+      skippedDuplicateTrades: 1,
     });
   });
 
