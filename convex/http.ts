@@ -237,12 +237,18 @@ http.route({
         "syncRunId",
       ) as Id<"brokerageSyncRuns">;
       const rawXml = requireString(body, "rawXml");
+      const cashSnapshots = requireCashSnapshots(body);
+      const errors = optionalStringArray(body, "errors");
+      const positionSnapshots = requirePositionSnapshots(body);
+      const trades = requireTrades(body);
+      const warnings = optionalStringArray(body, "warnings");
       const contentHash = await sha256Hex(rawXml);
       const byteLength = new TextEncoder().encode(rawXml).byteLength;
-      const storageId = await ctx.storage.store(
-        new Blob([rawXml], { type: "application/xml" }),
-      );
+      let storageId: Id<"_storage"> | undefined;
       try {
+        storageId = await ctx.storage.store(
+          new Blob([rawXml], { type: "application/xml" }),
+        );
         const rawReportId = await ctx.runMutation(
           internal.brokerageIngestion.storeRawReportReference,
           {
@@ -255,17 +261,19 @@ http.route({
         const result = await ctx.runMutation(
           internal.brokerageIngestion.ingestParsedFlexReport,
           {
-            cashSnapshots: requireCashSnapshots(body),
-            errors: optionalStringArray(body, "errors"),
-            positionSnapshots: requirePositionSnapshots(body),
+            cashSnapshots,
+            errors,
+            positionSnapshots,
             syncRunId,
-            trades: requireTrades(body),
-            warnings: optionalStringArray(body, "warnings"),
+            trades,
+            warnings,
           },
         );
         return jsonResponse({ rawReportId, ...result });
       } catch (error) {
-        await ctx.storage.delete(storageId);
+        if (storageId) {
+          await ctx.storage.delete(storageId);
+        }
         throw error;
       }
     });

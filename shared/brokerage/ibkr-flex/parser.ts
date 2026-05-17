@@ -122,8 +122,10 @@ function reportDateFromStatement(statement: UnknownRecord): string | undefined {
     "fromDate",
   ]);
   if (!fromDate) return undefined;
-  const compact = fromDate.includes(";") ? fromDate.split(";")[0] : fromDate;
-  if (!compact || compact.length < 8) return undefined;
+  const compact = (
+    fromDate.includes(";") ? fromDate.split(";")[0] : fromDate
+  )?.trim();
+  if (!compact || !/^\d{8}$/.test(compact)) return undefined;
   return `${compact.slice(0, 4)}-${compact.slice(4, 6)}-${compact.slice(6, 8)}`;
 }
 
