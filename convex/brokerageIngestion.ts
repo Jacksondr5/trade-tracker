@@ -436,6 +436,30 @@ export const storeRawReportReference = internalMutation({
   },
 });
 
+export const rollbackRawReportReference = internalMutation({
+  args: {
+    rawReportId: v.id("brokerageRawReports"),
+    storageId: v.id("_storage"),
+    syncRunId: v.id("brokerageSyncRuns"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { syncRun } = await getSyncRunWithConnection(ctx, args.syncRunId);
+    if (syncRun.rawReportId !== args.rawReportId) return null;
+
+    const rawReport = await ctx.db.get(args.rawReportId);
+    if (!rawReport || rawReport.syncRunId !== syncRun._id) return null;
+    if (rawReport.storageId !== args.storageId) return null;
+
+    await ctx.db.delete(rawReport._id);
+    await ctx.db.patch(syncRun._id, {
+      rawReportId: undefined,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
 export const ingestParsedFlexReport = internalMutation({
   args: {
     cashSnapshots: v.array(cashSnapshotValidator),

@@ -260,11 +260,12 @@ http.route({
       const contentHash = await sha256Hex(rawXml);
       const byteLength = new TextEncoder().encode(rawXml).byteLength;
       let storageId: Id<"_storage"> | undefined;
+      let rawReportId: Id<"brokerageRawReports"> | undefined;
       try {
         storageId = await ctx.storage.store(
           new Blob([rawXml], { type: "application/xml" }),
         );
-        const rawReportId = await ctx.runMutation(
+        rawReportId = await ctx.runMutation(
           internal.brokerageIngestion.storeRawReportReference,
           {
             byteLength,
@@ -286,6 +287,16 @@ http.route({
         );
         return jsonResponse({ rawReportId, ...result });
       } catch (error) {
+        if (storageId && rawReportId) {
+          await ctx.runMutation(
+            internal.brokerageIngestion.rollbackRawReportReference,
+            {
+              rawReportId,
+              storageId,
+              syncRunId,
+            },
+          );
+        }
         if (storageId) {
           await ctx.storage.delete(storageId);
         }

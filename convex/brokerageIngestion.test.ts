@@ -363,6 +363,44 @@ describe("brokerage ingestion", () => {
     });
   });
 
+  it("rolls back raw report metadata when downstream ingestion fails", async () => {
+    const connectionId = await createConnection();
+    const { syncRunId } = await t.mutation(
+      internal.brokerageIngestion.beginSyncRunForConnection,
+      {
+        connectionId,
+        reportDate: "2026-05-14",
+        reportType: "activity",
+      },
+    );
+    const storageId = await t.run(async (ctx) =>
+      await ctx.storage.store(
+        new Blob(["<FlexQueryResponse/>"], { type: "application/xml" }),
+      ),
+    );
+    const rawReportId = await t.mutation(
+      internal.brokerageIngestion.storeRawReportReference,
+      {
+        byteLength: 20,
+        contentHash: "hash-a",
+        storageId,
+        syncRunId,
+      },
+    );
+
+    await t.mutation(internal.brokerageIngestion.rollbackRawReportReference, {
+      rawReportId,
+      storageId,
+      syncRunId,
+    });
+
+    const syncRun = await t.run(async (ctx) => await ctx.db.get(syncRunId));
+    const rawReport = await t.run(async (ctx) => await ctx.db.get(rawReportId));
+
+    expect(syncRun?.rawReportId).toBeUndefined();
+    expect(rawReport).toBeNull();
+  });
+
   it("rejects invalid service tokens before HTTP route work runs", () => {
     const unauthorized = new Request("https://convex.test", {
       headers: { authorization: "Bearer wrong" },
