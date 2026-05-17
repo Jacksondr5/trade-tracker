@@ -71,6 +71,20 @@ function requireString(body: JsonObject, key: string): string {
   return value;
 }
 
+function requireLiteral<T extends string>(
+  body: JsonObject,
+  key: string,
+  allowed: readonly T[],
+): T {
+  const value = requireString(body, key);
+  if (!allowed.includes(value as T)) {
+    throw new JsonValidationError(
+      `${key} must be one of: ${allowed.join(", ")}`,
+    );
+  }
+  return value as T;
+}
+
 function optionalString(body: JsonObject, key: string): string | undefined {
   const value = body[key];
   if (value === undefined) return undefined;
@@ -190,9 +204,10 @@ http.route({
           ) as Id<"brokerageConnections">,
           queryId: optionalString(body, "queryId"),
           reportDate: requireString(body, "reportDate"),
-          reportType: requireString(body, "reportType") as
-            | "activity"
-            | "trade_confirmation",
+          reportType: requireLiteral(body, "reportType", [
+            "activity",
+            "trade_confirmation",
+          ]),
         },
       );
       return jsonResponse(result);
@@ -300,9 +315,10 @@ http.route({
     return await authorizedJson(req, async (body) => {
       await ctx.runMutation(internal.brokerageIngestion.markSyncRunFailed, {
         errorMessage: requireString(body, "errorMessage"),
-        failureType: requireString(body, "failureType") as
-          | "retryable"
-          | "terminal",
+        failureType: requireLiteral(body, "failureType", [
+          "retryable",
+          "terminal",
+        ]),
         syncRunId: requireString(body, "syncRunId") as Id<"brokerageSyncRuns">,
       });
       return jsonResponse({ ok: true });
