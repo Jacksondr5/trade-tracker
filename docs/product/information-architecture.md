@@ -28,6 +28,7 @@ That core chain is supported by additional layers:
 - `Strategy` for the formal long-lived operating document
 - `Inbox Trades` for pre-acceptance import workflow
 - `Portfolios` for capital-allocation grouping
+- brokerage sync and reconciliation records for automated ingestion
 - market data and portfolio valuation records for portfolio analytics
 - `Account Mappings` for display clarity
 - derived views such as `Positions`, `Dashboard Stats`, and future analytics
@@ -211,6 +212,22 @@ So portfolios are meaningful, but their relationship to campaigns and trade plan
 Role:
 
 - they improve readability across trades and imports
+
+### Brokerage Sync Runs And Snapshots
+
+Role:
+
+- they record automated brokerage ingestion attempts and source snapshots
+- they support reconciliation between brokerage state and accepted trades
+- they help determine whether portfolio valuation inputs are fresh enough to
+  trust
+
+Important constraint:
+
+- brokerage sync records are operational evidence, not the canonical trade
+  history
+- accepted trades and portfolio cash ledger entries remain the source of
+  portfolio valuation math
 
 ### Market Data Instruments
 
