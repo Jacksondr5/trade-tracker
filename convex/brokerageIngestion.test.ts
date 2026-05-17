@@ -283,6 +283,65 @@ describe("brokerage ingestion", () => {
     expect(connection?.lastSuccessfulSyncAt).toEqual(expect.any(Number));
   });
 
+  it("reuses existing raw report reference without creating extra metadata rows", async () => {
+    const connectionId = await createConnection();
+    const { syncRunId } = await t.mutation(
+      internal.brokerageIngestion.beginSyncRunForConnection,
+      {
+        connectionId,
+        reportDate: "2026-05-14",
+        reportType: "activity",
+      },
+    );
+    const storageIdA = await t.run(async (ctx) =>
+      await ctx.storage.store(
+        new Blob(["<FlexQueryResponse/>"], { type: "application/xml" }),
+      ),
+    );
+    const storageIdB = await t.run(async (ctx) =>
+      await ctx.storage.store(
+        new Blob(["<FlexQueryResponse><Trades/></FlexQueryResponse>"], {
+          type: "application/xml",
+        }),
+      ),
+    );
+
+    const firstRawReportId = await t.mutation(
+      internal.brokerageIngestion.storeRawReportReference,
+      {
+        byteLength: 20,
+        contentHash: "hash-a",
+        storageId: storageIdA,
+        syncRunId,
+      },
+    );
+    const secondRawReportId = await t.mutation(
+      internal.brokerageIngestion.storeRawReportReference,
+      {
+        byteLength: 43,
+        contentHash: "hash-b",
+        storageId: storageIdB,
+        syncRunId,
+      },
+    );
+
+    const syncRun = await t.run(async (ctx) => await ctx.db.get(syncRunId));
+    const rawReportRows = await t.run(async (ctx) =>
+      await ctx.db
+        .query("brokerageRawReports")
+        .withIndex("by_syncRunId", (q) => q.eq("syncRunId", syncRunId))
+        .collect(),
+    );
+
+    expect(secondRawReportId).toBe(firstRawReportId);
+    expect(syncRun?.rawReportId).toBe(firstRawReportId);
+    expect(rawReportRows).toHaveLength(1);
+    expect(rawReportRows[0]).toMatchObject({
+      contentHash: "hash-a",
+      storageId: storageIdA,
+    });
+  });
+
   it("rejects invalid service tokens before HTTP route work runs", () => {
     const unauthorized = new Request("https://convex.test", {
       headers: { authorization: "Bearer wrong" },

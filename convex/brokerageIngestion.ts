@@ -406,7 +406,12 @@ export const storeRawReportReference = internalMutation({
       ctx,
       args.syncRunId,
     );
-    if (syncRun.rawReportId) return syncRun.rawReportId;
+    if (syncRun.rawReportId) {
+      // A duplicate ingestion attempt may upload a second blob before checking
+      // idempotency; delete the new blob to avoid orphaned storage files.
+      await ctx.storage.delete(args.storageId);
+      return syncRun.rawReportId;
+    }
 
     const rawReportId = await ctx.db.insert("brokerageRawReports", {
       byteLength: args.byteLength,
