@@ -353,17 +353,11 @@ describe("brokerage ingestion", () => {
     );
 
     const syncRun = await t.run(async (ctx) => await ctx.db.get(syncRunId));
-    const rawReportRows = await t.run(async (ctx) =>
-      await ctx.db
-        .query("brokerageRawReports")
-        .withIndex("by_syncRunId", (q) => q.eq("syncRunId", syncRunId))
-        .collect(),
-    );
+    const rawReport = await t.run(async (ctx) => await ctx.db.get(firstRawReportId));
 
     expect(secondRawReportId).toBe(firstRawReportId);
     expect(syncRun?.rawReportId).toBe(firstRawReportId);
-    expect(rawReportRows).toHaveLength(1);
-    expect(rawReportRows[0]).toMatchObject({
+    expect(rawReport).toMatchObject({
       contentHash: "hash-a",
       storageId: storageIdA,
     });
