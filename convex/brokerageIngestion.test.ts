@@ -107,6 +107,27 @@ describe("brokerage ingestion", () => {
     });
   });
 
+  it("preserves existing IBKR credentials when omitted in upsert updates", async () => {
+    const connectionId = await createConnection();
+
+    await asUser().mutation(api.brokerageIngestion.upsertIbkrConnection, {
+      label: "Renamed connection",
+    });
+
+    const status = await asUser().query(
+      api.brokerageIngestion.getBrokerageIngestionStatus,
+      {},
+    );
+
+    expect(status.connections).toHaveLength(1);
+    expect(status.connections[0]).toMatchObject({
+      _id: connectionId,
+      label: "Renamed connection",
+      queryId: "123456",
+      status: "active",
+    });
+  });
+
   it("starts or reuses a sync run by connection, report type, report date, and query id", async () => {
     const connectionId = await createConnection();
     const first = await t.mutation(

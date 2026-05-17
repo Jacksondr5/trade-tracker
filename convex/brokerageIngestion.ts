@@ -157,21 +157,23 @@ export const upsertIbkrConnection = mutation({
       )
       .first();
 
-    const status = args.status ?? (args.queryId ? "active" : "needs_setup");
     if (existing) {
+      const nextQueryId = args.queryId ?? existing.queryId;
+      const status = args.status ?? (nextQueryId ? "active" : "needs_setup");
       await ctx.db.patch(existing._id, {
-        accountId: args.accountId,
+        accountId: args.accountId ?? existing.accountId,
         connectionError: undefined,
-        label: args.label,
-        queryId: args.queryId,
+        label: args.label ?? existing.label,
+        queryId: nextQueryId,
         status,
-        tokenExpiresAt: args.tokenExpiresAt,
-        tokenLabel: args.tokenLabel,
+        tokenExpiresAt: args.tokenExpiresAt ?? existing.tokenExpiresAt,
+        tokenLabel: args.tokenLabel ?? existing.tokenLabel,
         updatedAt: now,
       });
       return existing._id;
     }
 
+    const status = args.status ?? (args.queryId ? "active" : "needs_setup");
     return await ctx.db.insert("brokerageConnections", {
       accountId: args.accountId,
       createdAt: now,
