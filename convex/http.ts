@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 
 type JsonObject = Record<string, unknown>;
+class JsonValidationError extends Error {}
 type HttpTrade = {
   assetType: "stock";
   brokerageAccountId: string;
@@ -50,9 +51,14 @@ export function isBrokerageIngestionRequestAuthorized(req: Request): boolean {
 }
 
 async function readJson(req: Request): Promise<JsonObject> {
-  const body = (await req.json()) as unknown;
+  let body: unknown;
+  try {
+    body = (await req.json()) as unknown;
+  } catch {
+    throw new JsonValidationError("Malformed JSON body");
+  }
   if (!body || typeof body !== "object" || Array.isArray(body)) {
-    throw new Error("Expected JSON object body");
+    throw new JsonValidationError("Expected JSON object body");
   }
   return body as JsonObject;
 }
@@ -60,7 +66,7 @@ async function readJson(req: Request): Promise<JsonObject> {
 function requireString(body: JsonObject, key: string): string {
   const value = body[key];
   if (typeof value !== "string" || value.trim() === "") {
-    throw new Error(`${key} is required`);
+    throw new JsonValidationError(`${key} is required`);
   }
   return value;
 }
@@ -69,17 +75,19 @@ function optionalString(body: JsonObject, key: string): string | undefined {
   const value = body[key];
   if (value === undefined) return undefined;
   if (typeof value !== "string" || value.trim() === "") {
-    throw new Error(`${key} must be a string`);
+    throw new JsonValidationError(`${key} must be a string`);
   }
   return value;
 }
 
 function requireArray(body: JsonObject, key: string): JsonObject[] {
   const value = body[key];
-  if (!Array.isArray(value)) throw new Error(`${key} must be an array`);
+  if (!Array.isArray(value)) {
+    throw new JsonValidationError(`${key} must be an array`);
+  }
   return value.map((item, index) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) {
-      throw new Error(`${key}[${index}] must be an object`);
+      throw new JsonValidationError(`${key}[${index}] must be an object`);
     }
     return item as JsonObject;
   });
@@ -110,7 +118,7 @@ function optionalStringArray(
     !Array.isArray(value) ||
     !value.every((item) => typeof item === "string")
   ) {
-    throw new Error(`${key} must be an array of strings`);
+    throw new JsonValidationError(`${key} must be an array of strings`);
   }
   return value;
 }
@@ -131,13 +139,25 @@ async function authorizedJson(
     return jsonResponse({ error: "Unauthorized" }, 401);
   }
   try {
-    return await handler(await readJson(req));
+    const body = await readJson(req);
+    return await handler(body);
   } catch (error) {
+    if (!(error instanceof JsonValidationError)) throw error;
     return jsonResponse(
       { error: error instanceof Error ? error.message : String(error) },
       400,
     );
   }
+}
+
+async function authorizedOnly(
+  req: Request,
+  handler: () => Promise<Response>,
+): Promise<Response> {
+  if (!isBrokerageIngestionRequestAuthorized(req)) {
+    return jsonResponse({ error: "Unauthorized" }, 401);
+  }
+  return await handler();
 }
 
 const http = httpRouter();
@@ -146,7 +166,7 @@ http.route({
   path: "/internal/brokerage-ingestion/due-connections",
   method: "POST",
   handler: httpAction(async (ctx, req) => {
-    return await authorizedJson(req, async () => {
+    return await authorizedOnly(req, async () => {
       const connections = await ctx.runQuery(
         internal.brokerageIngestion.listDueConnections,
         {},
@@ -217,33 +237,37 @@ http.route({
         "syncRunId",
       ) as Id<"brokerageSyncRuns">;
       const rawXml = requireString(body, "rawXml");
+      const contentHash = await sha256Hex(rawXml);
+      const byteLength = new TextEncoder().encode(rawXml).byteLength;
       const storageId = await ctx.storage.store(
         new Blob([rawXml], { type: "application/xml" }),
       );
-      const contentHash =
-        optionalString(body, "contentHash") ?? (await sha256Hex(rawXml));
-      const byteLength = new TextEncoder().encode(rawXml).byteLength;
-      const rawReportId = await ctx.runMutation(
-        internal.brokerageIngestion.storeRawReportReference,
-        {
-          byteLength,
-          contentHash,
-          storageId,
-          syncRunId,
-        },
-      );
-      const result = await ctx.runMutation(
-        internal.brokerageIngestion.ingestParsedFlexReport,
-        {
-          cashSnapshots: requireCashSnapshots(body),
-          errors: optionalStringArray(body, "errors"),
-          positionSnapshots: requirePositionSnapshots(body),
-          syncRunId,
-          trades: requireTrades(body),
-          warnings: optionalStringArray(body, "warnings"),
-        },
-      );
-      return jsonResponse({ rawReportId, ...result });
+      try {
+        const rawReportId = await ctx.runMutation(
+          internal.brokerageIngestion.storeRawReportReference,
+          {
+            byteLength,
+            contentHash,
+            storageId,
+            syncRunId,
+          },
+        );
+        const result = await ctx.runMutation(
+          internal.brokerageIngestion.ingestParsedFlexReport,
+          {
+            cashSnapshots: requireCashSnapshots(body),
+            errors: optionalStringArray(body, "errors"),
+            positionSnapshots: requirePositionSnapshots(body),
+            syncRunId,
+            trades: requireTrades(body),
+            warnings: optionalStringArray(body, "warnings"),
+          },
+        );
+        return jsonResponse({ rawReportId, ...result });
+      } catch (error) {
+        await ctx.storage.delete(storageId);
+        throw error;
+      }
     });
   }),
 });

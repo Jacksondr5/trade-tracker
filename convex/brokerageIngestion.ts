@@ -322,6 +322,9 @@ export const beginSyncRunForConnection = internalMutation({
   handler: async (ctx, args) => {
     const connection = await ctx.db.get(args.connectionId);
     if (!connection) throw new ConvexError("Brokerage connection not found");
+    if (connection.status !== "active") {
+      throw new ConvexError("Brokerage connection is not active");
+    }
     const queryId = args.queryId ?? connection.queryId;
     if (!queryId) throw new ConvexError("IBKR query ID is required");
 
@@ -554,11 +557,13 @@ export const ingestParsedFlexReport = internalMutation({
     });
 
     await ctx.db.patch(syncRun._id, {
-      importedTrades: importResult.imported,
-      positionSnapshotCount: args.positionSnapshots.length,
+      importedTrades: (syncRun.importedTrades ?? 0) + importResult.imported,
+      positionSnapshotCount:
+        (syncRun.positionSnapshotCount ?? 0) + args.positionSnapshots.length,
       reconciliationIssueCount:
-        syncRun.reconciliationIssueCount + newIssueCount,
-      skippedDuplicateTrades: importResult.skippedDuplicates,
+        (syncRun.reconciliationIssueCount ?? 0) + newIssueCount,
+      skippedDuplicateTrades:
+        (syncRun.skippedDuplicateTrades ?? 0) + importResult.skippedDuplicates,
       status: "processing",
       updatedAt: now,
     });

@@ -130,6 +130,21 @@ describe("brokerage ingestion", () => {
     expect(second).toEqual({ created: false, syncRunId: first.syncRunId });
   });
 
+  it("blocks starting a sync run for paused connections", async () => {
+    const connectionId = await createConnection();
+    await asUser().mutation(api.brokerageIngestion.pauseBrokerageConnection, {
+      connectionId,
+    });
+
+    await expect(
+      t.mutation(internal.brokerageIngestion.beginSyncRunForConnection, {
+        connectionId,
+        reportDate: "2026-05-14",
+        reportType: "activity",
+      }),
+    ).rejects.toThrowError("Brokerage connection is not active");
+  });
+
   it("ingests parsed Flex reports idempotently into inbox trades and snapshots", async () => {
     const connectionId = await createConnection();
     const { syncRunId } = await t.mutation(
@@ -234,7 +249,7 @@ describe("brokerage ingestion", () => {
     });
   });
 
-  it("updates sync run and connection status for success and failure", async () => {
+  it("updates sync run and connection status on success", async () => {
     const connectionId = await createConnection();
     const { syncRunId } = await t.mutation(
       internal.brokerageIngestion.beginSyncRunForConnection,

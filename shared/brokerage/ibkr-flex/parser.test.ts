@@ -65,7 +65,7 @@ describe("parseIbkrFlexActivityXml", () => {
     const result = parseIbkrFlexActivityXml(readFileSync(fixturePath, "utf8"));
 
     expect(result.trades[1]).toMatchObject({
-      externalId: "ibkr-flex|U1234567|MSFT|20260514;103012|420.1|2",
+      externalId: "ibkr-flex|U1234567|MSFT|20260514;103012|sell|420.1|2",
       ticker: "MSFT",
     });
     expect(result.warnings).toContain(
@@ -112,5 +112,22 @@ describe("parseIbkrFlexActivityXml", () => {
 
     expect(result.trades).toHaveLength(1);
     expect(result.errors).toEqual(["Trade row 2: symbol is required"]);
+  });
+
+  it("rejects invalid overflow dates in IBKR timestamps", () => {
+    const result = parseIbkrFlexActivityXml(`
+      <FlexQueryResponse>
+        <FlexStatements>
+          <FlexStatement accountId="U1" toDate="20260514">
+            <Trades>
+              <Trade accountId="U1" symbol="SPY" dateTime="20261301;120000" buySell="BUY" quantity="1" tradePrice="500" ibExecID="exec-1" />
+            </Trades>
+          </FlexStatement>
+        </FlexStatements>
+      </FlexQueryResponse>
+    `);
+
+    expect(result.trades).toEqual([]);
+    expect(result.errors).toContain("Trade row 1: dateTime is required");
   });
 });

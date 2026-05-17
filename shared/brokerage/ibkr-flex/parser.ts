@@ -83,8 +83,36 @@ function parseIbkrTimestamp(value: string | undefined): number | undefined {
   const hour = Number(timePart.slice(0, 2));
   const minute = Number(timePart.slice(2, 4));
   const second = Number(timePart.slice(4, 6));
+  const parts = [year, month, day, hour, minute, second];
+  if (parts.some((part) => !Number.isInteger(part))) return undefined;
+  if (
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31 ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59 ||
+    second < 0 ||
+    second > 59
+  ) {
+    return undefined;
+  }
   const timestamp = Date.UTC(year, month - 1, day, hour, minute, second);
-  return Number.isFinite(timestamp) ? timestamp : undefined;
+  if (!Number.isFinite(timestamp)) return undefined;
+  const check = new Date(timestamp);
+  if (
+    check.getUTCFullYear() !== year ||
+    check.getUTCMonth() + 1 !== month ||
+    check.getUTCDate() !== day ||
+    check.getUTCHours() !== hour ||
+    check.getUTCMinutes() !== minute ||
+    check.getUTCSeconds() !== second
+  ) {
+    return undefined;
+  }
+  return timestamp;
 }
 
 function reportDateFromStatement(statement: UnknownRecord): string | undefined {
@@ -135,6 +163,7 @@ function fallbackExternalId(args: {
   dateTime: string | undefined;
   price: number;
   quantity: number;
+  side: "buy" | "sell";
   ticker: string;
 }): string {
   return [
@@ -142,6 +171,7 @@ function fallbackExternalId(args: {
     args.accountId,
     args.ticker,
     args.dateTime ?? "unknown-date",
+    args.side,
     args.price,
     args.quantity,
   ].join("|");
@@ -210,6 +240,7 @@ function parseTrade(
       dateTime,
       price,
       quantity,
+      side,
       ticker,
     });
   if (!executionId) {

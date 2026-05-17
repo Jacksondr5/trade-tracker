@@ -524,8 +524,18 @@ export async function stageInboxTradesForOwner(
     const validation = validateInboxTradeCandidate(trade, {
       includeExisting: false,
     });
-    const validationErrors = validation.validationErrors;
-    const validationWarnings = validation.validationWarnings;
+    const validationErrors = [
+      ...new Set([
+        ...(trade.validationErrors ?? []),
+        ...validation.validationErrors,
+      ]),
+    ];
+    const validationWarnings = [
+      ...new Set([
+        ...(trade.validationWarnings ?? []),
+        ...validation.validationWarnings,
+      ]),
+    ];
 
     if (validationErrors.length > 0) withValidationErrors++;
     if (validationWarnings.length > 0) withWarnings++;
