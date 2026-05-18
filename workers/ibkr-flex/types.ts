@@ -93,3 +93,108 @@ export type MarkBrokerageSyncFailedInput = {
   failureType: "retryable" | "terminal";
   syncRunId: string;
 };
+
+export type MarketDataProvider = "twelve_data";
+
+export type MarketDataAssetType = "crypto" | "stock";
+
+export type MarketDataDateWorkflowInput = {
+  budgetCredits?: number;
+  date: string;
+  force?: boolean;
+  ownerId: string;
+  pipelineDateRunId?: string;
+  pipelineRunId?: string;
+};
+
+export type MarketDataDateWorkflowOutput = {
+  marketDataRunId: string | null;
+  status: "skipped" | "succeeded" | "partial" | "failed";
+  symbolsFailed: number;
+  symbolsRequested: number;
+  symbolsSucceeded: number;
+  trackedPriceMarksWritten: number;
+};
+
+export type PrepareMarketDataRefreshInput = {
+  date: string;
+  force: boolean;
+  ownerId: string;
+  pipelineDateRunId?: string;
+};
+
+export type PrepareMarketDataRefreshOutput = {
+  marketDataRunId: string | null;
+  shouldRun: boolean;
+  skipReason?: string;
+};
+
+export type PlanMarketDataJobsInput = {
+  date: string;
+  marketDataRunId: string;
+  ownerId: string;
+};
+
+export type MarketDataProviderJob = {
+  assetType: MarketDataAssetType;
+  estimatedCredits: number;
+  provider: MarketDataProvider;
+  providerSymbol: string;
+  symbol: string;
+};
+
+export type PlanMarketDataJobsOutput = {
+  providerJobs: MarketDataProviderJob[];
+  trackedPriceMarksWritten: number;
+};
+
+export type FetchMarketPriceInput = {
+  date: string;
+  provider: MarketDataProvider;
+  providerSymbol: string;
+};
+
+export type FetchMarketPriceOutput =
+  | {
+      close: number;
+      date: string;
+      provider: MarketDataProvider;
+      providerSymbol: string;
+      status: "ok";
+    }
+  | {
+      date: string;
+      errorMessage: string;
+      provider: MarketDataProvider;
+      providerSymbol: string;
+      status: "error" | "missing";
+    };
+
+export type WriteMarketDataResultsInput = {
+  date: string;
+  marketDataRunId: string;
+  ownerId: string;
+  results: FetchMarketPriceOutput[];
+};
+
+export type WriteMarketDataResultsOutput = {
+  processedResults: Array<{
+    provider: MarketDataProvider;
+    providerSymbol: string;
+    status: "error" | "missing" | "ok";
+  }>;
+  snapshotsWritten: number;
+  symbolsFailed: number;
+  symbolsSucceeded: number;
+};
+
+export type CompleteMarketDataRunInput = {
+  marketDataRunId: string;
+  ownerId: string;
+  symbolsFailed: number;
+  symbolsSucceeded: number;
+};
+
+export type CompleteMarketDataRunOutput = {
+  status: "failed" | "partial" | "succeeded";
+};

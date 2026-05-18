@@ -45,6 +45,14 @@ type BrokerageIngestFlexReportBody = {
   trades: HttpTrade[];
   warnings?: string[];
 };
+type HttpMarketDataResult = {
+  close?: number;
+  date: string;
+  errorMessage?: string;
+  provider: "twelve_data";
+  providerSymbol: string;
+  status: "error" | "missing" | "ok";
+};
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -104,6 +112,19 @@ function optionalString(
   if (value === undefined) return undefined;
   if (typeof value !== "string" || value.trim() === "") {
     throw new JsonValidationError(`${label} must be a string`);
+  }
+  return value;
+}
+
+function optionalBoolean(
+  body: JsonObject,
+  key: string,
+  label = key,
+): boolean | undefined {
+  const value = body[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") {
+    throw new JsonValidationError(`${label} must be a boolean`);
   }
   return value;
 }
@@ -251,6 +272,48 @@ function optionalStringArray(
     throw new JsonValidationError(`${key} must be an array of strings`);
   }
   return value;
+}
+
+function requireMarketDataResults(body: JsonObject): HttpMarketDataResult[] {
+  return requireArray(body, "results").map((result, index) => {
+    const base = `results[${index}]`;
+    const status = requireLiteral(
+      result,
+      "status",
+      ["ok", "missing", "error"],
+      `${base}.status`,
+    );
+    return {
+      close: optionalNumber(result, "close", `${base}.close`),
+      date: requireString(result, "date", `${base}.date`),
+      errorMessage: optionalString(
+        result,
+        "errorMessage",
+        `${base}.errorMessage`,
+      ),
+      provider: requireLiteral(
+        result,
+        "provider",
+        ["twelve_data"],
+        `${base}.provider`,
+      ),
+      providerSymbol: requireString(
+        result,
+        "providerSymbol",
+        `${base}.providerSymbol`,
+      ),
+      status,
+      ...(status === "ok"
+        ? { close: requireNumber(result, "close", `${base}.close`) }
+        : {
+            errorMessage: requireString(
+              result,
+              "errorMessage",
+              `${base}.errorMessage`,
+            ),
+          }),
+    };
+  });
 }
 
 async function sha256Hex(value: string): Promise<string> {
@@ -467,6 +530,90 @@ http.route({
         syncRunId: requireString(body, "syncRunId") as Id<"brokerageSyncRuns">,
       });
       return jsonResponse({ ok: true });
+    });
+  }),
+});
+
+http.route({
+  path: "/internal/market-data/prepare-refresh",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body) => {
+      const result = await ctx.runMutation(
+        internal.marketData.prepareTemporalMarketDataRefresh,
+        {
+          date: requireString(body, "date"),
+          force: optionalBoolean(body, "force") ?? false,
+          ownerId: requireString(body, "ownerId"),
+          pipelineDateRunId: optionalString(body, "pipelineDateRunId"),
+        },
+      );
+      return jsonResponse(result);
+    });
+  }),
+});
+
+http.route({
+  path: "/internal/market-data/plan-jobs",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body) => {
+      const result = await ctx.runAction(
+        internal.marketData.planTemporalMarketDataJobs,
+        {
+          date: requireString(body, "date"),
+          marketDataRunId: requireString(
+            body,
+            "marketDataRunId",
+          ) as Id<"marketDataRefreshRuns">,
+          ownerId: requireString(body, "ownerId"),
+        },
+      );
+      return jsonResponse(result);
+    });
+  }),
+});
+
+http.route({
+  path: "/internal/market-data/write-results",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body) => {
+      const result = await ctx.runMutation(
+        internal.marketData.writeTemporalMarketDataResults,
+        {
+          date: requireString(body, "date"),
+          marketDataRunId: requireString(
+            body,
+            "marketDataRunId",
+          ) as Id<"marketDataRefreshRuns">,
+          ownerId: requireString(body, "ownerId"),
+          results: requireMarketDataResults(body),
+        },
+      );
+      return jsonResponse(result);
+    });
+  }),
+});
+
+http.route({
+  path: "/internal/market-data/complete-run",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body) => {
+      const result = await ctx.runMutation(
+        internal.marketData.completeTemporalMarketDataRun,
+        {
+          ownerId: requireString(body, "ownerId"),
+          runId: requireString(
+            body,
+            "marketDataRunId",
+          ) as Id<"marketDataRefreshRuns">,
+          symbolsFailed: requireNumber(body, "symbolsFailed"),
+          symbolsSucceeded: requireNumber(body, "symbolsSucceeded"),
+        },
+      );
+      return jsonResponse(result);
     });
   }),
 });

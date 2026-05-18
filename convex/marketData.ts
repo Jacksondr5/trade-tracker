@@ -203,6 +203,23 @@ type HistoricalBackfillEnqueueResult = {
   symbolsRequested: number;
 };
 
+type TemporalMarketDataPlan = {
+  providerJobs: Array<{
+    assetType: MarketDataAssetType;
+    estimatedCredits: number;
+    provider: typeof MARKET_DATA_PROVIDER;
+    providerSymbol: string;
+    symbol: string;
+  }>;
+  trackedPriceMarksWritten: number;
+};
+
+type TemporalMarketDataPrepareResult = {
+  marketDataRunId: Id<"marketDataRefreshRuns"> | null;
+  shouldRun: boolean;
+  skipReason?: string;
+};
+
 type PositionScanTrade = {
   assetType: MarketDataAssetType;
   direction: "long" | "short";
@@ -827,7 +844,7 @@ export const getPortfolioValuationUniverse = internalQuery({
       }),
     ),
   }),
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<PortfolioValuationUniversePage> => {
     const page = await ctx.db
       .query("trades")
       .order("desc")
@@ -850,7 +867,9 @@ export const getPortfolioValuationUniverse = internalQuery({
 });
 
 export const getPortfolioValuationUniversePaged = internalAction({
-  args: {},
+  args: {
+    ownerId: v.optional(v.string()),
+  },
   returns: v.array(
     v.object({
       instruments: v.array(marketDataInstrumentValidator),
@@ -865,7 +884,7 @@ export const getPortfolioValuationUniversePaged = internalAction({
       ),
     }),
   ),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const positionQuantities = new Map<
       string,
       {
@@ -891,6 +910,9 @@ export const getPortfolioValuationUniversePaged = internalAction({
       done = page.isDone;
 
       for (const trade of page.page) {
+        if (args.ownerId !== undefined && trade.ownerId !== args.ownerId) {
+          continue;
+        }
         if (trade.portfolioId === undefined) {
           continue;
         }
@@ -1015,7 +1037,7 @@ export const getHistoricalBackfillUniverse = internalQuery({
       }),
     ),
   }),
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<HistoricalBackfillUniversePage> => {
     const page = await ctx.db
       .query("trades")
       .withIndex("by_owner_date", (q) => q.eq("ownerId", args.ownerId))
@@ -1134,7 +1156,7 @@ export const startMarketDataRefreshRun = internalMutation({
     symbolsRequested: v.number(),
   },
   returns: v.id("marketDataRefreshRuns"),
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<Id<"marketDataRefreshRuns">> => {
     return await ctx.db.insert("marketDataRefreshRuns", {
       ownerId: args.ownerId,
       provider: MARKET_DATA_PROVIDER,
@@ -1145,6 +1167,153 @@ export const startMarketDataRefreshRun = internalMutation({
       symbolsRequested: args.symbolsRequested,
       symbolsSucceeded: 0,
     });
+  },
+});
+
+export const prepareTemporalMarketDataRefresh = internalMutation({
+  args: {
+    date: v.string(),
+    force: v.boolean(),
+    ownerId: v.string(),
+    pipelineDateRunId: v.optional(v.string()),
+  },
+  returns: v.object({
+    marketDataRunId: v.union(v.id("marketDataRefreshRuns"), v.null()),
+    shouldRun: v.boolean(),
+    skipReason: v.optional(v.string()),
+  }),
+  handler: async (ctx, args): Promise<TemporalMarketDataPrepareResult> => {
+    if (!isDailyMarketDataRefreshDate(args.date)) {
+      return {
+        marketDataRunId: null,
+        shouldRun: false,
+        skipReason: "not_market_refresh_date",
+      };
+    }
+
+    if (!args.force) {
+      const existingRuns = await ctx.db
+        .query("marketDataRefreshRuns")
+        .withIndex("by_ownerId_and_runDate", (q) =>
+          q.eq("ownerId", args.ownerId).eq("runDate", args.date),
+        )
+        .take(10);
+      const completedRun = existingRuns.find(
+        (run) => run.status === "completed",
+      );
+      if (completedRun !== undefined) {
+        return {
+          marketDataRunId: completedRun._id,
+          shouldRun: false,
+          skipReason: "already_completed",
+        };
+      }
+    }
+
+    const runId = await ctx.db.insert("marketDataRefreshRuns", {
+      ownerId: args.ownerId,
+      provider: MARKET_DATA_PROVIDER,
+      runDate: args.date,
+      startedAt: Date.now(),
+      status: "running",
+      symbolsFailed: 0,
+      symbolsRequested: 0,
+      symbolsSucceeded: 0,
+    });
+
+    return {
+      marketDataRunId: runId,
+      shouldRun: true,
+    };
+  },
+});
+
+export const setTemporalMarketDataRunSymbolsRequested = internalMutation({
+  args: {
+    ownerId: v.string(),
+    runId: v.id("marketDataRefreshRuns"),
+    symbolsRequested: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args): Promise<null> => {
+    if (
+      !Number.isInteger(args.symbolsRequested) ||
+      args.symbolsRequested < 0
+    ) {
+      throw new ConvexError(
+        "Requested symbol count must be a non-negative integer",
+      );
+    }
+    const run = await ctx.db.get(args.runId);
+    if (run === null || run.ownerId !== args.ownerId) {
+      throw new ConvexError("Market data refresh run not found");
+    }
+    await ctx.db.patch(args.runId, {
+      symbolsRequested: args.symbolsRequested,
+    });
+    return null;
+  },
+});
+
+export const planTemporalMarketDataJobs = internalAction({
+  args: {
+    date: v.string(),
+    marketDataRunId: v.id("marketDataRefreshRuns"),
+    ownerId: v.string(),
+  },
+  returns: v.object({
+    providerJobs: v.array(
+      v.object({
+        assetType: assetTypeValidator,
+        estimatedCredits: v.number(),
+        provider: v.literal("twelve_data"),
+        providerSymbol: v.string(),
+        symbol: v.string(),
+      }),
+    ),
+    trackedPriceMarksWritten: v.number(),
+  }),
+  handler: async (ctx, args): Promise<TemporalMarketDataPlan> => {
+    const ownerUniverses: Array<{
+      instruments: Doc<"marketDataInstruments">[];
+      ownerId: string;
+      trackedPositions: TrackedPriceMarkCandidate[];
+    }> = await ctx.runAction(
+      internal.marketData.getPortfolioValuationUniversePaged,
+      { ownerId: args.ownerId },
+    );
+    const ownerUniverse = ownerUniverses[0];
+    const trackedPriceMarksWritten: number =
+      ownerUniverse && ownerUniverse.trackedPositions.length > 0
+        ? await ctx.runMutation(
+            internal.marketData.upsertPortfolioPriceMarksForOwner,
+            {
+              date: args.date,
+              ownerId: args.ownerId,
+              positions: ownerUniverse.trackedPositions,
+            },
+          )
+        : 0;
+    const instruments = ownerUniverse?.instruments ?? [];
+    await ctx.runMutation(
+      internal.marketData.setTemporalMarketDataRunSymbolsRequested,
+      {
+        ownerId: args.ownerId,
+        runId: args.marketDataRunId,
+        symbolsRequested: instruments.length,
+      },
+    );
+
+    return {
+      providerJobs: instruments.map((instrument) => ({
+        assetType: instrument.assetType,
+        estimatedCredits: 1,
+        provider: instrument.provider,
+        providerSymbol: instrument.providerSymbol ?? instrument.symbol,
+        symbol: instrument.symbol,
+      })),
+      trackedPriceMarksWritten,
+    };
   },
 });
 
@@ -1188,6 +1357,169 @@ export const completeMarketDataRefreshRun = internalMutation({
     });
 
     return null;
+  },
+});
+
+export const writeTemporalMarketDataResults = internalMutation({
+  args: {
+    date: v.string(),
+    marketDataRunId: v.id("marketDataRefreshRuns"),
+    ownerId: v.string(),
+    results: v.array(
+      v.object({
+        close: v.optional(v.number()),
+        date: v.string(),
+        errorMessage: v.optional(v.string()),
+        provider: v.literal("twelve_data"),
+        providerSymbol: v.string(),
+        status: v.union(
+          v.literal("ok"),
+          v.literal("missing"),
+          v.literal("error"),
+        ),
+      }),
+    ),
+  },
+  returns: v.object({
+    processedResults: v.array(
+      v.object({
+        provider: v.literal("twelve_data"),
+        providerSymbol: v.string(),
+        status: v.union(
+          v.literal("ok"),
+          v.literal("missing"),
+          v.literal("error"),
+        ),
+      }),
+    ),
+    snapshotsWritten: v.number(),
+    symbolsFailed: v.number(),
+    symbolsSucceeded: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.marketDataRunId);
+    if (run === null || run.ownerId !== args.ownerId) {
+      throw new ConvexError("Market data refresh run not found");
+    }
+    if (run.runDate !== args.date) {
+      throw new ConvexError(
+        "Market data result date must match market data run date",
+      );
+    }
+    const latestByKey = new Map<string, PriceSnapshotWrite>();
+    for (const result of args.results) {
+      if (result.date !== args.date) {
+        throw new ConvexError(
+          "Market data result date must match requested refresh date",
+        );
+      }
+      if (result.status === "ok") {
+        if (result.close === undefined) {
+          throw new ConvexError(
+            "Market data results with status ok must include close",
+          );
+        }
+      } else if (!result.errorMessage || result.errorMessage.trim() === "") {
+        throw new ConvexError(
+          "Market data results with status missing or error must include errorMessage",
+        );
+      }
+      latestByKey.set(`${result.provider}:${result.providerSymbol}`, result);
+    }
+    const processedResults = [...latestByKey.values()];
+    await upsertMarketPriceSnapshots(ctx, processedResults, Date.now());
+    const symbolsSucceeded = processedResults.filter(
+      (result) => result.status === "ok",
+    ).length;
+    const symbolsFailed = processedResults.length - symbolsSucceeded;
+    return {
+      processedResults: processedResults.map((result) => ({
+        provider: result.provider,
+        providerSymbol: result.providerSymbol,
+        status: result.status,
+      })),
+      snapshotsWritten: processedResults.length,
+      symbolsFailed,
+      symbolsSucceeded,
+    };
+  },
+});
+
+export const completeTemporalMarketDataRun = internalMutation({
+  args: {
+    ownerId: v.string(),
+    runId: v.id("marketDataRefreshRuns"),
+    symbolsFailed: v.number(),
+    symbolsSucceeded: v.number(),
+  },
+  returns: v.object({
+    status: v.union(
+      v.literal("failed"),
+      v.literal("partial"),
+      v.literal("succeeded"),
+    ),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ status: "failed" | "partial" | "succeeded" }> => {
+    if (
+      !Number.isInteger(args.symbolsFailed) ||
+      !Number.isInteger(args.symbolsSucceeded) ||
+      args.symbolsFailed < 0 ||
+      args.symbolsSucceeded < 0
+    ) {
+      throw new ConvexError("Symbol counts must be non-negative integers");
+    }
+    const run = await ctx.db.get(args.runId);
+    if (run === null || run.ownerId !== args.ownerId) {
+      throw new ConvexError("Market data refresh run not found");
+    }
+    if (args.symbolsFailed + args.symbolsSucceeded > run.symbolsRequested) {
+      throw new ConvexError("Symbol counts exceed requested symbols for run");
+    }
+
+    if (run.completedAt !== undefined) {
+      if (
+        run.symbolsFailed !== args.symbolsFailed ||
+        run.symbolsSucceeded !== args.symbolsSucceeded
+      ) {
+        throw new ConvexError(
+          "Completed run count mismatch; refusing non-idempotent completion",
+        );
+      }
+      const existingStatus: "failed" | "partial" | "succeeded" =
+        run.status === "completed"
+          ? "succeeded"
+          : run.status === "failed" || run.status === "partial"
+            ? run.status
+            : (() => {
+                throw new ConvexError(
+                  "Completed run has invalid status; expected completed, failed, or partial",
+                );
+              })();
+      return { status: existingStatus };
+    }
+
+    const now = Date.now();
+    const totalCounted = args.symbolsFailed + args.symbolsSucceeded;
+    const status: "completed" | "failed" | "partial" =
+      totalCounted === run.symbolsRequested
+        ? args.symbolsFailed === 0
+          ? "completed"
+          : args.symbolsSucceeded === 0
+            ? "failed"
+            : "partial"
+        : "partial";
+    await ctx.db.patch(run._id, {
+      completedAt: now,
+      status,
+      symbolsFailed: args.symbolsFailed,
+      symbolsSucceeded: args.symbolsSucceeded,
+    });
+    const outputStatus: "failed" | "partial" | "succeeded" =
+      status === "completed" ? "succeeded" : status;
+    return { status: outputStatus };
   },
 });
 
