@@ -1393,18 +1393,34 @@ export const writeTemporalMarketDataResults = internalMutation({
     if (run === null || run.ownerId !== args.ownerId) {
       throw new ConvexError("Market data refresh run not found");
     }
-    await upsertMarketPriceSnapshots(ctx, args.results, Date.now());
-    const symbolsSucceeded = args.results.filter(
+    const latestByKey = new Map<string, PriceSnapshotWrite>();
+    for (const result of args.results) {
+      if (result.status === "ok") {
+        if (result.close === undefined) {
+          throw new ConvexError(
+            "Market data results with status ok must include close",
+          );
+        }
+      } else if (!result.errorMessage || result.errorMessage.trim() === "") {
+        throw new ConvexError(
+          "Market data results with status missing or error must include errorMessage",
+        );
+      }
+      latestByKey.set(`${result.provider}:${result.providerSymbol}`, result);
+    }
+    const processedResults = [...latestByKey.values()];
+    await upsertMarketPriceSnapshots(ctx, processedResults, Date.now());
+    const symbolsSucceeded = processedResults.filter(
       (result) => result.status === "ok",
     ).length;
-    const symbolsFailed = args.results.length - symbolsSucceeded;
+    const symbolsFailed = processedResults.length - symbolsSucceeded;
     return {
-      processedResults: args.results.map((result) => ({
+      processedResults: processedResults.map((result) => ({
         provider: result.provider,
         providerSymbol: result.providerSymbol,
         status: result.status,
       })),
-      snapshotsWritten: args.results.length,
+      snapshotsWritten: processedResults.length,
       symbolsFailed,
       symbolsSucceeded,
     };
