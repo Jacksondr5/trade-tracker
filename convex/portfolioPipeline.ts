@@ -74,6 +74,23 @@ type ComputeValuationsResult = {
   portfoliosComputed: number;
 };
 
+async function countPages<T>(args: {
+  fetchPage: (cursor: string | null) => Promise<{
+    continueCursor: string;
+    isDone: boolean;
+    page: T[];
+  }>;
+}): Promise<number> {
+  let total = 0;
+  let cursor: string | null = null;
+  do {
+    const page = await args.fetchPage(cursor);
+    total += page.page.length;
+    cursor = page.isDone ? null : page.continueCursor;
+  } while (cursor !== null);
+  return total;
+}
+
 export const listDailyOwners = internalQuery({
   args: {},
   returns: v.array(v.object({ ownerId: v.string() })),
@@ -273,29 +290,35 @@ export const summarizeReconciliation = internalQuery({
   }),
   handler: async (ctx, args) => {
     assertIsoDate(args.date, "date");
-    const openIssues = await ctx.db
-      .query("brokerageReconciliationIssues")
-      .withIndex("by_ownerId_and_status_and_reportDate", (q) =>
-        q
-          .eq("ownerId", args.ownerId)
-          .eq("status", "open")
-          .eq("reportDate", args.date),
-      )
-      .collect();
-    const pendingInboxTrades = await ctx.db
-      .query("inboxTrades")
-      .withIndex("by_owner_status", (q) =>
-        q.eq("ownerId", args.ownerId).eq("status", "pending_review"),
-      )
-      .collect();
+    const openIssues = await countPages({
+      fetchPage: async (cursor) =>
+        await ctx.db
+          .query("brokerageReconciliationIssues")
+          .withIndex("by_ownerId_and_status_and_reportDate", (q) =>
+            q
+              .eq("ownerId", args.ownerId)
+              .eq("status", "open")
+              .eq("reportDate", args.date),
+          )
+          .paginate({ cursor, numItems: 256 }),
+    });
+    const pendingInboxTrades = await countPages({
+      fetchPage: async (cursor) =>
+        await ctx.db
+          .query("inboxTrades")
+          .withIndex("by_owner_status", (q) =>
+            q.eq("ownerId", args.ownerId).eq("status", "pending_review"),
+          )
+          .paginate({ cursor, numItems: 256 }),
+    });
     const status: "partial" | "succeeded" =
-      openIssues.length > 0 || pendingInboxTrades.length > 0
+      openIssues > 0 || pendingInboxTrades > 0
         ? "partial"
         : "succeeded";
     return {
-      issuesOpened: openIssues.length,
+      issuesOpened: openIssues,
       issuesResolved: 0,
-      pendingInboxTrades: pendingInboxTrades.length,
+      pendingInboxTrades,
       status,
     };
   },
