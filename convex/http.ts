@@ -322,11 +322,18 @@ function requirePipelineAggregate(body: JsonObject) {
     throw new JsonValidationError("aggregate must be an object");
   }
   const aggregateBody = aggregate as JsonObject;
+  const requireNonNegativeInteger = (key: string): number => {
+    const value = requireNumber(aggregateBody, key);
+    if (!Number.isInteger(value) || value < 0) {
+      throw new JsonValidationError(`${key} must be a non-negative integer`);
+    }
+    return value;
+  };
   return {
-    datesFailed: requireNumber(aggregateBody, "datesFailed"),
-    datesPartial: requireNumber(aggregateBody, "datesPartial"),
-    datesSkipped: requireNumber(aggregateBody, "datesSkipped"),
-    datesSucceeded: requireNumber(aggregateBody, "datesSucceeded"),
+    datesFailed: requireNonNegativeInteger("datesFailed"),
+    datesPartial: requireNonNegativeInteger("datesPartial"),
+    datesSkipped: requireNonNegativeInteger("datesSkipped"),
+    datesSucceeded: requireNonNegativeInteger("datesSucceeded"),
   };
 }
 

@@ -158,7 +158,7 @@ export async function dailyPortfolioPipelineWorkflow(
               skipPolicy: DEFAULT_DAILY_SKIP_POLICY,
             },
           ],
-          workflowId: `portfolio-date:${owner.ownerId}:${pipelineDate}:daily`,
+          workflowId: `portfolio-date:${pipelineRun.pipelineRunId}:${owner.ownerId}:${pipelineDate}:daily`,
         });
       } catch {
         return {
@@ -243,7 +243,7 @@ export async function portfolioDateWorkflow(
     try {
       const brokerage = await executeChild(dailyIbkrFlexBrokerageSyncWorkflow, {
         args: [{ ownerId: input.ownerId, reportDate: input.date }],
-        workflowId: `brokerage-sync:${input.ownerId}:${input.date}:${input.mode}`,
+        workflowId: `brokerage-sync:${dateRun.pipelineDateRunId}:${input.ownerId}:${input.date}:${input.mode}`,
       });
       brokerageStatus = brokerage.status;
     } catch (error) {
@@ -264,7 +264,7 @@ export async function portfolioDateWorkflow(
             pipelineRunId: input.pipelineRunId,
           },
         ],
-        workflowId: `market-data:${input.ownerId}:${input.date}:${input.mode}`,
+        workflowId: `market-data:${dateRun.pipelineDateRunId}:${input.ownerId}:${input.date}:${input.mode}`,
       });
       marketDataStatus = phaseStatusFromMarketData(marketData);
     } catch (error) {

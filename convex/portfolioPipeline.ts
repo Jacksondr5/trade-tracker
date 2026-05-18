@@ -18,7 +18,10 @@ const phaseStatusValidator = v.union(
   v.literal("blocked"),
 );
 
-function assertIsoDate(value: string, name: "date" | "endDate" | "startDate") {
+function assertIsoDate(
+  value: string,
+  name: "date" | "endDate" | "startDate",
+): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     throw new ConvexError(`${name} must use YYYY-MM-DD format`);
   }
@@ -29,6 +32,7 @@ function assertIsoDate(value: string, name: "date" | "endDate" | "startDate") {
   ) {
     throw new ConvexError(`${name} must be a valid calendar date`);
   }
+  return value;
 }
 
 function dateRunStatus(args: {
@@ -129,9 +133,9 @@ export const startRun = internalMutation({
     status: v.union(v.literal("created"), v.literal("reused")),
   }),
   handler: async (ctx, args) => {
-    assertIsoDate(args.startDate, "startDate");
-    assertIsoDate(args.endDate, "endDate");
-    if (args.startDate > args.endDate) {
+    const startDate = assertIsoDate(args.startDate, "startDate");
+    const endDate = assertIsoDate(args.endDate, "endDate");
+    if (startDate > endDate) {
       throw new ConvexError("startDate must be on or before endDate");
     }
     const existing = await ctx.db
@@ -145,8 +149,8 @@ export const startRun = internalMutation({
         existing.mode !== args.mode ||
         existing.ownerId !== args.ownerId ||
         existing.requestedByOwnerId !== args.requestedByOwnerId ||
-        existing.startDate !== args.startDate ||
-        existing.endDate !== args.endDate
+        existing.startDate !== startDate ||
+        existing.endDate !== endDate
       ) {
         throw new ConvexError(
           "Temporal workflow id is already associated with a different pipeline run",
@@ -159,10 +163,10 @@ export const startRun = internalMutation({
     const pipelineRunId = await ctx.db.insert("portfolioPipelineRuns", {
       mode: args.mode,
       ownerId: args.ownerId,
-      endDate: args.endDate,
+      endDate,
       requestedAt: now,
       requestedByOwnerId: args.requestedByOwnerId,
-      startDate: args.startDate,
+      startDate,
       startedAt: now,
       status: "running",
       temporalWorkflowId: args.temporalWorkflowId,
@@ -389,8 +393,8 @@ export const computeValuations = internalMutation({
     return {
       freshnessStatus,
       portfoliosComputed: result.portfoliosComputed,
-      priceCoverageStatus: "complete" as const,
-      status: "succeeded" as const,
+      priceCoverageStatus: result.isDone ? "complete" : "partial",
+      status: result.isDone ? "succeeded" : "partial",
     };
   },
 });
