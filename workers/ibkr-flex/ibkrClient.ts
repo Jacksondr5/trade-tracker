@@ -41,7 +41,11 @@ function parseXml(xml: string): UnknownRecord {
 }
 
 function isReadyStatement(xml: string, root: UnknownRecord): boolean {
-  return Boolean(root.FlexQueryResponse) || xml.includes("<FlexStatement");
+  return (
+    Boolean(root.FlexStatement) ||
+    Boolean(root.FlexQueryResponse) ||
+    /<FlexStatement(?:\s|>)/.test(xml)
+  );
 }
 
 function isNotReady(code: string | undefined, message: string | undefined) {

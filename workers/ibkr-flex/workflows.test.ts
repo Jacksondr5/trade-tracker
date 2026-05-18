@@ -151,6 +151,30 @@ describe("ibkrFlexBrokerageSyncWorkflow", () => {
     expect(failures).toEqual(["terminal:1012: Invalid token"]);
   });
 
+  it("returns timed_out when max poll attempts are exhausted", async () => {
+    const failures: { errorMessage: string; failureType: string }[] = [];
+    const result = await runWorkflow({
+      activities: baseActivities({
+        markBrokerageSyncFailed: async (input) => {
+          failures.push({
+            errorMessage: input.errorMessage,
+            failureType: input.failureType,
+          });
+        },
+        pollAndIngestIbkrFlexStatement: async () => ({
+          message: "statement is being prepared",
+          status: "not_ready",
+        }),
+      }),
+      workflowId: "ibkr-timed-out",
+    });
+
+    expect(result.status).toBe("timed_out");
+    expect(result.attempts).toBe(3);
+    expect(failures).toHaveLength(1);
+    expect(failures[0].failureType).toBe("retryable");
+  });
+
   it("retries transient activity failures before succeeding", async () => {
     let attempts = 0;
     const result = await runWorkflow({

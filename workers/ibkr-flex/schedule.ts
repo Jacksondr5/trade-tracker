@@ -43,7 +43,6 @@ async function ensureSchedule() {
     policies: scheduleOptions.policies,
     spec: scheduleOptions.spec,
   };
-
   try {
     await client.schedule.create(scheduleOptions);
     console.log(`Created Temporal schedule ${DAILY_SCHEDULE_ID}`);
@@ -55,6 +54,8 @@ async function ensureSchedule() {
       state: previous.state,
     }));
     console.log(`Updated Temporal schedule ${DAILY_SCHEDULE_ID}`);
+  } finally {
+    await connection.close();
   }
 }
 

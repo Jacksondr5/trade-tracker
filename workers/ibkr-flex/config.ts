@@ -7,6 +7,7 @@ import {
 const envSchema = z.object({
   BROKERAGE_INGESTION_BASE_URL: z.string().url(),
   BROKERAGE_INGESTION_TOKEN: z.string().min(1),
+  IBKR_FLEX_BASE_URL: z.string().url().optional(),
   IBKR_FLEX_TOKEN: z.string().min(1),
   TEMPORAL_ADDRESS: z.string().min(1),
   TEMPORAL_NAMESPACE: z.string().min(1).default(DEFAULT_TEMPORAL_NAMESPACE),
@@ -29,6 +30,7 @@ export function loadIbkrFlexWorkerConfig(
   const parsed = envSchema.safeParse({
     BROKERAGE_INGESTION_BASE_URL: env.BROKERAGE_INGESTION_BASE_URL,
     BROKERAGE_INGESTION_TOKEN: env.BROKERAGE_INGESTION_TOKEN,
+    IBKR_FLEX_BASE_URL: env.IBKR_FLEX_BASE_URL,
     IBKR_FLEX_TOKEN: env.IBKR_FLEX_TOKEN,
     TEMPORAL_ADDRESS: env.TEMPORAL_ADDRESS,
     TEMPORAL_NAMESPACE: env.TEMPORAL_NAMESPACE || DEFAULT_TEMPORAL_NAMESPACE,
@@ -49,7 +51,7 @@ export function loadIbkrFlexWorkerConfig(
     ),
     brokerageIngestionToken: parsed.data.BROKERAGE_INGESTION_TOKEN,
     ibkrFlexBaseUrl:
-      env.IBKR_FLEX_BASE_URL?.replace(/\/+$/, "") ??
+      parsed.data.IBKR_FLEX_BASE_URL?.replace(/\/+$/, "") ??
       "https://gdcdyn.interactivebrokers.com/Universal/servlet",
     ibkrFlexToken: parsed.data.IBKR_FLEX_TOKEN,
     temporalAddress: parsed.data.TEMPORAL_ADDRESS,
