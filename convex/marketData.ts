@@ -1388,6 +1388,7 @@ export const writeTemporalMarketDataResults = internalMutation({
 
 export const completeTemporalMarketDataRun = internalMutation({
   args: {
+    ownerId: v.string(),
     runId: v.id("marketDataRefreshRuns"),
     symbolsFailed: v.number(),
     symbolsSucceeded: v.number(),
@@ -1403,6 +1404,18 @@ export const completeTemporalMarketDataRun = internalMutation({
     ctx,
     args,
   ): Promise<{ status: "failed" | "partial" | "succeeded" }> => {
+    if (
+      !Number.isInteger(args.symbolsFailed) ||
+      !Number.isInteger(args.symbolsSucceeded) ||
+      args.symbolsFailed < 0 ||
+      args.symbolsSucceeded < 0
+    ) {
+      throw new ConvexError("Symbol counts must be non-negative integers");
+    }
+    const run = await ctx.db.get(args.runId);
+    if (run === null || run.ownerId !== args.ownerId) {
+      throw new ConvexError("Market data refresh run not found");
+    }
     const now = Date.now();
     const status: "completed" | "failed" | "partial" =
       args.symbolsFailed === 0
@@ -1410,7 +1423,7 @@ export const completeTemporalMarketDataRun = internalMutation({
         : args.symbolsSucceeded === 0
           ? "failed"
           : "partial";
-    await ctx.db.patch(args.runId, {
+    await ctx.db.patch(run._id, {
       completedAt: now,
       status,
       symbolsFailed: args.symbolsFailed,

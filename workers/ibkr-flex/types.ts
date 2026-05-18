@@ -185,6 +185,7 @@ export type WriteMarketDataResultsOutput = {
 
 export type CompleteMarketDataRunInput = {
   marketDataRunId: string;
+  ownerId: string;
   symbolsFailed: number;
   symbolsSucceeded: number;
 };

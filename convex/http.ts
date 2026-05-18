@@ -594,6 +594,7 @@ http.route({
       const result = await ctx.runMutation(
         internal.marketData.completeTemporalMarketDataRun,
         {
+          ownerId: requireString(body, "ownerId"),
           runId: requireString(
             body,
             "marketDataRunId",

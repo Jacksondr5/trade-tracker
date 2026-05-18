@@ -271,6 +271,7 @@ export async function marketDataDateWorkflow(
 
   const completion = await completeMarketDataRun({
     marketDataRunId: prepared.marketDataRunId,
+    ownerId: input.ownerId,
     symbolsFailed,
     symbolsSucceeded,
   });
