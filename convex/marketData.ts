@@ -1236,6 +1236,14 @@ export const setTemporalMarketDataRunSymbolsRequested = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args): Promise<null> => {
+    if (
+      !Number.isInteger(args.symbolsRequested) ||
+      args.symbolsRequested < 0
+    ) {
+      throw new ConvexError(
+        "Requested symbol count must be a non-negative integer",
+      );
+    }
     const run = await ctx.db.get(args.runId);
     if (run === null || run.ownerId !== args.ownerId) {
       throw new ConvexError("Market data refresh run not found");
@@ -1457,6 +1465,32 @@ export const completeTemporalMarketDataRun = internalMutation({
     if (run === null || run.ownerId !== args.ownerId) {
       throw new ConvexError("Market data refresh run not found");
     }
+    if (args.symbolsFailed + args.symbolsSucceeded > run.symbolsRequested) {
+      throw new ConvexError("Symbol counts exceed requested symbols for run");
+    }
+
+    if (run.completedAt !== undefined) {
+      if (
+        run.symbolsFailed !== args.symbolsFailed ||
+        run.symbolsSucceeded !== args.symbolsSucceeded
+      ) {
+        throw new ConvexError(
+          "Completed run count mismatch; refusing non-idempotent completion",
+        );
+      }
+      const existingStatus: "failed" | "partial" | "succeeded" =
+        run.status === "completed"
+          ? "succeeded"
+          : run.status === "failed" || run.status === "partial"
+            ? run.status
+            : (() => {
+                throw new ConvexError(
+                  "Completed run has invalid status; expected completed, failed, or partial",
+                );
+              })();
+      return { status: existingStatus };
+    }
+
     const now = Date.now();
     const status: "completed" | "failed" | "partial" =
       args.symbolsFailed === 0
