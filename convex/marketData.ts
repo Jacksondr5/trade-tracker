@@ -1502,12 +1502,15 @@ export const completeTemporalMarketDataRun = internalMutation({
     }
 
     const now = Date.now();
+    const totalCounted = args.symbolsFailed + args.symbolsSucceeded;
     const status: "completed" | "failed" | "partial" =
-      args.symbolsFailed === 0
-        ? "completed"
-        : args.symbolsSucceeded === 0
-          ? "failed"
-          : "partial";
+      totalCounted === run.symbolsRequested
+        ? args.symbolsFailed === 0
+          ? "completed"
+          : args.symbolsSucceeded === 0
+            ? "failed"
+            : "partial"
+        : "partial";
     await ctx.db.patch(run._id, {
       completedAt: now,
       status,
