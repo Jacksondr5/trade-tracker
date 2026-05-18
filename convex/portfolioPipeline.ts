@@ -78,18 +78,22 @@ export const listDailyOwners = internalQuery({
   args: {},
   returns: v.array(v.object({ ownerId: v.string() })),
   handler: async (ctx) => {
-    const connections = await ctx.db
-      .query("brokerageConnections")
-      .withIndex("by_source_and_status", (q) =>
-        q.eq("source", "ibkr").eq("status", "active"),
-      )
-      .take(100);
     const ownerIds = new Set<string>();
-    for (const connection of connections) {
-      if (connection.queryId) {
-        ownerIds.add(connection.ownerId);
+    let cursor: string | null = null;
+    do {
+      const page = await ctx.db
+        .query("brokerageConnections")
+        .withIndex("by_source_and_status", (q) =>
+          q.eq("source", "ibkr").eq("status", "active"),
+        )
+        .paginate({ cursor, numItems: 100 });
+      for (const connection of page.page) {
+        if (connection.queryId) {
+          ownerIds.add(connection.ownerId);
+        }
       }
-    }
+      cursor = page.isDone ? null : page.continueCursor;
+    } while (cursor !== null);
     return [...ownerIds].sort().map((ownerId) => ({ ownerId }));
   },
 });
@@ -178,19 +182,15 @@ export const startDateRun = internalMutation({
   }),
   handler: async (ctx, args) => {
     assertIsoDate(args.date, "date");
-    const byRunMatches = await ctx.db
+    const byOwnerDateAndMode = await ctx.db
       .query("portfolioPipelineDateRuns")
-      .withIndex("by_pipelineRunId", (q) =>
-        q.eq("pipelineRunId", args.pipelineRunId),
+      .withIndex("by_ownerId_and_date_and_mode", (q) =>
+        q.eq("ownerId", args.ownerId).eq("date", args.date).eq("mode", args.mode),
       )
       .collect();
     const existing =
-      byRunMatches.find(
-        (run) =>
-          run.ownerId === args.ownerId &&
-          run.date === args.date &&
-          run.mode === args.mode,
-      ) ?? null;
+      byOwnerDateAndMode.find((run) => run.pipelineRunId === args.pipelineRunId) ??
+      null;
     if (existing)
       return { pipelineDateRunId: existing._id, status: "reused" as const };
 
