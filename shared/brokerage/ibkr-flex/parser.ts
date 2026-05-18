@@ -23,8 +23,14 @@ function asRecord(value: unknown): UnknownRecord | undefined {
 }
 
 function asArray(value: unknown): UnknownRecord[] {
-  if (Array.isArray(value))
-    return value.flatMap((item) => asRecord(item) ?? []);
+  if (Array.isArray(value)) {
+    const records: UnknownRecord[] = [];
+    for (const item of value) {
+      const record = asRecord(item);
+      if (record) records.push(record);
+    }
+    return records;
+  }
   const record = asRecord(value);
   return record ? [record] : [];
 }

@@ -151,7 +151,11 @@ describe("brokerage ingestion", () => {
     );
 
     expect(first.created).toBe(true);
-    expect(second).toEqual({ created: false, syncRunId: first.syncRunId });
+    expect(second).toEqual({
+      created: false,
+      queryId: "123456",
+      syncRunId: first.syncRunId,
+    });
   });
 
   it("blocks starting a sync run for paused connections", async () => {
