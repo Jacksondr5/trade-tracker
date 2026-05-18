@@ -131,6 +131,9 @@ export const startRun = internalMutation({
   handler: async (ctx, args) => {
     assertIsoDate(args.startDate, "startDate");
     assertIsoDate(args.endDate, "endDate");
+    if (args.startDate > args.endDate) {
+      throw new ConvexError("startDate must be on or before endDate");
+    }
     const existing = await ctx.db
       .query("portfolioPipelineRuns")
       .withIndex("by_temporalWorkflowId", (q) =>
@@ -141,7 +144,9 @@ export const startRun = internalMutation({
       if (
         existing.mode !== args.mode ||
         existing.ownerId !== args.ownerId ||
-        existing.requestedByOwnerId !== args.requestedByOwnerId
+        existing.requestedByOwnerId !== args.requestedByOwnerId ||
+        existing.startDate !== args.startDate ||
+        existing.endDate !== args.endDate
       ) {
         throw new ConvexError(
           "Temporal workflow id is already associated with a different pipeline run",
@@ -154,8 +159,10 @@ export const startRun = internalMutation({
     const pipelineRunId = await ctx.db.insert("portfolioPipelineRuns", {
       mode: args.mode,
       ownerId: args.ownerId,
+      endDate: args.endDate,
       requestedAt: now,
       requestedByOwnerId: args.requestedByOwnerId,
+      startDate: args.startDate,
       startedAt: now,
       status: "running",
       temporalWorkflowId: args.temporalWorkflowId,

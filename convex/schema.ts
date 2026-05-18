@@ -507,11 +507,13 @@ export default defineSchema({
 
   portfolioPipelineRuns: defineTable({
     completedAt: v.optional(v.number()),
+    endDate: v.string(),
     errorMessage: v.optional(v.string()),
     mode: portfolioPipelineModeValidator,
     ownerId: v.string(),
     requestedAt: v.number(),
     requestedByOwnerId: v.optional(v.string()),
+    startDate: v.string(),
     startedAt: v.optional(v.number()),
     status: portfolioPipelineRunStatusValidator,
     temporalWorkflowId: v.optional(v.string()),
