@@ -114,6 +114,25 @@ export const startRun = internalMutation({
   handler: async (ctx, args) => {
     assertIsoDate(args.startDate, "startDate");
     assertIsoDate(args.endDate, "endDate");
+    const existing = await ctx.db
+      .query("portfolioPipelineRuns")
+      .withIndex("by_temporalWorkflowId", (q) =>
+        q.eq("temporalWorkflowId", args.temporalWorkflowId),
+      )
+      .first();
+    if (existing) {
+      if (
+        existing.mode !== args.mode ||
+        existing.ownerId !== args.ownerId ||
+        existing.requestedByOwnerId !== args.requestedByOwnerId
+      ) {
+        throw new ConvexError(
+          "Temporal workflow id is already associated with a different pipeline run",
+        );
+      }
+      return { pipelineRunId: existing._id, status: "reused" as const };
+    }
+
     const now = Date.now();
     const pipelineRunId = await ctx.db.insert("portfolioPipelineRuns", {
       mode: args.mode,
@@ -122,6 +141,7 @@ export const startRun = internalMutation({
       requestedByOwnerId: args.requestedByOwnerId,
       startedAt: now,
       status: "running",
+      temporalWorkflowId: args.temporalWorkflowId,
       updatedAt: now,
     });
     return { pipelineRunId, status: "created" as const };
@@ -182,6 +202,29 @@ export const startDateRun = internalMutation({
   }),
   handler: async (ctx, args) => {
     assertIsoDate(args.date, "date");
+    const existingByWorkflow = await ctx.db
+      .query("portfolioPipelineDateRuns")
+      .withIndex("by_temporalWorkflowId", (q) =>
+        q.eq("temporalWorkflowId", args.temporalWorkflowId),
+      )
+      .first();
+    if (existingByWorkflow) {
+      if (
+        existingByWorkflow.ownerId !== args.ownerId ||
+        existingByWorkflow.date !== args.date ||
+        existingByWorkflow.mode !== args.mode ||
+        existingByWorkflow.pipelineRunId !== args.pipelineRunId
+      ) {
+        throw new ConvexError(
+          "Temporal workflow id is already associated with a different pipeline date run",
+        );
+      }
+      return {
+        pipelineDateRunId: existingByWorkflow._id,
+        status: "reused" as const,
+      };
+    }
+
     const dateRunsInPipeline = await ctx.db
       .query("portfolioPipelineDateRuns")
       .withIndex("by_pipelineRunId", (q) => q.eq("pipelineRunId", args.pipelineRunId))
@@ -204,6 +247,7 @@ export const startDateRun = internalMutation({
       pipelineRunId: args.pipelineRunId,
       startedAt: now,
       status: "running",
+      temporalWorkflowId: args.temporalWorkflowId,
       updatedAt: now,
     });
     return { pipelineDateRunId, status: "created" as const };
