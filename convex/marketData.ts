@@ -867,7 +867,9 @@ export const getPortfolioValuationUniverse = internalQuery({
 });
 
 export const getPortfolioValuationUniversePaged = internalAction({
-  args: {},
+  args: {
+    ownerId: v.optional(v.string()),
+  },
   returns: v.array(
     v.object({
       instruments: v.array(marketDataInstrumentValidator),
@@ -882,7 +884,7 @@ export const getPortfolioValuationUniversePaged = internalAction({
       ),
     }),
   ),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const positionQuantities = new Map<
       string,
       {
@@ -908,6 +910,9 @@ export const getPortfolioValuationUniversePaged = internalAction({
       done = page.isDone;
 
       for (const trade of page.page) {
+        if (args.ownerId !== undefined && trade.ownerId !== args.ownerId) {
+          continue;
+        }
         if (trade.portfolioId === undefined) {
           continue;
         }
@@ -1267,11 +1272,9 @@ export const planTemporalMarketDataJobs = internalAction({
       trackedPositions: TrackedPriceMarkCandidate[];
     }> = await ctx.runAction(
       internal.marketData.getPortfolioValuationUniversePaged,
-      {},
+      { ownerId: args.ownerId },
     );
-    const ownerUniverse = ownerUniverses.find(
-      (universe) => universe.ownerId === args.ownerId,
-    );
+    const ownerUniverse = ownerUniverses[0];
     const trackedPriceMarksWritten: number =
       ownerUniverse && ownerUniverse.trackedPositions.length > 0
         ? await ctx.runMutation(
@@ -1370,6 +1373,17 @@ export const writeTemporalMarketDataResults = internalMutation({
     ),
   },
   returns: v.object({
+    processedResults: v.array(
+      v.object({
+        provider: v.literal("twelve_data"),
+        providerSymbol: v.string(),
+        status: v.union(
+          v.literal("ok"),
+          v.literal("missing"),
+          v.literal("error"),
+        ),
+      }),
+    ),
     snapshotsWritten: v.number(),
     symbolsFailed: v.number(),
     symbolsSucceeded: v.number(),
@@ -1385,6 +1399,11 @@ export const writeTemporalMarketDataResults = internalMutation({
     ).length;
     const symbolsFailed = args.results.length - symbolsSucceeded;
     return {
+      processedResults: args.results.map((result) => ({
+        provider: result.provider,
+        providerSymbol: result.providerSymbol,
+        status: result.status,
+      })),
       snapshotsWritten: args.results.length,
       symbolsFailed,
       symbolsSucceeded,

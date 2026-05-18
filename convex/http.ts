@@ -277,6 +277,12 @@ function optionalStringArray(
 function requireMarketDataResults(body: JsonObject): HttpMarketDataResult[] {
   return requireArray(body, "results").map((result, index) => {
     const base = `results[${index}]`;
+    const status = requireLiteral(
+      result,
+      "status",
+      ["ok", "missing", "error"],
+      `${base}.status`,
+    );
     return {
       close: optionalNumber(result, "close", `${base}.close`),
       date: requireString(result, "date", `${base}.date`),
@@ -296,12 +302,16 @@ function requireMarketDataResults(body: JsonObject): HttpMarketDataResult[] {
         "providerSymbol",
         `${base}.providerSymbol`,
       ),
-      status: requireLiteral(
-        result,
-        "status",
-        ["ok", "missing", "error"],
-        `${base}.status`,
-      ),
+      status,
+      ...(status === "ok"
+        ? { close: requireNumber(result, "close", `${base}.close`) }
+        : {
+            errorMessage: requireString(
+              result,
+              "errorMessage",
+              `${base}.errorMessage`,
+            ),
+          }),
     };
   });
 }

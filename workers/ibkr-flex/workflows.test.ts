@@ -93,6 +93,11 @@ describe("ibkrFlexBrokerageSyncWorkflow", () => {
       resolvePriorBusinessDate: async () => "2026-05-14",
       sendIbkrFlexRequest: async () => ({ referenceCode: "ref-1" }),
       writeMarketDataResults: async (input) => ({
+        processedResults: input.results.map((result) => ({
+          provider: result.provider,
+          providerSymbol: result.providerSymbol,
+          status: result.status,
+        })),
         snapshotsWritten: input.results.length,
         symbolsFailed: input.results.filter((result) => result.status !== "ok")
           .length,
@@ -328,6 +333,11 @@ describe("marketDataDateWorkflow", () => {
       resolvePriorBusinessDate: async () => "2026-05-14",
       sendIbkrFlexRequest: async () => ({ referenceCode: "ref-1" }),
       writeMarketDataResults: async (input) => ({
+        processedResults: input.results.map((result) => ({
+          provider: result.provider,
+          providerSymbol: result.providerSymbol,
+          status: result.status,
+        })),
         snapshotsWritten: input.results.length,
         symbolsFailed: input.results.filter((result) => result.status !== "ok")
           .length,
@@ -396,6 +406,11 @@ describe("marketDataDateWorkflow", () => {
           );
         }
         return {
+          processedResults: input.results.map((result) => ({
+            provider: result.provider,
+            providerSymbol: result.providerSymbol,
+            status: result.status,
+          })),
           snapshotsWritten: input.results.length,
           symbolsFailed: 0,
           symbolsSucceeded: input.results.length,
@@ -417,5 +432,72 @@ describe("marketDataDateWorkflow", () => {
     expect(snapshotKeys).toEqual(
       new Set(["twelve_data:AAPL:2026-05-14", "twelve_data:MSFT:2026-05-14"]),
     );
+  });
+
+  it("counts symbols idempotently when write responses include duplicate processed results", async () => {
+    const result = await runMarketDataWorkflow({
+      activities: marketActivities({
+        writeMarketDataResults: async (input) => ({
+          processedResults: input.results.flatMap((entry) => [
+            {
+              provider: entry.provider,
+              providerSymbol: entry.providerSymbol,
+              status: entry.status,
+            },
+            {
+              provider: entry.provider,
+              providerSymbol: entry.providerSymbol,
+              status: entry.status,
+            },
+          ]),
+          snapshotsWritten: input.results.length,
+          symbolsFailed: 0,
+          symbolsSucceeded: input.results.length * 2,
+        }),
+      }),
+      workflowId: "market-data-idempotent-counts",
+    });
+
+    expect(result).toMatchObject({
+      symbolsFailed: 0,
+      symbolsRequested: 2,
+      symbolsSucceeded: 2,
+    });
+  });
+
+  it("finalizes run before surfacing processing errors", async () => {
+    let completionCalls = 0;
+    const completedWith: Array<{ failed: number; succeeded: number }> = [];
+
+    await expect(
+      runMarketDataWorkflow({
+        activities: marketActivities({
+          completeMarketDataRun: async (input) => {
+            completionCalls += 1;
+            completedWith.push({
+              failed: input.symbolsFailed,
+              succeeded: input.symbolsSucceeded,
+            });
+            return { status: "failed" };
+          },
+          fetchMarketPrice: async (input) => {
+            if (input.providerSymbol === "MSFT") {
+              throw new Error("provider timeout");
+            }
+            return {
+              close: 190,
+              date: input.date,
+              provider: input.provider,
+              providerSymbol: input.providerSymbol,
+              status: "ok",
+            };
+          },
+        }),
+        workflowId: "market-data-finalize-on-error",
+      }),
+    ).rejects.toBeInstanceOf(WorkflowFailedError);
+
+    expect(completionCalls).toBe(1);
+    expect(completedWith).toEqual([{ failed: 0, succeeded: 0 }]);
   });
 });

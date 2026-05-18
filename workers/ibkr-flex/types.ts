@@ -178,6 +178,11 @@ export type WriteMarketDataResultsInput = {
 };
 
 export type WriteMarketDataResultsOutput = {
+  processedResults: Array<{
+    provider: MarketDataProvider;
+    providerSymbol: string;
+    status: "error" | "missing" | "ok";
+  }>;
   snapshotsWritten: number;
   symbolsFailed: number;
   symbolsSucceeded: number;

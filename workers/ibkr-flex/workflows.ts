@@ -230,43 +230,59 @@ export async function marketDataDateWorkflow(
     marketDataRunId: prepared.marketDataRunId,
     ownerId: input.ownerId,
   });
-
   let symbolsSucceeded = 0;
   let symbolsFailed = 0;
-  for (
-    let index = 0;
-    index < plan.providerJobs.length;
-    index += budgetCredits
-  ) {
-    const jobs = plan.providerJobs.slice(index, index + budgetCredits);
-    const results = await Promise.all(
-      jobs.map((job) =>
-        fetchMarketPrice({
-          date: input.date,
-          provider: job.provider,
-          providerSymbol: job.providerSymbol,
-        }),
-      ),
-    );
+  const seenResultKeys = new Set<string>();
+  let processingError: unknown = null;
 
+  try {
     for (
-      let resultIndex = 0;
-      resultIndex < results.length;
-      resultIndex += MARKET_DATA_RESULT_BATCH_SIZE
+      let index = 0;
+      index < plan.providerJobs.length;
+      index += budgetCredits
     ) {
-      const batch = results.slice(
-        resultIndex,
-        resultIndex + MARKET_DATA_RESULT_BATCH_SIZE,
+      const jobs = plan.providerJobs.slice(index, index + budgetCredits);
+      const results = await Promise.all(
+        jobs.map((job) =>
+          fetchMarketPrice({
+            date: input.date,
+            provider: job.provider,
+            providerSymbol: job.providerSymbol,
+          }),
+        ),
       );
-      const writeResult = await writeMarketDataResults({
-        date: input.date,
-        marketDataRunId: prepared.marketDataRunId,
-        ownerId: input.ownerId,
-        results: batch,
-      });
-      symbolsSucceeded += writeResult.symbolsSucceeded;
-      symbolsFailed += writeResult.symbolsFailed;
+
+      for (
+        let resultIndex = 0;
+        resultIndex < results.length;
+        resultIndex += MARKET_DATA_RESULT_BATCH_SIZE
+      ) {
+        const batch = results.slice(
+          resultIndex,
+          resultIndex + MARKET_DATA_RESULT_BATCH_SIZE,
+        );
+        const writeResult = await writeMarketDataResults({
+          date: input.date,
+          marketDataRunId: prepared.marketDataRunId,
+          ownerId: input.ownerId,
+          results: batch,
+        });
+        for (const processed of writeResult.processedResults) {
+          const key = `${processed.provider}:${processed.providerSymbol}`;
+          if (seenResultKeys.has(key)) {
+            continue;
+          }
+          seenResultKeys.add(key);
+          if (processed.status === "ok") {
+            symbolsSucceeded += 1;
+          } else {
+            symbolsFailed += 1;
+          }
+        }
+      }
     }
+  } catch (error) {
+    processingError = error;
   }
 
   const completion = await completeMarketDataRun({
@@ -275,6 +291,10 @@ export async function marketDataDateWorkflow(
     symbolsFailed,
     symbolsSucceeded,
   });
+
+  if (processingError !== null) {
+    throw processingError;
+  }
 
   return {
     marketDataRunId: prepared.marketDataRunId,
