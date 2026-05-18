@@ -5,7 +5,13 @@ import { IbkrFlexClient } from "./ibkrClient";
 import type {
   BeginBrokerageSyncRunInput,
   BeginBrokerageSyncRunOutput,
+  CompletePipelineRunInput,
+  CompletePipelineRunOutput,
+  ComputePortfolioValuationsInput,
+  ComputePortfolioValuationsOutput,
   DueIbkrConnection,
+  FinalizePipelineDateInput,
+  FinalizePipelineDateOutput,
   MarkBrokerageSyncFailedInput,
   PlanMarketDataJobsInput,
   PlanMarketDataJobsOutput,
@@ -13,6 +19,8 @@ import type {
   PollAndIngestIbkrFlexStatementOutput,
   PrepareMarketDataRefreshInput,
   PrepareMarketDataRefreshOutput,
+  ReconcileBrokerageDateInput,
+  ReconcileBrokerageDateOutput,
   RecordIbkrFlexReferenceInput,
   SendIbkrFlexRequestInput,
   SendIbkrFlexRequestOutput,
@@ -22,6 +30,10 @@ import type {
   WriteMarketDataResultsOutput,
   CompleteMarketDataRunInput,
   CompleteMarketDataRunOutput,
+  StartPipelineDateRunInput,
+  StartPipelineDateRunOutput,
+  StartPipelineRunInput,
+  StartPipelineRunOutput,
 } from "./types";
 
 const TWELVE_DATA_BASE_URL = "https://api.twelvedata.com";
@@ -137,6 +149,11 @@ export function createIbkrFlexActivities(config: IbkrFlexWorkerConfig) {
       return result.connections;
     },
 
+    async listDailyPipelineOwners() {
+      const result = await convex.listDailyPipelineOwners();
+      return result.owners;
+    },
+
     async resolvePriorBusinessDate(): Promise<string> {
       const date = new Date();
       const parts = new Intl.DateTimeFormat("en-US", {
@@ -161,6 +178,42 @@ export function createIbkrFlexActivities(config: IbkrFlexWorkerConfig) {
       input: BeginBrokerageSyncRunInput,
     ): Promise<BeginBrokerageSyncRunOutput> {
       return await convex.beginSyncRun(input);
+    },
+
+    async startPipelineRun(
+      input: StartPipelineRunInput,
+    ): Promise<StartPipelineRunOutput> {
+      return await convex.startPipelineRun(input);
+    },
+
+    async completePipelineRun(
+      input: CompletePipelineRunInput,
+    ): Promise<CompletePipelineRunOutput> {
+      return await convex.completePipelineRun(input);
+    },
+
+    async startPipelineDateRun(
+      input: StartPipelineDateRunInput,
+    ): Promise<StartPipelineDateRunOutput> {
+      return await convex.startPipelineDateRun(input);
+    },
+
+    async reconcileBrokerageDate(
+      input: ReconcileBrokerageDateInput,
+    ): Promise<ReconcileBrokerageDateOutput> {
+      return await convex.reconcileBrokerageDate(input);
+    },
+
+    async computePortfolioValuations(
+      input: ComputePortfolioValuationsInput,
+    ): Promise<ComputePortfolioValuationsOutput> {
+      return await convex.computePortfolioValuations(input);
+    },
+
+    async finalizePipelineDate(
+      input: FinalizePipelineDateInput,
+    ): Promise<FinalizePipelineDateOutput> {
+      return await convex.finalizePipelineDate(input);
     },
 
     async sendIbkrFlexRequest(
