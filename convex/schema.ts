@@ -535,6 +535,12 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_pipelineRunId", ["pipelineRunId"])
+    .index("by_pipelineRunId_and_ownerId_and_date_and_mode", [
+      "pipelineRunId",
+      "ownerId",
+      "date",
+      "mode",
+    ])
     .index("by_temporalWorkflowId", ["temporalWorkflowId"])
     .index("by_ownerId_and_date", ["ownerId", "date"])
     .index("by_ownerId_and_date_and_mode", ["ownerId", "date", "mode"])

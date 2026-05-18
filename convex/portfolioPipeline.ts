@@ -225,17 +225,16 @@ export const startDateRun = internalMutation({
       };
     }
 
-    const dateRunsInPipeline = await ctx.db
+    const existing = await ctx.db
       .query("portfolioPipelineDateRuns")
-      .withIndex("by_pipelineRunId", (q) => q.eq("pipelineRunId", args.pipelineRunId))
-      .collect();
-    const existing =
-      dateRunsInPipeline.find(
-        (run) =>
-          run.ownerId === args.ownerId &&
-          run.date === args.date &&
-          run.mode === args.mode,
-      ) ?? null;
+      .withIndex("by_pipelineRunId_and_ownerId_and_date_and_mode", (q) =>
+        q
+          .eq("pipelineRunId", args.pipelineRunId)
+          .eq("ownerId", args.ownerId)
+          .eq("date", args.date)
+          .eq("mode", args.mode),
+      )
+      .first();
     if (existing)
       return { pipelineDateRunId: existing._id, status: "reused" as const };
 
