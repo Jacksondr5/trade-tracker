@@ -4,7 +4,10 @@ import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { isBrokerageIngestionRequestAuthorized } from "./http";
+import {
+  isBrokerageIngestionRequestAuthorized,
+  validateBrokerageIngestFlexReportBody,
+} from "./http";
 import schema from "./schema";
 
 interface ImportMetaWithGlob extends ImportMeta {
@@ -221,6 +224,10 @@ describe("brokerage ingestion", () => {
       internal.brokerageIngestion.ingestParsedFlexReport,
       payload,
     );
+    const third = await t.mutation(
+      internal.brokerageIngestion.ingestParsedFlexReport,
+      payload,
+    );
     const inboxTrades = await t.run(async (ctx) =>
       (await ctx.db.query("inboxTrades").collect()).filter(
         (trade) =>
@@ -248,6 +255,12 @@ describe("brokerage ingestion", () => {
       skippedDuplicateTrades: 0,
     });
     expect(second).toMatchObject({
+      cashSnapshotsWritten: 0,
+      importedTrades: 0,
+      positionSnapshotsWritten: 0,
+      skippedDuplicateTrades: 1,
+    });
+    expect(third).toMatchObject({
       cashSnapshotsWritten: 0,
       importedTrades: 0,
       positionSnapshotsWritten: 0,
@@ -320,17 +333,19 @@ describe("brokerage ingestion", () => {
         reportType: "activity",
       },
     );
-    const storageIdA = await t.run(async (ctx) =>
-      await ctx.storage.store(
-        new Blob(["<FlexQueryResponse/>"], { type: "application/xml" }),
-      ),
+    const storageIdA = await t.run(
+      async (ctx) =>
+        await ctx.storage.store(
+          new Blob(["<FlexQueryResponse/>"], { type: "application/xml" }),
+        ),
     );
-    const storageIdB = await t.run(async (ctx) =>
-      await ctx.storage.store(
-        new Blob(["<FlexQueryResponse><Trades/></FlexQueryResponse>"], {
-          type: "application/xml",
-        }),
-      ),
+    const storageIdB = await t.run(
+      async (ctx) =>
+        await ctx.storage.store(
+          new Blob(["<FlexQueryResponse><Trades/></FlexQueryResponse>"], {
+            type: "application/xml",
+          }),
+        ),
     );
 
     const firstRawReportId = await t.mutation(
@@ -353,7 +368,9 @@ describe("brokerage ingestion", () => {
     );
 
     const syncRun = await t.run(async (ctx) => await ctx.db.get(syncRunId));
-    const rawReport = await t.run(async (ctx) => await ctx.db.get(firstRawReportId));
+    const rawReport = await t.run(
+      async (ctx) => await ctx.db.get(firstRawReportId),
+    );
 
     expect(secondRawReportId).toBe(firstRawReportId);
     expect(syncRun?.rawReportId).toBe(firstRawReportId);
@@ -373,10 +390,11 @@ describe("brokerage ingestion", () => {
         reportType: "activity",
       },
     );
-    const storageId = await t.run(async (ctx) =>
-      await ctx.storage.store(
-        new Blob(["<FlexQueryResponse/>"], { type: "application/xml" }),
-      ),
+    const storageId = await t.run(
+      async (ctx) =>
+        await ctx.storage.store(
+          new Blob(["<FlexQueryResponse/>"], { type: "application/xml" }),
+        ),
     );
     const rawReportId = await t.mutation(
       internal.brokerageIngestion.storeRawReportReference,
@@ -413,5 +431,64 @@ describe("brokerage ingestion", () => {
 
     expect(isBrokerageIngestionRequestAuthorized(unauthorized)).toBe(false);
     expect(isBrokerageIngestionRequestAuthorized(authorized)).toBe(true);
+  });
+
+  it("validates nested Flex report HTTP payload fields by object keys", () => {
+    const body = {
+      cashSnapshots: [
+        {
+          brokerageAccountId: "U1234567",
+          cash: 12500.25,
+          currency: "USD",
+          reportDate: "2026-05-14",
+        },
+      ],
+      positionSnapshots: [
+        {
+          assetType: "stock",
+          brokerageAccountId: "U1234567",
+          marketValue: 1895,
+          quantity: 10,
+          reportDate: "2026-05-14",
+          ticker: "AAPL",
+        },
+      ],
+      rawXml: "<FlexQueryResponse/>",
+      syncRunId: "sync-run-id",
+      trades: [
+        {
+          assetType: "stock",
+          brokerageAccountId: "U1234567",
+          currency: "USD",
+          date: Date.UTC(2026, 4, 14, 9, 30, 5),
+          direction: "long",
+          executionId: "exec-1",
+          externalId: "0000e1.12345.01",
+          fees: -1.25,
+          orderType: "LMT",
+          price: 189.5,
+          quantity: 10,
+          side: "buy",
+          taxes: 0,
+          ticker: "AAPL",
+        },
+      ],
+      warnings: ["warning"],
+    };
+
+    expect(validateBrokerageIngestFlexReportBody(body)).toMatchObject({
+      cashSnapshots: [{ brokerageAccountId: "U1234567" }],
+      positionSnapshots: [{ assetType: "stock", ticker: "AAPL" }],
+      rawXml: "<FlexQueryResponse/>",
+      syncRunId: "sync-run-id",
+      trades: [{ side: "buy", ticker: "AAPL" }],
+      warnings: ["warning"],
+    });
+    expect(() =>
+      validateBrokerageIngestFlexReportBody({
+        ...body,
+        trades: [{ ...body.trades[0], side: "hold" }],
+      }),
+    ).toThrow("trades[0].side must be one of");
   });
 });

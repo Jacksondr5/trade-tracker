@@ -593,8 +593,10 @@ export const ingestParsedFlexReport = internalMutation({
         (syncRun.positionSnapshotCount ?? 0) + positionSnapshotsWritten,
       reconciliationIssueCount:
         (syncRun.reconciliationIssueCount ?? 0) + newIssueCount,
-      skippedDuplicateTrades:
-        (syncRun.skippedDuplicateTrades ?? 0) + importResult.skippedDuplicates,
+      skippedDuplicateTrades: Math.max(
+        syncRun.skippedDuplicateTrades ?? 0,
+        importResult.skippedDuplicates,
+      ),
       status: "processing",
       updatedAt: now,
     });

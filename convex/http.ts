@@ -36,6 +36,15 @@ type HttpCashSnapshot = {
   currency: string;
   reportDate: string;
 };
+type BrokerageIngestFlexReportBody = {
+  cashSnapshots: HttpCashSnapshot[];
+  errors?: string[];
+  positionSnapshots: HttpPositionSnapshot[];
+  rawXml: string;
+  syncRunId: Id<"brokerageSyncRuns">;
+  trades: HttpTrade[];
+  warnings?: string[];
+};
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -63,10 +72,10 @@ async function readJson(req: Request): Promise<JsonObject> {
   return body as JsonObject;
 }
 
-function requireString(body: JsonObject, key: string): string {
+function requireString(body: JsonObject, key: string, label = key): string {
   const value = body[key];
   if (typeof value !== "string" || value.trim() === "") {
-    throw new JsonValidationError(`${key} is required`);
+    throw new JsonValidationError(`${label} is required`);
   }
   return value;
 }
@@ -75,21 +84,26 @@ function requireLiteral<T extends string>(
   body: JsonObject,
   key: string,
   allowed: readonly T[],
+  label = key,
 ): T {
-  const value = requireString(body, key);
+  const value = requireString(body, key, label);
   if (!allowed.includes(value as T)) {
     throw new JsonValidationError(
-      `${key} must be one of: ${allowed.join(", ")}`,
+      `${label} must be one of: ${allowed.join(", ")}`,
     );
   }
   return value as T;
 }
 
-function optionalString(body: JsonObject, key: string): string | undefined {
+function optionalString(
+  body: JsonObject,
+  key: string,
+  label = key,
+): string | undefined {
   const value = body[key];
   if (value === undefined) return undefined;
   if (typeof value !== "string" || value.trim() === "") {
-    throw new JsonValidationError(`${key} must be a string`);
+    throw new JsonValidationError(`${label} must be a string`);
   }
   return value;
 }
@@ -107,19 +121,23 @@ function requireArray(body: JsonObject, key: string): JsonObject[] {
   });
 }
 
-function requireNumber(body: JsonObject, key: string): number {
+function requireNumber(body: JsonObject, key: string, label = key): number {
   const value = body[key];
   if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new JsonValidationError(`${key} must be a number`);
+    throw new JsonValidationError(`${label} must be a number`);
   }
   return value;
 }
 
-function optionalNumber(body: JsonObject, key: string): number | undefined {
+function optionalNumber(
+  body: JsonObject,
+  key: string,
+  label = key,
+): number | undefined {
   const value = body[key];
   if (value === undefined) return undefined;
   if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new JsonValidationError(`${key} must be a number`);
+    throw new JsonValidationError(`${label} must be a number`);
   }
   return value;
 }
@@ -128,12 +146,13 @@ function optionalLiteral<T extends string>(
   body: JsonObject,
   key: string,
   allowed: readonly T[],
+  label = key,
 ): T | undefined {
   const value = body[key];
   if (value === undefined) return undefined;
   if (typeof value !== "string" || !allowed.includes(value as T)) {
     throw new JsonValidationError(
-      `${key} must be one of: ${allowed.join(", ")}`,
+      `${label} must be one of: ${allowed.join(", ")}`,
     );
   }
   return value as T;
@@ -143,23 +162,34 @@ function requireTrades(body: JsonObject): HttpTrade[] {
   return requireArray(body, "trades").map((trade, index) => {
     const base = `trades[${index}]`;
     return {
-      assetType: requireLiteral(trade, `${base}.assetType`, ["stock"]),
-      brokerageAccountId: requireString(trade, `${base}.brokerageAccountId`),
-      currency: optionalString(trade, `${base}.currency`),
-      date: requireNumber(trade, `${base}.date`),
-      direction: optionalLiteral(trade, `${base}.direction`, [
-        "long",
-        "short",
-      ]),
-      executionId: optionalString(trade, `${base}.executionId`),
-      externalId: requireString(trade, `${base}.externalId`),
-      fees: optionalNumber(trade, `${base}.fees`),
-      orderType: optionalString(trade, `${base}.orderType`),
-      price: requireNumber(trade, `${base}.price`),
-      quantity: requireNumber(trade, `${base}.quantity`),
-      side: requireLiteral(trade, `${base}.side`, ["buy", "sell"]),
-      taxes: optionalNumber(trade, `${base}.taxes`),
-      ticker: requireString(trade, `${base}.ticker`),
+      assetType: requireLiteral(
+        trade,
+        "assetType",
+        ["stock"],
+        `${base}.assetType`,
+      ),
+      brokerageAccountId: requireString(
+        trade,
+        "brokerageAccountId",
+        `${base}.brokerageAccountId`,
+      ),
+      currency: optionalString(trade, "currency", `${base}.currency`),
+      date: requireNumber(trade, "date", `${base}.date`),
+      direction: optionalLiteral(
+        trade,
+        "direction",
+        ["long", "short"],
+        `${base}.direction`,
+      ),
+      executionId: optionalString(trade, "executionId", `${base}.executionId`),
+      externalId: requireString(trade, "externalId", `${base}.externalId`),
+      fees: optionalNumber(trade, "fees", `${base}.fees`),
+      orderType: optionalString(trade, "orderType", `${base}.orderType`),
+      price: requireNumber(trade, "price", `${base}.price`),
+      quantity: requireNumber(trade, "quantity", `${base}.quantity`),
+      side: requireLiteral(trade, "side", ["buy", "sell"], `${base}.side`),
+      taxes: optionalNumber(trade, "taxes", `${base}.taxes`),
+      ticker: requireString(trade, "ticker", `${base}.ticker`),
     };
   });
 }
@@ -168,16 +198,26 @@ function requirePositionSnapshots(body: JsonObject): HttpPositionSnapshot[] {
   return requireArray(body, "positionSnapshots").map((snapshot, index) => {
     const base = `positionSnapshots[${index}]`;
     return {
-      assetType: requireLiteral(snapshot, `${base}.assetType`, ["stock"]),
+      assetType: requireLiteral(
+        snapshot,
+        "assetType",
+        ["stock"],
+        `${base}.assetType`,
+      ),
       brokerageAccountId: requireString(
         snapshot,
+        "brokerageAccountId",
         `${base}.brokerageAccountId`,
       ),
-      currency: optionalString(snapshot, `${base}.currency`),
-      marketValue: optionalNumber(snapshot, `${base}.marketValue`),
-      quantity: requireNumber(snapshot, `${base}.quantity`),
-      reportDate: requireString(snapshot, `${base}.reportDate`),
-      ticker: requireString(snapshot, `${base}.ticker`),
+      currency: optionalString(snapshot, "currency", `${base}.currency`),
+      marketValue: optionalNumber(
+        snapshot,
+        "marketValue",
+        `${base}.marketValue`,
+      ),
+      quantity: requireNumber(snapshot, "quantity", `${base}.quantity`),
+      reportDate: requireString(snapshot, "reportDate", `${base}.reportDate`),
+      ticker: requireString(snapshot, "ticker", `${base}.ticker`),
     };
   });
 }
@@ -186,10 +226,14 @@ function requireCashSnapshots(body: JsonObject): HttpCashSnapshot[] {
   return requireArray(body, "cashSnapshots").map((snapshot, index) => {
     const base = `cashSnapshots[${index}]`;
     return {
-      brokerageAccountId: requireString(snapshot, `${base}.brokerageAccountId`),
-      cash: requireNumber(snapshot, `${base}.cash`),
-      currency: requireString(snapshot, `${base}.currency`),
-      reportDate: requireString(snapshot, `${base}.reportDate`),
+      brokerageAccountId: requireString(
+        snapshot,
+        "brokerageAccountId",
+        `${base}.brokerageAccountId`,
+      ),
+      cash: requireNumber(snapshot, "cash", `${base}.cash`),
+      currency: requireString(snapshot, "currency", `${base}.currency`),
+      reportDate: requireString(snapshot, "reportDate", `${base}.reportDate`),
     };
   });
 }
@@ -215,6 +259,20 @@ async function sha256Hex(value: string): Promise<string> {
   return [...new Uint8Array(digest)]
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
+}
+
+export function validateBrokerageIngestFlexReportBody(
+  body: JsonObject,
+): BrokerageIngestFlexReportBody {
+  return {
+    cashSnapshots: requireCashSnapshots(body),
+    errors: optionalStringArray(body, "errors"),
+    positionSnapshots: requirePositionSnapshots(body),
+    rawXml: requireString(body, "rawXml"),
+    syncRunId: requireString(body, "syncRunId") as Id<"brokerageSyncRuns">,
+    trades: requireTrades(body),
+    warnings: optionalStringArray(body, "warnings"),
+  };
 }
 
 async function authorizedJson(
@@ -319,16 +377,15 @@ http.route({
   method: "POST",
   handler: httpAction(async (ctx, req) => {
     return await authorizedJson(req, async (body) => {
-      const syncRunId = requireString(
-        body,
-        "syncRunId",
-      ) as Id<"brokerageSyncRuns">;
-      const rawXml = requireString(body, "rawXml");
-      const cashSnapshots = requireCashSnapshots(body);
-      const errors = optionalStringArray(body, "errors");
-      const positionSnapshots = requirePositionSnapshots(body);
-      const trades = requireTrades(body);
-      const warnings = optionalStringArray(body, "warnings");
+      const {
+        cashSnapshots,
+        errors,
+        positionSnapshots,
+        rawXml,
+        syncRunId,
+        trades,
+        warnings,
+      } = validateBrokerageIngestFlexReportBody(body);
       const contentHash = await sha256Hex(rawXml);
       const byteLength = new TextEncoder().encode(rawXml).byteLength;
       let storageId: Id<"_storage"> | undefined;
