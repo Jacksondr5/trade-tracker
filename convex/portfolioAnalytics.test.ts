@@ -126,6 +126,7 @@ describe("portfolio analytics schema", () => {
 
     const valuationId = await t.run(async (ctx) => {
       return await ctx.db.insert("portfolioDailyValuations", {
+        brokerageFreshnessStatus: "unmanaged",
         cashBalance: 7_500,
         computedAt: now,
         date: "2026-04-28",
@@ -848,6 +849,7 @@ describe("portfolio analytics calculations", () => {
         ownerId: otherOwnerId,
       });
       await ctx.db.insert("portfolioDailyValuations", {
+        brokerageFreshnessStatus: "unmanaged",
         cashBalance: 100,
         computedAt: now,
         date: "2026-04-28",

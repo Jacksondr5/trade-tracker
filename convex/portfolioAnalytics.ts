@@ -9,6 +9,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { assertOwner, requireUser } from "./lib/auth";
+import { computeBrokerageFreshnessStatus } from "./lib/brokerageFreshness";
 
 const MARKET_DATA_PROVIDER = "twelve_data";
 const POSITION_EPSILON = 0.00000001;
@@ -22,9 +23,18 @@ const priceCoverageStatusValidator = v.union(
   v.literal("missing"),
 );
 
+const brokerageFreshnessStatusValidator = v.union(
+  v.literal("current"),
+  v.literal("pending_review"),
+  v.literal("stale"),
+  v.literal("mismatched"),
+  v.literal("unmanaged"),
+);
+
 const portfolioDailyValuationValidator = v.object({
   _creationTime: v.number(),
   _id: v.id("portfolioDailyValuations"),
+  brokerageFreshnessStatus: v.optional(brokerageFreshnessStatusValidator),
   cashBalance: v.number(),
   computedAt: v.number(),
   date: v.string(),
@@ -328,6 +338,11 @@ async function upsertDailyValuation(args: {
     .unique();
   const row = {
     ...computed,
+    brokerageFreshnessStatus: await computeBrokerageFreshnessStatus(
+      args.ctx,
+      args.ownerId,
+      args.date,
+    ),
     computedAt,
     ownerId: args.ownerId,
     portfolioId: args.portfolioId,
@@ -547,6 +562,40 @@ export const listEquitySeries = query({
       )
       .order("asc")
       .take(MAX_SERIES_ROWS);
+  },
+});
+
+export const getValuationFreshnessStatus = query({
+  args: {
+    date: v.string(),
+    portfolioId: v.id("portfolios"),
+  },
+  returns: v.object({
+    date: v.string(),
+    status: brokerageFreshnessStatusValidator,
+  }),
+  handler: async (ctx, args) => {
+    assertIsoDate(args.date, "date");
+    const ownerId = await requireUser(ctx);
+    const portfolio = await ctx.db.get(args.portfolioId);
+    assertOwner(portfolio, ownerId, "Portfolio not found");
+
+    const valuation = await ctx.db
+      .query("portfolioDailyValuations")
+      .withIndex("by_ownerId_and_portfolioId_and_date", (q) =>
+        q
+          .eq("ownerId", ownerId)
+          .eq("portfolioId", args.portfolioId)
+          .eq("date", args.date),
+      )
+      .unique();
+
+    return {
+      date: args.date,
+      status:
+        valuation?.brokerageFreshnessStatus ??
+        (await computeBrokerageFreshnessStatus(ctx, ownerId, args.date)),
+    };
   },
 });
 

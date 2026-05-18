@@ -77,6 +77,14 @@ const portfolioDailyValuationPriceCoverageStatusValidator = v.union(
   v.literal("missing"),
 );
 
+const portfolioDailyValuationBrokerageFreshnessStatusValidator = v.union(
+  v.literal("current"),
+  v.literal("pending_review"),
+  v.literal("stale"),
+  v.literal("mismatched"),
+  v.literal("unmanaged"),
+);
+
 const marketDataRefreshRunStatusValidator = v.union(
   v.literal("running"),
   v.literal("completed"),
@@ -424,6 +432,9 @@ export default defineSchema({
     ]),
 
   portfolioDailyValuations: defineTable({
+    brokerageFreshnessStatus: v.optional(
+      portfolioDailyValuationBrokerageFreshnessStatusValidator,
+    ),
     cashBalance: v.number(),
     computedAt: v.number(),
     date: v.string(),
@@ -670,6 +681,7 @@ export default defineSchema({
     severity: brokerageReconciliationIssueSeverityValidator,
     status: brokerageReconciliationIssueStatusValidator,
     syncRunId: v.id("brokerageSyncRuns"),
+    direction: v.optional(v.union(v.literal("long"), v.literal("short"))),
     ticker: v.optional(v.string()),
     updatedAt: v.number(),
   })

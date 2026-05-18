@@ -1,6 +1,7 @@
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
 import { assertOwner, requireUser } from "./lib/auth";
+import { computeBrokerageFreshnessStatus } from "./lib/brokerageFreshness";
 import { tradeValidator } from "./lib/tradeValidator";
 import type { Doc, Id } from "./_generated/dataModel";
 
@@ -258,7 +259,16 @@ const priceCoverageStatusValidator = v.union(
   v.literal("missing"),
 );
 
+const brokerageFreshnessStatusValidator = v.union(
+  v.literal("current"),
+  v.literal("pending_review"),
+  v.literal("stale"),
+  v.literal("mismatched"),
+  v.literal("unmanaged"),
+);
+
 const overviewValuationValidator = v.object({
+  brokerageFreshnessStatus: brokerageFreshnessStatusValidator,
   cashBalance: v.number(),
   computedAt: v.number(),
   date: v.string(),
@@ -723,6 +733,13 @@ export const getPortfolioOverview = query({
 
     const latestValuation = latestValuationRow
       ? {
+          brokerageFreshnessStatus:
+            latestValuationRow.brokerageFreshnessStatus ??
+            (await computeBrokerageFreshnessStatus(
+              ctx,
+              ownerId,
+              latestValuationRow.date,
+            )),
           cashBalance: latestValuationRow.cashBalance,
           computedAt: latestValuationRow.computedAt,
           date: latestValuationRow.date,

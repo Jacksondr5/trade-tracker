@@ -525,6 +525,7 @@ export const PORTFOLIO_DETAIL_TEST_IDS = {
   nameInput: "portfolio-name-input",
   openPositionsEmpty: "portfolio-open-positions-empty",
   openPositionsSection: "portfolio-open-positions-section",
+  portfolioFreshnessStatus: "portfolio-freshness-status",
   recentTradesEmpty: "portfolio-recent-trades-empty",
   recentTradesSection: "portfolio-recent-trades-section",
   returnPercent: "portfolio-return-percent",
