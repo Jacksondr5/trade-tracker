@@ -1401,6 +1401,11 @@ export const writeTemporalMarketDataResults = internalMutation({
     if (run === null || run.ownerId !== args.ownerId) {
       throw new ConvexError("Market data refresh run not found");
     }
+    if (run.runDate !== args.date) {
+      throw new ConvexError(
+        "Market data result date must match market data run date",
+      );
+    }
     const latestByKey = new Map<string, PriceSnapshotWrite>();
     for (const result of args.results) {
       if (result.date !== args.date) {
