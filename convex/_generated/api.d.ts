@@ -11,9 +11,11 @@
 import type * as accountMappings from "../accountMappings.js";
 import type * as analytics from "../analytics.js";
 import type * as bravos from "../bravos.js";
+import type * as brokerageIngestion from "../brokerageIngestion.js";
 import type * as campaigns from "../campaigns.js";
 import type * as crons from "../crons.js";
 import type * as e2eSeed from "../e2eSeed.js";
+import type * as http from "../http.js";
 import type * as importTasks from "../importTasks.js";
 import type * as imports from "../imports.js";
 import type * as lib_auth from "../lib/auth.js";
@@ -45,9 +47,11 @@ declare const fullApi: ApiFromModules<{
   accountMappings: typeof accountMappings;
   analytics: typeof analytics;
   bravos: typeof bravos;
+  brokerageIngestion: typeof brokerageIngestion;
   campaigns: typeof campaigns;
   crons: typeof crons;
   e2eSeed: typeof e2eSeed;
+  http: typeof http;
   importTasks: typeof importTasks;
   imports: typeof imports;
   "lib/auth": typeof lib_auth;

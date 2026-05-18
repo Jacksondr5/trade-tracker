@@ -195,6 +195,33 @@ const importsReviewWorkspaceValidator = v.object({
 
 type ImportSource = "ibkr" | "kraken" | "manual";
 
+export type StageInboxTradeInput = {
+  assetType?: "stock" | "crypto";
+  brokerageAccountId?: string;
+  date?: number;
+  direction?: "long" | "short";
+  externalId?: string;
+  fees?: number;
+  orderType?: string;
+  portfolioId?: Id<"portfolios">;
+  price?: number;
+  quantity?: number;
+  side?: "buy" | "sell";
+  source: ImportSource;
+  taxes?: number;
+  ticker?: string;
+  tradePlanId?: Id<"tradePlans">;
+  validationErrors?: string[];
+  validationWarnings?: string[];
+};
+
+export type StageInboxTradesResult = {
+  imported: number;
+  skippedDuplicates: number;
+  withValidationErrors: number;
+  withWarnings: number;
+};
+
 function dedupKey(source: ImportSource, externalId: string): string {
   return `${source}|${externalId}`;
 }
@@ -399,6 +426,203 @@ async function commitInboxTradeAcceptance(
   return { accepted: true };
 }
 
+export async function stageInboxTradesForOwner(
+  ctx: MutationCtx,
+  ownerId: string,
+  trades: StageInboxTradeInput[],
+): Promise<StageInboxTradesResult> {
+  const existingTrades = await ctx.db
+    .query("trades")
+    .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+    .collect();
+  const existingPendingInboxTrades = await ctx.db
+    .query("inboxTrades")
+    .withIndex("by_owner_status", (q) =>
+      q.eq("ownerId", ownerId).eq("status", "pending_review"),
+    )
+    .collect();
+
+  const existingExternalIds = new Set<string>([
+    ...existingTrades
+      .filter(
+        (
+          t,
+        ): t is typeof t & {
+          externalId: string;
+          source: ImportSource;
+        } =>
+          t.externalId !== undefined &&
+          (t.source === "ibkr" ||
+            t.source === "kraken" ||
+            t.source === "manual"),
+      )
+      .map((t) => dedupKey(t.source, t.externalId)),
+    ...existingPendingInboxTrades
+      .filter(
+        (t): t is typeof t & { externalId: string } =>
+          t.externalId !== undefined,
+      )
+      .map((t) => dedupKey(t.source, t.externalId)),
+  ]);
+
+  const [activeTradePlans, ideaTradePlans, watchingTradePlans] =
+    await Promise.all([
+      ctx.db
+        .query("tradePlans")
+        .withIndex("by_owner_status", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "active"),
+        )
+        .collect(),
+      ctx.db
+        .query("tradePlans")
+        .withIndex("by_owner_status", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "idea"),
+        )
+        .collect(),
+      ctx.db
+        .query("tradePlans")
+        .withIndex("by_owner_status", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "watching"),
+        )
+        .collect(),
+    ]);
+  const openTradePlans = [
+    ...activeTradePlans,
+    ...ideaTradePlans,
+    ...watchingTradePlans,
+  ];
+
+  const tradePlanMatchList = openTradePlans.map((p) => ({
+    id: p._id as string,
+    instrumentSymbol: p.instrumentSymbol,
+  }));
+
+  let imported = 0;
+  let skippedDuplicates = 0;
+  let withValidationErrors = 0;
+  let withWarnings = 0;
+  const scheduledResolutionKeys = new Set<string>();
+
+  const portfolioOwnerCache = new Map<Id<"portfolios">, true>();
+  const tradePlanOwnerCache = new Map<Id<"tradePlans">, true>();
+
+  for (const trade of trades) {
+    const brokerageAccountId = normalizeBrokerageAccountId(
+      trade.source,
+      trade.brokerageAccountId,
+    );
+
+    if (trade.externalId) {
+      const key = dedupKey(trade.source, trade.externalId);
+      if (existingExternalIds.has(key)) {
+        skippedDuplicates++;
+        continue;
+      }
+      existingExternalIds.add(key);
+    }
+
+    const validation = validateInboxTradeCandidate(trade, {
+      includeExisting: false,
+    });
+    const validationErrors = [
+      ...new Set([
+        ...(trade.validationErrors ?? []),
+        ...validation.validationErrors,
+      ]),
+    ];
+    const validationWarnings = [
+      ...new Set([
+        ...(trade.validationWarnings ?? []),
+        ...validation.validationWarnings,
+      ]),
+    ];
+
+    if (validationErrors.length > 0) withValidationErrors++;
+    if (validationWarnings.length > 0) withWarnings++;
+
+    if (trade.tradePlanId !== undefined) {
+      if (!tradePlanOwnerCache.has(trade.tradePlanId)) {
+        const tradePlan = await ctx.db.get(trade.tradePlanId);
+        assertOwner(tradePlan, ownerId, "Trade plan not found");
+        tradePlanOwnerCache.set(trade.tradePlanId, true);
+      }
+    }
+
+    let resolvedTradePlanId = trade.tradePlanId;
+    if (resolvedTradePlanId === undefined && validation.normalizedTicker) {
+      const autoMatchId = findAutoMatchTradePlanId(
+        validation.normalizedTicker,
+        tradePlanMatchList,
+      );
+      if (autoMatchId) {
+        resolvedTradePlanId = autoMatchId as Id<"tradePlans">;
+      }
+    }
+
+    if (trade.portfolioId !== undefined) {
+      if (!portfolioOwnerCache.has(trade.portfolioId)) {
+        const portfolio = await ctx.db.get(trade.portfolioId);
+        assertOwner(portfolio, ownerId, "Portfolio not found");
+        portfolioOwnerCache.set(trade.portfolioId, true);
+      }
+    }
+
+    if (trade.assetType && validation.normalizedTicker) {
+      const instrument = await ensureMarketDataInstrumentReviewRecord(
+        ctx,
+        ownerId,
+        trade.assetType,
+        validation.normalizedTicker,
+      );
+      if (
+        instrument !== null &&
+        instrument.resolutionStatus !== "resolved" &&
+        instrument.resolutionStatus !== "ignored"
+      ) {
+        const resolutionKey = `${trade.assetType}|${validation.normalizedTicker}`;
+        if (!scheduledResolutionKeys.has(resolutionKey)) {
+          scheduledResolutionKeys.add(resolutionKey);
+          await ctx.scheduler.runAfter(
+            0,
+            internal.marketData.resolveInstrumentInternal,
+            {
+              assetType: trade.assetType,
+              ownerId,
+              ticker: validation.normalizedTicker,
+            },
+          );
+        }
+      }
+    }
+
+    await ctx.db.insert("inboxTrades", {
+      assetType: trade.assetType,
+      brokerageAccountId,
+      date: trade.date,
+      direction: trade.direction,
+      externalId: trade.externalId,
+      fees: trade.fees,
+      orderType: trade.orderType,
+      ownerId,
+      portfolioId: trade.portfolioId,
+      price: trade.price,
+      quantity: trade.quantity,
+      side: trade.side,
+      source: trade.source,
+      status: "pending_review",
+      taxes: trade.taxes,
+      ticker: validation.normalizedTicker,
+      tradePlanId: resolvedTradePlanId,
+      validationErrors,
+      validationWarnings,
+    });
+
+    imported++;
+  }
+
+  return { imported, skippedDuplicates, withValidationErrors, withWarnings };
+}
+
 export const importTrades = mutation({
   args: {
     trades: v.array(
@@ -431,187 +655,7 @@ export const importTrades = mutation({
   }),
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
-
-    const existingTrades = await ctx.db
-      .query("trades")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect();
-    const existingPendingInboxTrades = await ctx.db
-      .query("inboxTrades")
-      .withIndex("by_owner_status", (q) =>
-        q.eq("ownerId", ownerId).eq("status", "pending_review"),
-      )
-      .collect();
-
-    const existingExternalIds = new Set<string>([
-      ...existingTrades
-        .filter(
-          (
-            t,
-          ): t is typeof t & {
-            externalId: string;
-            source: ImportSource;
-          } =>
-            t.externalId !== undefined &&
-            (t.source === "ibkr" ||
-              t.source === "kraken" ||
-              t.source === "manual"),
-        )
-        .map((t) => dedupKey(t.source, t.externalId)),
-      ...existingPendingInboxTrades
-        .filter(
-          (t): t is typeof t & { externalId: string } =>
-            t.externalId !== undefined,
-        )
-        .map((t) => dedupKey(t.source, t.externalId)),
-    ]);
-
-    const [activeTradePlans, ideaTradePlans, watchingTradePlans] =
-      await Promise.all([
-        ctx.db
-          .query("tradePlans")
-          .withIndex("by_owner_status", (q) =>
-            q.eq("ownerId", ownerId).eq("status", "active"),
-          )
-          .collect(),
-        ctx.db
-          .query("tradePlans")
-          .withIndex("by_owner_status", (q) =>
-            q.eq("ownerId", ownerId).eq("status", "idea"),
-          )
-          .collect(),
-        ctx.db
-          .query("tradePlans")
-          .withIndex("by_owner_status", (q) =>
-            q.eq("ownerId", ownerId).eq("status", "watching"),
-          )
-          .collect(),
-      ]);
-    const openTradePlans = [
-      ...activeTradePlans,
-      ...ideaTradePlans,
-      ...watchingTradePlans,
-    ];
-
-    const tradePlanMatchList = openTradePlans.map((p) => ({
-      id: p._id as string,
-      instrumentSymbol: p.instrumentSymbol,
-    }));
-
-    let imported = 0;
-    let skippedDuplicates = 0;
-    let withValidationErrors = 0;
-    let withWarnings = 0;
-    const scheduledResolutionKeys = new Set<string>();
-
-    const portfolioOwnerCache = new Map<Id<"portfolios">, true>();
-    const tradePlanOwnerCache = new Map<Id<"tradePlans">, true>();
-
-    for (const trade of args.trades) {
-      const brokerageAccountId = normalizeBrokerageAccountId(
-        trade.source,
-        trade.brokerageAccountId,
-      );
-
-      if (trade.externalId) {
-        const key = dedupKey(trade.source, trade.externalId);
-        if (existingExternalIds.has(key)) {
-          skippedDuplicates++;
-          continue;
-        }
-        existingExternalIds.add(key);
-      }
-
-      const validation = validateInboxTradeCandidate(trade, {
-        includeExisting: false,
-      });
-      const validationErrors = validation.validationErrors;
-      const validationWarnings = validation.validationWarnings;
-
-      if (validationErrors.length > 0) withValidationErrors++;
-      if (validationWarnings.length > 0) withWarnings++;
-
-      if (trade.tradePlanId !== undefined) {
-        if (!tradePlanOwnerCache.has(trade.tradePlanId)) {
-          const tradePlan = await ctx.db.get(trade.tradePlanId);
-          assertOwner(tradePlan, ownerId, "Trade plan not found");
-          tradePlanOwnerCache.set(trade.tradePlanId, true);
-        }
-      }
-
-      let resolvedTradePlanId = trade.tradePlanId;
-      if (resolvedTradePlanId === undefined && validation.normalizedTicker) {
-        const autoMatchId = findAutoMatchTradePlanId(
-          validation.normalizedTicker,
-          tradePlanMatchList,
-        );
-        if (autoMatchId) {
-          resolvedTradePlanId = autoMatchId as Id<"tradePlans">;
-        }
-      }
-
-      if (trade.portfolioId !== undefined) {
-        if (!portfolioOwnerCache.has(trade.portfolioId)) {
-          const portfolio = await ctx.db.get(trade.portfolioId);
-          assertOwner(portfolio, ownerId, "Portfolio not found");
-          portfolioOwnerCache.set(trade.portfolioId, true);
-        }
-      }
-
-      if (trade.assetType && validation.normalizedTicker) {
-        const instrument = await ensureMarketDataInstrumentReviewRecord(
-          ctx,
-          ownerId,
-          trade.assetType,
-          validation.normalizedTicker,
-        );
-        if (
-          instrument !== null &&
-          instrument.resolutionStatus !== "resolved" &&
-          instrument.resolutionStatus !== "ignored"
-        ) {
-          const resolutionKey = `${trade.assetType}|${validation.normalizedTicker}`;
-          if (!scheduledResolutionKeys.has(resolutionKey)) {
-            scheduledResolutionKeys.add(resolutionKey);
-            await ctx.scheduler.runAfter(
-              0,
-              internal.marketData.resolveInstrumentInternal,
-              {
-                assetType: trade.assetType,
-                ownerId,
-                ticker: validation.normalizedTicker,
-              },
-            );
-          }
-        }
-      }
-
-      await ctx.db.insert("inboxTrades", {
-        assetType: trade.assetType,
-        brokerageAccountId,
-        date: trade.date,
-        direction: trade.direction,
-        externalId: trade.externalId,
-        fees: trade.fees,
-        orderType: trade.orderType,
-        ownerId,
-        portfolioId: trade.portfolioId,
-        price: trade.price,
-        quantity: trade.quantity,
-        side: trade.side,
-        source: trade.source,
-        status: "pending_review",
-        taxes: trade.taxes,
-        ticker: validation.normalizedTicker,
-        tradePlanId: resolvedTradePlanId,
-        validationErrors,
-        validationWarnings,
-      });
-
-      imported++;
-    }
-
-    return { imported, skippedDuplicates, withValidationErrors, withWarnings };
+    return await stageInboxTradesForOwner(ctx, ownerId, args.trades);
   },
 });
 
@@ -894,11 +938,7 @@ export const getImportsReviewWorkspace = query({
             ? (assignedTradePlanById.get(trade.tradePlanId) ?? null)
             : null;
 
-        const matchState:
-          | "ambiguous"
-          | "assigned"
-          | "suggested"
-          | "unmatched" =
+        const matchState: "ambiguous" | "assigned" | "suggested" | "unmatched" =
           assignedTradePlan !== null
             ? "assigned"
             : matchedPlans.length === 1
@@ -1078,7 +1118,9 @@ export const listInboxTradesForTradePlan = query({
     );
     const sortedSuggested = suggested
       .filter((trade) => trade.tradePlanId === undefined)
-      .sort((a, b) => (b.date ?? b._creationTime) - (a.date ?? a._creationTime));
+      .sort(
+        (a, b) => (b.date ?? b._creationTime) - (a.date ?? a._creationTime),
+      );
 
     return [
       ...sortedAssigned.map((trade) => ({
@@ -1234,10 +1276,7 @@ async function acceptInboxTradeViaAction(
     assetType: check.assetType,
     ticker: check.candidate.ticker,
   });
-  if (
-    resolution.status !== "resolved" &&
-    resolution.status !== "ignored"
-  ) {
+  if (resolution.status !== "resolved" && resolution.status !== "ignored") {
     return {
       accepted: false,
       error: `Price mapping required for ${check.candidate.ticker}: ${resolution.instrument.lastError ?? "instrument not resolved"}`,
