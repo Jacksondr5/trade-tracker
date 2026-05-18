@@ -203,6 +203,23 @@ type HistoricalBackfillEnqueueResult = {
   symbolsRequested: number;
 };
 
+type TemporalMarketDataPlan = {
+  providerJobs: Array<{
+    assetType: MarketDataAssetType;
+    estimatedCredits: number;
+    provider: typeof MARKET_DATA_PROVIDER;
+    providerSymbol: string;
+    symbol: string;
+  }>;
+  trackedPriceMarksWritten: number;
+};
+
+type TemporalMarketDataPrepareResult = {
+  marketDataRunId: Id<"marketDataRefreshRuns"> | null;
+  shouldRun: boolean;
+  skipReason?: string;
+};
+
 type PositionScanTrade = {
   assetType: MarketDataAssetType;
   direction: "long" | "short";
@@ -827,7 +844,7 @@ export const getPortfolioValuationUniverse = internalQuery({
       }),
     ),
   }),
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<PortfolioValuationUniversePage> => {
     const page = await ctx.db
       .query("trades")
       .order("desc")
@@ -1015,7 +1032,7 @@ export const getHistoricalBackfillUniverse = internalQuery({
       }),
     ),
   }),
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<HistoricalBackfillUniversePage> => {
     const page = await ctx.db
       .query("trades")
       .withIndex("by_owner_date", (q) => q.eq("ownerId", args.ownerId))
@@ -1134,7 +1151,7 @@ export const startMarketDataRefreshRun = internalMutation({
     symbolsRequested: v.number(),
   },
   returns: v.id("marketDataRefreshRuns"),
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<Id<"marketDataRefreshRuns">> => {
     return await ctx.db.insert("marketDataRefreshRuns", {
       ownerId: args.ownerId,
       provider: MARKET_DATA_PROVIDER,
@@ -1145,6 +1162,141 @@ export const startMarketDataRefreshRun = internalMutation({
       symbolsRequested: args.symbolsRequested,
       symbolsSucceeded: 0,
     });
+  },
+});
+
+export const prepareTemporalMarketDataRefresh = internalMutation({
+  args: {
+    date: v.string(),
+    force: v.boolean(),
+    ownerId: v.string(),
+    pipelineDateRunId: v.optional(v.string()),
+  },
+  returns: v.object({
+    marketDataRunId: v.union(v.id("marketDataRefreshRuns"), v.null()),
+    shouldRun: v.boolean(),
+    skipReason: v.optional(v.string()),
+  }),
+  handler: async (ctx, args): Promise<TemporalMarketDataPrepareResult> => {
+    if (!isDailyMarketDataRefreshDate(args.date)) {
+      return {
+        marketDataRunId: null,
+        shouldRun: false,
+        skipReason: "not_market_refresh_date",
+      };
+    }
+
+    if (!args.force) {
+      const existingRuns = await ctx.db
+        .query("marketDataRefreshRuns")
+        .withIndex("by_ownerId_and_runDate", (q) =>
+          q.eq("ownerId", args.ownerId).eq("runDate", args.date),
+        )
+        .take(10);
+      const completedRun = existingRuns.find(
+        (run) => run.status === "completed",
+      );
+      if (completedRun !== undefined) {
+        return {
+          marketDataRunId: completedRun._id,
+          shouldRun: false,
+          skipReason: "already_completed",
+        };
+      }
+    }
+
+    const runId = await ctx.db.insert("marketDataRefreshRuns", {
+      ownerId: args.ownerId,
+      provider: MARKET_DATA_PROVIDER,
+      runDate: args.date,
+      startedAt: Date.now(),
+      status: "running",
+      symbolsFailed: 0,
+      symbolsRequested: 0,
+      symbolsSucceeded: 0,
+    });
+
+    return {
+      marketDataRunId: runId,
+      shouldRun: true,
+    };
+  },
+});
+
+export const setTemporalMarketDataRunSymbolsRequested = internalMutation({
+  args: {
+    runId: v.id("marketDataRefreshRuns"),
+    symbolsRequested: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args): Promise<null> => {
+    await ctx.db.patch(args.runId, {
+      symbolsRequested: args.symbolsRequested,
+    });
+    return null;
+  },
+});
+
+export const planTemporalMarketDataJobs = internalAction({
+  args: {
+    date: v.string(),
+    marketDataRunId: v.id("marketDataRefreshRuns"),
+    ownerId: v.string(),
+  },
+  returns: v.object({
+    providerJobs: v.array(
+      v.object({
+        assetType: assetTypeValidator,
+        estimatedCredits: v.number(),
+        provider: v.literal("twelve_data"),
+        providerSymbol: v.string(),
+        symbol: v.string(),
+      }),
+    ),
+    trackedPriceMarksWritten: v.number(),
+  }),
+  handler: async (ctx, args): Promise<TemporalMarketDataPlan> => {
+    const ownerUniverses: Array<{
+      instruments: Doc<"marketDataInstruments">[];
+      ownerId: string;
+      trackedPositions: TrackedPriceMarkCandidate[];
+    }> = await ctx.runAction(
+      internal.marketData.getPortfolioValuationUniversePaged,
+      {},
+    );
+    const ownerUniverse = ownerUniverses.find(
+      (universe) => universe.ownerId === args.ownerId,
+    );
+    const trackedPriceMarksWritten: number =
+      ownerUniverse && ownerUniverse.trackedPositions.length > 0
+        ? await ctx.runMutation(
+            internal.marketData.upsertPortfolioPriceMarksForOwner,
+            {
+              date: args.date,
+              ownerId: args.ownerId,
+              positions: ownerUniverse.trackedPositions,
+            },
+          )
+        : 0;
+    const instruments = ownerUniverse?.instruments ?? [];
+    await ctx.runMutation(
+      internal.marketData.setTemporalMarketDataRunSymbolsRequested,
+      {
+        runId: args.marketDataRunId,
+        symbolsRequested: instruments.length,
+      },
+    );
+
+    return {
+      providerJobs: instruments.map((instrument) => ({
+        assetType: instrument.assetType,
+        estimatedCredits: 1,
+        provider: instrument.provider,
+        providerSymbol: instrument.providerSymbol ?? instrument.symbol,
+        symbol: instrument.symbol,
+      })),
+      trackedPriceMarksWritten,
+    };
   },
 });
 
@@ -1188,6 +1340,85 @@ export const completeMarketDataRefreshRun = internalMutation({
     });
 
     return null;
+  },
+});
+
+export const writeTemporalMarketDataResults = internalMutation({
+  args: {
+    date: v.string(),
+    marketDataRunId: v.id("marketDataRefreshRuns"),
+    ownerId: v.string(),
+    results: v.array(
+      v.object({
+        close: v.optional(v.number()),
+        date: v.string(),
+        errorMessage: v.optional(v.string()),
+        provider: v.literal("twelve_data"),
+        providerSymbol: v.string(),
+        status: v.union(
+          v.literal("ok"),
+          v.literal("missing"),
+          v.literal("error"),
+        ),
+      }),
+    ),
+  },
+  returns: v.object({
+    snapshotsWritten: v.number(),
+    symbolsFailed: v.number(),
+    symbolsSucceeded: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.marketDataRunId);
+    if (run === null || run.ownerId !== args.ownerId) {
+      throw new ConvexError("Market data refresh run not found");
+    }
+    await upsertMarketPriceSnapshots(ctx, args.results, Date.now());
+    const symbolsSucceeded = args.results.filter(
+      (result) => result.status === "ok",
+    ).length;
+    const symbolsFailed = args.results.length - symbolsSucceeded;
+    return {
+      snapshotsWritten: args.results.length,
+      symbolsFailed,
+      symbolsSucceeded,
+    };
+  },
+});
+
+export const completeTemporalMarketDataRun = internalMutation({
+  args: {
+    runId: v.id("marketDataRefreshRuns"),
+    symbolsFailed: v.number(),
+    symbolsSucceeded: v.number(),
+  },
+  returns: v.object({
+    status: v.union(
+      v.literal("failed"),
+      v.literal("partial"),
+      v.literal("succeeded"),
+    ),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ status: "failed" | "partial" | "succeeded" }> => {
+    const now = Date.now();
+    const status: "completed" | "failed" | "partial" =
+      args.symbolsFailed === 0
+        ? "completed"
+        : args.symbolsSucceeded === 0
+          ? "failed"
+          : "partial";
+    await ctx.db.patch(args.runId, {
+      completedAt: now,
+      status,
+      symbolsFailed: args.symbolsFailed,
+      symbolsSucceeded: args.symbolsSucceeded,
+    });
+    const outputStatus: "failed" | "partial" | "succeeded" =
+      status === "completed" ? "succeeded" : status;
+    return { status: outputStatus };
   },
 });
 

@@ -11,6 +11,8 @@ import type {
   DailyIbkrFlexBrokerageSyncWorkflowOutput,
   IbkrFlexBrokerageSyncWorkflowInput,
   IbkrFlexBrokerageSyncWorkflowOutput,
+  MarketDataDateWorkflowInput,
+  MarketDataDateWorkflowOutput,
 } from "./types";
 
 const {
@@ -20,9 +22,14 @@ const {
   markBrokerageSyncSucceeded,
   markBrokerageSyncWaiting,
   pollAndIngestIbkrFlexStatement,
+  completeMarketDataRun,
+  fetchMarketPrice,
+  planMarketDataJobs,
+  prepareMarketDataRefresh,
   recordIbkrFlexReference,
   resolvePriorBusinessDate,
   sendIbkrFlexRequest,
+  writeMarketDataResults,
 } = proxyActivities<IbkrFlexActivities>({
   retry: {
     initialInterval: "10 seconds",
@@ -30,6 +37,8 @@ const {
   },
   startToCloseTimeout: "2 minutes",
 });
+
+const MARKET_DATA_RESULT_BATCH_SIZE = 25;
 
 function pollDelayMs(args: {
   attempt: number;
@@ -191,4 +200,87 @@ export async function ibkrFlexBrokerageSyncWorkflow(
     });
     throw error;
   }
+}
+
+export async function marketDataDateWorkflow(
+  input: MarketDataDateWorkflowInput,
+): Promise<MarketDataDateWorkflowOutput> {
+  const force = input.force ?? false;
+  const budgetCredits = Math.max(1, input.budgetCredits ?? 8);
+  const prepared = await prepareMarketDataRefresh({
+    date: input.date,
+    force,
+    ownerId: input.ownerId,
+    pipelineDateRunId: input.pipelineDateRunId,
+  });
+
+  if (!prepared.shouldRun || prepared.marketDataRunId === null) {
+    return {
+      marketDataRunId: prepared.marketDataRunId,
+      status: "skipped",
+      symbolsFailed: 0,
+      symbolsRequested: 0,
+      symbolsSucceeded: 0,
+      trackedPriceMarksWritten: 0,
+    };
+  }
+
+  const plan = await planMarketDataJobs({
+    date: input.date,
+    marketDataRunId: prepared.marketDataRunId,
+    ownerId: input.ownerId,
+  });
+
+  let symbolsSucceeded = 0;
+  let symbolsFailed = 0;
+  for (
+    let index = 0;
+    index < plan.providerJobs.length;
+    index += budgetCredits
+  ) {
+    const jobs = plan.providerJobs.slice(index, index + budgetCredits);
+    const results = await Promise.all(
+      jobs.map((job) =>
+        fetchMarketPrice({
+          date: input.date,
+          provider: job.provider,
+          providerSymbol: job.providerSymbol,
+        }),
+      ),
+    );
+
+    for (
+      let resultIndex = 0;
+      resultIndex < results.length;
+      resultIndex += MARKET_DATA_RESULT_BATCH_SIZE
+    ) {
+      const batch = results.slice(
+        resultIndex,
+        resultIndex + MARKET_DATA_RESULT_BATCH_SIZE,
+      );
+      const writeResult = await writeMarketDataResults({
+        date: input.date,
+        marketDataRunId: prepared.marketDataRunId,
+        ownerId: input.ownerId,
+        results: batch,
+      });
+      symbolsSucceeded += writeResult.symbolsSucceeded;
+      symbolsFailed += writeResult.symbolsFailed;
+    }
+  }
+
+  const completion = await completeMarketDataRun({
+    marketDataRunId: prepared.marketDataRunId,
+    symbolsFailed,
+    symbolsSucceeded,
+  });
+
+  return {
+    marketDataRunId: prepared.marketDataRunId,
+    status: completion.status,
+    symbolsFailed,
+    symbolsRequested: plan.providerJobs.length,
+    symbolsSucceeded,
+    trackedPriceMarksWritten: plan.trackedPriceMarksWritten,
+  };
 }

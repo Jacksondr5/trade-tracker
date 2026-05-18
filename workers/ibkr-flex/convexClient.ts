@@ -1,10 +1,18 @@
 import type {
   BeginBrokerageSyncRunInput,
   BeginBrokerageSyncRunOutput,
+  CompleteMarketDataRunInput,
+  CompleteMarketDataRunOutput,
   DueIbkrConnection,
   MarkBrokerageSyncFailedInput,
+  PlanMarketDataJobsInput,
+  PlanMarketDataJobsOutput,
   PollAndIngestIbkrFlexStatementOutput,
+  PrepareMarketDataRefreshInput,
+  PrepareMarketDataRefreshOutput,
   RecordIbkrFlexReferenceInput,
+  WriteMarketDataResultsInput,
+  WriteMarketDataResultsOutput,
 } from "./types";
 import type { IbkrFlexWorkerConfig } from "./config";
 import type { IbkrFlexParseResult } from "../../shared/brokerage/ibkr-flex/types";
@@ -81,6 +89,30 @@ export class ConvexServiceClient {
 
   async markFailed(input: MarkBrokerageSyncFailedInput): Promise<void> {
     await this.post("/internal/brokerage-ingestion/mark-failed", input);
+  }
+
+  async prepareMarketDataRefresh(
+    input: PrepareMarketDataRefreshInput,
+  ): Promise<PrepareMarketDataRefreshOutput> {
+    return await this.post("/internal/market-data/prepare-refresh", input);
+  }
+
+  async planMarketDataJobs(
+    input: PlanMarketDataJobsInput,
+  ): Promise<PlanMarketDataJobsOutput> {
+    return await this.post("/internal/market-data/plan-jobs", input);
+  }
+
+  async writeMarketDataResults(
+    input: WriteMarketDataResultsInput,
+  ): Promise<WriteMarketDataResultsOutput> {
+    return await this.post("/internal/market-data/write-results", input);
+  }
+
+  async completeMarketDataRun(
+    input: CompleteMarketDataRunInput,
+  ): Promise<CompleteMarketDataRunOutput> {
+    return await this.post("/internal/market-data/complete-run", input);
   }
 
   private async post<T>(

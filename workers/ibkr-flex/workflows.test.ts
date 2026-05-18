@@ -4,7 +4,10 @@ import { Worker } from "@temporalio/worker";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { IbkrFlexActivities } from "./activities";
-import { ibkrFlexBrokerageSyncWorkflow } from "./workflows";
+import {
+  ibkrFlexBrokerageSyncWorkflow,
+  marketDataDateWorkflow,
+} from "./workflows";
 
 const workflowsPath = fileURLToPath(new URL("./workflows.ts", import.meta.url));
 
@@ -63,6 +66,18 @@ describe("ibkrFlexBrokerageSyncWorkflow", () => {
       markBrokerageSyncFailed: async () => undefined,
       markBrokerageSyncSucceeded: async () => undefined,
       markBrokerageSyncWaiting: async () => undefined,
+      completeMarketDataRun: async () => ({ status: "succeeded" }),
+      fetchMarketPrice: async (input) => ({
+        close: 100,
+        date: input.date,
+        provider: input.provider,
+        providerSymbol: input.providerSymbol,
+        status: "ok",
+      }),
+      planMarketDataJobs: async () => ({
+        providerJobs: [],
+        trackedPriceMarksWritten: 0,
+      }),
       pollAndIngestIbkrFlexStatement: async () => ({
         cashSnapshotsWritten: 1,
         importedTrades: 2,
@@ -70,9 +85,21 @@ describe("ibkrFlexBrokerageSyncWorkflow", () => {
         skippedDuplicateTrades: 0,
         status: "ready",
       }),
+      prepareMarketDataRefresh: async () => ({
+        marketDataRunId: "market-data-run-1",
+        shouldRun: true,
+      }),
       recordIbkrFlexReference: async () => undefined,
       resolvePriorBusinessDate: async () => "2026-05-14",
       sendIbkrFlexRequest: async () => ({ referenceCode: "ref-1" }),
+      writeMarketDataResults: async (input) => ({
+        snapshotsWritten: input.results.length,
+        symbolsFailed: input.results.filter((result) => result.status !== "ok")
+          .length,
+        symbolsSucceeded: input.results.filter(
+          (result) => result.status === "ok",
+        ).length,
+      }),
       ...overrides,
     };
   }
@@ -196,5 +223,199 @@ describe("ibkrFlexBrokerageSyncWorkflow", () => {
 
     expect(attempts).toBe(2);
     expect(result.status).toBe("succeeded");
+  });
+});
+
+describe("marketDataDateWorkflow", () => {
+  let testEnv: TestWorkflowEnvironment;
+
+  beforeAll(async () => {
+    testEnv = await TestWorkflowEnvironment.createTimeSkipping();
+  });
+
+  afterAll(async () => {
+    await testEnv?.teardown();
+  });
+
+  async function runMarketDataWorkflow(args: {
+    activities: IbkrFlexActivities;
+    workflowId: string;
+  }) {
+    const taskQueue = `${args.workflowId}-queue`;
+    const worker = await Worker.create({
+      activities: args.activities,
+      connection: testEnv.nativeConnection,
+      taskQueue,
+      workflowsPath,
+    });
+    return await worker.runUntil(async () => {
+      return await testEnv.client.workflow.execute(marketDataDateWorkflow, {
+        args: [
+          {
+            budgetCredits: 2,
+            date: "2026-05-14",
+            force: true,
+            ownerId: "owner-1",
+            pipelineDateRunId: "date-run-1",
+            pipelineRunId: "pipeline-run-1",
+          },
+        ],
+        taskQueue,
+        workflowId: args.workflowId,
+      });
+    });
+  }
+
+  function marketActivities(
+    overrides: Partial<IbkrFlexActivities> = {},
+  ): IbkrFlexActivities {
+    return {
+      beginBrokerageSyncRun: async () => ({
+        created: true,
+        queryId: "query-1",
+        syncRunId: "sync-run-1",
+      }),
+      listDueIbkrConnections: async () => [],
+      markBrokerageSyncFailed: async () => undefined,
+      markBrokerageSyncSucceeded: async () => undefined,
+      markBrokerageSyncWaiting: async () => undefined,
+      completeMarketDataRun: async (input) => ({
+        status:
+          input.symbolsFailed === 0
+            ? "succeeded"
+            : input.symbolsSucceeded === 0
+              ? "failed"
+              : "partial",
+      }),
+      fetchMarketPrice: async (input) => ({
+        close: input.providerSymbol === "AAPL" ? 190 : 420,
+        date: input.date,
+        provider: input.provider,
+        providerSymbol: input.providerSymbol,
+        status: "ok",
+      }),
+      planMarketDataJobs: async () => ({
+        providerJobs: [
+          {
+            assetType: "stock",
+            estimatedCredits: 1,
+            provider: "twelve_data",
+            providerSymbol: "AAPL",
+            symbol: "AAPL",
+          },
+          {
+            assetType: "stock",
+            estimatedCredits: 1,
+            provider: "twelve_data",
+            providerSymbol: "MSFT",
+            symbol: "MSFT",
+          },
+        ],
+        trackedPriceMarksWritten: 1,
+      }),
+      pollAndIngestIbkrFlexStatement: async () => ({
+        cashSnapshotsWritten: 0,
+        importedTrades: 0,
+        positionSnapshotsWritten: 0,
+        skippedDuplicateTrades: 0,
+        status: "ready",
+      }),
+      prepareMarketDataRefresh: async () => ({
+        marketDataRunId: "market-data-run-1",
+        shouldRun: true,
+      }),
+      recordIbkrFlexReference: async () => undefined,
+      resolvePriorBusinessDate: async () => "2026-05-14",
+      sendIbkrFlexRequest: async () => ({ referenceCode: "ref-1" }),
+      writeMarketDataResults: async (input) => ({
+        snapshotsWritten: input.results.length,
+        symbolsFailed: input.results.filter((result) => result.status !== "ok")
+          .length,
+        symbolsSucceeded: input.results.filter(
+          (result) => result.status === "ok",
+        ).length,
+      }),
+      ...overrides,
+    };
+  }
+
+  it("refreshes market prices for one explicit date", async () => {
+    const result = await runMarketDataWorkflow({
+      activities: marketActivities(),
+      workflowId: "market-data-success",
+    });
+
+    expect(result).toEqual({
+      marketDataRunId: "market-data-run-1",
+      status: "succeeded",
+      symbolsFailed: 0,
+      symbolsRequested: 2,
+      symbolsSucceeded: 2,
+      trackedPriceMarksWritten: 1,
+    });
+  });
+
+  it("stores missing prices as partial coverage instead of failing the workflow", async () => {
+    const result = await runMarketDataWorkflow({
+      activities: marketActivities({
+        fetchMarketPrice: async (input) =>
+          input.providerSymbol === "MSFT"
+            ? {
+                date: input.date,
+                errorMessage: "No daily close returned for MSFT",
+                provider: input.provider,
+                providerSymbol: input.providerSymbol,
+                status: "missing",
+              }
+            : {
+                close: 190,
+                date: input.date,
+                provider: input.provider,
+                providerSymbol: input.providerSymbol,
+                status: "ok",
+              },
+      }),
+      workflowId: "market-data-partial",
+    });
+
+    expect(result).toMatchObject({
+      status: "partial",
+      symbolsFailed: 1,
+      symbolsRequested: 2,
+      symbolsSucceeded: 1,
+    });
+  });
+
+  it("reruns idempotently against the same date and provider symbols", async () => {
+    const snapshotKeys = new Set<string>();
+    const activities = marketActivities({
+      writeMarketDataResults: async (input) => {
+        for (const result of input.results) {
+          snapshotKeys.add(
+            `${result.provider}:${result.providerSymbol}:${result.date}`,
+          );
+        }
+        return {
+          snapshotsWritten: input.results.length,
+          symbolsFailed: 0,
+          symbolsSucceeded: input.results.length,
+        };
+      },
+    });
+
+    const first = await runMarketDataWorkflow({
+      activities,
+      workflowId: "market-data-idempotent-1",
+    });
+    const second = await runMarketDataWorkflow({
+      activities,
+      workflowId: "market-data-idempotent-2",
+    });
+
+    expect(first.status).toBe("succeeded");
+    expect(second.status).toBe("succeeded");
+    expect(snapshotKeys).toEqual(
+      new Set(["twelve_data:AAPL:2026-05-14", "twelve_data:MSFT:2026-05-14"]),
+    );
   });
 });

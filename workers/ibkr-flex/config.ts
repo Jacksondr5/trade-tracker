@@ -12,6 +12,7 @@ const envSchema = z.object({
   TEMPORAL_ADDRESS: z.string().min(1),
   TEMPORAL_NAMESPACE: z.string().min(1).default(DEFAULT_TEMPORAL_NAMESPACE),
   TEMPORAL_TASK_QUEUE: z.string().min(1).default(DEFAULT_TEMPORAL_TASK_QUEUE),
+  TWELVE_DATA_API_KEY: z.string().min(1).optional(),
 });
 
 export type IbkrFlexWorkerConfig = {
@@ -22,6 +23,7 @@ export type IbkrFlexWorkerConfig = {
   temporalAddress: string;
   temporalNamespace: string;
   temporalTaskQueue: string;
+  twelveDataApiKey?: string;
 };
 
 export function loadIbkrFlexWorkerConfig(
@@ -35,6 +37,7 @@ export function loadIbkrFlexWorkerConfig(
     TEMPORAL_ADDRESS: env.TEMPORAL_ADDRESS,
     TEMPORAL_NAMESPACE: env.TEMPORAL_NAMESPACE || DEFAULT_TEMPORAL_NAMESPACE,
     TEMPORAL_TASK_QUEUE: env.TEMPORAL_TASK_QUEUE || DEFAULT_TEMPORAL_TASK_QUEUE,
+    TWELVE_DATA_API_KEY: env.TWELVE_DATA_API_KEY,
   });
 
   if (!parsed.success) {
@@ -57,5 +60,6 @@ export function loadIbkrFlexWorkerConfig(
     temporalAddress: parsed.data.TEMPORAL_ADDRESS,
     temporalNamespace: parsed.data.TEMPORAL_NAMESPACE,
     temporalTaskQueue: parsed.data.TEMPORAL_TASK_QUEUE,
+    twelveDataApiKey: parsed.data.TWELVE_DATA_API_KEY,
   };
 }
