@@ -416,20 +416,25 @@ http.route({
         );
         return jsonResponse({ rawReportId, ...result });
       } catch (error) {
+        const originalError = error;
         if (storageId && rawReportId) {
-          await ctx.runMutation(
-            internal.brokerageIngestion.rollbackRawReportReference,
-            {
-              rawReportId,
-              storageId,
-              syncRunId,
-            },
-          );
+          try {
+            await ctx.runMutation(
+              internal.brokerageIngestion.rollbackRawReportReference,
+              {
+                rawReportId,
+                storageId,
+                syncRunId,
+              },
+            );
+          } catch {}
         }
         if (storageId) {
-          await ctx.storage.delete(storageId);
+          try {
+            await ctx.storage.delete(storageId);
+          } catch {}
         }
-        throw error;
+        throw originalError;
       }
     });
   }),
