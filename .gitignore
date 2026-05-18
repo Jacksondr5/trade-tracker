@@ -8,6 +8,9 @@ out/
 # Build
 dist/
 build/
+.pnpm-store/
+.turbo/
+.vercel/
 
 # Environment
 .env
@@ -42,6 +45,7 @@ coverage/
 
 # Local data
 data/
+test-workspace/
 
 # Playwright
 /test-results/
