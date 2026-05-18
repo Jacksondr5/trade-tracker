@@ -50,6 +50,13 @@ type CampaignStatus = "planning" | "active" | "closed";
 
 type BadgeVariant = NonNullable<BadgeProps["variant"]>;
 
+type BrokerageFreshnessStatus =
+  | "current"
+  | "pending_review"
+  | "stale"
+  | "mismatched"
+  | "unmanaged";
+
 function getCampaignStatusVariant(status: CampaignStatus): BadgeVariant {
   switch (status) {
     case "planning":
@@ -57,6 +64,40 @@ function getCampaignStatusVariant(status: CampaignStatus): BadgeVariant {
     case "active":
       return "success";
     case "closed":
+    default:
+      return "neutral";
+  }
+}
+
+function getBrokerageFreshnessLabel(status: BrokerageFreshnessStatus): string {
+  switch (status) {
+    case "current":
+      return "Brokerage current";
+    case "pending_review":
+      return "Brokerage pending review";
+    case "stale":
+      return "Brokerage stale";
+    case "mismatched":
+      return "Brokerage mismatch";
+    case "unmanaged":
+    default:
+      return "Brokerage unmanaged";
+  }
+}
+
+function getBrokerageFreshnessVariant(
+  status: BrokerageFreshnessStatus,
+): BadgeVariant {
+  switch (status) {
+    case "current":
+      return "success";
+    case "pending_review":
+      return "warning";
+    case "stale":
+      return "warning";
+    case "mismatched":
+      return "danger";
+    case "unmanaged":
     default:
       return "neutral";
   }
@@ -362,22 +403,40 @@ export default function PortfolioDetailPageClient({
             </div>
           )}
           {!isEditingName && overview.asOfDate ? (
-            <p
-              className="mt-1 text-sm text-olive-11"
-              data-testid={PORTFOLIO_DETAIL_TEST_IDS.asOfDate}
-            >
-              Valuation as of {formatIsoDateForDisplay(overview.asOfDate)} ·{" "}
-              {overview.tradeCount} trade
-              {overview.tradeCount === 1 ? "" : "s"}
-            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <p
+                className="text-sm text-olive-11"
+                data-testid={PORTFOLIO_DETAIL_TEST_IDS.asOfDate}
+              >
+                Valuation as of {formatIsoDateForDisplay(overview.asOfDate)} ·{" "}
+                {overview.tradeCount} trade
+                {overview.tradeCount === 1 ? "" : "s"}
+              </p>
+              {latestValuation ? (
+                <Badge
+                  data-testid={
+                    PORTFOLIO_DETAIL_TEST_IDS.portfolioFreshnessStatus
+                  }
+                  variant={getBrokerageFreshnessVariant(
+                    latestValuation.brokerageFreshnessStatus,
+                  )}
+                >
+                  {getBrokerageFreshnessLabel(
+                    latestValuation.brokerageFreshnessStatus,
+                  )}
+                </Badge>
+              ) : null}
+            </div>
           ) : !isEditingName ? (
-            <p
-              className="mt-1 text-sm text-olive-11"
-              data-testid={PORTFOLIO_DETAIL_TEST_IDS.asOfDate}
-            >
-              No valuations yet · {overview.tradeCount} trade
-              {overview.tradeCount === 1 ? "" : "s"}
-            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <p
+                className="text-sm text-olive-11"
+                data-testid={PORTFOLIO_DETAIL_TEST_IDS.asOfDate}
+              >
+                No valuations yet · {overview.tradeCount} trade
+                {overview.tradeCount === 1 ? "" : "s"}
+              </p>
+            </div>
           ) : null}
         </div>
 
@@ -462,7 +521,8 @@ export default function PortfolioDetailPageClient({
           label="Market Value"
           tone="blue"
           subtle={
-            latestValuation && latestValuation.priceCoverageStatus !== "complete"
+            latestValuation &&
+            latestValuation.priceCoverageStatus !== "complete"
               ? capitalize(latestValuation.priceCoverageStatus) + " coverage"
               : null
           }
@@ -514,7 +574,7 @@ export default function PortfolioDetailPageClient({
           </h2>
           <div className="flex items-center gap-2">
             <label
-              className="text-xs font-medium text-olive-11 uppercase tracking-wide"
+              className="text-xs font-medium tracking-wide text-olive-11 uppercase"
               htmlFor="portfolio-timeframe-select"
             >
               Timeframe
@@ -706,8 +766,8 @@ export default function PortfolioDetailPageClient({
                   </div>
                   <p className="mt-0.5 text-xs text-olive-11">
                     {row.openPositionCount} open position
-                    {row.openPositionCount === 1 ? "" : "s"} ·{" "}
-                    {row.tradeCount} trade
+                    {row.openPositionCount === 1 ? "" : "s"} · {row.tradeCount}{" "}
+                    trade
                     {row.tradeCount === 1 ? "" : "s"}
                     {row.tickers.length > 0
                       ? ` · ${row.tickers.join(", ")}`
@@ -738,9 +798,7 @@ export default function PortfolioDetailPageClient({
             overview.uncoveredExposure.openPositionCount > 0 ? (
               <li
                 className="flex flex-col gap-2 rounded-md border border-dashed border-olive-6 bg-olive-1 p-3 sm:flex-row sm:items-center sm:justify-between"
-                data-testid={
-                  PORTFOLIO_CAMPAIGN_EXPOSURE_UNCOVERED_ROW_TEST_ID
-                }
+                data-testid={PORTFOLIO_CAMPAIGN_EXPOSURE_UNCOVERED_ROW_TEST_ID}
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -753,8 +811,7 @@ export default function PortfolioDetailPageClient({
                     <Badge variant="neutral">Unlinked</Badge>
                   </div>
                   <p className="mt-0.5 text-xs text-olive-11">
-                    {overview.uncoveredExposure.openPositionCount} open
-                    position
+                    {overview.uncoveredExposure.openPositionCount} open position
                     {overview.uncoveredExposure.openPositionCount === 1
                       ? ""
                       : "s"}{" "}
@@ -780,9 +837,7 @@ export default function PortfolioDetailPageClient({
                     <p className="text-xs text-olive-11">Share</p>
                     <p className="font-medium text-olive-12">
                       {overview.uncoveredExposure.sharePercent !== null
-                        ? formatPercent(
-                            overview.uncoveredExposure.sharePercent,
-                          )
+                        ? formatPercent(overview.uncoveredExposure.sharePercent)
                         : "—"}
                     </p>
                   </div>
@@ -914,9 +969,8 @@ function DataIssuesPanel({
               </Link>
             </div>
             <p className="mt-1 text-sm text-olive-11">
-              Pick a provider symbol so daily prices can be fetched. Until
-              this is resolved, market value treats these positions as
-              unpriced.
+              Pick a provider symbol so daily prices can be fetched. Until this
+              is resolved, market value treats these positions as unpriced.
             </p>
             {renderSymbolList(needsMappingSymbols)}
           </div>
@@ -931,8 +985,7 @@ function DataIssuesPanel({
               {awaitingSnapshotSymbols.length})
             </p>
             <p className="mt-1 text-sm text-olive-11">
-              These symbols are mapped, but no daily close has been fetched
-              yet
+              These symbols are mapped, but no daily close has been fetched yet
               {asOfDate ? (
                 <>
                   {" "}
@@ -953,9 +1006,9 @@ function DataIssuesPanel({
               Trades not linked to a campaign ({uncoveredTradeCount})
             </p>
             <p className="mt-1 text-sm text-olive-11">
-              These trades count toward the portfolio total but don&apos;t
-              show up in campaign exposure. Link them to a trade plan to
-              include them.
+              These trades count toward the portfolio total but don&apos;t show
+              up in campaign exposure. Link them to a trade plan to include
+              them.
             </p>
           </div>
         ) : null}
@@ -990,17 +1043,13 @@ function SummaryStat({
       className="rounded-lg border border-olive-6 bg-olive-2 p-4"
       data-testid={dataTestId}
     >
-      <p className="text-xs font-medium uppercase tracking-wide text-olive-11">
+      <p className="text-xs font-medium tracking-wide text-olive-11 uppercase">
         {label}
       </p>
-      <p
-        className={`mt-1 text-2xl font-semibold tabular-nums ${accent}`}
-      >
+      <p className={`mt-1 text-2xl font-semibold tabular-nums ${accent}`}>
         {value}
       </p>
-      {subtle ? (
-        <p className="mt-1 text-xs text-olive-11">{subtle}</p>
-      ) : null}
+      {subtle ? <p className="mt-1 text-xs text-olive-11">{subtle}</p> : null}
     </div>
   );
 }

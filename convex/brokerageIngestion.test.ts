@@ -84,6 +84,88 @@ describe("brokerage ingestion", () => {
     );
   }
 
+  async function createPortfolio(): Promise<Id<"portfolios">> {
+    return await t.run(async (ctx) => {
+      return await ctx.db.insert("portfolios", {
+        name: "Core",
+        ownerId,
+      });
+    });
+  }
+
+  async function beginActivitySyncRun(
+    connectionId: Id<"brokerageConnections">,
+    reportDate = "2026-05-14",
+  ): Promise<Id<"brokerageSyncRuns">> {
+    const { syncRunId } = await t.mutation(
+      internal.brokerageIngestion.beginSyncRunForConnection,
+      {
+        connectionId,
+        reportDate,
+        reportType: "activity",
+      },
+    );
+    return syncRunId;
+  }
+
+  async function insertAcceptedTrade(args: {
+    brokerageAccountId?: string;
+    direction?: "long" | "short";
+    portfolioId?: Id<"portfolios">;
+    quantity: number;
+    side?: "buy" | "sell";
+    ticker?: string;
+  }): Promise<Id<"trades">> {
+    return await t.run(async (ctx) => {
+      return await ctx.db.insert("trades", {
+        assetType: "stock",
+        brokerageAccountId: args.brokerageAccountId ?? "U1234567",
+        date: Date.UTC(2026, 4, 14, 16),
+        direction: args.direction ?? "long",
+        ownerId,
+        portfolioId: args.portfolioId,
+        price: 100,
+        quantity: args.quantity,
+        side: args.side ?? "buy",
+        source: "ibkr",
+        ticker: args.ticker ?? "AAPL",
+      });
+    });
+  }
+
+  async function ingestPositionSnapshots(
+    syncRunId: Id<"brokerageSyncRuns">,
+    positions: Array<{
+      brokerageAccountId?: string;
+      quantity: number;
+      ticker?: string;
+    }>,
+  ) {
+    return await t.mutation(
+      internal.brokerageIngestion.ingestParsedFlexReport,
+      {
+        cashSnapshots: [],
+        positionSnapshots: positions.map((position) => ({
+          assetType: "stock" as const,
+          brokerageAccountId: position.brokerageAccountId ?? "U1234567",
+          quantity: position.quantity,
+          reportDate: "2026-05-14",
+          ticker: position.ticker ?? "AAPL",
+        })),
+        syncRunId,
+        trades: [],
+      },
+    );
+  }
+
+  async function listOpenReconciliationIssues() {
+    return await t.run(async (ctx) => {
+      return (
+        await ctx.db.query("brokerageReconciliationIssues").collect()
+      ).filter((issue) => issue.ownerId === ownerId && issue.status === "open");
+    });
+  }
+
   it("upserts one IBKR connection metadata row for the authenticated user", async () => {
     const connectionId = await createConnection();
     const sameConnectionId = await asUser().mutation(
@@ -290,6 +372,152 @@ describe("brokerage ingestion", () => {
       importedTrades: 1,
       positionSnapshotCount: 1,
       skippedDuplicateTrades: 1,
+    });
+  });
+
+  it("does not open reconciliation issues when accepted positions match brokerage snapshots", async () => {
+    const connectionId = await createConnection();
+    const syncRunId = await beginActivitySyncRun(connectionId);
+    await insertAcceptedTrade({ quantity: 10 });
+
+    await ingestPositionSnapshots(syncRunId, [{ quantity: 10 }]);
+
+    expect(await listOpenReconciliationIssues()).toHaveLength(0);
+  });
+
+  it("opens position reconciliation issues for brokerage quantity mismatches", async () => {
+    const connectionId = await createConnection();
+    const syncRunId = await beginActivitySyncRun(connectionId);
+    await insertAcceptedTrade({ quantity: 10 });
+
+    await ingestPositionSnapshots(syncRunId, [{ quantity: 8 }]);
+
+    const openIssues = await listOpenReconciliationIssues();
+    expect(openIssues).toHaveLength(1);
+    expect(openIssues[0]).toMatchObject({
+      actualQuantity: 8,
+      brokerageAccountId: "U1234567",
+      direction: "long",
+      expectedQuantity: 10,
+      issueType: "position_mismatch",
+      status: "open",
+      ticker: "AAPL",
+    });
+  });
+
+  it("resolves open position reconciliation issues when later snapshots match", async () => {
+    const connectionId = await createConnection();
+    const syncRunId = await beginActivitySyncRun(connectionId);
+    await insertAcceptedTrade({ quantity: 10 });
+    await ingestPositionSnapshots(syncRunId, [{ quantity: 8 }]);
+
+    await ingestPositionSnapshots(syncRunId, [{ quantity: 10 }]);
+
+    const issues = await t.run(async (ctx) => {
+      return await ctx.db.query("brokerageReconciliationIssues").collect();
+    });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({
+      issueType: "position_mismatch",
+      status: "resolved",
+    });
+    expect(issues[0].resolvedAt).toEqual(expect.any(Number));
+  });
+
+  it("reports mismatched valuation freshness when open position issues exist", async () => {
+    const portfolioId = await createPortfolio();
+    const connectionId = await createConnection();
+    const syncRunId = await beginActivitySyncRun(connectionId);
+    await insertAcceptedTrade({ portfolioId, quantity: 10 });
+    await ingestPositionSnapshots(syncRunId, [{ quantity: 8 }]);
+    await t.mutation(internal.brokerageIngestion.markSyncRunSucceeded, {
+      syncRunId,
+    });
+
+    const freshness = await asUser().query(
+      api.portfolioAnalytics.getValuationFreshnessStatus,
+      {
+        date: "2026-05-14",
+        portfolioId,
+      },
+    );
+
+    expect(freshness).toEqual({
+      date: "2026-05-14",
+      status: "mismatched",
+    });
+  });
+
+  it("reports stale valuation freshness when the expected sync has not succeeded", async () => {
+    const portfolioId = await createPortfolio();
+    await createConnection();
+
+    const freshness = await asUser().query(
+      api.portfolioAnalytics.getValuationFreshnessStatus,
+      {
+        date: "2026-05-14",
+        portfolioId,
+      },
+    );
+
+    expect(freshness).toEqual({
+      date: "2026-05-14",
+      status: "stale",
+    });
+  });
+
+  it("reports pending review freshness for imported trades still in the inbox", async () => {
+    const portfolioId = await createPortfolio();
+    const connectionId = await createConnection();
+    const syncRunId = await beginActivitySyncRun(connectionId);
+
+    await t.mutation(internal.brokerageIngestion.ingestParsedFlexReport, {
+      cashSnapshots: [],
+      positionSnapshots: [],
+      syncRunId,
+      trades: [
+        {
+          assetType: "stock" as const,
+          brokerageAccountId: "U1234567",
+          date: Date.UTC(2026, 4, 14, 9, 30, 5),
+          direction: "long" as const,
+          externalId: "0000e1.pending",
+          price: 189.5,
+          quantity: 10,
+          side: "buy" as const,
+          ticker: "aapl",
+        },
+      ],
+    });
+    await t.mutation(internal.brokerageIngestion.markSyncRunSucceeded, {
+      syncRunId,
+    });
+
+    const freshness = await asUser().query(
+      api.portfolioAnalytics.getValuationFreshnessStatus,
+      {
+        date: "2026-05-14",
+        portfolioId,
+      },
+    );
+
+    expect(freshness.status).toBe("pending_review");
+  });
+
+  it("reports unmanaged valuation freshness without an active brokerage connection", async () => {
+    const portfolioId = await createPortfolio();
+
+    const freshness = await asUser().query(
+      api.portfolioAnalytics.getValuationFreshnessStatus,
+      {
+        date: "2026-05-14",
+        portfolioId,
+      },
+    );
+
+    expect(freshness).toEqual({
+      date: "2026-05-14",
+      status: "unmanaged",
     });
   });
 

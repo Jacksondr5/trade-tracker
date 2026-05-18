@@ -121,6 +121,7 @@ describe("market data health", () => {
   }) {
     await t.run(async (ctx) => {
       await ctx.db.insert("portfolioDailyValuations", {
+        brokerageFreshnessStatus: "unmanaged",
         cashBalance: 1_000,
         computedAt: now,
         date: args.date,
@@ -432,6 +433,7 @@ describe("market data health", () => {
       });
       await t.run(async (ctx) => {
         await ctx.db.insert("portfolioDailyValuations", {
+          brokerageFreshnessStatus: "unmanaged",
           cashBalance: 1,
           computedAt: now,
           date: "2026-05-01",

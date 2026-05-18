@@ -6,7 +6,7 @@ import {
   query,
 } from "./_generated/server";
 import { assertOwner, requireUser } from "./lib/auth";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { stageInboxTradesForOwner } from "./imports";
 import type { StageInboxTradeInput } from "./imports";
@@ -67,8 +67,93 @@ const cashSnapshotValidator = v.object({
   reportDate: v.string(),
 });
 
+const POSITION_EPSILON = 0.00000001;
+
+type ReconciliationDirection = "long" | "short";
+type ReconciliationIssueType =
+  | "missing_brokerage_position"
+  | "missing_local_position"
+  | "position_mismatch";
+
+type PositionReconciliationKey =
+  `${string}:${"crypto" | "stock"}:${string}:${ReconciliationDirection}`;
+
+type ReconciledPosition = {
+  assetType: "crypto" | "stock";
+  brokerageAccountId: string;
+  direction: ReconciliationDirection;
+  quantity: number;
+  ticker: string;
+};
+
 function normalizeSymbol(symbol: string): string {
   return symbol.trim().toUpperCase();
+}
+
+function endOfUtcDate(date: string): number {
+  return Date.parse(`${date}T23:59:59.999Z`);
+}
+
+function getSignedTradeQuantity(trade: Doc<"trades">): number {
+  const openingSide = trade.direction === "long" ? "buy" : "sell";
+  return trade.side === openingSide ? trade.quantity : -trade.quantity;
+}
+
+function getDirectionFromBrokerageQuantity(
+  quantity: number,
+): ReconciliationDirection | null {
+  if (quantity > POSITION_EPSILON) return "long";
+  if (quantity < -POSITION_EPSILON) return "short";
+  return null;
+}
+
+function positionReconciliationKey(position: {
+  assetType: "crypto" | "stock";
+  brokerageAccountId: string;
+  direction: ReconciliationDirection;
+  ticker: string;
+}): PositionReconciliationKey {
+  return `${position.brokerageAccountId}:${position.assetType}:${position.ticker}:${position.direction}`;
+}
+
+function reconciliationIssueKey(
+  issue: Pick<
+    Doc<"brokerageReconciliationIssues">,
+    "assetType" | "brokerageAccountId" | "direction" | "ticker"
+  >,
+): PositionReconciliationKey | null {
+  if (
+    !issue.assetType ||
+    !issue.brokerageAccountId ||
+    !issue.direction ||
+    !issue.ticker
+  ) {
+    return null;
+  }
+  return positionReconciliationKey({
+    assetType: issue.assetType,
+    brokerageAccountId: issue.brokerageAccountId,
+    direction: issue.direction,
+    ticker: issue.ticker,
+  });
+}
+
+function getPositionMismatchMessage(args: {
+  actualQuantity: number;
+  brokerageAccountId: string;
+  direction: ReconciliationDirection;
+  expectedQuantity: number;
+  issueType: ReconciliationIssueType;
+  ticker: string;
+}): string {
+  const label = `${args.brokerageAccountId} ${args.ticker} ${args.direction}`;
+  if (args.issueType === "missing_local_position") {
+    return `Brokerage reports ${args.actualQuantity} ${label} but no matching local accepted position exists`;
+  }
+  if (args.issueType === "missing_brokerage_position") {
+    return `Local accepted trades expect ${args.expectedQuantity} ${label} but the brokerage snapshot does not include it`;
+  }
+  return `Brokerage reports ${args.actualQuantity} ${label}; local accepted trades expect ${args.expectedQuantity}`;
 }
 
 function syncRunNotFound(): never {
@@ -135,6 +220,243 @@ async function upsertPendingImportReviewIssue(
     updatedAt: now,
   });
   return 1;
+}
+
+async function getLocalAcceptedPositions(
+  ctx: MutationCtx,
+  args: {
+    ownerId: string;
+    reportDate: string;
+    source: "ibkr";
+  },
+): Promise<Map<PositionReconciliationKey, ReconciledPosition>> {
+  const positions = new Map<PositionReconciliationKey, ReconciledPosition>();
+  const endTimestamp = endOfUtcDate(args.reportDate);
+
+  for await (const trade of ctx.db
+    .query("trades")
+    .withIndex("by_owner_date", (q) =>
+      q.eq("ownerId", args.ownerId).lte("date", endTimestamp),
+    )) {
+    if (trade.source !== args.source || !trade.brokerageAccountId) {
+      continue;
+    }
+
+    const ticker = normalizeSymbol(trade.ticker);
+    const key = positionReconciliationKey({
+      assetType: trade.assetType,
+      brokerageAccountId: trade.brokerageAccountId,
+      direction: trade.direction,
+      ticker,
+    });
+    const existing =
+      positions.get(key) ??
+      ({
+        assetType: trade.assetType,
+        brokerageAccountId: trade.brokerageAccountId,
+        direction: trade.direction,
+        quantity: 0,
+        ticker,
+      } satisfies ReconciledPosition);
+    existing.quantity += getSignedTradeQuantity(trade);
+    positions.set(key, existing);
+  }
+
+  for (const [key, position] of positions) {
+    if (position.quantity <= POSITION_EPSILON) {
+      positions.delete(key);
+    }
+  }
+
+  return positions;
+}
+
+async function getBrokerageSnapshotPositions(
+  ctx: MutationCtx,
+  syncRunId: Id<"brokerageSyncRuns">,
+): Promise<Map<PositionReconciliationKey, ReconciledPosition>> {
+  const positions = new Map<PositionReconciliationKey, ReconciledPosition>();
+
+  for await (const snapshot of ctx.db
+    .query("brokeragePositionSnapshots")
+    .withIndex("by_syncRunId", (q) => q.eq("syncRunId", syncRunId))) {
+    const direction = getDirectionFromBrokerageQuantity(snapshot.quantity);
+    if (direction === null) continue;
+
+    const ticker = normalizeSymbol(snapshot.ticker);
+    const key = positionReconciliationKey({
+      assetType: snapshot.assetType,
+      brokerageAccountId: snapshot.brokerageAccountId,
+      direction,
+      ticker,
+    });
+    const existing =
+      positions.get(key) ??
+      ({
+        assetType: snapshot.assetType,
+        brokerageAccountId: snapshot.brokerageAccountId,
+        direction,
+        quantity: 0,
+        ticker,
+      } satisfies ReconciledPosition);
+    existing.quantity += Math.abs(snapshot.quantity);
+    positions.set(key, existing);
+  }
+
+  return positions;
+}
+
+async function upsertPositionReconciliationIssue(
+  ctx: MutationCtx,
+  args: {
+    actualQuantity: number;
+    connectionId: Id<"brokerageConnections">;
+    expectedQuantity: number;
+    issueType: ReconciliationIssueType;
+    ownerId: string;
+    position: Omit<ReconciledPosition, "quantity">;
+    reportDate: string;
+    syncRunId: Id<"brokerageSyncRuns">;
+  },
+): Promise<boolean> {
+  const now = Date.now();
+  const existingOpenIssues = await ctx.db
+    .query("brokerageReconciliationIssues")
+    .withIndex("by_ownerId_and_status", (q) =>
+      q.eq("ownerId", args.ownerId).eq("status", "open"),
+    )
+    .collect();
+  const key = positionReconciliationKey(args.position);
+  const existing = existingOpenIssues.find(
+    (issue) =>
+      issue.connectionId === args.connectionId &&
+      issue.issueType === args.issueType &&
+      reconciliationIssueKey(issue) === key,
+  );
+  const message = getPositionMismatchMessage({
+    actualQuantity: args.actualQuantity,
+    brokerageAccountId: args.position.brokerageAccountId,
+    direction: args.position.direction,
+    expectedQuantity: args.expectedQuantity,
+    issueType: args.issueType,
+    ticker: args.position.ticker,
+  });
+
+  const fields = {
+    actualQuantity: args.actualQuantity,
+    assetType: args.position.assetType,
+    brokerageAccountId: args.position.brokerageAccountId,
+    direction: args.position.direction,
+    expectedQuantity: args.expectedQuantity,
+    message,
+    reportDate: args.reportDate,
+    syncRunId: args.syncRunId,
+    ticker: args.position.ticker,
+    updatedAt: now,
+  };
+
+  if (existing) {
+    await ctx.db.patch(existing._id, fields);
+    return false;
+  }
+
+  await ctx.db.insert("brokerageReconciliationIssues", {
+    ...fields,
+    connectionId: args.connectionId,
+    createdAt: now,
+    issueType: args.issueType,
+    ownerId: args.ownerId,
+    severity: "warning",
+    status: "open",
+  });
+  return true;
+}
+
+async function reconcilePositionsForSyncRun(
+  ctx: MutationCtx,
+  args: {
+    connectionId: Id<"brokerageConnections">;
+    ownerId: string;
+    reportDate: string;
+    source: "ibkr";
+    syncRunId: Id<"brokerageSyncRuns">;
+  },
+): Promise<{ openIssueCount: number }> {
+  const localPositions = await getLocalAcceptedPositions(ctx, args);
+  const brokeragePositions = await getBrokerageSnapshotPositions(
+    ctx,
+    args.syncRunId,
+  );
+  const discrepancyKeys = new Set<PositionReconciliationKey>();
+  let openIssueCount = 0;
+
+  const allKeys = new Set<PositionReconciliationKey>([
+    ...localPositions.keys(),
+    ...brokeragePositions.keys(),
+  ]);
+
+  for (const key of allKeys) {
+    const local = localPositions.get(key);
+    const brokerage = brokeragePositions.get(key);
+    const position = brokerage ?? local;
+    if (!position) continue;
+
+    const expectedQuantity = local?.quantity ?? 0;
+    const actualQuantity = brokerage?.quantity ?? 0;
+    const delta = Math.abs(expectedQuantity - actualQuantity);
+    if (delta <= POSITION_EPSILON) {
+      continue;
+    }
+
+    const issueType: ReconciliationIssueType =
+      local === undefined
+        ? "missing_local_position"
+        : brokerage === undefined
+          ? "missing_brokerage_position"
+          : "position_mismatch";
+
+    discrepancyKeys.add(key);
+    const created = await upsertPositionReconciliationIssue(ctx, {
+      actualQuantity,
+      connectionId: args.connectionId,
+      expectedQuantity,
+      issueType,
+      ownerId: args.ownerId,
+      position,
+      reportDate: args.reportDate,
+      syncRunId: args.syncRunId,
+    });
+    if (created) openIssueCount += 1;
+  }
+
+  const now = Date.now();
+  const openIssues = await ctx.db
+    .query("brokerageReconciliationIssues")
+    .withIndex("by_ownerId_and_status", (q) =>
+      q.eq("ownerId", args.ownerId).eq("status", "open"),
+    )
+    .collect();
+  for (const issue of openIssues) {
+    if (issue.connectionId !== args.connectionId) continue;
+    if (
+      issue.issueType !== "position_mismatch" &&
+      issue.issueType !== "missing_local_position" &&
+      issue.issueType !== "missing_brokerage_position"
+    ) {
+      continue;
+    }
+    const issueKey = reconciliationIssueKey(issue);
+    if (issueKey !== null && !discrepancyKeys.has(issueKey)) {
+      await ctx.db.patch(issue._id, {
+        resolvedAt: now,
+        status: "resolved",
+        syncRunId: args.syncRunId,
+        updatedAt: now,
+      });
+    }
+  }
+
+  return { openIssueCount };
 }
 
 export const upsertIbkrConnection = mutation({
@@ -580,20 +902,32 @@ export const ingestParsedFlexReport = internalMutation({
       }
     }
 
-    const newIssueCount = await upsertPendingImportReviewIssue(ctx, {
+    const positionReconciliation = await reconcilePositionsForSyncRun(ctx, {
       connectionId: connection._id,
-      count: importResult.imported,
       ownerId: syncRun.ownerId,
       reportDate: syncRun.reportDate,
+      source: syncRun.source,
       syncRunId: syncRun._id,
     });
+    const newPendingImportIssueCount = await upsertPendingImportReviewIssue(
+      ctx,
+      {
+        connectionId: connection._id,
+        count: importResult.imported,
+        ownerId: syncRun.ownerId,
+        reportDate: syncRun.reportDate,
+        syncRunId: syncRun._id,
+      },
+    );
 
     await ctx.db.patch(syncRun._id, {
       importedTrades: (syncRun.importedTrades ?? 0) + importResult.imported,
       positionSnapshotCount:
         (syncRun.positionSnapshotCount ?? 0) + positionSnapshotsWritten,
       reconciliationIssueCount:
-        (syncRun.reconciliationIssueCount ?? 0) + newIssueCount,
+        (syncRun.reconciliationIssueCount ?? 0) +
+        positionReconciliation.openIssueCount +
+        newPendingImportIssueCount,
       skippedDuplicateTrades: Math.max(
         syncRun.skippedDuplicateTrades ?? 0,
         importResult.skippedDuplicates,
