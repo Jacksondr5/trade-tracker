@@ -1403,6 +1403,11 @@ export const writeTemporalMarketDataResults = internalMutation({
     }
     const latestByKey = new Map<string, PriceSnapshotWrite>();
     for (const result of args.results) {
+      if (result.date !== args.date) {
+        throw new ConvexError(
+          "Market data result date must match requested refresh date",
+        );
+      }
       if (result.status === "ok") {
         if (result.close === undefined) {
           throw new ConvexError(
