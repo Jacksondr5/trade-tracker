@@ -1225,11 +1225,16 @@ export const prepareTemporalMarketDataRefresh = internalMutation({
 
 export const setTemporalMarketDataRunSymbolsRequested = internalMutation({
   args: {
+    ownerId: v.string(),
     runId: v.id("marketDataRefreshRuns"),
     symbolsRequested: v.number(),
   },
   returns: v.null(),
   handler: async (ctx, args): Promise<null> => {
+    const run = await ctx.db.get(args.runId);
+    if (run === null || run.ownerId !== args.ownerId) {
+      throw new ConvexError("Market data refresh run not found");
+    }
     await ctx.db.patch(args.runId, {
       symbolsRequested: args.symbolsRequested,
     });
@@ -1282,6 +1287,7 @@ export const planTemporalMarketDataJobs = internalAction({
     await ctx.runMutation(
       internal.marketData.setTemporalMarketDataRunSymbolsRequested,
       {
+        ownerId: args.ownerId,
         runId: args.marketDataRunId,
         symbolsRequested: instruments.length,
       },
