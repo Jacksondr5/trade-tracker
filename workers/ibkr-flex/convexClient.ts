@@ -1,8 +1,15 @@
 import type {
   BeginBrokerageSyncRunInput,
   BeginBrokerageSyncRunOutput,
+  CompletePipelineRunInput,
+  CompletePipelineRunOutput,
+  ComputePortfolioValuationsInput,
+  ComputePortfolioValuationsOutput,
   CompleteMarketDataRunInput,
   CompleteMarketDataRunOutput,
+  DailyPipelineOwner,
+  FinalizePipelineDateInput,
+  FinalizePipelineDateOutput,
   DueIbkrConnection,
   MarkBrokerageSyncFailedInput,
   PlanMarketDataJobsInput,
@@ -10,7 +17,13 @@ import type {
   PollAndIngestIbkrFlexStatementOutput,
   PrepareMarketDataRefreshInput,
   PrepareMarketDataRefreshOutput,
+  ReconcileBrokerageDateInput,
+  ReconcileBrokerageDateOutput,
   RecordIbkrFlexReferenceInput,
+  StartPipelineDateRunInput,
+  StartPipelineDateRunOutput,
+  StartPipelineRunInput,
+  StartPipelineRunOutput,
   WriteMarketDataResultsInput,
   WriteMarketDataResultsOutput,
 } from "./types";
@@ -32,6 +45,58 @@ export class ConvexServiceClient {
     connections: DueIbkrConnection[];
   }> {
     return await this.post("/internal/brokerage-ingestion/due-connections", {});
+  }
+
+  async listDailyPipelineOwners(): Promise<{ owners: DailyPipelineOwner[] }> {
+    return await this.post("/internal/portfolio-pipeline/daily-owners", {});
+  }
+
+  async startPipelineRun(
+    input: StartPipelineRunInput,
+  ): Promise<StartPipelineRunOutput> {
+    return await this.post("/internal/portfolio-pipeline/start-run", input);
+  }
+
+  async completePipelineRun(
+    input: CompletePipelineRunInput,
+  ): Promise<CompletePipelineRunOutput> {
+    return await this.post("/internal/portfolio-pipeline/complete-run", input);
+  }
+
+  async startPipelineDateRun(
+    input: StartPipelineDateRunInput,
+  ): Promise<StartPipelineDateRunOutput> {
+    return await this.post(
+      "/internal/portfolio-pipeline/start-date-run",
+      input,
+    );
+  }
+
+  async reconcileBrokerageDate(
+    input: ReconcileBrokerageDateInput,
+  ): Promise<ReconcileBrokerageDateOutput> {
+    return await this.post(
+      "/internal/portfolio-pipeline/reconcile-date",
+      input,
+    );
+  }
+
+  async computePortfolioValuations(
+    input: ComputePortfolioValuationsInput,
+  ): Promise<ComputePortfolioValuationsOutput> {
+    return await this.post(
+      "/internal/portfolio-pipeline/compute-valuations",
+      input,
+    );
+  }
+
+  async finalizePipelineDate(
+    input: FinalizePipelineDateInput,
+  ): Promise<FinalizePipelineDateOutput> {
+    return await this.post(
+      "/internal/portfolio-pipeline/finalize-date-run",
+      input,
+    );
   }
 
   async beginSyncRun(

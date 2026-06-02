@@ -316,6 +316,27 @@ function requireMarketDataResults(body: JsonObject): HttpMarketDataResult[] {
   });
 }
 
+function requirePipelineAggregate(body: JsonObject) {
+  const aggregate = body.aggregate;
+  if (!aggregate || typeof aggregate !== "object" || Array.isArray(aggregate)) {
+    throw new JsonValidationError("aggregate must be an object");
+  }
+  const aggregateBody = aggregate as JsonObject;
+  const requireNonNegativeInteger = (key: string): number => {
+    const value = requireNumber(aggregateBody, key);
+    if (!Number.isInteger(value) || value < 0) {
+      throw new JsonValidationError(`${key} must be a non-negative integer`);
+    }
+    return value;
+  };
+  return {
+    datesFailed: requireNonNegativeInteger("datesFailed"),
+    datesPartial: requireNonNegativeInteger("datesPartial"),
+    datesSkipped: requireNonNegativeInteger("datesSkipped"),
+    datesSucceeded: requireNonNegativeInteger("datesSucceeded"),
+  };
+}
+
 async function sha256Hex(value: string): Promise<string> {
   const bytes = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
@@ -611,6 +632,188 @@ http.route({
           ) as Id<"marketDataRefreshRuns">,
           symbolsFailed: requireNumber(body, "symbolsFailed"),
           symbolsSucceeded: requireNumber(body, "symbolsSucceeded"),
+        },
+      );
+      return jsonResponse(result);
+    });
+  }),
+});
+
+http.route({
+  path: "/internal/portfolio-pipeline/daily-owners",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedOnly(req, async () => {
+      const owners = await ctx.runQuery(
+        internal.portfolioPipeline.listDailyOwners,
+        {},
+      );
+      return jsonResponse({ owners });
+    });
+  }),
+});
+
+http.route({
+  path: "/internal/portfolio-pipeline/start-run",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body) => {
+      const result = await ctx.runMutation(
+        internal.portfolioPipeline.startRun,
+        {
+          endDate: requireString(body, "endDate"),
+          mode: requireLiteral(body, "mode", [
+            "daily",
+            "backfill",
+            "recompute",
+          ]),
+          ownerId: requireString(body, "ownerId"),
+          requestedByOwnerId: optionalString(body, "requestedByOwnerId"),
+          startDate: requireString(body, "startDate"),
+          temporalWorkflowId: requireString(body, "temporalWorkflowId"),
+        },
+      );
+      return jsonResponse(result);
+    });
+  }),
+});
+
+http.route({
+  path: "/internal/portfolio-pipeline/complete-run",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body) => {
+      const result = await ctx.runMutation(
+        internal.portfolioPipeline.completeRun,
+        {
+          aggregate: requirePipelineAggregate(body),
+          pipelineRunId: requireString(
+            body,
+            "pipelineRunId",
+          ) as Id<"portfolioPipelineRuns">,
+        },
+      );
+      return jsonResponse(result);
+    });
+  }),
+});
+
+http.route({
+  path: "/internal/portfolio-pipeline/start-date-run",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body) => {
+      const result = await ctx.runMutation(
+        internal.portfolioPipeline.startDateRun,
+        {
+          date: requireString(body, "date"),
+          mode: requireLiteral(body, "mode", [
+            "daily",
+            "backfill",
+            "recompute",
+          ]),
+          ownerId: requireString(body, "ownerId"),
+          pipelineRunId: requireString(
+            body,
+            "pipelineRunId",
+          ) as Id<"portfolioPipelineRuns">,
+          temporalWorkflowId: requireString(body, "temporalWorkflowId"),
+        },
+      );
+      return jsonResponse(result);
+    });
+  }),
+});
+
+http.route({
+  path: "/internal/portfolio-pipeline/reconcile-date",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body) => {
+      const result = await ctx.runQuery(
+        internal.portfolioPipeline.summarizeReconciliation,
+        {
+          date: requireString(body, "date"),
+          force: optionalBoolean(body, "force") ?? false,
+          ownerId: requireString(body, "ownerId"),
+          pipelineDateRunId: requireString(
+            body,
+            "pipelineDateRunId",
+          ) as Id<"portfolioPipelineDateRuns">,
+        },
+      );
+      return jsonResponse(result);
+    });
+  }),
+});
+
+http.route({
+  path: "/internal/portfolio-pipeline/compute-valuations",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body) => {
+      const result = await ctx.runMutation(
+        internal.portfolioPipeline.computeValuations,
+        {
+          date: requireString(body, "date"),
+          force: optionalBoolean(body, "force") ?? false,
+          ownerId: requireString(body, "ownerId"),
+          pipelineDateRunId: requireString(
+            body,
+            "pipelineDateRunId",
+          ) as Id<"portfolioPipelineDateRuns">,
+        },
+      );
+      return jsonResponse(result);
+    });
+  }),
+});
+
+http.route({
+  path: "/internal/portfolio-pipeline/finalize-date-run",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body) => {
+      const result = await ctx.runMutation(
+        internal.portfolioPipeline.finalizeDateRun,
+        {
+          brokerageStatus: requireLiteral(body, "brokerageStatus", [
+            "not_requested",
+            "skipped",
+            "succeeded",
+            "partial",
+            "failed",
+            "blocked",
+          ]),
+          errorMessage: optionalString(body, "errorMessage"),
+          marketDataStatus: requireLiteral(body, "marketDataStatus", [
+            "not_requested",
+            "skipped",
+            "succeeded",
+            "partial",
+            "failed",
+            "blocked",
+          ]),
+          pipelineDateRunId: requireString(
+            body,
+            "pipelineDateRunId",
+          ) as Id<"portfolioPipelineDateRuns">,
+          reconciliationStatus: requireLiteral(body, "reconciliationStatus", [
+            "not_requested",
+            "skipped",
+            "succeeded",
+            "partial",
+            "failed",
+            "blocked",
+          ]),
+          valuationStatus: requireLiteral(body, "valuationStatus", [
+            "not_requested",
+            "skipped",
+            "succeeded",
+            "partial",
+            "failed",
+            "blocked",
+          ]),
         },
       );
       return jsonResponse(result);

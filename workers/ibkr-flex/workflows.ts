@@ -3,32 +3,47 @@ import {
   executeChild,
   proxyActivities,
   sleep,
+  workflowInfo,
 } from "@temporalio/workflow";
 import type { IbkrFlexActivities } from "./activities";
 import type {
   BrokerageSyncReportType,
+  DailyPortfolioPipelineWorkflowInput,
+  DailyPortfolioPipelineWorkflowOutput,
   DailyIbkrFlexBrokerageSyncWorkflowInput,
   DailyIbkrFlexBrokerageSyncWorkflowOutput,
   IbkrFlexBrokerageSyncWorkflowInput,
   IbkrFlexBrokerageSyncWorkflowOutput,
   MarketDataDateWorkflowInput,
   MarketDataDateWorkflowOutput,
+  PipelinePhaseSelection,
+  PipelineSkipPolicy,
+  PortfolioDateWorkflowInput,
+  PortfolioDateWorkflowOutput,
+  PortfolioPipelinePhaseStatus,
 } from "./types";
 
 const {
   beginBrokerageSyncRun,
+  completePipelineRun,
   listDueIbkrConnections,
+  listDailyPipelineOwners,
   markBrokerageSyncFailed,
   markBrokerageSyncSucceeded,
   markBrokerageSyncWaiting,
   pollAndIngestIbkrFlexStatement,
+  computePortfolioValuations,
   completeMarketDataRun,
+  finalizePipelineDate,
   fetchMarketPrice,
   planMarketDataJobs,
   prepareMarketDataRefresh,
+  reconcileBrokerageDate,
   recordIbkrFlexReference,
   resolvePriorBusinessDate,
   sendIbkrFlexRequest,
+  startPipelineDateRun,
+  startPipelineRun,
   writeMarketDataResults,
 } = proxyActivities<IbkrFlexActivities>({
   retry: {
@@ -39,6 +54,19 @@ const {
 });
 
 const MARKET_DATA_RESULT_BATCH_SIZE = 25;
+const DAILY_PIPELINE_OWNER_ID = "__daily__";
+const DEFAULT_DAILY_PHASES: PipelinePhaseSelection = {
+  computeValuations: true,
+  reconcile: true,
+  refreshMarketData: true,
+  syncBrokerage: true,
+};
+const DEFAULT_DAILY_SKIP_POLICY: PipelineSkipPolicy = {
+  forceBrokerageSync: false,
+  forceMarketDataRefresh: false,
+  forceReconciliation: false,
+  forceValuationCompute: false,
+};
 
 function pollDelayMs(args: {
   attempt: number;
@@ -59,7 +87,12 @@ export async function dailyIbkrFlexBrokerageSyncWorkflow(
   input: DailyIbkrFlexBrokerageSyncWorkflowInput = {},
 ): Promise<DailyIbkrFlexBrokerageSyncWorkflowOutput> {
   const reportDate = input.reportDate ?? (await resolvePriorBusinessDate());
-  const connections = await listDueIbkrConnections();
+  const allConnections = await listDueIbkrConnections();
+  const connections = input.ownerId
+    ? allConnections.filter(
+        (connection) => connection.ownerId === input.ownerId,
+      )
+    : allConnections;
   const results = await Promise.all(
     connections.map(async (connection) => {
       try {
@@ -95,6 +128,202 @@ export async function dailyIbkrFlexBrokerageSyncWorkflow(
         : runsSucceeded === 0
           ? "failed"
           : "partial",
+  };
+}
+
+export async function dailyPortfolioPipelineWorkflow(
+  input: DailyPortfolioPipelineWorkflowInput = {},
+): Promise<DailyPortfolioPipelineWorkflowOutput> {
+  const pipelineDate = await resolvePriorBusinessDate();
+  const workflowId = workflowInfo().workflowId;
+  const pipelineRun = await startPipelineRun({
+    endDate: pipelineDate,
+    mode: input.mode ?? "daily",
+    ownerId: DAILY_PIPELINE_OWNER_ID,
+    startDate: pipelineDate,
+    temporalWorkflowId: workflowId,
+  });
+  const owners = await listDailyPipelineOwners();
+  const results = await Promise.all(
+    owners.map(async (owner) => {
+      try {
+        return await executeChild(portfolioDateWorkflow, {
+          args: [
+            {
+              date: pipelineDate,
+              mode: "daily",
+              ownerId: owner.ownerId,
+              phases: DEFAULT_DAILY_PHASES,
+              pipelineRunId: pipelineRun.pipelineRunId,
+              skipPolicy: DEFAULT_DAILY_SKIP_POLICY,
+            },
+          ],
+          workflowId: `portfolio-date:${pipelineRun.pipelineRunId}:${owner.ownerId}:${pipelineDate}:daily`,
+        });
+      } catch {
+        return {
+          finalStatus: "failed",
+        } as const;
+      }
+    }),
+  );
+  const datesSucceeded = results.filter(
+    (result) => result.finalStatus === "succeeded",
+  ).length;
+  const datesPartial = results.filter(
+    (result) => result.finalStatus === "partial",
+  ).length;
+  const datesSkipped = results.filter(
+    (result) => result.finalStatus === "skipped",
+  ).length;
+  const datesFailed =
+    results.length - datesSucceeded - datesPartial - datesSkipped;
+  const completion = await completePipelineRun({
+    aggregate: {
+      datesFailed,
+      datesPartial,
+      datesSkipped,
+      datesSucceeded,
+    },
+    pipelineRunId: pipelineRun.pipelineRunId,
+  });
+
+  return {
+    ownerRunsFailed: datesFailed,
+    ownerRunsStarted: owners.length,
+    ownerRunsSucceeded: datesSucceeded,
+    pipelineDate,
+    pipelineRunId: pipelineRun.pipelineRunId,
+    status:
+      completion.status === "succeeded"
+        ? "succeeded"
+        : completion.status === "failed"
+          ? "failed"
+          : "partial",
+  };
+}
+
+function phaseStatusFromMarketData(
+  output: MarketDataDateWorkflowOutput,
+): PortfolioPipelinePhaseStatus {
+  return output.status;
+}
+
+function finalErrorMessage(errors: string[]): string | undefined {
+  return errors.length === 0 ? undefined : errors.join("; ");
+}
+
+export async function portfolioDateWorkflow(
+  input: PortfolioDateWorkflowInput,
+): Promise<PortfolioDateWorkflowOutput> {
+  const phases = input.phases ?? DEFAULT_DAILY_PHASES;
+  const skipPolicy = input.skipPolicy ?? DEFAULT_DAILY_SKIP_POLICY;
+  const dateRun = await startPipelineDateRun({
+    date: input.date,
+    mode: input.mode,
+    ownerId: input.ownerId,
+    pipelineRunId: input.pipelineRunId,
+    temporalWorkflowId: workflowInfo().workflowId,
+  });
+  const errors: string[] = [];
+  let brokerageStatus: PortfolioPipelinePhaseStatus = phases.syncBrokerage
+    ? "failed"
+    : "not_requested";
+  let marketDataStatus: PortfolioPipelinePhaseStatus = phases.refreshMarketData
+    ? "failed"
+    : "not_requested";
+  let reconciliationStatus: PortfolioPipelinePhaseStatus = phases.reconcile
+    ? "blocked"
+    : "not_requested";
+  let valuationStatus: PortfolioPipelinePhaseStatus = phases.computeValuations
+    ? "failed"
+    : "not_requested";
+
+  if (phases.syncBrokerage) {
+    try {
+      const brokerage = await executeChild(dailyIbkrFlexBrokerageSyncWorkflow, {
+        args: [{ ownerId: input.ownerId, reportDate: input.date }],
+        workflowId: `brokerage-sync:${dateRun.pipelineDateRunId}:${input.ownerId}:${input.date}:${input.mode}`,
+      });
+      brokerageStatus = brokerage.status;
+    } catch (error) {
+      brokerageStatus = "failed";
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  if (phases.refreshMarketData) {
+    try {
+      const marketData = await executeChild(marketDataDateWorkflow, {
+        args: [
+          {
+            date: input.date,
+            force: skipPolicy.forceMarketDataRefresh,
+            ownerId: input.ownerId,
+            pipelineDateRunId: dateRun.pipelineDateRunId,
+            pipelineRunId: input.pipelineRunId,
+          },
+        ],
+        workflowId: `market-data:${dateRun.pipelineDateRunId}:${input.ownerId}:${input.date}:${input.mode}`,
+      });
+      marketDataStatus = phaseStatusFromMarketData(marketData);
+    } catch (error) {
+      marketDataStatus = "failed";
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  if (phases.reconcile) {
+    if (brokerageStatus === "failed") {
+      reconciliationStatus = "blocked";
+    } else {
+      try {
+        const reconciliation = await reconcileBrokerageDate({
+          date: input.date,
+          force: skipPolicy.forceReconciliation,
+          ownerId: input.ownerId,
+          pipelineDateRunId: dateRun.pipelineDateRunId,
+        });
+        reconciliationStatus = reconciliation.status;
+      } catch (error) {
+        reconciliationStatus = "failed";
+        errors.push(error instanceof Error ? error.message : String(error));
+      }
+    }
+  }
+
+  if (phases.computeValuations) {
+    try {
+      const valuation = await computePortfolioValuations({
+        date: input.date,
+        force: skipPolicy.forceValuationCompute,
+        ownerId: input.ownerId,
+        pipelineDateRunId: dateRun.pipelineDateRunId,
+      });
+      valuationStatus = valuation.status;
+    } catch (error) {
+      valuationStatus = "failed";
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  const finalized = await finalizePipelineDate({
+    brokerageStatus,
+    errorMessage: finalErrorMessage(errors),
+    marketDataStatus,
+    pipelineDateRunId: dateRun.pipelineDateRunId,
+    reconciliationStatus,
+    valuationStatus,
+  });
+
+  return {
+    brokerageStatus,
+    date: input.date,
+    finalStatus: finalized.finalStatus,
+    marketDataStatus,
+    pipelineDateRunId: dateRun.pipelineDateRunId,
+    reconciliationStatus,
+    valuationStatus,
   };
 }
 

@@ -30,6 +30,7 @@ import type * as navigation from "../navigation.js";
 import type * as notes from "../notes.js";
 import type * as portfolioAnalytics from "../portfolioAnalytics.js";
 import type * as portfolioCashLedger from "../portfolioCashLedger.js";
+import type * as portfolioPipeline from "../portfolioPipeline.js";
 import type * as portfolios from "../portfolios.js";
 import type * as positions from "../positions.js";
 import type * as retrospectives from "../retrospectives.js";
@@ -67,6 +68,7 @@ declare const fullApi: ApiFromModules<{
   notes: typeof notes;
   portfolioAnalytics: typeof portfolioAnalytics;
   portfolioCashLedger: typeof portfolioCashLedger;
+  portfolioPipeline: typeof portfolioPipeline;
   portfolios: typeof portfolios;
   positions: typeof positions;
   retrospectives: typeof retrospectives;

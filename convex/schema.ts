@@ -507,17 +507,21 @@ export default defineSchema({
 
   portfolioPipelineRuns: defineTable({
     completedAt: v.optional(v.number()),
+    endDate: v.string(),
     errorMessage: v.optional(v.string()),
     mode: portfolioPipelineModeValidator,
     ownerId: v.string(),
     requestedAt: v.number(),
     requestedByOwnerId: v.optional(v.string()),
+    startDate: v.string(),
     startedAt: v.optional(v.number()),
     status: portfolioPipelineRunStatusValidator,
+    temporalWorkflowId: v.optional(v.string()),
     updatedAt: v.number(),
   })
     .index("by_ownerId_and_status", ["ownerId", "status"])
     .index("by_ownerId_and_requestedAt", ["ownerId", "requestedAt"])
+    .index("by_temporalWorkflowId", ["temporalWorkflowId"])
     .index("by_status_and_updatedAt", ["status", "updatedAt"]),
 
   portfolioPipelineDateRuns: defineTable({
@@ -529,9 +533,17 @@ export default defineSchema({
     pipelineRunId: v.id("portfolioPipelineRuns"),
     startedAt: v.optional(v.number()),
     status: portfolioPipelineDateRunStatusValidator,
+    temporalWorkflowId: v.optional(v.string()),
     updatedAt: v.number(),
   })
     .index("by_pipelineRunId", ["pipelineRunId"])
+    .index("by_pipelineRunId_and_ownerId_and_date_and_mode", [
+      "pipelineRunId",
+      "ownerId",
+      "date",
+      "mode",
+    ])
+    .index("by_temporalWorkflowId", ["temporalWorkflowId"])
     .index("by_ownerId_and_date", ["ownerId", "date"])
     .index("by_ownerId_and_date_and_mode", ["ownerId", "date", "mode"])
     .index("by_ownerId_and_status", ["ownerId", "status"]),

@@ -6,7 +6,7 @@ import {
 } from "@temporalio/client";
 import { loadIbkrFlexWorkerConfig } from "./config";
 
-const DAILY_SCHEDULE_ID = "trade-tracker-ibkr-flex-daily";
+const DAILY_SCHEDULE_ID = "trade-tracker-portfolio-pipeline-daily";
 
 async function ensureSchedule() {
   const config = loadIbkrFlexWorkerConfig();
@@ -27,7 +27,7 @@ async function ensureSchedule() {
       ],
       taskQueue: config.temporalTaskQueue,
       type: "startWorkflow" as const,
-      workflowType: "dailyIbkrFlexBrokerageSyncWorkflow",
+      workflowType: "dailyPortfolioPipelineWorkflow",
     },
     policies: {
       overlap: ScheduleOverlapPolicy.SKIP,
