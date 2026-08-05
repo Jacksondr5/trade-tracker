@@ -75,8 +75,7 @@ export class IbkrFlexClient {
     queryId: string;
     reportDate: string;
   }): Promise<{ referenceCode: string }> {
-    const url = this.url("FlexStatementService.SendRequest", {
-      date: args.reportDate,
+    const url = this.url("SendRequest", {
       q: args.queryId,
     });
     const xml = await this.getText(url);
@@ -94,7 +93,7 @@ export class IbkrFlexClient {
   }
 
   async getStatement(referenceCode: string): Promise<IbkrStatementResult> {
-    const url = this.url("FlexStatementService.GetStatement", {
+    const url = this.url("GetStatement", {
       q: referenceCode,
     });
     const xml = await this.getText(url);
@@ -129,7 +128,9 @@ export class IbkrFlexClient {
   }
 
   private async getText(url: URL): Promise<string> {
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: { "User-Agent": "TradeTracker/0.0.1" },
+    });
     if (!response.ok) {
       throw new Error(
         `IBKR Flex request failed ${response.status}: ${response.statusText}`,
