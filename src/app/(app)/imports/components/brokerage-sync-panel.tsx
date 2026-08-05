@@ -52,14 +52,6 @@ type ConnectionFormValues = z.infer<typeof connectionSchema>;
 type BadgeVariant = NonNullable<BadgeProps["variant"]>;
 type ConnectionStatus = "active" | "paused" | "needs_setup" | "error";
 
-function validateConnectionField(
-  field: keyof ConnectionFormValues,
-  value: string,
-): string | undefined {
-  const result = connectionSchema.shape[field].safeParse(value);
-  return result.success ? undefined : result.error.issues[0]?.message;
-}
-
 function getStatusPresentation(status: ConnectionStatus): {
   label: string;
   variant: BadgeVariant;
@@ -407,13 +399,7 @@ export function BrokerageSyncPanel({
               </p>
             </div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-              <form.AppField
-                name="label"
-                validators={{
-                  onChange: ({ value }) =>
-                    validateConnectionField("label", value),
-                }}
-              >
+              <form.AppField name="label">
                 {(field) => (
                   <field.FieldInput
                     label="Connection label"
@@ -421,13 +407,7 @@ export function BrokerageSyncPanel({
                   />
                 )}
               </form.AppField>
-              <form.AppField
-                name="accountId"
-                validators={{
-                  onChange: ({ value }) =>
-                    validateConnectionField("accountId", value),
-                }}
-              >
+              <form.AppField name="accountId">
                 {(field) => (
                   <field.FieldInput
                     dataTestId={
@@ -438,13 +418,7 @@ export function BrokerageSyncPanel({
                   />
                 )}
               </form.AppField>
-              <form.AppField
-                name="queryId"
-                validators={{
-                  onChange: ({ value }) =>
-                    validateConnectionField("queryId", value),
-                }}
-              >
+              <form.AppField name="queryId">
                 {(field) => (
                   <field.FieldInput
                     dataTestId={
@@ -456,13 +430,7 @@ export function BrokerageSyncPanel({
                   />
                 )}
               </form.AppField>
-              <form.AppField
-                name="tokenLabel"
-                validators={{
-                  onChange: ({ value }) =>
-                    validateConnectionField("tokenLabel", value),
-                }}
-              >
+              <form.AppField name="tokenLabel">
                 {(field) => (
                   <field.FieldInput
                     label="Worker secret label"
@@ -470,13 +438,7 @@ export function BrokerageSyncPanel({
                   />
                 )}
               </form.AppField>
-              <form.AppField
-                name="tokenExpiresOn"
-                validators={{
-                  onChange: ({ value }) =>
-                    validateConnectionField("tokenExpiresOn", value),
-                }}
-              >
+              <form.AppField name="tokenExpiresOn">
                 {(field) => (
                   <field.FieldInput label="Token expires" type="date" />
                 )}
