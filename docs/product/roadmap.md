@@ -2,155 +2,123 @@
 
 ## Purpose
 
-This roadmap describes the current intended sequence of product work for Trade Tracker.
+This roadmap describes the current intended sequence of major product work for Trade Tracker.
 
-It is not a release plan. It is a strategic ordering of major product efforts based on current priorities, product maturity, and the need to tighten the existing workflow before expanding into larger new feature sets.
+It is not a release plan. It is a strategic ordering based on the diagnosis recorded in [decision-log.md](decision-log.md): the app failed through months of non-use because every interaction was a deposit with a deferred payoff. The sequence below is ordered around restarting and proving the engagement flywheel before investing in surfaces or migrations.
+
+This supersedes the earlier UI-first ordering (navigation overhaul, thinking surfaces, operational polish). That work remains valid and is retained below in compressed form, but it no longer leads: polishing surfaces the target user was not opening does not address the failure.
 
 ## Roadmap Principles
 
-- Improve the current core workflow before broadening the product.
-- Fix movement and context before polishing isolated screens.
-- Strengthen evidence capture and review before building deep analytics.
-- Roll the new visual design system out incrementally as major surfaces are touched.
-- Build missing shared UI primitives as soon as a phase needs them rather than deferring them to a later cleanup pass.
-- Every phase should leave touched surfaces more compliant with the shared UI and shared form system than before.
+- Restore automated deposits and remove the owed-work pile before anything else.
+- Test the riskiest assumption — that a system-initiated check-in gets engaged with during real workdays — before building on it.
+- Migrate the data model on evidence from real use, not ahead of it.
+- Keep every interaction paying at the moment of use (principle 14 in [product-principles.md](product-principles.md)).
+- Defer deep UI investment in surfaces the instrument-thread model will reshape.
 - Keep the roadmap flexible where the product is still exploratory.
 
-## Phase 1: Navigation And Working Context
+## Phase 1: Automated Deposits And Clean Slate
 
-Goal: make the core hierarchy easier to move through and easier to keep in view during daily use.
+Goal: the system deposits data without user discipline, and the mountain of owed work is gone.
 
 Includes:
 
-1. Campaign and Trade Plan navigation overhaul
-2. Watchlist as a cross-cutting focus layer
-3. Better linkage and visibility across `campaign -> trade plan -> trade`
-4. Cleaner handling of standalone trade plans vs campaign-linked trade plans
-5. Global shell redesign from flat top-nav to the grouped desktop sidebar and mobile drawer model
-6. Local hierarchy rail for campaigns and trade plans, plus breadcrumb behavior on mobile
-7. Command palette / quick-switcher groundwork for direct jumps to known campaigns and trade plans
-8. Apply canonical navigation language such as `Imports` instead of route-local variants
-9. Apply the new visual design system to all navigation and hierarchy surfaces touched in this phase
+1. Finish and prove IBKR automated ingestion: connection/status UI, reconciliation visibility, and the nightly sync proven against the real account (see [brokerage-ingestion.md](brokerage-ingestion.md))
+2. Deactivate the Bravos import feature and clear its review backlog; delete Bravos-created trade plans with no user-authored notes
+3. Clean slate on the campaign and trade-plan layer: audit for genuinely well-filled-out keepers, then clear the rest
+4. Forward-looking backfill for active and recent positions: establish the plan from here, not reconstructed entry rationale
 
 Why this phase comes first:
 
-- the current hierarchy exists in the model but is harder to navigate than it should be
-- movement between related objects is too expensive
-- focus and parent-child context need to stay visible without relying on memory
+- automated ingestion is the deposit engine everything downstream pays from
+- the owed-work pile is the standing reason the app stopped being opened
 
-## Phase 2: Core Thinking Surfaces
+## Phase 2: Flywheel Probe
 
-Goal: improve the parts of the product that already matter most to the trading process.
-
-Includes:
-
-1. Strategy editor redesign
-2. Notes workflow redesign, including chart and image support
-3. Campaign detail and Trade Plan detail information design refresh
-4. Make trade plans a true first-class tactical working surface rather than splitting the experience between standalone lists and campaign detail embeds
-5. Expose the richer trade-plan structure needed for tactical planning, such as rationale, entry, target, exit, and instrument notes
-6. Keep campaign, trade plan, trade, and note context visible together on the main thinking surfaces
-7. Retrospective workflow design
-8. Apply the new visual design system to all strategy, notes, campaign, and trade-plan surfaces touched in this phase
-
-Why this phase comes next:
-
-- these are the most mature and most strategically important workflows
-- they hold the thinking, evidence, and review context the product depends on
-- improving them has higher leverage than expanding underdeveloped areas
-
-## Phase 3: Operational Efficiency
-
-Goal: reduce weekly maintenance work and make operational surfaces faster and clearer.
+Goal: test whether the system-initiated daily check-in actually gets engaged with during real workdays, before any model migration.
 
 Includes:
 
-1. Import flow UX refinement for weekly throughput
-2. Standardize status language vs watch and focus language
-3. Refactor dense operational controls onto shared primitives instead of maintaining route-local inputs, selects, and action buttons
-4. Improve loading and skeleton states across data-heavy routes
-5. Apply the copy principles across major surfaces touched in this phase
-6. Apply the new visual design system to all operational and data-heavy surfaces touched in this phase
+1. A minimal AI counterpart reachable over Discord DM (see [ai-counterpart.md](ai-counterpart.md))
+2. System-initiated check-ins in the real workday windows: late morning, mid-afternoon, end of day
+3. The mirror and the briefing as check-in content, fed by nightly IBKR data
+4. Replies captured as instrument-tagged notes, with no schema migration required
+5. Unanswered check-ins evaporate; nothing accumulates
 
-Why this phase follows the core thinking surfaces:
+Success measure:
 
-- imports matter, but they are an operational workflow rather than the center of the product
-- the right measure of success here is reduced friction, less admin work, and reliable throughput
+- the ritual sticks across real workweeks, judged by sustained engagement, not feature completeness
 
-## Phase 4: Systemization And Documentation
+Why this phase comes second:
 
-Goal: consolidate the design and product system before moving into larger analytics and review expansions.
+- the entire design rests on one behavioral hypothesis, and it is testable almost for free
+- if the ritual does not stick, that is learned cheaply with no migration to unwind
+
+## Phase 3: Instrument Thread Model
+
+Goal: build the target data model under a ritual that has evidence.
 
 Includes:
 
-1. Apply the new visual design system across the authenticated shell
-2. Standardize page templates, empty states, and recurring page-level patterns
-3. Fill the remaining shared UI gaps such as standalone selects, icon-button patterns, and other reused controls discovered in earlier phases
-4. Migrate remaining touched routes off route-local UI patterns and onto the shared UI layer
-5. Maintain and update `technical-architecture-overview.md`
-6. Maintain and expand `glossary.md`
-7. Start and maintain a decision log (`docs/product/decision-log.md`)
-8. Maintain this roadmap as priorities change
+1. Instrument threads as permanent first-class objects
+2. Episodes: bounded engagements with setup conditions, lifecycle, source, and concurrency support
+3. Trade plan migration or replacement, informed by probe experience
+4. Note attachment to threads and episodes
+5. Campaign linkage to threads and episodes (see [instrument-threads.md](instrument-threads.md))
+
+Why this phase follows the probe:
+
+- migration is expensive and its shape should be informed by how capture actually behaves in practice
+
+## Phase 4: Counterpart Deepening
+
+Goal: close the retro loop and grow the counterpart's value per exchange.
+
+Includes:
+
+1. Retrospective drafting when episodes close; endorsed lessons written to threads
+2. Lessons and past-episode context surfaced at re-entry decisions
+3. Highlighting: approaching conditions, stale ideas, suggested TradingView alerts
+4. Thesis-development conversations feeding campaigns and threads
+5. External-source episodes (for example, Bravos re-entry as thread context) if wanted
 
 Why this phase sits here:
 
-- phases 1 through 3 will change a meaningful portion of the app
-- the product should be tightened and documented before larger new feature areas are introduced
-- some of this work should happen in parallel with earlier phases, but it should be considered a formal checkpoint before major analytics expansion
-- this phase is for consolidation and long-tail cleanup, not for deferring obvious shared-component adoption on high-priority surfaces
+- each item deepens a loop the earlier phases have already made real
 
-## Phase 5: Analytics Foundation
+## Later: App Surface Improvement
 
-Goal: build the first meaningful analytical layer for judging whether the trading process is working.
+The earlier roadmap's UI phases live here in compressed form. They remain worth doing, but deep investment waits until the instrument-thread model has settled, because campaign and trade-plan surfaces are exactly what the model reshapes.
 
-Includes:
+- Navigation and working context: sidebar shell, local hierarchy rail, command palette, watchlist as a focus layer (see [navigation-model.md](navigation-model.md))
+- Core thinking surfaces: strategy editor, notes workflow, detail-page information design, retrospective UI
+- Operational efficiency: import review throughput, status and copy standardization, loading states
+- Systemization: shared UI primitives, page templates, visual design system rollout (see [visual-design-system.md](visual-design-system.md))
 
-1. Baseline performance analytics
-2. Exposure analytics by portfolio, campaign, and trade plan
-3. Review-oriented analytics that point to what deserves diagnosis
-4. Portfolio model clarification for future analytics and exposure review
-5. Define the long-term analytics object model before expanding the dashboard
+## Later: Analytics And Review Maturity
 
-Why this phase comes after systemization:
+- Baseline performance and exposure analytics across portfolios, campaigns, and threads
+- Review-oriented analytics that point to what deserves diagnosis
+- Dashboard redesign once the analytical model is mature enough to justify it
+- Portfolio model clarification if analytics prove a stronger structural role is needed
 
-- analytics should be built on top of stronger workflow, evidence, and design foundations
-- the dashboard should not be expanded until the underlying analytical model is clear
-
-## Phase 6: Review And Portfolio Maturity
-
-Goal: deepen the review layer and clarify parts of the model that are currently intentionally flexible.
-
-Includes:
-
-1. Retrospective summaries and possible retrospectives of retrospectives
-2. Watchlist and review signals surfaced into the dashboard
-3. Dashboard redesign once analytics are mature enough to justify it
-4. Keep portfolios as trade-linked overlays unless analytics prove a stronger model is needed
-5. Clarify the long-term role of trades without trade plans
-6. Make a deliberate trade-detail visibility decision while keeping notes centered on campaigns and trade plans
-
-Why this phase comes last:
-
-- it depends on better navigation, stronger thinking surfaces, and a more developed analytics layer
-- several items here are important, but they should be resolved with more product evidence than is available today
+Analytics still come after the flywheel work: they are a withdrawal surface, and they need the deposit engine and captured reasoning to have something to reveal.
 
 ## Notes On Scope
 
-- `Dashboard` remains strategically important but is not an early design priority.
-- `Portfolios` matter, but they should remain an overlay until analytics prove they need a stronger structural role.
-- `Watchlist` should remain separate from lifecycle status throughout this roadmap.
-- Notes should remain attached to campaigns, trade plans, or no parent object.
-- A possible future trade-detail workflow may emerge from phases 2 and 6, but it should not distract from the campaign and trade-plan hierarchy work that comes first.
-- Shared UI and shared form migration is not isolated to phase 4; each earlier phase should improve the system on the surfaces it touches.
+- `Watchlist` remains separate from lifecycle status throughout.
+- Portfolios remain overlays unless analytics prove otherwise.
+- Bare records stay tolerated data in every phase; no phase may reintroduce an owed-work pile.
+- The Discord-vs-app-infrastructure hosting decision for the counterpart is made during the probe, not before.
 
 ## Summary
 
-The roadmap is intentionally front-loaded toward tightening the product that already exists:
+The roadmap is ordered around one lesson: the product failed by waiting quietly and demanding deposits.
 
-1. improve navigation and context
-2. improve the main thinking and review surfaces
-3. reduce operational friction
-4. consolidate the system
-5. then expand analytics and deeper review
+1. restore automated deposits and clear the owed work
+2. prove the system-initiated ritual cheaply
+3. build the instrument-thread model on that evidence
+4. deepen the counterpart until the retro loop compounds
+5. then invest in surfaces and analytics
 
-That order keeps the product grounded in real workflow improvement instead of expanding breadth too early.
+Each phase exists to make the next one's payoff real.

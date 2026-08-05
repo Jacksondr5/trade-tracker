@@ -35,6 +35,12 @@ That core chain is supported by additional layers:
 
 The architecture is intentionally flexible. The product prefers structured workflows, but does not force perfect structure at all times.
 
+## Model Direction
+
+This document describes the currently implemented model. The settled direction is to evolve it: the instrument becomes a first-class object (the instrument thread), trade plans' role is carried by bounded episodes born into threads, and campaigns remain the instrument-optional thematic layer. See [instrument-threads.md](instrument-threads.md) for the target model and its reasoning, and [roadmap.md](roadmap.md) for sequencing — migration follows evidence from the flywheel probe.
+
+Where this document and the target model diverge, this document remains authoritative for the implemented system until migration.
+
 ## Object Taxonomy
 
 The system is easiest to understand in five groups.

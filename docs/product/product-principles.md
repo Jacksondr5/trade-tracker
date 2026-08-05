@@ -225,6 +225,21 @@ This is especially important in navigation and review workflows.
 
 Use [glossary.md](glossary.md) for the term meanings, [navigation-model.md](navigation-model.md) for placement and behavior, and [content-and-copy-principles.md](content-and-copy-principles.md) for wording.
 
+## 14. Pay At The Moment Of Use
+
+Every interaction should give the target user something back now, not only at a deferred review.
+
+The product's first years proved the failure mode: interactions that only take — write the thesis, assign the imports, log the notes — get dropped under workday time pressure, and the accumulated pile of owed work becomes itself the reason to stop opening the app.
+
+The rules that follow:
+
+- Design interactions as withdrawals with capture as a byproduct, not as data entry with a deferred payoff.
+- A visible pile of owed assignment or annotation work is the failure state. Either capture happens in the moment or the record stays bare, and bare records are tolerated data, not debt.
+- Automated ingestion is the default deposit engine. The system should acquire trades, positions, and prices without user discipline, so there is always something to pay with.
+- Review artifacts must have consumers. A retrospective that nothing ever reads will not get written; a retrospective that makes the next decision smarter will.
+
+See [ai-counterpart.md](ai-counterpart.md) for the main application of this principle.
+
 ## Summary
 
 Trade Tracker should be a focused personal system for trading process development.

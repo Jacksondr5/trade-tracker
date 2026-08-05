@@ -250,6 +250,60 @@ What accounts are not for:
 
 - becoming a large settings surface by themselves
 
+### AI Counterpart
+
+Primary job:
+
+- pay the target user at the moment of use so the record accretes as a byproduct
+
+What the counterpart should optimize for:
+
+- immediate value in every exchange
+- capture as conversation exhaust, never as homework
+- surviving contact with a real workday
+
+What the counterpart is for:
+
+- the system-initiated daily check-in
+- developing half-formed ideas into theses
+- mirroring actual trading behavior back while reasoning is fresh
+- briefing and challenging against the target user's own plans
+- drafting retrospectives and proposing lessons for endorsement
+
+What the counterpart is not for:
+
+- executing or modifying trades
+- live market monitoring or alerting
+- writing durable judgments without endorsement
+- replacing the target user's thinking
+
+See [ai-counterpart.md](ai-counterpart.md) for the full model.
+
+### Instrument Threads And Episodes
+
+Primary job:
+
+- give every instrument a permanent memory that survives between engagements
+
+What threads and episodes should optimize for:
+
+- capture that always has an immediate home (the ticker is always known)
+- context that outlives any single position
+- retrospectives that feed the next decision
+
+What this area is for:
+
+- the per-instrument spine of notes, lessons, and history
+- bounded episodes from setup through retro
+- external-source episodes as context
+
+What this area is not for:
+
+- replacing campaigns as the thematic layer
+- forcing every thought into a setup before it can be recorded
+
+See [instrument-threads.md](instrument-threads.md) for the full model.
+
 ### Navigation / Watchlist
 
 Primary job:

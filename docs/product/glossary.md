@@ -26,6 +26,8 @@ A tactical setup for a specific instrument or expression of an idea.
 
 Trade plans connect thesis to execution and may be linked to a campaign or exist as standalone plans.
 
+In the target model, the trade plan's role is carried by `Episode` under an `Instrument Thread`. See [instrument-threads.md](instrument-threads.md).
+
 Lifecycle states:
 
 - `Idea`: the setup exists conceptually but is not yet ready for close monitoring or execution.
@@ -67,6 +69,40 @@ Portfolios are overlays on the core hierarchy, not the main thesis structure.
 
 A translation from a raw brokerage account identifier to a user-friendly account name.
 
+## Target Model Objects
+
+These objects define the intended model direction described in [instrument-threads.md](instrument-threads.md). They coexist with the current objects above until migration.
+
+### Instrument Thread
+
+A permanent per-instrument container.
+
+Threads aggregate episodes, running notes, endorsed lessons, external context, and campaign links for one instrument. Threads never close.
+
+### Episode
+
+A bounded engagement with an instrument, born into an instrument thread.
+
+Episodes hold setup conditions, linked trades, notes, and a retrospective on close. A thread may have multiple live episodes at once. Episodes carry a source: authored by the user, or attached from an external service as context.
+
+Lifecycle states: `Idea`, `Watching`, `Active`, `Closed` (same meanings as trade plan states).
+
+### Endorsed Lesson
+
+A durable conclusion on an instrument thread that the user has explicitly confirmed, typically from a retrospective.
+
+Only endorsed lessons may be stated back as fact by the AI counterpart. Unendorsed patterns are live inference, presented as inference and never stored as fact.
+
+## AI Terms
+
+### AI Counterpart
+
+The conversational AI partner with read access to the user's data and legible, reviewable write paths. See [ai-counterpart.md](ai-counterpart.md).
+
+### Check-In
+
+The system-initiated daily conversation from the AI counterpart. Its content follows the day: a mirror of new fills, or a briefing on open positions and waiting setups. An unanswered check-in evaporates.
+
 ## Relationship Terms
 
 ### Standalone Trade Plan
@@ -100,6 +136,8 @@ An object that has been added to `Watchlist`.
 - Do not use `priority`, `pinned`, `starred`, and `watched` interchangeably unless the product explicitly adopts one of those terms later.
 - Do not treat portfolios as the parent structure for campaigns or trade plans.
 - Do not treat standalone trade plans as exceptions or broken data.
+- Do not treat bare records (a trade without an episode, a thread without a campaign) as debt or unfinished homework.
+- Do not present AI inference as endorsed fact, and do not suppress inference because it is unendorsed.
 
 ## Naming Rule
 

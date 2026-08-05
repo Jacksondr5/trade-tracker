@@ -198,6 +198,22 @@ The target user should be able to tell:
 
 Trade Tracker should feel assistive, not mysterious.
 
+This extends to AI memory: observations the AI infers from data are presented as inference, and only conclusions the target user has endorsed become durable memory that can be stated back as fact. See [ai-counterpart.md](ai-counterpart.md).
+
+## 13. Let The System Initiate
+
+The product must not wait quietly for the target user to show up.
+
+The steps of the trading process that die under time pressure are the self-driven ones — idea development, documentation, retrospectives. They lose to any workday because nothing demands them. A product that also waits to be opened joins them.
+
+In practice:
+
+- the daily check-in arrives where the target user already is, started by the system
+- prompts follow real events: new fills, closed episodes, approaching conditions
+- an unanswered prompt evaporates; it never becomes a queue of owed replies or a guilt surface
+
+The system cranks the flywheel. The target user's discipline is the beneficiary, not the fuel.
+
 ## Summary
 
 Trade Tracker UX should make disciplined trading behavior easier by keeping context visible, reducing friction, preserving evidence, and supporting clear movement through the thesis-to-trade hierarchy.
