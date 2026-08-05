@@ -589,7 +589,12 @@ export default defineSchema({
       "reportType",
     ])
     .index("by_ownerId_and_startedAt", ["ownerId", "startedAt"])
-    .index("by_ownerId_and_status", ["ownerId", "status"]),
+    .index("by_ownerId_and_status", ["ownerId", "status"])
+    .index("by_ownerId_and_status_and_updatedAt", [
+      "ownerId",
+      "status",
+      "updatedAt",
+    ]),
 
   brokerageRawReports: defineTable({
     byteLength: v.number(),

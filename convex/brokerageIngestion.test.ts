@@ -213,6 +213,85 @@ describe("brokerage ingestion", () => {
     });
   });
 
+  it("returns the operational details needed to review brokerage ingestion", async () => {
+    const connectionId = await createConnection();
+    const tokenExpiresAt = Date.UTC(2026, 11, 31, 23, 59, 59, 999);
+    await asUser().mutation(api.brokerageIngestion.upsertIbkrConnection, {
+      tokenExpiresAt,
+    });
+    const syncRunId = await beginActivitySyncRun(connectionId);
+
+    await t.run(async (ctx) => {
+      await ctx.db.insert("inboxTrades", {
+        assetType: "stock",
+        brokerageAccountId: "U1234567",
+        date: Date.UTC(2026, 4, 14, 16),
+        direction: "long",
+        externalId: "ibkr-execution-1",
+        ownerId,
+        price: 100,
+        quantity: 1,
+        side: "buy",
+        source: "ibkr",
+        status: "pending_review",
+        ticker: "AAPL",
+        validationErrors: [],
+        validationWarnings: [],
+      });
+      await ctx.db.insert("brokerageReconciliationIssues", {
+        actualQuantity: 2,
+        assetType: "stock",
+        brokerageAccountId: "U1234567",
+        connectionId,
+        createdAt: Date.UTC(2026, 4, 15, 6),
+        direction: "long",
+        expectedQuantity: 1,
+        issueType: "position_mismatch",
+        message:
+          "Brokerage reports 2 U1234567 AAPL long; local accepted trades expect 1",
+        ownerId,
+        reportDate: "2026-05-14",
+        severity: "warning",
+        status: "open",
+        syncRunId,
+        ticker: "AAPL",
+        updatedAt: Date.UTC(2026, 4, 15, 6),
+      });
+    });
+
+    await t.mutation(internal.brokerageIngestion.markSyncRunFailed, {
+      errorMessage: "IBKR rejected the Flex token",
+      failureType: "terminal",
+      syncRunId,
+    });
+
+    const status = await asUser().query(
+      api.brokerageIngestion.getBrokerageIngestionStatus,
+      {},
+    );
+
+    expect(status.connections[0]).toMatchObject({
+      connectionError: "IBKR rejected the Flex token",
+      tokenExpiresAt,
+      tokenLabel: "homelab-secret",
+    });
+    expect(status.latestFailedSync).toMatchObject({
+      errorMessage: "IBKR rejected the Flex token",
+      reportDate: "2026-05-14",
+      status: "failed_terminal",
+    });
+    expect(status.pendingImportedTradeCount).toBe(1);
+    expect(status.openIssueCount).toBe(1);
+    expect(status.openIssues).toEqual([
+      expect.objectContaining({
+        message:
+          "Brokerage reports 2 U1234567 AAPL long; local accepted trades expect 1",
+        reportDate: "2026-05-14",
+        severity: "warning",
+      }),
+    ]);
+  });
+
   it("starts or reuses a sync run by connection, report type, report date, and query id", async () => {
     const connectionId = await createConnection();
     const first = await t.mutation(

@@ -537,6 +537,42 @@ export function getBrokerageSelect(page: Page): Locator {
   return page.getByTestId(IMPORTS_INDEX_TEST_IDS.brokerageSelect);
 }
 
+export function getBrokerageConnectionConfigureButton(page: Page): Locator {
+  return page.getByTestId(
+    IMPORTS_INDEX_TEST_IDS.brokerageConnectionConfigureButton,
+  );
+}
+
+export function getBrokerageConnectionForm(page: Page): Locator {
+  return page.getByTestId(IMPORTS_INDEX_TEST_IDS.brokerageConnectionForm);
+}
+
+export function getBrokerageConnectionQueryIdInput(page: Page): Locator {
+  return page.getByTestId(
+    IMPORTS_INDEX_TEST_IDS.brokerageConnectionQueryIdInput,
+  );
+}
+
+export function getBrokerageLatestFailure(page: Page): Locator {
+  return page.getByTestId(IMPORTS_INDEX_TEST_IDS.brokerageLatestFailure);
+}
+
+export function getBrokerageLatestSuccess(page: Page): Locator {
+  return page.getByTestId(IMPORTS_INDEX_TEST_IDS.brokerageLatestSuccess);
+}
+
+export function getBrokeragePendingImports(page: Page): Locator {
+  return page.getByTestId(IMPORTS_INDEX_TEST_IDS.brokeragePendingImports);
+}
+
+export function getBrokerageReconciliationIssues(page: Page): Locator {
+  return page.getByTestId(IMPORTS_INDEX_TEST_IDS.brokerageReconciliationIssues);
+}
+
+export function getBrokerageSyncStatus(page: Page): Locator {
+  return page.getByTestId(IMPORTS_INDEX_TEST_IDS.brokerageSyncStatus);
+}
+
 export function getTradesFilteredEmptyState(page: Page): Locator {
   return page.getByTestId(TRADES_INDEX_TEST_IDS.filteredEmptyState);
 }

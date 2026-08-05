@@ -10,6 +10,7 @@ export default async function ImportsPage() {
     preloadedInboxTradePriceMappings,
     preloadedOpenTradePlans,
     preloadedAccountMappings,
+    preloadedBrokerageIngestionStatus,
     preloadedPortfolios,
     preloadedCampaigns,
   ] = await Promise.all([
@@ -17,6 +18,11 @@ export default async function ImportsPage() {
     preloadQuery(api.imports.listInboxTradePriceMappings, {}, { token }),
     preloadQuery(api.tradePlans.listOpenTradePlans, {}, { token }),
     preloadQuery(api.accountMappings.listAccountMappings, {}, { token }),
+    preloadQuery(
+      api.brokerageIngestion.getBrokerageIngestionStatus,
+      {},
+      { token },
+    ),
     preloadQuery(api.portfolios.listPortfolios, {}, { token }),
     preloadQuery(api.campaigns.listCampaigns, {}, { token }),
   ]);
@@ -24,6 +30,7 @@ export default async function ImportsPage() {
   return (
     <ImportsPageClient
       preloadedAccountMappings={preloadedAccountMappings}
+      preloadedBrokerageIngestionStatus={preloadedBrokerageIngestionStatus}
       preloadedCampaigns={preloadedCampaigns}
       preloadedInboxTradePriceMappings={preloadedInboxTradePriceMappings}
       preloadedInboxTrades={preloadedInboxTrades}
