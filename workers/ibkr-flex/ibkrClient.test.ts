@@ -15,10 +15,12 @@ const config: IbkrFlexWorkerConfig = {
 
 describe("IbkrFlexClient", () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
   it("uses the documented SendRequest endpoint, version, and User-Agent", async () => {
+    vi.useFakeTimers();
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         "<FlexStatementResponse><Status>Success</Status><ReferenceCode>12345</ReferenceCode></FlexStatementResponse>",
@@ -37,7 +39,11 @@ describe("IbkrFlexClient", () => {
     expect(url.toString()).toBe(
       "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest?t=ibkr-token&v=3&q=67890",
     );
-    expect(init.headers).toEqual({ "User-Agent": "TradeTracker/0.0.1" });
+    expect(init).toMatchObject({
+      headers: { "User-Agent": "TradeTracker/0.0.1" },
+      signal: expect.any(AbortSignal),
+    });
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("uses the configured base URL for GetStatement", async () => {
@@ -57,6 +63,33 @@ describe("IbkrFlexClient", () => {
     expect(url.toString()).toBe(
       "https://flex.example.test/custom/GetStatement?t=ibkr-token&v=3&q=12345",
     );
-    expect(init.headers).toEqual({ "User-Agent": "TradeTracker/0.0.1" });
+    expect(init).toMatchObject({
+      headers: { "User-Agent": "TradeTracker/0.0.1" },
+      signal: expect.any(AbortSignal),
+    });
+  });
+
+  it("aborts a request before the Temporal activity timeout", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(
+      (_url: URL, init: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener("abort", () => {
+            reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+          });
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new IbkrFlexClient(config).getStatement("12345");
+    const rejection = expect(request).rejects.toThrow(
+      "IBKR Flex request timed out after 90000ms",
+    );
+    await vi.advanceTimersByTimeAsync(90_000);
+
+    await rejection;
+    const [, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(init.signal?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
