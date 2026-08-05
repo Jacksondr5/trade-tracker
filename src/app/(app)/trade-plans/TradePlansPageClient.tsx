@@ -27,7 +27,6 @@ import {
   getTradePlansStatusTestId,
   TRADE_PLANS_INDEX_TEST_IDS,
 } from "../../../../shared/e2e/testIds";
-import { ImportPostDialog } from "./ImportPostDialog";
 
 type TradePlanStatus = "active" | "closed" | "idea" | "watching";
 type RelationshipFilter = "all" | "bravos" | "linked" | "standalone";
@@ -86,7 +85,6 @@ export default function TradePlansPageClient({
   const createTradePlan = useMutation(api.tradePlans.createTradePlan);
   const [error, setError] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [showImportDialog, setShowImportDialog] = useState(false);
   const [relationshipFilter, setRelationshipFilter] =
     useState<RelationshipFilter>("all");
   const [statusFilter, setStatusFilter] = useState<TradePlanStatus | "all">(
@@ -159,18 +157,10 @@ export default function TradePlansPageClient({
             Trade Plans
           </h1>
           <p className="max-w-2xl text-sm text-olive-11">
-            Manage linked, standalone, and Bravos trade plans across all
-            campaigns.
+            Manage linked and standalone trade plans across all campaigns.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            dataTestId={TRADE_PLANS_INDEX_TEST_IDS.importFromServiceButton}
-            variant="outline"
-            onClick={() => setShowImportDialog(true)}
-          >
-            Import from Bravos
-          </Button>
           <Button
             aria-controls={TRADE_PLANS_INDEX_TEST_IDS.createFormSection}
             aria-expanded={showCreateForm}
@@ -182,12 +172,6 @@ export default function TradePlansPageClient({
           </Button>
         </div>
       </div>
-
-      <ImportPostDialog
-        mode="create"
-        open={showImportDialog}
-        onOpenChange={setShowImportDialog}
-      />
 
       {/* Create form (collapsible) */}
       {showCreateForm && (
@@ -295,12 +279,6 @@ export default function TradePlansPageClient({
             dataTestId={TRADE_PLANS_INDEX_TEST_IDS.filterLinked}
             label="Linked"
             onClick={() => setRelationshipFilter("linked")}
-          />
-          <FilterTab
-            active={relationshipFilter === "bravos"}
-            dataTestId={TRADE_PLANS_INDEX_TEST_IDS.filterBravos}
-            label="Bravos"
-            onClick={() => setRelationshipFilter("bravos")}
           />
           <FilterTab
             active={relationshipFilter === "standalone"}

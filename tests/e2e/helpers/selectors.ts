@@ -525,8 +525,8 @@ export function getTradesPaginationNext(page: Page): Locator {
   return page.getByTestId(TRADES_INDEX_TEST_IDS.paginationNext);
 }
 
-export function getTradePlansFilterBravos(page: Page): Locator {
-  return page.getByTestId(TRADE_PLANS_INDEX_TEST_IDS.filterBravos);
+export function getTradePlansFilterStandalone(page: Page): Locator {
+  return page.getByTestId(TRADE_PLANS_INDEX_TEST_IDS.filterStandalone);
 }
 
 export function getTradePlansStatusClosed(page: Page): Locator {

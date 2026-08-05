@@ -3,13 +3,6 @@ import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
-crons.interval(
-  "scheduled Bravos listing scans",
-  { hours: 24 },
-  internal.bravos.requestScheduledBravosListingScans,
-  {},
-);
-
 crons.cron(
   "nightly portfolio price snapshot planning",
   "0 1 * * *",

@@ -4,7 +4,7 @@ import {
   APP_PAGE_TITLES,
   getBrokerageSelect,
   getLinkedTradeRow,
-  getTradePlansFilterBravos,
+  getTradePlansFilterStandalone,
   getTradePlansFilteredEmptyState,
   getTradePlansStatusClosed,
   getTradesFilterAccount,
@@ -56,10 +56,10 @@ test.describe("operational surfaces regression", () => {
     await page.goto("/trade-plans");
     await waitForAuthenticatedApp(page, APP_PAGE_TITLES.tradePlans);
 
-    // Combine "Bravos" relationship + "Closed" status filters.
-    // No e2e test creates then closes a Bravos plan, so this
+    // Combine "Standalone" relationship + "Closed" status filters.
+    // The deterministic seed has a watching standalone plan but no closed one,
     // reliably produces zero results on both local and preview targets.
-    await getTradePlansFilterBravos(page).click();
+    await getTradePlansFilterStandalone(page).click();
     await getTradePlansStatusClosed(page).click();
 
     // Verify the filtered empty state is displayed

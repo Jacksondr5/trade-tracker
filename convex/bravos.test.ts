@@ -25,6 +25,7 @@ describe("bravos review queue", () => {
     process.env.BRAVOS_WORKER_SECRET = workerSecret;
     process.env.BRAVOS_WORKER_URL = "https://worker.test/api/internal/bravos/run";
     process.env.BRAVOS_DISABLE_DISPATCH_FOR_TESTS = "1";
+    process.env.BRAVOS_ENABLED = "true";
     t = convexTest(schema, modules);
   });
 
@@ -58,6 +59,14 @@ describe("bravos review queue", () => {
       });
     });
   }
+
+  it("rejects direct scan requests while Bravos is deactivated", async () => {
+    delete process.env.BRAVOS_ENABLED;
+
+    await expect(
+      asUser().mutation(api.bravos.requestBravosListingScan, {}),
+    ).rejects.toThrow("Bravos import is deactivated");
+  });
 
   it("creates one review item per canonical Bravos source identity", async () => {
     const syncRunId = await insertRun({

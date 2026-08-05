@@ -7,10 +7,18 @@ import {
   pollBrowserbaseSessionReady,
   releaseBrowserbaseSession,
 } from "~/lib/bravos/browserbase";
+import {
+  bravosDeactivatedResponse,
+  isBravosEnabled,
+} from "~/lib/bravos/disabled";
 
 export const runtime = "nodejs";
 
 export async function POST() {
+  if (!isBravosEnabled()) {
+    return bravosDeactivatedResponse();
+  }
+
   const authState = await auth();
   const token = await authState.getToken({ template: "convex" });
   if (!token) {
