@@ -29,7 +29,7 @@ import {
 } from "../../../../shared/e2e/testIds";
 
 type TradePlanStatus = "active" | "closed" | "idea" | "watching";
-type RelationshipFilter = "all" | "bravos" | "linked" | "standalone";
+type RelationshipFilter = "all" | "linked" | "standalone";
 
 const STATUS_BADGE_VARIANT: Record<
   TradePlanStatus,

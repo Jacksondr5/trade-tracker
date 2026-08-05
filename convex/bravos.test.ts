@@ -2,7 +2,7 @@
 
 import { convexTest } from "convex-test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
 
@@ -48,17 +48,162 @@ describe("bravos review queue", () => {
     });
   }
 
-  async function insertTradePlan(): Promise<Id<"tradePlans">> {
+  async function insertTradePlan(args?: {
+    name?: string;
+    sourceUrl?: string;
+  }): Promise<Id<"tradePlans">> {
     return await t.run(async (ctx) => {
       return await ctx.db.insert("tradePlans", {
         instrumentSymbol: "QQQ",
-        name: "QQQ Bravos",
+        name: args?.name ?? "QQQ Bravos",
         ownerId,
         rationale: "Existing rationale",
+        sourceUrl: args?.sourceUrl,
         status: "watching",
       });
     });
   }
+
+  it("keeps dry runs and non-Bravos plans untouched", async () => {
+    const bravosPlanId = await insertTradePlan({
+      sourceUrl: "https://bravosresearch.com/post/1",
+    });
+    const manualPlanId = await insertTradePlan({ name: "Manual plan" });
+
+    const dryRun = await t.mutation(
+      internal.bravos.deleteBravosPlansWithoutReferences,
+      { cursor: null, dryRun: true },
+    );
+    expect(dryRun).toMatchObject({
+      bravosPlansInBatch: 1,
+      deletedPlans: 0,
+      isDone: true,
+    });
+    expect(await t.run((ctx) => ctx.db.get(bravosPlanId))).not.toBeNull();
+
+    const cleanup = await t.mutation(
+      internal.bravos.deleteBravosPlansWithoutReferences,
+      { cursor: null, dryRun: false },
+    );
+    expect(cleanup.deletedPlans).toBe(1);
+    expect(await t.run((ctx) => ctx.db.get(bravosPlanId))).toBeNull();
+    expect(await t.run((ctx) => ctx.db.get(manualPlanId))).not.toBeNull();
+  });
+
+  it("refuses and reports linked trade-plan records", async () => {
+    const tradePlanId = await insertTradePlan({
+      sourceUrl: "https://bravosresearch.com/post/2",
+    });
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      await ctx.db.insert("trades", {
+        assetType: "stock",
+        date: now,
+        direction: "long",
+        ownerId,
+        price: 100,
+        quantity: 1,
+        side: "buy",
+        ticker: "QQQ",
+        tradePlanId,
+      });
+      await ctx.db.insert("notes", {
+        content: "Imported Bravos note",
+        noteDate: now,
+        ownerId,
+        tradePlanId,
+      });
+      await ctx.db.insert("inboxTrades", {
+        ownerId,
+        source: "manual",
+        status: "pending_review",
+        tradePlanId,
+        validationErrors: [],
+        validationWarnings: [],
+      });
+      await ctx.db.insert("retrospectives", {
+        content: "Retrospective",
+        ownerId,
+        parentId: tradePlanId,
+        parentKind: "tradePlan",
+        updatedAt: now,
+      });
+      await ctx.db.insert("watchlist", {
+        itemType: "tradePlan",
+        ownerId,
+        tradePlanId,
+        watchedAt: now,
+      });
+      await ctx.db.insert("importTasks", {
+        createdTradePlanId: tradePlanId,
+        mode: "create",
+        ownerId,
+        pastedText: "Bravos import",
+        status: "done",
+        tradePlanId,
+      });
+      await ctx.db.insert("bravosReviewItems", {
+        appliedTradePlanId: tradePlanId,
+        canonicalSourceIdentity: "https://bravosresearch.com/post/2",
+        classification: "initiate",
+        fetchSource: "direct_post_fetch",
+        fetchedAt: now,
+        imageUrls: [],
+        lastFetchedAt: now,
+        ownerId,
+        proposedAction: {
+          instrumentSymbol: "QQQ",
+          kind: "create_trade_plan",
+          name: "QQQ Bravos",
+        },
+        rawText: "QQQ Bravos",
+        reviewState: "approved",
+        sourceUrl: "https://bravosresearch.com/post/2",
+        suggestedTradePlanId: tradePlanId,
+      });
+    });
+
+    const result = await t.mutation(
+      internal.bravos.deleteBravosPlansWithoutReferences,
+      { cursor: null, dryRun: false },
+    );
+
+    expect(result).toMatchObject({
+      deletedPlans: 0,
+      plansWithAppliedReviewItems: 1,
+      plansWithCreatedImportTasks: 1,
+      plansWithInboxTrades: 1,
+      plansWithLinkedImportTasks: 1,
+      plansWithLinkedNotes: 1,
+      plansWithLinkedTrades: 1,
+      plansWithOtherBravosReviewItems: 1,
+      plansWithRetrospectives: 1,
+      plansWithSuggestedReviewItems: 1,
+      plansWithWatchlistItems: 1,
+    });
+    expect(await t.run((ctx) => ctx.db.get(tradePlanId))).not.toBeNull();
+  });
+
+  it("processes Bravos cleanup pages to cursor termination", async () => {
+    for (const index of Array.from({ length: 11 }, (_, value) => value)) {
+      await insertTradePlan({
+        name: `Bravos ${index}`,
+        sourceUrl: `https://bravosresearch.com/post/${index}`,
+      });
+    }
+
+    const firstPage = await t.mutation(
+      internal.bravos.deleteBravosPlansWithoutReferences,
+      { cursor: null, dryRun: true },
+    );
+    expect(firstPage).toMatchObject({ bravosPlansInBatch: 10, isDone: false });
+
+    const secondPage = await t.mutation(
+      internal.bravos.deleteBravosPlansWithoutReferences,
+      { cursor: firstPage.continueCursor, dryRun: true },
+    );
+    expect(secondPage).toMatchObject({ bravosPlansInBatch: 1, isDone: true });
+  });
 
   it("rejects direct scan requests while Bravos is deactivated", async () => {
     delete process.env.BRAVOS_ENABLED;

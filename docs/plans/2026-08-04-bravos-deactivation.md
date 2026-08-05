@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Protect Bravos operational routes
+## Task 1: Protect Bravos operational routes
 
 **Files:**
 - Create: `src/lib/bravos/disabled.ts`
@@ -26,7 +26,7 @@
 
 **Step 3:** Run the focused unit test.
 
-### Task 2: Remove product discovery and legacy review access
+## Task 2: Remove product discovery and legacy review access
 
 **Files:**
 - Modify: `src/components/app-shell/app-navigation.ts`
@@ -43,7 +43,7 @@
 
 **Step 3:** Replace the Bravos-only filtering assertion with a supported filter combination.
 
-### Task 3: Add a non-executable cleanup mechanism and audit production
+## Task 3: Add a non-executable cleanup mechanism and audit production
 
 **Files:**
 - Modify: `convex/bravos.ts`
@@ -55,7 +55,7 @@
 
 **Step 3:** Run production queries only to count Bravos plans, associated trades/notes, and unresolved review items. Do not invoke any mutation.
 
-### Task 4: Verify and ship
+## Task 4: Verify and ship
 
 **Files:**
 - Modify: none expected
