@@ -692,6 +692,11 @@ export default defineSchema({
   })
     .index("by_syncRunId", ["syncRunId"])
     .index("by_ownerId_and_status", ["ownerId", "status"])
+    .index("by_ownerId_and_status_and_updatedAt", [
+      "ownerId",
+      "status",
+      "updatedAt",
+    ])
     .index("by_ownerId_and_status_and_reportDate", [
       "ownerId",
       "status",
@@ -792,6 +797,7 @@ export default defineSchema({
     validationWarnings: v.array(v.string()),
   })
     .index("by_owner_status", ["ownerId", "status"])
+    .index("by_owner_source_status", ["ownerId", "source", "status"])
     .index("by_owner_source_externalId", ["ownerId", "source", "externalId"])
     .index("by_owner_portfolioId", ["ownerId", "portfolioId"])
     .index("by_owner_date", ["ownerId", "date"])

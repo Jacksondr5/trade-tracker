@@ -585,6 +585,8 @@ export const getBrokerageIngestionStatus = query({
     latestFailedSync: v.union(v.null(), brokerageSyncRunSummaryValidator),
     latestSuccessfulSync: v.union(v.null(), brokerageSyncRunSummaryValidator),
     latestSyncRuns: v.array(brokerageSyncRunSummaryValidator),
+    hasMoreOpenIssues: v.boolean(),
+    hasMorePendingImportedTrades: v.boolean(),
     openIssueCount: v.number(),
     openIssues: v.array(
       v.object({
@@ -622,16 +624,20 @@ export const getBrokerageIngestionStatus = query({
         .take(10),
       ctx.db
         .query("brokerageReconciliationIssues")
-        .withIndex("by_ownerId_and_status", (q) =>
+        .withIndex("by_ownerId_and_status_and_updatedAt", (q) =>
           q.eq("ownerId", ownerId).eq("status", "open"),
         )
+        .order("desc")
         .take(101),
       ctx.db
         .query("inboxTrades")
-        .withIndex("by_owner_status", (q) =>
-          q.eq("ownerId", ownerId).eq("status", "pending_review"),
+        .withIndex("by_owner_source_status", (q) =>
+          q
+            .eq("ownerId", ownerId)
+            .eq("source", "ibkr")
+            .eq("status", "pending_review"),
         )
-        .collect(),
+        .take(101),
       ctx.db
         .query("brokerageSyncRuns")
         .withIndex("by_ownerId_and_status_and_updatedAt", (q) =>
@@ -661,9 +667,7 @@ export const getBrokerageIngestionStatus = query({
         terminalFailedRuns.updatedAt > retryableFailedRuns.updatedAt)
         ? terminalFailedRuns
         : retryableFailedRuns;
-    const reviewableIssues = [...openIssues]
-      .sort((left, right) => right.updatedAt - left.updatedAt)
-      .slice(0, 10);
+    const reviewableIssues = openIssues.slice(0, 10);
 
     return {
       connections: connections.map((connection) => ({
@@ -687,7 +691,9 @@ export const getBrokerageIngestionStatus = query({
         ? toSyncRunSummary(latestSuccessfulSync)
         : null,
       latestSyncRuns: latestSyncRuns.map(toSyncRunSummary),
-      openIssueCount: openIssues.length,
+      hasMoreOpenIssues: openIssues.length > 100,
+      hasMorePendingImportedTrades: pendingImportedTrades.length > 100,
+      openIssueCount: Math.min(openIssues.length, 100),
       openIssues: reviewableIssues.map((issue) => ({
         _id: issue._id,
         actualQuantity: issue.actualQuantity,
@@ -698,9 +704,7 @@ export const getBrokerageIngestionStatus = query({
         ticker: issue.ticker,
         updatedAt: issue.updatedAt,
       })),
-      pendingImportedTradeCount: pendingImportedTrades.filter(
-        (trade) => trade.source === "ibkr",
-      ).length,
+      pendingImportedTradeCount: Math.min(pendingImportedTrades.length, 100),
     };
   },
 });

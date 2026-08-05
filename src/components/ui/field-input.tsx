@@ -10,11 +10,13 @@ import { cn } from "~/lib/utils";
 export const FieldInput = ({
   label,
   className,
+  dataTestId,
   ...props
 }: Omit<
   InputProps,
   "value" | "onChange" | "onBlur" | "aria-invalid" | "dataTestId"
 > & {
+  dataTestId?: string;
   label: string;
 }) => {
   const errorId = React.useId();
@@ -32,7 +34,7 @@ export const FieldInput = ({
       <Input
         {...props}
         id={field.name}
-        dataTestId={`${field.name}-input`}
+        dataTestId={dataTestId ?? `${field.name}-input`}
         value={field.state.value || ""}
         onChange={(e) => field.handleChange(e.target.value)}
         onBlur={field.handleBlur}

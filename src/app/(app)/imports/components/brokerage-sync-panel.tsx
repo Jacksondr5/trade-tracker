@@ -9,7 +9,7 @@ import {
   Play,
   Settings2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 import {
   Alert,
@@ -101,6 +101,30 @@ export function BrokerageSyncPanel({
     variant: "error" | "success";
   } | null>(null);
   const [isChangingStatus, setIsChangingStatus] = useState(false);
+  const connectionAccountId = connection?.accountId ?? "";
+  const connectionLabel = connection?.label ?? "";
+  const connectionQueryId = connection?.queryId ?? "";
+  const connectionStatus = connection?.status;
+  const connectionTokenExpiresOn = toDateInputValue(
+    connection?.tokenExpiresAt,
+  );
+  const connectionTokenLabel = connection?.tokenLabel ?? "";
+  const connectionFormValues = useMemo(
+    () => ({
+      accountId: connectionAccountId,
+      label: connectionLabel,
+      queryId: connectionQueryId,
+      tokenExpiresOn: connectionTokenExpiresOn,
+      tokenLabel: connectionTokenLabel,
+    }),
+    [
+      connectionAccountId,
+      connectionLabel,
+      connectionQueryId,
+      connectionTokenExpiresOn,
+      connectionTokenLabel,
+    ],
+  );
 
   const upsertConnection = useMutation(
     api.brokerageIngestion.upsertIbkrConnection,
@@ -110,13 +134,7 @@ export function BrokerageSyncPanel({
   );
 
   const form = useAppForm({
-    defaultValues: {
-      accountId: connection?.accountId ?? "",
-      label: connection?.label ?? "",
-      queryId: connection?.queryId ?? "",
-      tokenExpiresOn: toDateInputValue(connection?.tokenExpiresAt),
-      tokenLabel: connection?.tokenLabel ?? "",
-    } satisfies ConnectionFormValues,
+    defaultValues: connectionFormValues satisfies ConnectionFormValues,
     validators: {
       onChange: ({ value }) => {
         const result = connectionSchema.safeParse(value);
@@ -154,15 +172,12 @@ export function BrokerageSyncPanel({
   });
 
   useEffect(() => {
-    form.reset({
-      accountId: connection?.accountId ?? "",
-      label: connection?.label ?? "",
-      queryId: connection?.queryId ?? "",
-      tokenExpiresOn: toDateInputValue(connection?.tokenExpiresAt),
-      tokenLabel: connection?.tokenLabel ?? "",
-    });
-    if (connection?.status === "needs_setup") setIsEditing(true);
-  }, [connection, form]);
+    form.reset(connectionFormValues);
+  }, [connectionFormValues, form]);
+
+  useEffect(() => {
+    if (connectionStatus === "needs_setup") setIsEditing(true);
+  }, [connectionStatus]);
 
   const handleConnectionStatusChange = async () => {
     if (!connection || isChangingStatus) return;
@@ -296,7 +311,7 @@ export function BrokerageSyncPanel({
           <p className="mt-1 text-sm text-olive-12">
             {status.pendingImportedTradeCount === 0
               ? "Inbox is clear"
-              : `${status.pendingImportedTradeCount} awaiting review`}
+              : `${status.pendingImportedTradeCount}${status.hasMorePendingImportedTrades ? "+" : ""} awaiting review`}
           </p>
         </div>
         <div
@@ -308,13 +323,16 @@ export function BrokerageSyncPanel({
             <p className="mt-1 text-sm text-olive-12">No open issues</p>
           ) : (
             <button
+              aria-controls="brokerage-reconciliation-issue-list"
+              aria-expanded={showIssues}
               className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-amber-11 hover:text-amber-12 focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-blue-8 focus-visible:outline-none"
               data-testid={IMPORTS_INDEX_TEST_IDS.brokerageReconciliationToggle}
               onClick={() => setShowIssues((current) => !current)}
               type="button"
             >
               <AlertTriangle className="size-4" aria-hidden="true" />
-              {status.openIssueCount} open
+              {status.openIssueCount}
+              {status.hasMoreOpenIssues ? "+" : ""} open
               <ChevronDown
                 className={cn(
                   "size-4 transition-transform",
@@ -328,7 +346,10 @@ export function BrokerageSyncPanel({
       </div>
 
       {showIssues && status.openIssues.length > 0 ? (
-        <div className="border-t border-olive-6 bg-slate-2 px-4 py-3">
+        <div
+          className="border-t border-olive-6 bg-slate-2 px-4 py-3"
+          id="brokerage-reconciliation-issue-list"
+        >
           <h3 className="text-sm font-semibold text-slate-12">
             Open reconciliation issues
           </h3>
@@ -345,7 +366,8 @@ export function BrokerageSyncPanel({
               </li>
             ))}
           </ul>
-          {status.openIssueCount > status.openIssues.length ? (
+          {status.hasMoreOpenIssues ||
+          status.openIssueCount > status.openIssues.length ? (
             <p className="mt-2 text-xs text-slate-11">
               Showing the {status.openIssues.length} most recent issues.
             </p>
@@ -408,6 +430,9 @@ export function BrokerageSyncPanel({
               >
                 {(field) => (
                   <field.FieldInput
+                    dataTestId={
+                      IMPORTS_INDEX_TEST_IDS.brokerageConnectionAccountIdInput
+                    }
                     label="Brokerage account ID"
                     placeholder="U1234567"
                   />
@@ -422,6 +447,9 @@ export function BrokerageSyncPanel({
               >
                 {(field) => (
                   <field.FieldInput
+                    dataTestId={
+                      IMPORTS_INDEX_TEST_IDS.brokerageConnectionQueryIdInput
+                    }
                     inputMode="numeric"
                     label="Activity Flex query ID"
                     placeholder="123456"
@@ -457,7 +485,9 @@ export function BrokerageSyncPanel({
             <div className="mt-4 flex justify-end gap-2">
               {connection ? (
                 <Button
-                  dataTestId="brokerage-connection-cancel-button"
+                  dataTestId={
+                    IMPORTS_INDEX_TEST_IDS.brokerageConnectionCancelButton
+                  }
                   onClick={() => setIsEditing(false)}
                   size="sm"
                   type="button"
