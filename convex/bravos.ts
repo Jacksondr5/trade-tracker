@@ -677,7 +677,7 @@ export const cleanupBravosPlansAndDerivedRecords = internalMutation({
     unlinkedTrades: v.number(),
   }),
   handler: async (ctx, args) => {
-    const [page, reviewPage] = await Promise.all([
+    const [page, reviewItems] = await Promise.all([
       ctx.db
         .query("tradePlans")
         .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
@@ -687,9 +687,9 @@ export const cleanupBravosPlansAndDerivedRecords = internalMutation({
         .query("bravosReviewItems")
         .withIndex("by_ownerId", (q) => q.eq("ownerId", args.ownerId))
         .order("asc")
-        .paginate({ cursor: null, numItems: BRAVOS_CLEANUP_MAX_REVIEW_ITEMS }),
+        .take(BRAVOS_CLEANUP_MAX_REVIEW_ITEMS + 1),
     ]);
-    if (!reviewPage.isDone) {
+    if (reviewItems.length > BRAVOS_CLEANUP_MAX_REVIEW_ITEMS) {
       throw new ConvexError(
         "Bravos cleanup review history exceeds its bounded safety limit",
       );
@@ -700,7 +700,7 @@ export const cleanupBravosPlansAndDerivedRecords = internalMutation({
       );
     }
 
-    const readyReviewItems = reviewPage.page.filter(
+    const readyReviewItems = reviewItems.filter(
       (item) => item.reviewState === "ready",
     );
     const plansToDelete: Array<{
@@ -800,7 +800,7 @@ export const cleanupBravosPlansAndDerivedRecords = internalMutation({
       );
       const bravosNotes = notes.filter(
         (note) =>
-          reviewPage.page.some((item) => item.appliedNoteId === note._id) ||
+          reviewItems.some((item) => item.appliedNoteId === note._id) ||
           note.content ===
             `Imported from service post: ${tradePlan.sourceUrl}` ||
           matchesLegacyBravosImportTaskNote({ note, tasks: importTasks }),
@@ -844,7 +844,7 @@ export const cleanupBravosPlansAndDerivedRecords = internalMutation({
     let clearedSuggestedReviewItemPlanIds = 0;
     let clearedProposedActionTargets = 0;
 
-    for (const item of reviewPage.page) {
+    for (const item of reviewItems) {
       if (readyReviewItemIds.has(item._id)) continue;
       const patch: Partial<Doc<"bravosReviewItems">> = {};
       if (

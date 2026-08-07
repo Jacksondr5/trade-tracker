@@ -120,6 +120,75 @@ describe("bravos review queue", () => {
     expect(await t.run((ctx) => ctx.db.get(lookAlikePlanId))).not.toBeNull();
   });
 
+  it("allows the review history limit but fails closed above it", async () => {
+    await insertTradePlan({
+      sourceUrl: "https://bravosresearch.com/post/pagination-regression",
+    });
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      for (const index of Array.from(
+        { length: 500 },
+        (_, value) => value,
+      )) {
+        await ctx.db.insert("bravosReviewItems", {
+          canonicalSourceIdentity: `https://bravosresearch.com/post/ready-${index}`,
+          classification: "initiate",
+          fetchSource: "direct_post_fetch",
+          fetchedAt: now,
+          imageUrls: [],
+          lastFetchedAt: now,
+          ownerId,
+          proposedAction: {
+            instrumentSymbol: "QQQ",
+            kind: "create_trade_plan",
+            name: "Pending Bravos",
+          },
+          rawText: "Pending Bravos",
+          reviewState: "ready",
+          sourceUrl: `https://bravosresearch.com/post/ready-${index}`,
+        });
+      }
+    });
+
+    await expect(
+      t.mutation(internal.bravos.cleanupBravosPlansAndDerivedRecords, {
+        dryRun: true,
+        ownerId,
+      }),
+    ).resolves.toMatchObject({
+      bravosPlans: 1,
+      deletedReadyReviewItems: 500,
+    });
+
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      await ctx.db.insert("bravosReviewItems", {
+        canonicalSourceIdentity: "https://bravosresearch.com/post/ready-500",
+        classification: "initiate",
+        fetchSource: "direct_post_fetch",
+        fetchedAt: now,
+        imageUrls: [],
+        lastFetchedAt: now,
+        ownerId,
+        proposedAction: {
+          instrumentSymbol: "QQQ",
+          kind: "create_trade_plan",
+          name: "Pending Bravos",
+        },
+        rawText: "Pending Bravos",
+        reviewState: "ready",
+        sourceUrl: "https://bravosresearch.com/post/ready-500",
+      });
+    });
+
+    await expect(
+      t.mutation(internal.bravos.cleanupBravosPlansAndDerivedRecords, {
+        dryRun: true,
+        ownerId,
+      }),
+    ).rejects.toThrow("Bravos cleanup review history exceeds its bounded safety limit");
+  });
+
   it("reports dry-run effects and cleans Bravos-derived records without touching trades", async () => {
     const tradePlanId = await insertTradePlan({
       sourceUrl: "https://bravosresearch.com/post/2",
