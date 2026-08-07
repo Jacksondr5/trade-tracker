@@ -98,11 +98,14 @@ The earlier roadmap's UI phases live here in compressed form. They remain worth 
 - Core thinking surfaces: strategy editor, notes workflow, detail-page information design, retrospective UI
 - Operational efficiency: import review throughput, status and copy standardization, loading states
 - Systemization: shared UI primitives, page templates, visual design system rollout (see [visual-design-system.md](visual-design-system.md))
+- Trade-detail visibility: make a deliberate decision about a trade-detail workflow while keeping notes centered on threads, episodes, and campaigns
 
 ## Later: Analytics And Review Maturity
 
 - Baseline performance and exposure analytics across portfolios, campaigns, and threads
 - Review-oriented analytics that point to what deserves diagnosis
+- Retrospective summaries, and possibly retrospectives of retrospectives, once single-episode retros are routine
+- Watchlist and review signals surfaced into the dashboard
 - Dashboard redesign once the analytical model is mature enough to justify it
 - Portfolio model clarification if analytics prove a stronger structural role is needed
 
@@ -115,6 +118,8 @@ Analytics still come after the flywheel work: they are a withdrawal surface, and
 - Bare records stay tolerated data in every phase; no phase may reintroduce an owed-work pile.
 - The Discord-vs-app-infrastructure hosting decision for the counterpart is made during the probe, not before.
 - Shared UI and shared form migration is not isolated to a cleanup phase; each phase should improve the system on the surfaces it touches.
+- `Dashboard` remains strategically important but is not an early design priority.
+- Maintain `technical-architecture-overview.md`, `glossary.md`, the [decision log](decision-log.md), and this roadmap as the product changes.
 
 ## Summary
 
