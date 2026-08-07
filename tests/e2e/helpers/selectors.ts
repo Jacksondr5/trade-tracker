@@ -547,6 +547,42 @@ export function getBrokerageConnectionForm(page: Page): Locator {
   return page.getByTestId(IMPORTS_INDEX_TEST_IDS.brokerageConnectionForm);
 }
 
+export function getBrokerageConnectionAccountIdClearButton(
+  page: Page,
+): Locator {
+  return page.getByTestId(
+    IMPORTS_INDEX_TEST_IDS.brokerageConnectionAccountIdClearButton,
+  );
+}
+
+export function getBrokerageConnectionAccountIdInput(page: Page): Locator {
+  return page.getByTestId(
+    IMPORTS_INDEX_TEST_IDS.brokerageConnectionAccountIdInput,
+  );
+}
+
+export function getBrokerageConnectionAccountIdUndoButton(page: Page): Locator {
+  return page.getByTestId(
+    IMPORTS_INDEX_TEST_IDS.brokerageConnectionAccountIdUndoButton,
+  );
+}
+
+export function getBrokerageConnectionLabelClearButton(page: Page): Locator {
+  return page.getByTestId(
+    IMPORTS_INDEX_TEST_IDS.brokerageConnectionLabelClearButton,
+  );
+}
+
+export function getBrokerageConnectionLabelInput(page: Page): Locator {
+  return page.getByTestId(IMPORTS_INDEX_TEST_IDS.brokerageConnectionLabelInput);
+}
+
+export function getBrokerageConnectionLabelUndoButton(page: Page): Locator {
+  return page.getByTestId(
+    IMPORTS_INDEX_TEST_IDS.brokerageConnectionLabelUndoButton,
+  );
+}
+
 export function getBrokerageConnectionQueryIdInput(page: Page): Locator {
   return page.getByTestId(
     IMPORTS_INDEX_TEST_IDS.brokerageConnectionQueryIdInput,
@@ -561,6 +597,12 @@ export function getBrokerageConnectionReplaceTokenButton(page: Page): Locator {
 
 export function getBrokerageConnectionTokenInput(page: Page): Locator {
   return page.getByTestId(IMPORTS_INDEX_TEST_IDS.brokerageConnectionTokenInput);
+}
+
+export function getBrokerageConnectionTokenExpiryInput(page: Page): Locator {
+  return page.getByTestId(
+    IMPORTS_INDEX_TEST_IDS.brokerageConnectionTokenExpiryInput,
+  );
 }
 
 export function getBrokerageConnectionTokenStatus(page: Page): Locator {

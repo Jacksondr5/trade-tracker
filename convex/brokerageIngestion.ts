@@ -6,6 +6,11 @@ import {
   query,
 } from "./_generated/server";
 import { assertOwner, requireUser } from "./lib/auth";
+import {
+  optionalMetadataStringPatchValidator,
+  resolveOptionalMetadataStringPatch,
+  validateTokenExpiresAt,
+} from "./lib/brokerageConnectionMetadata";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { stageInboxTradesForOwner } from "./imports";
@@ -496,17 +501,20 @@ async function reconcilePositionsForSyncRun(
 
 export const upsertIbkrConnection = mutation({
   args: {
-    accountId: v.optional(v.string()),
-    label: v.optional(v.string()),
+    accountId: v.optional(optionalMetadataStringPatchValidator),
+    label: v.optional(optionalMetadataStringPatchValidator),
     queryId: v.optional(v.string()),
     status: v.optional(brokerageConnectionStatusValidator),
     tokenExpiresAt: v.optional(v.number()),
-    tokenLabel: v.optional(v.string()),
   },
   returns: v.id("brokerageConnections"),
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
     const now = Date.now();
+    const tokenExpiresAt =
+      args.tokenExpiresAt === undefined
+        ? undefined
+        : validateTokenExpiresAt(args.tokenExpiresAt);
     const existing = await ctx.db
       .query("brokerageConnections")
       .withIndex("by_ownerId_and_source", (q) =>
@@ -518,13 +526,28 @@ export const upsertIbkrConnection = mutation({
       const nextQueryId = args.queryId ?? existing.queryId;
       const status = args.status ?? (nextQueryId ? "active" : "needs_setup");
       await ctx.db.patch(existing._id, {
-        accountId: args.accountId ?? existing.accountId,
+        ...(args.accountId === undefined
+          ? {}
+          : {
+              accountId: resolveOptionalMetadataStringPatch({
+                fieldName: "Account ID",
+                maxLength: 40,
+                patch: args.accountId,
+              }),
+            }),
         connectionError: undefined,
-        label: args.label ?? existing.label,
+        ...(args.label === undefined
+          ? {}
+          : {
+              label: resolveOptionalMetadataStringPatch({
+                fieldName: "Label",
+                maxLength: 80,
+                patch: args.label,
+              }),
+            }),
         queryId: nextQueryId,
         status,
-        tokenExpiresAt: args.tokenExpiresAt ?? existing.tokenExpiresAt,
-        tokenLabel: args.tokenLabel ?? existing.tokenLabel,
+        tokenExpiresAt: tokenExpiresAt ?? existing.tokenExpiresAt,
         updatedAt: now,
       });
       return existing._id;
@@ -532,15 +555,28 @@ export const upsertIbkrConnection = mutation({
 
     const status = args.status ?? (args.queryId ? "active" : "needs_setup");
     return await ctx.db.insert("brokerageConnections", {
-      accountId: args.accountId,
+      accountId:
+        args.accountId === undefined
+          ? undefined
+          : resolveOptionalMetadataStringPatch({
+              fieldName: "Account ID",
+              maxLength: 40,
+              patch: args.accountId,
+            }),
       createdAt: now,
-      label: args.label,
+      label:
+        args.label === undefined
+          ? undefined
+          : resolveOptionalMetadataStringPatch({
+              fieldName: "Label",
+              maxLength: 80,
+              patch: args.label,
+            }),
       ownerId,
       queryId: args.queryId,
       source: "ibkr",
       status,
-      tokenExpiresAt: args.tokenExpiresAt,
-      tokenLabel: args.tokenLabel,
+      tokenExpiresAt,
       updatedAt: now,
     });
   },
@@ -580,7 +616,6 @@ export const getBrokerageIngestionStatus = query({
         status: brokerageConnectionStatusValidator,
         tokenConfigured: v.boolean(),
         tokenExpiresAt: v.optional(v.number()),
-        tokenLabel: v.optional(v.string()),
         updatedAt: v.number(),
       }),
     ),
@@ -699,7 +734,6 @@ export const getBrokerageIngestionStatus = query({
         status: connection.status,
         tokenConfigured: configuredConnectionIds.has(connection._id),
         tokenExpiresAt: connection.tokenExpiresAt,
-        tokenLabel: connection.tokenLabel,
         updatedAt: connection.updatedAt,
       })),
       latestFailedSync: latestFailedSync

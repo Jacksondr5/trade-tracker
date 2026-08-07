@@ -148,8 +148,8 @@ describe("brokerage connection secrets", () => {
       {
         connectionId,
         metadata: {
-          accountId: "U7654321",
-          label: "Primary IBKR",
+          accountId: { kind: "set", value: "U7654321" },
+          label: { kind: "set", value: "Primary IBKR" },
           queryId: "987654",
           tokenExpiresAt: 1_800_000_000_000,
         },
@@ -191,7 +191,7 @@ describe("brokerage connection secrets", () => {
     await asUser().action(api.brokerageSecrets.setIbkrConnectionToken, {
       connectionId,
       metadata: {
-        label: "Original metadata",
+        label: { kind: "set", value: "Original metadata" },
         queryId: "123456",
         tokenExpiresAt: 1_700_000_000_000,
       },
@@ -209,7 +209,7 @@ describe("brokerage connection secrets", () => {
       asUser().action(api.brokerageSecrets.setIbkrConnectionToken, {
         connectionId,
         metadata: {
-          label: "Uncommitted metadata",
+          label: { kind: "set", value: "Uncommitted metadata" },
           queryId: "654321",
           tokenExpiresAt: 1_900_000_000_000,
         },
@@ -238,12 +238,15 @@ describe("brokerage connection secrets", () => {
     await asUser().action(api.brokerageSecrets.setIbkrConnectionToken, {
       connectionId,
       metadata: {
-        accountId: "U1234567",
-        label: "Original label",
+        accountId: { kind: "set", value: "U1234567" },
+        label: { kind: "set", value: "Original label" },
         queryId: "123456",
         tokenExpiresAt: 1_800_000_000_000,
       },
       token: "first-secret",
+    });
+    await asUser().mutation(api.brokerageIngestion.pauseBrokerageConnection, {
+      connectionId,
     });
     const first = await t.run(async (ctx) =>
       ctx.db.query("brokerageConnectionSecrets").unique(),
@@ -253,12 +256,19 @@ describe("brokerage connection secrets", () => {
     await expect(
       asUser("owner-b").action(api.brokerageSecrets.setIbkrConnectionToken, {
         connectionId,
+        metadata: {
+          queryId: "123456",
+          tokenExpiresAt: 1_800_000_000_000,
+        },
         token: "attacker-secret",
       }),
     ).rejects.toThrow("Brokerage connection not found");
     await asUser().action(api.brokerageSecrets.setIbkrConnectionToken, {
       connectionId,
-      metadata: { queryId: "654321" },
+      metadata: {
+        queryId: "654321",
+        tokenExpiresAt: 1_800_000_000_000,
+      },
       token: "replacement-secret",
     });
     const secrets = await t.run(async (ctx) =>
@@ -273,6 +283,7 @@ describe("brokerage connection secrets", () => {
       accountId: "U1234567",
       label: "Original label",
       queryId: "654321",
+      status: "paused",
       tokenExpiresAt: 1_800_000_000_000,
     });
     await expect(
@@ -281,5 +292,70 @@ describe("brokerage connection secrets", () => {
         ownerId: "owner-a",
       }),
     ).resolves.toBe("replacement-secret");
+  });
+
+  it("applies explicit metadata clears atomically with a token replacement", async () => {
+    const connectionId = await createConnection();
+    await asUser().action(api.brokerageSecrets.setIbkrConnectionToken, {
+      connectionId,
+      metadata: {
+        accountId: { kind: "set", value: "U1234567" },
+        label: { kind: "set", value: "Primary" },
+        queryId: "123456",
+        tokenExpiresAt: 1_800_000_000_000,
+      },
+      token: "first-secret",
+    });
+
+    await asUser().action(api.brokerageSecrets.setIbkrConnectionToken, {
+      connectionId,
+      metadata: {
+        accountId: { kind: "clear" },
+        label: { kind: "clear" },
+        queryId: "654321",
+        tokenExpiresAt: 1_900_000_000_000,
+      },
+      token: "replacement-secret",
+    });
+
+    const connection = await t.run(async (ctx) => ctx.db.get(connectionId));
+    expect(connection).toMatchObject({
+      queryId: "654321",
+      status: "active",
+      tokenExpiresAt: 1_900_000_000_000,
+    });
+    expect(connection).not.toHaveProperty("accountId");
+    expect(connection).not.toHaveProperty("label");
+  });
+
+  it("rejects empty token metadata set patches", async () => {
+    const connectionId = await createConnection();
+
+    await expect(
+      asUser().action(api.brokerageSecrets.setIbkrConnectionToken, {
+        connectionId,
+        metadata: {
+          label: { kind: "set", value: "" },
+          queryId: "123456",
+          tokenExpiresAt: 1_800_000_000_000,
+        },
+        token: "new-secret",
+      }),
+    ).rejects.toThrow("Label cannot be empty");
+  });
+
+  it("rejects a non-finite token expiration timestamp", async () => {
+    const connectionId = await createConnection();
+
+    await expect(
+      asUser().action(api.brokerageSecrets.setIbkrConnectionToken, {
+        connectionId,
+        metadata: {
+          queryId: "123456",
+          tokenExpiresAt: Number.NaN,
+        },
+        token: "new-secret",
+      }),
+    ).rejects.toThrow("expiration date is required");
   });
 });

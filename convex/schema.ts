@@ -559,7 +559,6 @@ export default defineSchema({
     source: brokerageSourceValidator,
     status: brokerageConnectionStatusValidator,
     tokenExpiresAt: v.optional(v.number()),
-    tokenLabel: v.optional(v.string()),
     updatedAt: v.number(),
   })
     .index("by_ownerId", ["ownerId"])
@@ -574,9 +573,7 @@ export default defineSchema({
     keyVersion: v.number(),
     ownerId: v.string(),
     updatedAt: v.number(),
-  })
-    .index("by_connectionId", ["connectionId"])
-    .index("by_ownerId", ["ownerId"]),
+  }).index("by_connectionId", ["connectionId"]),
 
   brokerageSyncRuns: defineTable({
     completedAt: v.optional(v.number()),

@@ -21,6 +21,7 @@ import type * as ibkrFlexWorkflow from "../ibkrFlexWorkflow.js";
 import type * as importTasks from "../importTasks.js";
 import type * as imports from "../imports.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_brokerageConnectionMetadata from "../lib/brokerageConnectionMetadata.js";
 import type * as lib_brokerageFreshness from "../lib/brokerageFreshness.js";
 import type * as lib_ibkrSchedule from "../lib/ibkrSchedule.js";
 import type * as lib_marketCalendar from "../lib/marketCalendar.js";
@@ -61,6 +62,7 @@ declare const fullApi: ApiFromModules<{
   importTasks: typeof importTasks;
   imports: typeof imports;
   "lib/auth": typeof lib_auth;
+  "lib/brokerageConnectionMetadata": typeof lib_brokerageConnectionMetadata;
   "lib/brokerageFreshness": typeof lib_brokerageFreshness;
   "lib/ibkrSchedule": typeof lib_ibkrSchedule;
   "lib/marketCalendar": typeof lib_marketCalendar;

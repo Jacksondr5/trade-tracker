@@ -77,7 +77,9 @@ test.describe("operational surfaces regression", () => {
     await expect(getTradePlansFilteredEmptyState(page)).toBeVisible();
   });
 
-  test("imports page renders with correct structure", async ({ page }) => {
+  test("imports page renders its operational controls and resets an unsaved password draft", async ({
+    page,
+  }) => {
     await page.goto("/imports");
     await waitForAuthenticatedApp(page, APP_PAGE_TITLES.imports);
 
@@ -111,7 +113,7 @@ test.describe("operational surfaces regression", () => {
     await expect(tokenInput).toBeVisible();
     await expect(tokenInput).toHaveAttribute("type", "password");
     await expect(tokenInput).toHaveValue("");
-    await tokenInput.fill("must-not-be-read-back");
+    await tokenInput.fill("unsaved-local-token-draft");
 
     await getBrokerageConnectionConfigureButton(page).click();
     await expect(connectionForm).toBeHidden();

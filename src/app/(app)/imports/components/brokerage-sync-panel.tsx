@@ -23,14 +23,20 @@ import {
 import { api } from "~/convex/_generated/api";
 import { formatDate } from "~/lib/format";
 import { cn } from "~/lib/utils";
+import { MAX_IBKR_FLEX_TOKEN_LENGTH } from "../../../../../shared/brokerage/constants";
 import { IMPORTS_INDEX_TEST_IDS } from "../../../../../shared/e2e/testIds";
 
 const connectionSchema = z.object({
   accountId: z
     .string()
     .trim()
+    .min(1, "Account ID is required; use Clear to remove it")
     .max(40, "Account ID must be 40 characters or less"),
-  label: z.string().trim().max(80, "Label must be 80 characters or less"),
+  label: z
+    .string()
+    .trim()
+    .min(1, "Label is required; use Clear to remove it")
+    .max(80, "Label must be 80 characters or less"),
   queryId: z
     .string()
     .trim()
@@ -38,15 +44,18 @@ const connectionSchema = z.object({
     .regex(/^\d+$/, "Flex query ID must contain only numbers"),
   tokenExpiresOn: z
     .string()
+    .min(1, "Token expiration date is required")
     .refine(
-      (value) =>
-        value === "" || !Number.isNaN(Date.parse(`${value}T00:00:00Z`)),
+      (value) => !Number.isNaN(Date.parse(`${value}T00:00:00Z`)),
       "Enter a valid expiration date",
     ),
   token: z
     .string()
     .trim()
-    .max(4096, "Flex token must be 4096 characters or less"),
+    .max(
+      MAX_IBKR_FLEX_TOKEN_LENGTH,
+      `Flex token must be ${MAX_IBKR_FLEX_TOKEN_LENGTH} characters or less`,
+    ),
 });
 
 type ConnectionFormValues = z.infer<typeof connectionSchema>;
@@ -74,8 +83,20 @@ function toDateInputValue(timestamp?: number): string {
   return timestamp ? new Date(timestamp).toISOString().slice(0, 10) : "";
 }
 
-function toEndOfUtcDay(date: string): number | undefined {
-  return date ? Date.parse(`${date}T23:59:59.999Z`) : undefined;
+function toEndOfUtcDay(date: string): number {
+  return Date.parse(`${date}T23:59:59.999Z`);
+}
+
+function toOptionalStringPatch(args: {
+  cleared: boolean;
+  persistedValue: string | undefined;
+  value: string;
+}) {
+  if (args.cleared) return { kind: "clear" as const };
+  const value = args.value.trim();
+  return value === args.persistedValue
+    ? undefined
+    : { kind: "set" as const, value };
 }
 
 export function BrokerageSyncPanel({
@@ -97,6 +118,10 @@ export function BrokerageSyncPanel({
     variant: "error" | "success";
   } | null>(null);
   const [isChangingStatus, setIsChangingStatus] = useState(false);
+  const [clearedMetadata, setClearedMetadata] = useState({
+    accountId: false,
+    label: false,
+  });
   const connectionAccountId = connection?.accountId ?? "";
   const connectionLabel = connection?.label ?? "";
   const connectionQueryId = connection?.queryId ?? "";
@@ -141,6 +166,17 @@ export function BrokerageSyncPanel({
       try {
         const parsed = connectionSchema.parse(value);
         const token = parsed.token.trim();
+        const accountId = toOptionalStringPatch({
+          cleared: clearedMetadata.accountId,
+          persistedValue: connection?.accountId,
+          value: parsed.accountId,
+        });
+        const label = toOptionalStringPatch({
+          cleared: clearedMetadata.label,
+          persistedValue: connection?.label,
+          value: parsed.label,
+        });
+        const tokenExpiresAt = toEndOfUtcDay(parsed.tokenExpiresOn);
         if ((!connection?.tokenConfigured || isReplacingToken) && !token) {
           throw new Error("IBKR Flex token is required");
         }
@@ -155,20 +191,20 @@ export function BrokerageSyncPanel({
           await setConnectionToken({
             connectionId,
             metadata: {
-              accountId: parsed.accountId || undefined,
-              label: parsed.label || undefined,
+              accountId,
+              label,
               queryId: parsed.queryId,
-              tokenExpiresAt: toEndOfUtcDay(parsed.tokenExpiresOn),
+              tokenExpiresAt,
             },
             token,
           });
         } else {
           await upsertConnection({
-            accountId: parsed.accountId || undefined,
-            label: parsed.label || undefined,
+            accountId,
+            label,
             queryId: parsed.queryId,
             status: connection?.status === "paused" ? "paused" : "active",
-            tokenExpiresAt: toEndOfUtcDay(parsed.tokenExpiresOn),
+            tokenExpiresAt,
           });
         }
         setFeedback({
@@ -178,6 +214,7 @@ export function BrokerageSyncPanel({
           variant: "success",
         });
         form.reset({ ...parsed, token: "" });
+        setClearedMetadata({ accountId: false, label: false });
         setIsReplacingToken(false);
         setIsEditing(false);
       } catch (error) {
@@ -195,6 +232,7 @@ export function BrokerageSyncPanel({
 
   useEffect(() => {
     form.reset(connectionFormValues);
+    setClearedMetadata({ accountId: false, label: false });
   }, [connectionFormValues, form]);
 
   useEffect(() => {
@@ -206,6 +244,7 @@ export function BrokerageSyncPanel({
 
   const handleEditingToggle = () => {
     form.reset(connectionFormValues);
+    setClearedMetadata({ accountId: false, label: false });
     setIsReplacingToken(!connection?.tokenConfigured);
     setIsEditing((current) => !current);
   };
@@ -437,25 +476,92 @@ export function BrokerageSyncPanel({
               </p>
             </div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <form.AppField name="label">
-                {(field) => (
-                  <field.FieldInput
-                    label="Connection label"
-                    placeholder="Main IBKR account"
-                  />
-                )}
-              </form.AppField>
-              <form.AppField name="accountId">
-                {(field) => (
-                  <field.FieldInput
-                    dataTestId={
-                      IMPORTS_INDEX_TEST_IDS.brokerageConnectionAccountIdInput
-                    }
-                    label="Brokerage account ID"
-                    placeholder="U1234567"
-                  />
-                )}
-              </form.AppField>
+              <div>
+                <form.AppField name="label">
+                  {(field) => (
+                    <field.FieldInput
+                      dataTestId={
+                        IMPORTS_INDEX_TEST_IDS.brokerageConnectionLabelInput
+                      }
+                      disabled={clearedMetadata.label}
+                      displayValue={clearedMetadata.label ? "" : undefined}
+                      label="Connection label"
+                      labelAction={
+                        connection?.label ? (
+                          <Button
+                            className="h-auto px-0 py-0"
+                            dataTestId={
+                              clearedMetadata.label
+                                ? IMPORTS_INDEX_TEST_IDS.brokerageConnectionLabelUndoButton
+                                : IMPORTS_INDEX_TEST_IDS.brokerageConnectionLabelClearButton
+                            }
+                            onClick={() =>
+                              setClearedMetadata((current) => ({
+                                ...current,
+                                label: !current.label,
+                              }))
+                            }
+                            size="sm"
+                            type="button"
+                            variant="link"
+                          >
+                            {clearedMetadata.label ? "Undo" : "Clear"}
+                          </Button>
+                        ) : undefined
+                      }
+                      placeholder="Main IBKR account"
+                    />
+                  )}
+                </form.AppField>
+                {clearedMetadata.label ? (
+                  <p className="mt-1.5 text-xs text-olive-11">
+                    Label will be cleared when saved.
+                  </p>
+                ) : null}
+              </div>
+              <div>
+                <form.AppField name="accountId">
+                  {(field) => (
+                    <field.FieldInput
+                      dataTestId={
+                        IMPORTS_INDEX_TEST_IDS.brokerageConnectionAccountIdInput
+                      }
+                      disabled={clearedMetadata.accountId}
+                      displayValue={clearedMetadata.accountId ? "" : undefined}
+                      label="Brokerage account ID"
+                      labelAction={
+                        connection?.accountId ? (
+                          <Button
+                            className="h-auto px-0 py-0"
+                            dataTestId={
+                              clearedMetadata.accountId
+                                ? IMPORTS_INDEX_TEST_IDS.brokerageConnectionAccountIdUndoButton
+                                : IMPORTS_INDEX_TEST_IDS.brokerageConnectionAccountIdClearButton
+                            }
+                            onClick={() =>
+                              setClearedMetadata((current) => ({
+                                ...current,
+                                accountId: !current.accountId,
+                              }))
+                            }
+                            size="sm"
+                            type="button"
+                            variant="link"
+                          >
+                            {clearedMetadata.accountId ? "Undo" : "Clear"}
+                          </Button>
+                        ) : undefined
+                      }
+                      placeholder="U1234567"
+                    />
+                  )}
+                </form.AppField>
+                {clearedMetadata.accountId ? (
+                  <p className="mt-1.5 text-xs text-olive-11">
+                    Account ID will be cleared when saved.
+                  </p>
+                ) : null}
+              </div>
               <form.AppField name="queryId">
                 {(field) => (
                   <field.FieldInput
@@ -470,7 +576,13 @@ export function BrokerageSyncPanel({
               </form.AppField>
               <form.AppField name="tokenExpiresOn">
                 {(field) => (
-                  <field.FieldInput label="Token expires" type="date" />
+                  <field.FieldInput
+                    dataTestId={
+                      IMPORTS_INDEX_TEST_IDS.brokerageConnectionTokenExpiryInput
+                    }
+                    label="Token expires"
+                    type="date"
+                  />
                 )}
               </form.AppField>
             </div>

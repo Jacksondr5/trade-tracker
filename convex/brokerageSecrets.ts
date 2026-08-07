@@ -2,12 +2,17 @@ import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery } from "./_generated/server";
+import {
+  optionalMetadataStringPatchValidator,
+  resolveOptionalMetadataStringPatch,
+  validateTokenExpiresAt,
+} from "./lib/brokerageConnectionMetadata";
 import { requireUser } from "./lib/auth";
+import { MAX_IBKR_FLEX_TOKEN_LENGTH } from "../shared/brokerage/constants";
 
 export const DEFAULT_BROKERAGE_TOKEN_KEY_VERSION = 1;
 const AES_KEY_BYTES = 32;
 const AES_GCM_IV_BYTES = 12;
-const MAX_TOKEN_LENGTH = 4_096;
 
 type EncryptedBrokerageToken = {
   ciphertext: string;
@@ -21,10 +26,10 @@ type BrokerageTokenBinding = {
 };
 
 const brokerageTokenMetadataValidator = v.object({
-  accountId: v.optional(v.string()),
-  label: v.optional(v.string()),
+  accountId: v.optional(optionalMetadataStringPatchValidator),
+  label: v.optional(optionalMetadataStringPatchValidator),
   queryId: v.string(),
-  tokenExpiresAt: v.optional(v.number()),
+  tokenExpiresAt: v.number(),
 });
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -162,7 +167,7 @@ export async function decryptBrokerageToken(
 export const setIbkrConnectionToken = action({
   args: {
     connectionId: v.id("brokerageConnections"),
-    metadata: v.optional(brokerageTokenMetadataValidator),
+    metadata: brokerageTokenMetadataValidator,
     token: v.string(),
   },
   returns: v.object({ configured: v.literal(true), updatedAt: v.number() }),
@@ -170,11 +175,12 @@ export const setIbkrConnectionToken = action({
     const ownerId = await requireUser(ctx);
     const token = args.token.trim();
     if (!token) throw new ConvexError("IBKR Flex token is required");
-    if (token.length > MAX_TOKEN_LENGTH) {
+    if (token.length > MAX_IBKR_FLEX_TOKEN_LENGTH) {
       throw new ConvexError(
-        `IBKR Flex token must be ${MAX_TOKEN_LENGTH} characters or less`,
+        `IBKR Flex token must be ${MAX_IBKR_FLEX_TOKEN_LENGTH} characters or less`,
       );
     }
+    validateTokenExpiresAt(args.metadata.tokenExpiresAt);
     const encrypted = await encryptBrokerageToken(token, {
       connectionId: args.connectionId,
       ownerId,
@@ -197,7 +203,7 @@ export const storeEncryptedToken = internalMutation({
     connectionId: v.id("brokerageConnections"),
     iv: v.string(),
     keyVersion: v.number(),
-    metadata: v.optional(brokerageTokenMetadataValidator),
+    metadata: brokerageTokenMetadataValidator,
     ownerId: v.string(),
     updatedAt: v.number(),
   },
@@ -226,20 +232,28 @@ export const storeEncryptedToken = internalMutation({
     } else {
       await ctx.db.insert("brokerageConnectionSecrets", secret);
     }
-    const metadataPatch = args.metadata
-      ? {
-          queryId: args.metadata.queryId,
-          ...(args.metadata.accountId === undefined
-            ? {}
-            : { accountId: args.metadata.accountId }),
-          ...(args.metadata.label === undefined
-            ? {}
-            : { label: args.metadata.label }),
-          ...(args.metadata.tokenExpiresAt === undefined
-            ? {}
-            : { tokenExpiresAt: args.metadata.tokenExpiresAt }),
-        }
-      : {};
+    const metadataPatch = {
+      queryId: args.metadata.queryId,
+      tokenExpiresAt: validateTokenExpiresAt(args.metadata.tokenExpiresAt),
+      ...(args.metadata.accountId === undefined
+        ? {}
+        : {
+            accountId: resolveOptionalMetadataStringPatch({
+              fieldName: "Account ID",
+              maxLength: 40,
+              patch: args.metadata.accountId,
+            }),
+          }),
+      ...(args.metadata.label === undefined
+        ? {}
+        : {
+            label: resolveOptionalMetadataStringPatch({
+              fieldName: "Label",
+              maxLength: 80,
+              patch: args.metadata.label,
+            }),
+          }),
+    };
     await ctx.db.patch(connection._id, {
       ...metadataPatch,
       connectionError: undefined,

@@ -9,33 +9,40 @@ import { cn } from "~/lib/utils";
 
 export const FieldInput = ({
   label,
+  labelAction,
   className,
   dataTestId,
+  displayValue,
   ...props
 }: Omit<
   InputProps,
   "value" | "onChange" | "onBlur" | "aria-invalid" | "dataTestId"
 > & {
   dataTestId?: string;
+  displayValue?: string;
   label: string;
+  labelAction?: React.ReactNode;
 }) => {
   const errorId = React.useId();
   const field = useFieldContext<string>();
   const hasError = field.state.meta.errors.length > 0;
   return (
     <div className={cn("grid w-full items-center gap-1.5", className)}>
-      <Label
-        htmlFor={field.name}
-        dataTestId={`${field.name}-label`}
-        error={hasError}
-      >
-        {label}
-      </Label>
+      <div className="flex min-h-5 items-center justify-between gap-2">
+        <Label
+          htmlFor={field.name}
+          dataTestId={`${field.name}-label`}
+          error={hasError}
+        >
+          {label}
+        </Label>
+        {labelAction}
+      </div>
       <Input
         {...props}
         id={field.name}
         dataTestId={dataTestId ?? `${field.name}-input`}
-        value={field.state.value || ""}
+        value={displayValue ?? field.state.value ?? ""}
         onChange={(e) => field.handleChange(e.target.value)}
         onBlur={field.handleBlur}
         aria-invalid={hasError}

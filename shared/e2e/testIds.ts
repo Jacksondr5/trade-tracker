@@ -156,9 +156,17 @@ export const TRADES_INDEX_TEST_IDS = {
 
 export const IMPORTS_INDEX_TEST_IDS = {
   brokerageConnectionAccountIdInput: "brokerage-connection-account-id-input",
+  brokerageConnectionAccountIdClearButton:
+    "brokerage-connection-account-id-clear-button",
+  brokerageConnectionAccountIdUndoButton:
+    "brokerage-connection-account-id-undo-button",
   brokerageConnectionCancelButton: "brokerage-connection-cancel-button",
   brokerageConnectionConfigureButton: "brokerage-connection-configure-button",
   brokerageConnectionForm: "brokerage-connection-form",
+  brokerageConnectionLabelClearButton:
+    "brokerage-connection-label-clear-button",
+  brokerageConnectionLabelInput: "brokerage-connection-label-input",
+  brokerageConnectionLabelUndoButton: "brokerage-connection-label-undo-button",
   brokerageConnectionPauseButton: "brokerage-connection-pause-button",
   brokerageConnectionQueryIdInput: "brokerage-connection-query-id-input",
   brokerageConnectionReplaceTokenButton:
@@ -166,6 +174,8 @@ export const IMPORTS_INDEX_TEST_IDS = {
   brokerageConnectionResumeButton: "brokerage-connection-resume-button",
   brokerageConnectionSaveButton: "brokerage-connection-save-button",
   brokerageConnectionTokenInput: "brokerage-connection-token-input",
+  brokerageConnectionTokenExpiryInput:
+    "brokerage-connection-token-expiry-input",
   brokerageConnectionTokenStatus: "brokerage-connection-token-status",
   brokerageLatestFailure: "brokerage-sync-latest-failure",
   brokerageLatestSuccess: "brokerage-sync-latest-success",
