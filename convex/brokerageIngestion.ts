@@ -614,7 +614,6 @@ export const getBrokerageIngestionStatus = query({
       successfulRuns,
       retryableFailedRuns,
       terminalFailedRuns,
-      connectionSecrets,
     ] = await Promise.all([
       ctx.db
         .query("brokerageConnections")
@@ -662,10 +661,6 @@ export const getBrokerageIngestionStatus = query({
         )
         .order("desc")
         .first(),
-      ctx.db
-        .query("brokerageConnectionSecrets")
-        .withIndex("by_ownerId", (q) => q.eq("ownerId", ownerId))
-        .take(25),
     ]);
     const latestSuccessfulSync = successfulRuns;
     const latestFailedSync =
@@ -675,8 +670,20 @@ export const getBrokerageIngestionStatus = query({
         ? terminalFailedRuns
         : retryableFailedRuns;
     const reviewableIssues = openIssues.slice(0, 10);
+    const connectionSecrets = await Promise.all(
+      connections.map((connection) =>
+        ctx.db
+          .query("brokerageConnectionSecrets")
+          .withIndex("by_connectionId", (query) =>
+            query.eq("connectionId", connection._id),
+          )
+          .unique(),
+      ),
+    );
     const configuredConnectionIds = new Set(
-      connectionSecrets.map((secret) => secret.connectionId),
+      connectionSecrets
+        .filter((secret) => secret !== null)
+        .map((secret) => secret.connectionId),
     );
 
     return {

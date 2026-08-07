@@ -68,6 +68,23 @@ describe("brokerage connection secrets", () => {
         ownerId: "owner-b",
       }),
     ).rejects.toThrow("could not be decrypted");
+    const otherConnectionId = await t.run(async (ctx) => {
+      const now = Date.now();
+      return await ctx.db.insert("brokerageConnections", {
+        createdAt: now,
+        ownerId: "owner-a",
+        queryId: "654321",
+        source: "ibkr",
+        status: "needs_setup",
+        updatedAt: now,
+      });
+    });
+    await expect(
+      decryptBrokerageToken(encrypted, {
+        connectionId: otherConnectionId,
+        ownerId: "owner-a",
+      }),
+    ).rejects.toThrow("could not be decrypted");
   });
 
   it("keeps old rows decryptable while new writes use a rotated key version", async () => {
@@ -145,6 +162,7 @@ describe("brokerage connection secrets", () => {
     const first = await t.run(async (ctx) =>
       ctx.db.query("brokerageConnectionSecrets").unique(),
     );
+    if (!first) throw new Error("Expected an encrypted brokerage secret");
 
     await expect(
       asUser("owner-b").action(api.brokerageSecrets.setIbkrConnectionToken, {

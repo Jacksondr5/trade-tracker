@@ -212,6 +212,7 @@ describe("IBKR Flex Convex workflow", () => {
       order: "asc",
       paginationOpts: { cursor: null, numItems: 100 },
     });
+    expect(workflows.page.length).toBeGreaterThan(0);
     const steps = await Promise.all(
       workflows.page.map((entry) =>
         t.query(components.workflow.workflow.listSteps, {
@@ -222,6 +223,7 @@ describe("IBKR Flex Convex workflow", () => {
       ),
     );
 
+    expect(steps.flatMap((entry) => entry.page).length).toBeGreaterThan(0);
     expect(JSON.stringify({ steps, workflows })).not.toContain(plaintextToken);
   });
 
@@ -559,5 +561,23 @@ describe("IBKR Flex Convex workflow", () => {
       expect.stringContaining("t=token-a"),
       expect.stringContaining("t=token-b"),
     ]);
+  });
+
+  it("fails terminally when the owner does not match the connection", async () => {
+    const connectionId = await createConnection("owner-a", "token-a");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await t.action(internal.ibkrFlexWorkflow.sendRequest, {
+      connectionId,
+      ownerId: "owner-b",
+      queryId: "111",
+    });
+
+    expect(result).toMatchObject({
+      errorMessage: "No IBKR credential is configured for this connection.",
+      status: "terminal_error",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

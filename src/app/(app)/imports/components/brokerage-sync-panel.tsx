@@ -478,6 +478,7 @@ export function BrokerageSyncPanel({
                         ).toLocaleDateString("en-US", {
                           day: "numeric",
                           month: "short",
+                          timeZone: "UTC",
                           year: "numeric",
                         })}`
                       : ""}
