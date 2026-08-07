@@ -20,6 +20,13 @@ type BrokerageTokenBinding = {
   ownerId: string;
 };
 
+const brokerageTokenMetadataValidator = v.object({
+  accountId: v.optional(v.string()),
+  label: v.optional(v.string()),
+  queryId: v.string(),
+  tokenExpiresAt: v.optional(v.number()),
+});
+
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -152,6 +159,7 @@ export async function decryptBrokerageToken(
 export const setIbkrConnectionToken = action({
   args: {
     connectionId: v.id("brokerageConnections"),
+    metadata: v.optional(brokerageTokenMetadataValidator),
     token: v.string(),
   },
   returns: v.object({ configured: v.literal(true), updatedAt: v.number() }),
@@ -172,6 +180,7 @@ export const setIbkrConnectionToken = action({
     await ctx.runMutation(internal.brokerageSecrets.storeEncryptedToken, {
       ...encrypted,
       connectionId: args.connectionId,
+      metadata: args.metadata,
       ownerId,
       updatedAt,
     });
@@ -185,6 +194,7 @@ export const storeEncryptedToken = internalMutation({
     connectionId: v.id("brokerageConnections"),
     iv: v.string(),
     keyVersion: v.number(),
+    metadata: v.optional(brokerageTokenMetadataValidator),
     ownerId: v.string(),
     updatedAt: v.number(),
   },
@@ -213,7 +223,16 @@ export const storeEncryptedToken = internalMutation({
     } else {
       await ctx.db.insert("brokerageConnectionSecrets", secret);
     }
+    const metadataPatch = args.metadata
+      ? {
+          accountId: args.metadata.accountId,
+          label: args.metadata.label,
+          queryId: args.metadata.queryId,
+          tokenExpiresAt: args.metadata.tokenExpiresAt,
+        }
+      : {};
     await ctx.db.patch(connection._id, {
+      ...metadataPatch,
       connectionError: undefined,
       status: connection.status === "paused" ? "paused" : "active",
       updatedAt: args.updatedAt,

@@ -125,7 +125,16 @@ describe("brokerage connection secrets", () => {
 
     const result = await asUser().action(
       api.brokerageSecrets.setIbkrConnectionToken,
-      { connectionId, token: plaintext },
+      {
+        connectionId,
+        metadata: {
+          accountId: "U7654321",
+          label: "Primary IBKR",
+          queryId: "987654",
+          tokenExpiresAt: 1_800_000_000_000,
+        },
+        token: plaintext,
+      },
     );
     const [storedSecret] = await t.run(async (ctx) =>
       ctx.db.query("brokerageConnectionSecrets").collect(),
@@ -145,12 +154,63 @@ describe("brokerage connection secrets", () => {
     expect(storedSecret.ciphertext).not.toContain(plaintext);
     expect(status.connections[0]).toMatchObject({
       _id: connectionId,
+      accountId: "U7654321",
+      label: "Primary IBKR",
+      queryId: "987654",
       status: "active",
       tokenConfigured: true,
+      tokenExpiresAt: 1_800_000_000_000,
     });
     expect(JSON.stringify(status)).not.toContain(plaintext);
     expect(JSON.stringify(status)).not.toContain(storedSecret.ciphertext);
     expect(JSON.stringify(status)).not.toContain(storedSecret.iv);
+  });
+
+  it("does not commit replacement metadata when encryption fails", async () => {
+    const connectionId = await createConnection();
+    await asUser().action(api.brokerageSecrets.setIbkrConnectionToken, {
+      connectionId,
+      metadata: {
+        label: "Original metadata",
+        queryId: "123456",
+        tokenExpiresAt: 1_700_000_000_000,
+      },
+      token: "working-secret",
+    });
+    const originalSecret = await t.run(async (ctx) =>
+      ctx.db.query("brokerageConnectionSecrets").unique(),
+    );
+    if (!originalSecret) {
+      throw new Error("Expected an encrypted brokerage secret");
+    }
+    delete process.env.BROKERAGE_TOKEN_ENCRYPTION_KEY;
+
+    await expect(
+      asUser().action(api.brokerageSecrets.setIbkrConnectionToken, {
+        connectionId,
+        metadata: {
+          label: "Uncommitted metadata",
+          queryId: "654321",
+          tokenExpiresAt: 1_900_000_000_000,
+        },
+        token: "replacement-secret",
+      }),
+    ).rejects.toThrow("key version 1 is not configured");
+    const connection = await t.run(async (ctx) => ctx.db.get(connectionId));
+    const storedSecret = await t.run(async (ctx) =>
+      ctx.db.query("brokerageConnectionSecrets").unique(),
+    );
+
+    expect(connection).toMatchObject({
+      label: "Original metadata",
+      queryId: "123456",
+      status: "active",
+      tokenExpiresAt: 1_700_000_000_000,
+    });
+    expect(storedSecret).toMatchObject({
+      _id: originalSecret._id,
+      ciphertext: originalSecret.ciphertext,
+    });
   });
 
   it("replaces a token in place without allowing cross-owner writes", async () => {

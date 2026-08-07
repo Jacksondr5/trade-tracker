@@ -144,24 +144,37 @@ export function BrokerageSyncPanel({
         if ((!connection?.tokenConfigured || isReplacingToken) && !token) {
           throw new Error("IBKR Flex token is required");
         }
-        const nextStatus =
-          connection?.status === "paused"
-            ? "paused"
-            : connection?.tokenConfigured
-              ? "active"
-              : "needs_setup";
-        const connectionId = await upsertConnection({
-          accountId: parsed.accountId || undefined,
-          label: parsed.label || undefined,
-          queryId: parsed.queryId,
-          status: nextStatus,
-          tokenExpiresAt: toEndOfUtcDay(parsed.tokenExpiresOn),
-        });
+        let connectionId = connection?._id;
+        if (!connectionId) {
+          connectionId = await upsertConnection({
+            queryId: parsed.queryId,
+            status: "needs_setup",
+          });
+        }
         if (token) {
-          await setConnectionToken({ connectionId, token });
+          await setConnectionToken({
+            connectionId,
+            metadata: {
+              accountId: parsed.accountId || undefined,
+              label: parsed.label || undefined,
+              queryId: parsed.queryId,
+              tokenExpiresAt: toEndOfUtcDay(parsed.tokenExpiresOn),
+            },
+            token,
+          });
+        } else {
+          await upsertConnection({
+            accountId: parsed.accountId || undefined,
+            label: parsed.label || undefined,
+            queryId: parsed.queryId,
+            status: connection?.status === "paused" ? "paused" : "active",
+            tokenExpiresAt: toEndOfUtcDay(parsed.tokenExpiresOn),
+          });
         }
         setFeedback({
-          message: "IBKR connection saved with its encrypted Flex credential.",
+          message: token
+            ? "IBKR connection saved with its encrypted Flex credential."
+            : "IBKR connection metadata saved.",
           variant: "success",
         });
         form.reset({ ...parsed, token: "" });
