@@ -73,26 +73,51 @@ describe("bravos review queue", () => {
       name: "Other imported plan",
       sourceUrl: "https://example.com/post/1",
     });
+    const subdomainPlanId = await insertTradePlan({
+      name: "Bravos subdomain plan",
+      sourceUrl: "https://app.bravosresearch.com/post/1",
+    });
+    const lookAlikePlanId = await insertTradePlan({
+      name: "Bravos look-alike plan",
+      sourceUrl: "https://notbravosresearch.com/post/1",
+    });
 
     const dryRun = await t.mutation(
       internal.bravos.cleanupBravosPlansAndDerivedRecords,
-      { cursor: null, dryRun: true, ownerId },
+      { dryRun: true, ownerId },
     );
     expect(dryRun).toMatchObject({
-      bravosPlansInBatch: 1,
-      deletedPlans: 0,
-      eligiblePlans: 1,
-      isDone: true,
+      bravosPlans: 2,
+      deletedPlans: 2,
+      eligiblePlanCount: 2,
+      eligiblePlansWithoutNotes: 2,
     });
+    expect(dryRun.eligiblePlans).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: bravosPlanId,
+          name: "QQQ Bravos",
+          sourceUrl: "https://bravosresearch.com/post/1",
+        }),
+        expect.objectContaining({
+          id: subdomainPlanId,
+          name: "Bravos subdomain plan",
+          sourceUrl: "https://app.bravosresearch.com/post/1",
+        }),
+      ]),
+    );
     expect(await t.run((ctx) => ctx.db.get(bravosPlanId))).not.toBeNull();
+    expect(await t.run((ctx) => ctx.db.get(subdomainPlanId))).not.toBeNull();
 
     const cleanup = await t.mutation(
       internal.bravos.cleanupBravosPlansAndDerivedRecords,
-      { cursor: null, dryRun: false, ownerId },
+      { dryRun: false, ownerId },
     );
-    expect(cleanup.deletedPlans).toBe(1);
+    expect(cleanup.deletedPlans).toBe(2);
     expect(await t.run((ctx) => ctx.db.get(bravosPlanId))).toBeNull();
+    expect(await t.run((ctx) => ctx.db.get(subdomainPlanId))).toBeNull();
     expect(await t.run((ctx) => ctx.db.get(manualPlanId))).not.toBeNull();
+    expect(await t.run((ctx) => ctx.db.get(lookAlikePlanId))).not.toBeNull();
   });
 
   it("reports dry-run effects and cleans Bravos-derived records without touching trades", async () => {
@@ -161,6 +186,7 @@ describe("bravos review queue", () => {
         approvedAction: {
           fieldUpdates: [],
           kind: "apply_follow_up",
+          noteContent: "Keep this field",
           targetTradePlanId: tradePlanId,
         },
         approvedAt: now,
@@ -176,6 +202,7 @@ describe("bravos review queue", () => {
         proposedAction: {
           fieldUpdates: [],
           kind: "apply_follow_up",
+          noteContent: "Keep this field",
           targetTradePlanId: tradePlanId,
         },
         rawText: "QQQ Bravos",
@@ -212,7 +239,7 @@ describe("bravos review queue", () => {
 
     const dryRun = await t.mutation(
       internal.bravos.cleanupBravosPlansAndDerivedRecords,
-      { cursor: null, dryRun: true, ownerId },
+      { dryRun: true, ownerId },
     );
     expect(dryRun).toMatchObject({
       clearedAppliedReviewItemNoteIds: 1,
@@ -224,9 +251,9 @@ describe("bravos review queue", () => {
       clearedProposedActionTargets: 1,
       clearedSuggestedReviewItemPlanIds: 1,
       deletedNotes: 3,
-      deletedPlans: 0,
+      deletedPlans: 1,
       deletedReadyReviewItems: 1,
-      eligiblePlans: 1,
+      eligiblePlanCount: 1,
       patchedImportTasks: 1,
       patchedReviewItems: 1,
       unlinkedTrades: 1,
@@ -235,10 +262,16 @@ describe("bravos review queue", () => {
     expect(await t.run((ctx) => ctx.db.get(tradeId))).toMatchObject({
       tradePlanId,
     });
+    expect(await t.run((ctx) => ctx.db.get(directNoteId))).not.toBeNull();
+    expect(await t.run((ctx) => ctx.db.get(readyReviewId))).not.toBeNull();
+    expect(await t.run((ctx) => ctx.db.get(reviewId))).toMatchObject({
+      appliedNoteId: directNoteId,
+      appliedTradePlanId: tradePlanId,
+    });
 
     const cleanup = await t.mutation(
       internal.bravos.cleanupBravosPlansAndDerivedRecords,
-      { cursor: null, dryRun: false, ownerId },
+      { dryRun: false, ownerId },
     );
     expect(cleanup.deletedPlans).toBe(1);
     expect(await t.run((ctx) => ctx.db.get(tradePlanId))).toBeNull();
@@ -255,8 +288,16 @@ describe("bravos review queue", () => {
     expect(await t.run((ctx) => ctx.db.get(readyReviewId))).toBeNull();
     const review = await t.run((ctx) => ctx.db.get(reviewId));
     expect(review).toMatchObject({
-      approvedAction: { fieldUpdates: [], kind: "apply_follow_up" },
-      proposedAction: { fieldUpdates: [], kind: "apply_follow_up" },
+      approvedAction: {
+        fieldUpdates: [],
+        kind: "apply_follow_up",
+        noteContent: "Keep this field",
+      },
+      proposedAction: {
+        fieldUpdates: [],
+        kind: "apply_follow_up",
+        noteContent: "Keep this field",
+      },
     });
     expect(review).not.toHaveProperty("appliedNoteId");
     expect(review).not.toHaveProperty("appliedTradePlanId");
@@ -264,8 +305,14 @@ describe("bravos review queue", () => {
   });
 
   it("refuses plans with unknown notes or user-content references", async () => {
-    const tradePlanId = await insertTradePlan({
-      sourceUrl: "https://bravosresearch.com/post/blocked",
+    const unknownNotePlanId = await insertTradePlan({
+      sourceUrl: "https://bravosresearch.com/post/unknown-note",
+    });
+    const retrospectivePlanId = await insertTradePlan({
+      sourceUrl: "https://bravosresearch.com/post/retrospective",
+    });
+    const watchlistPlanId = await insertTradePlan({
+      sourceUrl: "https://bravosresearch.com/post/watchlist",
     });
     await t.run(async (ctx) => {
       const now = Date.now();
@@ -273,26 +320,26 @@ describe("bravos review queue", () => {
         content: "Jackson note",
         noteDate: now,
         ownerId,
-        tradePlanId,
+        tradePlanId: unknownNotePlanId,
       });
       await ctx.db.insert("retrospectives", {
         content: "Retrospective",
         ownerId,
-        parentId: tradePlanId,
+        parentId: retrospectivePlanId,
         parentKind: "tradePlan",
         updatedAt: now,
       });
       await ctx.db.insert("watchlist", {
         itemType: "tradePlan",
         ownerId,
-        tradePlanId,
+        tradePlanId: watchlistPlanId,
         watchedAt: now,
       });
     });
 
     const result = await t.mutation(
       internal.bravos.cleanupBravosPlansAndDerivedRecords,
-      { cursor: null, dryRun: false, ownerId },
+      { dryRun: false, ownerId },
     );
     expect(result).toMatchObject({
       deletedPlans: 0,
@@ -300,10 +347,37 @@ describe("bravos review queue", () => {
       plansWithUnknownNotes: 1,
       plansWithWatchlistItems: 1,
     });
+    expect(await t.run((ctx) => ctx.db.get(unknownNotePlanId))).not.toBeNull();
+    expect(await t.run((ctx) => ctx.db.get(retrospectivePlanId))).not.toBeNull();
+    expect(await t.run((ctx) => ctx.db.get(watchlistPlanId))).not.toBeNull();
+  });
+
+  it("fails closed when a child-reference query reaches its safety limit", async () => {
+    const tradePlanId = await insertTradePlan({
+      sourceUrl: "https://bravosresearch.com/post/too-many-notes",
+    });
+    await t.run(async (ctx) => {
+      for (const index of Array.from({ length: 501 }, (_, value) => value)) {
+        await ctx.db.insert("notes", {
+          content:
+            "Imported from service post: https://bravosresearch.com/post/too-many-notes",
+          noteDate: index,
+          ownerId,
+          tradePlanId,
+        });
+      }
+    });
+
+    await expect(
+      t.mutation(internal.bravos.cleanupBravosPlansAndDerivedRecords, {
+        dryRun: true,
+        ownerId,
+      }),
+    ).rejects.toThrow("more than 500 linked records");
     expect(await t.run((ctx) => ctx.db.get(tradePlanId))).not.toBeNull();
   });
 
-  it("processes Bravos cleanup pages to cursor termination", async () => {
+  it("deletes all Bravos plans atomically in one non-dry-run", async () => {
     for (const index of Array.from({ length: 11 }, (_, value) => value)) {
       await insertTradePlan({
         name: `Bravos ${index}`,
@@ -311,17 +385,24 @@ describe("bravos review queue", () => {
       });
     }
 
-    const firstPage = await t.mutation(
+    const dryRun = await t.mutation(
       internal.bravos.cleanupBravosPlansAndDerivedRecords,
-      { cursor: null, dryRun: true, ownerId },
+      { dryRun: true, ownerId },
     );
-    expect(firstPage).toMatchObject({ bravosPlansInBatch: 10, isDone: false });
+    expect(dryRun).toMatchObject({
+      bravosPlans: 11,
+      deletedPlans: 11,
+      eligiblePlanCount: 11,
+    });
 
-    const secondPage = await t.mutation(
+    const cleanup = await t.mutation(
       internal.bravos.cleanupBravosPlansAndDerivedRecords,
-      { cursor: firstPage.continueCursor, dryRun: true, ownerId },
+      { dryRun: false, ownerId },
     );
-    expect(secondPage).toMatchObject({ bravosPlansInBatch: 1, isDone: true });
+    expect(cleanup.deletedPlans).toBe(11);
+    expect(
+      await t.run(async (ctx) => await ctx.db.query("tradePlans").take(20)),
+    ).toEqual([]);
   });
 
   it("rejects direct scan requests while Bravos is deactivated", async () => {
