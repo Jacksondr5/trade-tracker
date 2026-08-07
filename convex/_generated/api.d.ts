@@ -12,6 +12,7 @@ import type * as accountMappings from "../accountMappings.js";
 import type * as analytics from "../analytics.js";
 import type * as bravos from "../bravos.js";
 import type * as brokerageIngestion from "../brokerageIngestion.js";
+import type * as brokerageSecrets from "../brokerageSecrets.js";
 import type * as campaigns from "../campaigns.js";
 import type * as crons from "../crons.js";
 import type * as e2eSeed from "../e2eSeed.js";
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   analytics: typeof analytics;
   bravos: typeof bravos;
   brokerageIngestion: typeof brokerageIngestion;
+  brokerageSecrets: typeof brokerageSecrets;
   campaigns: typeof campaigns;
   crons: typeof crons;
   e2eSeed: typeof e2eSeed;

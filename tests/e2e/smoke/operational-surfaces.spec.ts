@@ -5,6 +5,9 @@ import {
   getBrokerageConnectionConfigureButton,
   getBrokerageConnectionForm,
   getBrokerageConnectionQueryIdInput,
+  getBrokerageConnectionReplaceTokenButton,
+  getBrokerageConnectionTokenInput,
+  getBrokerageConnectionTokenStatus,
   getBrokerageLatestFailure,
   getBrokerageLatestSuccess,
   getBrokeragePendingImports,
@@ -98,5 +101,25 @@ test.describe("operational surfaces regression", () => {
       await expect(connectionForm).toBeVisible();
     }
     await expect(getBrokerageConnectionQueryIdInput(page)).toBeVisible();
+    await expect(getBrokerageConnectionTokenStatus(page)).toBeVisible();
+
+    const replaceTokenButton = getBrokerageConnectionReplaceTokenButton(page);
+    if (await replaceTokenButton.isVisible()) {
+      await replaceTokenButton.click();
+    }
+    const tokenInput = getBrokerageConnectionTokenInput(page);
+    await expect(tokenInput).toBeVisible();
+    await expect(tokenInput).toHaveAttribute("type", "password");
+    await expect(tokenInput).toHaveValue("");
+    await tokenInput.fill("must-not-be-read-back");
+
+    await getBrokerageConnectionConfigureButton(page).click();
+    await expect(connectionForm).toBeHidden();
+    await getBrokerageConnectionConfigureButton(page).click();
+    await expect(connectionForm).toBeVisible();
+    if (await replaceTokenButton.isVisible()) {
+      await replaceTokenButton.click();
+    }
+    await expect(tokenInput).toHaveValue("");
   });
 });

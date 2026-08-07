@@ -553,6 +553,22 @@ export function getBrokerageConnectionQueryIdInput(page: Page): Locator {
   );
 }
 
+export function getBrokerageConnectionReplaceTokenButton(page: Page): Locator {
+  return page.getByTestId(
+    IMPORTS_INDEX_TEST_IDS.brokerageConnectionReplaceTokenButton,
+  );
+}
+
+export function getBrokerageConnectionTokenInput(page: Page): Locator {
+  return page.getByTestId(IMPORTS_INDEX_TEST_IDS.brokerageConnectionTokenInput);
+}
+
+export function getBrokerageConnectionTokenStatus(page: Page): Locator {
+  return page.getByTestId(
+    IMPORTS_INDEX_TEST_IDS.brokerageConnectionTokenStatus,
+  );
+}
+
 export function getBrokerageLatestFailure(page: Page): Locator {
   return page.getByTestId(IMPORTS_INDEX_TEST_IDS.brokerageLatestFailure);
 }

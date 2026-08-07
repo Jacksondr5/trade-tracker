@@ -161,8 +161,12 @@ export const IMPORTS_INDEX_TEST_IDS = {
   brokerageConnectionForm: "brokerage-connection-form",
   brokerageConnectionPauseButton: "brokerage-connection-pause-button",
   brokerageConnectionQueryIdInput: "brokerage-connection-query-id-input",
+  brokerageConnectionReplaceTokenButton:
+    "brokerage-connection-replace-token-button",
   brokerageConnectionResumeButton: "brokerage-connection-resume-button",
   brokerageConnectionSaveButton: "brokerage-connection-save-button",
+  brokerageConnectionTokenInput: "brokerage-connection-token-input",
+  brokerageConnectionTokenStatus: "brokerage-connection-token-status",
   brokerageLatestFailure: "brokerage-sync-latest-failure",
   brokerageLatestSuccess: "brokerage-sync-latest-success",
   brokeragePendingImports: "brokerage-pending-imports",

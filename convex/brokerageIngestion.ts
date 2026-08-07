@@ -578,6 +578,7 @@ export const getBrokerageIngestionStatus = query({
         queryId: v.optional(v.string()),
         source: v.literal("ibkr"),
         status: brokerageConnectionStatusValidator,
+        tokenConfigured: v.boolean(),
         tokenExpiresAt: v.optional(v.number()),
         tokenLabel: v.optional(v.string()),
         updatedAt: v.number(),
@@ -613,6 +614,7 @@ export const getBrokerageIngestionStatus = query({
       successfulRuns,
       retryableFailedRuns,
       terminalFailedRuns,
+      connectionSecrets,
     ] = await Promise.all([
       ctx.db
         .query("brokerageConnections")
@@ -660,6 +662,10 @@ export const getBrokerageIngestionStatus = query({
         )
         .order("desc")
         .first(),
+      ctx.db
+        .query("brokerageConnectionSecrets")
+        .withIndex("by_ownerId", (q) => q.eq("ownerId", ownerId))
+        .take(25),
     ]);
     const latestSuccessfulSync = successfulRuns;
     const latestFailedSync =
@@ -669,6 +675,9 @@ export const getBrokerageIngestionStatus = query({
         ? terminalFailedRuns
         : retryableFailedRuns;
     const reviewableIssues = openIssues.slice(0, 10);
+    const configuredConnectionIds = new Set(
+      connectionSecrets.map((secret) => secret.connectionId),
+    );
 
     return {
       connections: connections.map((connection) => ({
@@ -681,6 +690,7 @@ export const getBrokerageIngestionStatus = query({
         queryId: connection.queryId,
         source: connection.source,
         status: connection.status,
+        tokenConfigured: configuredConnectionIds.has(connection._id),
         tokenExpiresAt: connection.tokenExpiresAt,
         tokenLabel: connection.tokenLabel,
         updatedAt: connection.updatedAt,

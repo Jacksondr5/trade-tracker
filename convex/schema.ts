@@ -567,6 +567,17 @@ export default defineSchema({
     .index("by_ownerId_and_source_and_status", ["ownerId", "source", "status"])
     .index("by_source_and_status", ["source", "status"]),
 
+  brokerageConnectionSecrets: defineTable({
+    ciphertext: v.string(),
+    connectionId: v.id("brokerageConnections"),
+    iv: v.string(),
+    keyVersion: v.number(),
+    ownerId: v.string(),
+    updatedAt: v.number(),
+  })
+    .index("by_connectionId", ["connectionId"])
+    .index("by_ownerId", ["ownerId"]),
+
   brokerageSyncRuns: defineTable({
     completedAt: v.optional(v.number()),
     connectionId: v.id("brokerageConnections"),

@@ -24,6 +24,7 @@ import {
   getNightlyKickoffDelayMs,
   getPriorBusinessDate,
 } from "./lib/ibkrSchedule";
+import { decryptBrokerageToken } from "./brokerageSecrets";
 
 const DEFAULT_MAX_POLL_ATTEMPTS = 24;
 const DEFAULT_INITIAL_POLL_INTERVAL_MS = 60_000;
@@ -163,8 +164,11 @@ type ActionConfig =
       baseUrl?: string;
       status: "ready";
       token: string;
-      tokenOwnerId: string;
     }
+  | { errorMessage: string; status: "terminal_error" };
+
+type BaseActionConfig =
+  | { baseUrl?: string; status: "ready" }
   | { errorMessage: string; status: "terminal_error" };
 
 function isConnectionWorkflowStatus(
@@ -194,30 +198,12 @@ function requireConnectionWorkflowResult(
   return result as ConnectionWorkflowResult;
 }
 
-function getActionConfig(
+function getBaseActionConfig(
   env: Record<string, string | undefined> = process.env,
-): ActionConfig {
-  const token = env.IBKR_FLEX_TOKEN?.trim();
-  if (!token) {
-    return {
-      errorMessage:
-        "IBKR Flex token is not configured in the Convex deployment environment",
-      status: "terminal_error",
-    };
-  }
-
-  const tokenOwnerId = env.IBKR_FLEX_TOKEN_OWNER_ID?.trim();
-  if (!tokenOwnerId) {
-    return {
-      errorMessage:
-        "IBKR Flex credential owner is not configured in the Convex deployment environment",
-      status: "terminal_error",
-    };
-  }
-
+): BaseActionConfig {
   const configuredBaseUrl = env.IBKR_FLEX_BASE_URL?.trim();
   if (!configuredBaseUrl) {
-    return { status: "ready", token, tokenOwnerId };
+    return { status: "ready" };
   }
   try {
     const url = new URL(configuredBaseUrl);
@@ -230,8 +216,6 @@ function getActionConfig(
     return {
       baseUrl: configuredBaseUrl.replace(/\/+$/, ""),
       status: "ready",
-      token,
-      tokenOwnerId,
     };
   } catch {
     return {
@@ -241,16 +225,31 @@ function getActionConfig(
   }
 }
 
-function requireCredentialForOwner(
-  config: ActionConfig,
-  ownerId: string,
-): ActionConfig {
-  if (config.status === "terminal_error") return config;
-  if (config.tokenOwnerId === ownerId) return config;
-  return {
-    errorMessage: "No IBKR credential is configured for this connection.",
-    status: "terminal_error",
-  };
+async function getActionConfig(
+  ctx: Pick<ActionCtx, "runQuery">,
+  args: { connectionId: Id<"brokerageConnections">; ownerId: string },
+): Promise<ActionConfig> {
+  const baseConfig = getBaseActionConfig();
+  if (baseConfig.status === "terminal_error") return baseConfig;
+  const encrypted = await ctx.runQuery(
+    internal.brokerageSecrets.getEncryptedTokenForConnection,
+    { connectionId: args.connectionId, ownerId: args.ownerId },
+  );
+  if (!encrypted) {
+    return {
+      errorMessage: "No IBKR credential is configured for this connection.",
+      status: "terminal_error",
+    };
+  }
+  try {
+    const token = await decryptBrokerageToken(encrypted, args);
+    return { ...baseConfig, status: "ready", token };
+  } catch (error) {
+    return {
+      errorMessage: operationalErrorMessage(error),
+      status: "terminal_error",
+    };
+  }
 }
 
 function operationalErrorMessage(error: unknown, token?: string): string {
@@ -379,10 +378,14 @@ export const getSyncRunOutcome = internalQuery({
 });
 
 export const sendRequest = internalAction({
-  args: { ownerId: v.string(), queryId: v.string() },
+  args: {
+    connectionId: v.id("brokerageConnections"),
+    ownerId: v.string(),
+    queryId: v.string(),
+  },
   returns: sendRequestResultValidator,
-  handler: async (_ctx, args) => {
-    const config = requireCredentialForOwner(getActionConfig(), args.ownerId);
+  handler: async (ctx, args) => {
+    const config = await getActionConfig(ctx, args);
     if (config.status === "terminal_error") return config;
     const client = new IbkrFlexClient(config);
     try {
@@ -400,13 +403,14 @@ export const sendRequest = internalAction({
 
 export const pollAndIngestStatement = internalAction({
   args: {
+    connectionId: v.id("brokerageConnections"),
     ownerId: v.string(),
     referenceCode: v.string(),
     syncRunId: v.id("brokerageSyncRuns"),
   },
   returns: pollResultValidator,
   handler: async (ctx, args) => {
-    const config = requireCredentialForOwner(getActionConfig(), args.ownerId);
+    const config = await getActionConfig(ctx, args);
     if (config.status === "terminal_error") return config;
     const client = new IbkrFlexClient(config);
 
@@ -535,7 +539,11 @@ export const syncConnection = workflow
     try {
       request = await step.runAction(
         internal.ibkrFlexWorkflow.sendRequest,
-        { ownerId: syncRun.ownerId, queryId: syncRun.queryId },
+        {
+          connectionId: args.connectionId,
+          ownerId: syncRun.ownerId,
+          queryId: syncRun.queryId,
+        },
         { name: "send IBKR Flex request", retry: actionRetry },
       );
     } catch (error) {
@@ -596,6 +604,7 @@ export const syncConnection = workflow
         statement = await step.runAction(
           internal.ibkrFlexWorkflow.pollAndIngestStatement,
           {
+            connectionId: args.connectionId,
             ownerId: syncRun.ownerId,
             referenceCode: request.referenceCode,
             syncRunId: syncRun.syncRunId,
