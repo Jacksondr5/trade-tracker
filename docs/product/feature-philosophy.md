@@ -252,14 +252,16 @@ What accounts are not for:
 
 ### AI Counterpart
 
+Status: planned, not yet implemented. See [roadmap.md](roadmap.md) phase 2 and [ai-counterpart.md](ai-counterpart.md).
+
 Primary job:
 
-- pay the target user at the moment of use so the record accretes as a byproduct
+- pay the target user at the moment of use so the record builds up as a byproduct
 
 What the counterpart should optimize for:
 
 - immediate value in every exchange
-- capture as conversation exhaust, never as homework
+- capture as a byproduct of conversation, never as homework
 - surviving contact with a real workday
 
 What the counterpart is for:
@@ -280,6 +282,8 @@ What the counterpart is not for:
 See [ai-counterpart.md](ai-counterpart.md) for the full model.
 
 ### Instrument Threads And Episodes
+
+Status: planned, not yet implemented. See [roadmap.md](roadmap.md) phase 3 and [instrument-threads.md](instrument-threads.md); [information-architecture.md](information-architecture.md) remains authoritative for the implemented model.
 
 Primary job:
 

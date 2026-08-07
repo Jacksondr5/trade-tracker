@@ -34,6 +34,7 @@ Three kinds of objects, distinguished by lifespan:
 ```mermaid
 flowchart TD
     C["Campaign (thematic, instrument-optional)"] -->|resolves into| T["Instrument Thread (permanent)"]
+    T -.->|may link upward| C
     T --> E1["Episode (bounded)"]
     T --> E2["Episode (concurrent, e.g. other portfolio)"]
     T --> X["External-source episode (e.g. Bravos)"]
@@ -57,12 +58,12 @@ The thread is what makes context survive between engagements. When the target us
 
 ## Episode
 
-A bounded engagement with an instrument, born into a thread.
+A bounded engagement with an instrument, created under a thread.
 
 An episode holds:
 
 - setup conditions: entry, target, stop, required macro conditions
-- lifecycle: `idea` → `watching` → `active` → `closed`
+- lifecycle: `Idea` → `Watching` → `Active` → `Closed`
 - the notes captured while it was live
 - linked trades
 - a retrospective when it closes
@@ -71,7 +72,7 @@ Rules:
 
 - A thread may have multiple live episodes at once. Genuinely distinct concurrent engagements happen in practice — for example, a short-term swing in one portfolio alongside a longer-term hold in another.
 - An episode carries a source. Most are authored by the target user. External-source episodes (for example, trades from a followed recommendation service) may attach to a thread as context, even for instruments the user is not trading. External context enriches the thread without masquerading as the user's own planning.
-- When an episode closes, it dies into the thread's memory: its retro conclusions become candidate lessons, and its history remains reachable from the thread. Closing an episode must not bury its context.
+- When an episode closes, it closes into the thread's memory: its retro conclusions become candidate lessons, and its history remains reachable from the thread. Closing an episode must not bury its context.
 
 The episode is roughly today's trade plan, reparented under the instrument thread instead of floating beside the campaign, and given an explicit afterlife.
 
@@ -118,4 +119,4 @@ The withdrawal for doing a retro is a smarter counterpart at the next decision. 
 
 ## Summary
 
-The instrument thread is the permanent spine: per-ticker memory that aggregates episodes, notes, external context, and endorsed lessons. Episodes are bounded engagements that are born into a thread and die into its memory. Campaigns remain the instrument-optional thematic layer above. The shape exists so that capture always has an immediate home, context survives between engagements, and retrospectives feed the next decision instead of the archive.
+The instrument thread is the permanent spine: per-ticker memory that aggregates episodes, notes, external context, and endorsed lessons. Episodes are bounded engagements created under a thread that close into its memory. Campaigns remain the instrument-optional thematic layer above. The shape exists so that capture always has an immediate home, context survives between engagements, and retrospectives feed the next decision instead of the archive.

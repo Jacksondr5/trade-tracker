@@ -115,7 +115,7 @@ Trade Tracker should not become:
 
 Those directions either overlap too heavily with better existing tools or pull the product away from its main objective.
 
-One boundary refinement: live alerting means real-time price monitoring with instant condition triggers, and that stays out — it is TradingView's job. Highlighting is different and in scope: pointing the target user's attention at their own process on a daily cadence, including suggesting TradingView alerts worth setting. See [ai-counterpart.md](ai-counterpart.md).
+Live alerting means real-time price monitoring with instant condition triggers, and it stays out — that is TradingView's job. Highlighting is different and in scope: pointing the target user's attention at their own process on a daily cadence, including suggesting TradingView alerts worth setting. See [ai-counterpart.md](ai-counterpart.md).
 
 ## Strategic Focus
 

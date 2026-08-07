@@ -15,11 +15,14 @@ This supersedes the earlier UI-first ordering (navigation overhaul, thinking sur
 - Migrate the data model on evidence from real use, not ahead of it.
 - Keep every interaction paying at the moment of use (principle 14 in [product-principles.md](product-principles.md)).
 - Defer deep UI investment in surfaces the instrument-thread model will reshape.
+- Roll the new visual design system out incrementally as major surfaces are touched.
+- Build missing shared UI primitives as soon as a phase needs them rather than deferring them to a later cleanup pass.
+- Every phase should leave touched surfaces more compliant with the shared UI and shared form system than before.
 - Keep the roadmap flexible where the product is still exploratory.
 
 ## Phase 1: Automated Deposits And Clean Slate
 
-Goal: the system deposits data without user discipline, and the mountain of owed work is gone.
+Goal: the system deposits data without user discipline, and the pile of owed work is gone.
 
 Includes:
 
@@ -40,9 +43,9 @@ Goal: test whether the system-initiated daily check-in actually gets engaged wit
 Includes:
 
 1. A minimal AI counterpart reachable over Discord DM (see [ai-counterpart.md](ai-counterpart.md))
-2. System-initiated check-ins in the real workday windows: late morning, mid-afternoon, end of day
+2. System-initiated check-ins in the real workday windows (late morning, mid-afternoon, end of day), at most one conversation open at a time, with cadence tuned during the probe
 3. The mirror and the briefing as check-in content, fed by nightly IBKR data
-4. Replies captured as instrument-tagged notes, with no schema migration required
+4. Replies captured as notes carrying a ticker — an additive field, not a migration to the thread model
 5. Unanswered check-ins evaporate; nothing accumulates
 
 Success measure:
@@ -65,6 +68,7 @@ Includes:
 3. Trade plan migration or replacement, informed by probe experience
 4. Note attachment to threads and episodes
 5. Campaign linkage to threads and episodes (see [instrument-threads.md](instrument-threads.md))
+6. Update the evergreen docs to reflect the migrated model: retire the target-model markers in the glossary, README, and feature philosophy, and make [information-architecture.md](information-architecture.md) describe the new model as implemented
 
 Why this phase follows the probe:
 
@@ -110,6 +114,7 @@ Analytics still come after the flywheel work: they are a withdrawal surface, and
 - Portfolios remain overlays unless analytics prove otherwise.
 - Bare records stay tolerated data in every phase; no phase may reintroduce an owed-work pile.
 - The Discord-vs-app-infrastructure hosting decision for the counterpart is made during the probe, not before.
+- Shared UI and shared form migration is not isolated to a cleanup phase; each phase should improve the system on the surfaces it touches.
 
 ## Summary
 

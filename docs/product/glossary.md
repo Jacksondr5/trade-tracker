@@ -75,21 +75,31 @@ These objects define the intended model direction described in [instrument-threa
 
 ### Instrument Thread
 
-A permanent per-instrument container.
+A permanent per-instrument container and the instrument's memory.
 
-Threads aggregate episodes, running notes, endorsed lessons, external context, and campaign links for one instrument. Threads never close.
+For one ticker, a thread aggregates:
+
+- running notes about the instrument over time
+- the accumulated read on how the instrument behaves
+- endorsed lessons, including lessons about the user's own behavior with the instrument
+- links to every episode, the user's own and external
+- links to campaigns the instrument participates in
+
+Threads never close. They exist so context survives between engagements with an instrument instead of being buried when a plan closes.
 
 ### Episode
 
-A bounded engagement with an instrument, born into an instrument thread.
+A bounded engagement with an instrument, created under an instrument thread.
 
-Episodes hold setup conditions, linked trades, notes, and a retrospective on close. A thread may have multiple live episodes at once. Episodes carry a source: authored by the user, or attached from an external service as context.
+An episode holds setup conditions (entry, target, stop, required macro conditions), linked trades, notes captured while it is live, and a retrospective when it closes. A thread may have several live episodes at once — for example, a short-term swing and a longer-term hold in different portfolios.
 
-Lifecycle states: `Idea`, `Watching`, `Active`, `Closed` (same meanings as trade plan states).
+Episodes carry a source. Most are authored by the user; trades from an external service may attach to a thread as episodes for context without being part of the user's own planning.
+
+Lifecycle states: `Idea`, `Watching`, `Active`, `Closed` (same meanings as trade plan states). When an episode closes, its retrospective conclusions become candidate lessons on the thread.
 
 ### Endorsed Lesson
 
-A durable conclusion on an instrument thread that the user has explicitly confirmed, typically from a retrospective.
+A durable conclusion on an instrument thread that the user has explicitly confirmed, typically from a retrospective. Examples: "this instrument tends to follow rigid price action", "I chase this one."
 
 Only endorsed lessons may be stated back as fact by the AI counterpart. Unendorsed patterns are live inference, presented as inference and never stored as fact.
 
@@ -97,11 +107,27 @@ Only endorsed lessons may be stated back as fact by the AI counterpart. Unendors
 
 ### AI Counterpart
 
-The conversational AI partner with read access to the user's data and legible, reviewable write paths. See [ai-counterpart.md](ai-counterpart.md).
+The conversational AI partner. It reads the user's data (trades, positions, threads, episodes, campaigns, notes, lessons, strategy, prices), writes routinely through legible and reviewable paths (notes, drafted retrospectives, proposed lessons, campaigns, episodes), and initiates the check-in. See [ai-counterpart.md](ai-counterpart.md).
 
 ### Check-In
 
-The system-initiated daily conversation from the AI counterpart. Its content follows the day: a mirror of new fills, or a briefing on open positions and waiting setups. An unanswered check-in evaporates.
+The system-initiated conversation from the AI counterpart, arriving in the user's real workday windows with at most one open at a time. Its content follows the day: a mirror of new fills, or a briefing on open positions and waiting setups. An unanswered check-in evaporates rather than becoming owed work.
+
+## Engagement Terms
+
+These terms come from principle 14 in [product-principles.md](product-principles.md).
+
+### Deposit
+
+An interaction that asks the user for input — writing a thesis, assigning an import, logging a note — with the payoff deferred to later review.
+
+### Withdrawal
+
+An interaction that gives the user value at the moment of use — a briefing, a developed thesis, a drafted retrospective, a surfaced lesson.
+
+### Flywheel
+
+The intended engagement loop: automated ingestion deposits data without user discipline, the check-in pays value out of that data and captures reasoning as a byproduct, retrospectives feed lessons forward, and each turn makes the next interaction pay more.
 
 ## Relationship Terms
 

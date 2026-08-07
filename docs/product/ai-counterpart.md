@@ -11,7 +11,7 @@ Use [target-user.md](target-user.md) for the audience assumptions behind this de
 
 ## Why This Exists
 
-Trade Tracker's first years assumed the target user would come to the app and do the work of capture: write theses, fill in plans, assign imports, log notes. That failed in practice, and the failure mode is now understood.
+Trade Tracker's first months assumed the target user would come to the app and do the work of capture: write theses, fill in plans, assign imports, log notes. That failed in practice, and the failure mode is now understood.
 
 Every interaction the app offered was a deposit — input now, payoff deferred to a review that never happened. Under workday time pressure, a tool that only takes gets dropped. Unassigned imports and unwritten notes accumulated into a visible pile of owed work, and that pile itself became the reason to stop opening the app.
 
@@ -22,32 +22,34 @@ The counterpart exists to invert this. It is the interface through which the sys
 - it briefs against the target user's own plans before decisions
 - it drafts retrospectives instead of demanding them
 
-Capture still happens — but as conversation exhaust, not as homework. The durable record is a byproduct of interactions that are worth having on their own.
+Capture still happens — but as exhaust, not as homework: the durable record falls out of conversations that were worth having anyway.
 
 See principle 14 in [product-principles.md](product-principles.md) for the general rule.
 
 ## The Counterpart
 
-The counterpart is a conversational partner with read access to the target user's data:
+The counterpart is a conversational partner that reads and writes the target user's data.
 
-- trades, positions, and cash from automated brokerage ingestion
+It reads:
+
+- trades, positions, and cash
 - instrument threads, episodes, and campaigns
 - notes and endorsed lessons
 - the strategy document
 - market prices
 
-It writes back through legible, reviewable paths: captured notes, drafted retrospectives, and proposed lessons. It does not silently restructure the record.
+Writing is routine, not exceptional. The counterpart regularly creates and updates notes, lessons, campaigns, and episodes as conversations produce them. Brokerage-derived records such as trades stay read-only, but the counterpart is a full participant in the record, not a commentator on it. Its writes stay legible and reviewable: it proposes, attributes, and corrects rather than silently restructuring the record.
 
 Automated brokerage ingestion is what makes the counterpart useful from day one. The system deposits trades, positions, and cash nightly without any user discipline, so the counterpart always has real material to pay with — even when the user has written nothing.
 
 ## The Daily Check-In
 
-The check-in is the core ritual and the crank of the flywheel.
+The check-in is the core ritual. It is what keeps the flywheel turning.
 
 Rules:
 
 - The system initiates it. The counterpart starts the conversation where the target user already is; the user never has to remember to open anything.
-- It arrives during the real windows in the target user's day: late morning after the open, mid-afternoon before the close, and end of day.
+- It may arrive in any of the real windows in the target user's day — late morning after the open, mid-afternoon before the close, and end of day — with at most one conversation open at a time. How many windows get used is tuned during the probe, not fixed in advance.
 - Its content follows what actually happened. On a day with fills, it leads with the mirror: the day's trades reflected back, with a question about the thinking. On a quiet day, it leads with a briefing: open positions against their episodes, and what active setups are waiting for.
 - An unanswered check-in evaporates. It must never accumulate into a queue of owed replies. The next check-in starts fresh.
 
@@ -66,6 +68,8 @@ The check-in is one entry point into a single ongoing conversation. Other entry 
 ## Memory Rules
 
 The counterpart's memory has two tiers. The distinction is who vouches for the content.
+
+Memory means database records. Anything worth remembering is written to the product database — threads, notes, lessons — never kept only in the counterpart's own conversation history. A fresh conversation with no chat history must have the same memory as the last one.
 
 ### Endorsed lessons
 
@@ -87,7 +91,7 @@ Rules:
 - Inference is always presented as inference, never quoted back as established fact.
 - Inference is recomputed from data, not stored as memory.
 
-This is [ux-principles.md](ux-principles.md) legible automation applied to memory: the counterpart never launders its own guesses into the user's record.
+This is principle 12 in [ux-principles.md](ux-principles.md) — Prefer Legible Automation — applied to memory: the counterpart never launders its own guesses into the user's record.
 
 ## Highlighting, Not Alerting
 
@@ -97,7 +101,8 @@ What the counterpart may do is highlight: direct attention using stored plans an
 
 - "Price is approaching your entry condition. Want to set a TradingView alert?"
 - "You have not reviewed this idea in a while. Is the entry getting closer?"
-- "This instrument's RSI looks overextended. Worth looking for a selling opportunity?"
+
+Those need only stored plans and daily prices. A later capability, once the product stores technical indicator data: "This instrument's RSI looks overextended. Worth looking for a selling opportunity?"
 
 The distinction: highlighting points the target user at their own process on a daily cadence; alerting monitors the market in real time. The first is in scope, the second is not.
 

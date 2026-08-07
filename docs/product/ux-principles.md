@@ -212,7 +212,7 @@ In practice:
 - prompts follow real events: new fills, closed episodes, approaching conditions
 - an unanswered prompt evaporates; it never becomes a queue of owed replies or a guilt surface
 
-The system cranks the flywheel. The target user's discipline is the beneficiary, not the fuel.
+The system, not the target user's discipline, is responsible for keeping the loop going. Discipline should be what the product builds, not what it runs on.
 
 ## Summary
 

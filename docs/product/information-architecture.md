@@ -335,6 +335,8 @@ This tolerance exists mainly to reduce administrative burden and avoid blocking 
 
 The product should support that flexibility without treating it as the preferred steady state.
 
+The target model revises this judgment: there, theme-first and instrument-first entry are co-equal ways for ideas to form, and bare records are tolerated data rather than a lesser state. This section describes the implemented product; see [instrument-threads.md](instrument-threads.md) for the revised posture.
+
 ## Status Model
 
 Use [glossary.md](glossary.md) for the canonical definitions of these terms.
