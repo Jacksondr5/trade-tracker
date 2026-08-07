@@ -14,13 +14,12 @@ Unlike the dated documents in `docs/plans/`, these docs are meant to stay curren
 - `navigation-model.md` - where things live and how movement through the product should work
 - `ux-principles.md` - interaction-level rules about context, visibility, reviewability, and friction
 - `feature-philosophy.md` - what each major surface is for and what it should avoid becoming
+- `ai-counterpart.md` - the conversational AI counterpart, the check-in, memory rules, and highlighting boundaries (planned, not yet implemented)
+- `instrument-threads.md` - the target data model direction: instrument threads, episodes, and how campaigns relate to them (planned; `information-architecture.md` remains authoritative for the implemented model)
 - `brokerage-ingestion.md` - automated brokerage sync, reconciliation, and valuation freshness guidance
 - `portfolio-analytics.md` - portfolio analytics, cash ledger, market data, valuation, and exposure guidance
 - `content-and-copy-principles.md` - naming, labels, actions, helper text, and feedback wording
 - `visual-design-system.md` - concrete visual implementation guidance
 - `technical-architecture-overview.md` - repository structure and mandatory engineering conventions
 - `roadmap.md` - phased ordering of major product work
-
-## Planned docs
-
-- `decision-log.md`
+- `decision-log.md` - dated record of settled product decisions and their reasoning

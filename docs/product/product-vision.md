@@ -88,6 +88,8 @@ The product matters across the full lifecycle of a trade:
 
 It should not overweight only one phase. However, the compounding value of the app comes from review: analytics reveal whether the process is working, and retrospectives help explain why.
 
+Because trading happens during workdays when the target user cannot stop to do data entry, the product should carry the process to the user rather than wait to be opened. The AI counterpart and the system-initiated daily check-in exist for this. See [ai-counterpart.md](ai-counterpart.md).
+
 ## Relationship To Other Tools
 
 Trade Tracker is meant to complement the tools the target user already relies on, not replace them.
@@ -112,6 +114,8 @@ Trade Tracker should not become:
 - a social trading product
 
 Those directions either overlap too heavily with better existing tools or pull the product away from its main objective.
+
+Live alerting means real-time price monitoring with instant condition triggers, and it stays out — that is TradingView's job. Highlighting is different and in scope: pointing the target user's attention at their own process on a daily cadence, including suggesting TradingView alerts worth setting. See [ai-counterpart.md](ai-counterpart.md).
 
 ## Strategic Focus
 
