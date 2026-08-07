@@ -78,12 +78,6 @@ const connectionWorkflowStatuses = [
   "failed_retryable",
   "failed_terminal",
 ] as const;
-const [
-  succeededStatus,
-  timedOutStatus,
-  failedRetryableStatus,
-  failedTerminalStatus,
-] = connectionWorkflowStatuses;
 type ConnectionWorkflowStatus = (typeof connectionWorkflowStatuses)[number];
 
 const connectionWorkflowResultValidator = v.object({
@@ -93,10 +87,10 @@ const connectionWorkflowResultValidator = v.object({
   positionSnapshotsWritten: v.number(),
   skippedDuplicateTrades: v.number(),
   status: v.union(
-    v.literal(succeededStatus),
-    v.literal(timedOutStatus),
-    v.literal(failedRetryableStatus),
-    v.literal(failedTerminalStatus),
+    v.literal("succeeded"),
+    v.literal("timed_out"),
+    v.literal("failed_retryable"),
+    v.literal("failed_terminal"),
   ),
   syncRunId: v.id("brokerageSyncRuns"),
 });
@@ -503,10 +497,7 @@ export const syncConnection = workflow
     );
 
     if (!syncRun.created) {
-      const maxExistingRunWaits = Math.max(
-        maxPollAttempts,
-        DEFAULT_MAX_POLL_ATTEMPTS,
-      );
+      const maxExistingRunWaits = maxPollAttempts;
       for (
         let waitAttempt = 0;
         waitAttempt <= maxExistingRunWaits;
