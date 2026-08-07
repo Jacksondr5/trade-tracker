@@ -665,6 +665,7 @@ export default defineSchema({
     currency: v.string(),
     ownerId: v.string(),
     reportDate: v.string(),
+    rowKind: v.union(v.literal("base_summary"), v.literal("currency")),
     syncRunId: v.id("brokerageSyncRuns"),
   })
     .index("by_syncRunId", ["syncRunId"])

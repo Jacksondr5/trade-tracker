@@ -1,17 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<FlexQueryResponse queryName="Trade Tracker Activity" type="AF">
-  <FlexStatements count="1">
-    <FlexStatement accountId="U1234567" fromDate="20260514" toDate="20260514" whenGenerated="20260515;010000">
+<FlexQueryResponse queryName="Sanitized Trade Tracker Daily" type="AF">
+  <FlexStatements count="2">
+    <FlexStatement accountId="U1111111" fromDate="20260805" toDate="20260805" period="LastBusinessDay" whenGenerated="20260806;233740">
+      <Trades></Trades>
+      <OpenPositions></OpenPositions>
+      <CashReport>
+        <CashReportCurrency accountId="U1111111" currency="BASE_SUMMARY" endingCash="75.00" endingCashSec="75.00" endingCashCom="0" />
+        <CashReportCurrency accountId="U1111111" currency="JPY" endingCash="-0.01" endingCashSec="-0.01" endingCashCom="0" />
+        <CashReportCurrency accountId="U1111111" currency="USD" endingCash="75.00" endingCashSec="75.00" endingCashCom="0" />
+      </CashReport>
+    </FlexStatement>
+    <FlexStatement accountId="U2222222" fromDate="20260805" toDate="20260805" period="LastBusinessDay" whenGenerated="20260806;233740">
       <Trades>
-        <Trade accountId="U1234567" assetCategory="STK" symbol="aapl" dateTime="20260514;093005" buySell="BUY" openCloseIndicator="O" quantity="10" tradePrice="189.50" ibCommission="-1.25" taxes="0" orderType="LMT" ibExecID="0000e1.12345.01" currency="USD" />
-        <Trade accountId="U1234567" assetCategory="STK" symbol="MSFT" dateTime="20260514;103012" buySell="SELL" openCloseIndicator="C" quantity="-2" tradePrice="420.10" ibCommission="-0.75" taxes="0.03" orderType="MKT" currency="USD" />
+        <Trade accountId="U2222222" assetCategory="STK" symbol="aapl" dateTime="20260805;093005" buySell="BUY" openCloseIndicator="O" quantity="10" tradePrice="190.00" ibCommission="-1.25" taxes="0" orderType="LMT" ibExecID="0000e1.12345.01" currency="USD" />
+        <Trade accountId="U2222222" assetCategory="STK" symbol="MSFT" dateTime="20260805;103012" buySell="SELL" openCloseIndicator="C" quantity="-2" tradePrice="420.00" ibCommission="-0.75" taxes="0.03" orderType="MKT" ibExecID="0000e1.12345.02" currency="USD" />
+        <AssetSummary accountId="U2222222" assetCategory="STK" symbol="" quantity="0" tradePrice="" currency="USD" />
       </Trades>
       <OpenPositions>
-        <OpenPosition accountId="U1234567" assetCategory="STK" symbol="AAPL" position="10" positionValue="1895.00" currency="USD" />
-        <OpenPosition accountId="U1234567" assetCategory="STK" symbol="MSFT" position="3" positionValue="1260.30" currency="USD" />
+        <OpenPosition accountId="U2222222" assetCategory="STK" symbol="AAPL" position="10" markPrice="190.00" positionValue="1900.00" currency="USD" />
+        <OpenPosition accountId="U2222222" assetCategory="STK" symbol="MSFT" position="3" markPrice="420.00" positionValue="1260.00" currency="USD" />
       </OpenPositions>
       <CashReport>
-        <CashReportCurrency accountId="U1234567" currency="USD" endingCash="12500.25" />
+        <CashReportCurrency accountId="U2222222" currency="BASE_SUMMARY" endingCash="725.00" endingCashSec="725.00" endingCashCom="0" />
       </CashReport>
     </FlexStatement>
   </FlexStatements>

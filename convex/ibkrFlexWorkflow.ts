@@ -13,6 +13,7 @@ import {
   internalMutation,
   internalQuery,
 } from "./_generated/server";
+import type { ActionCtx } from "./_generated/server";
 import {
   IbkrFlexClient,
   IbkrFlexTerminalError,
@@ -105,6 +106,11 @@ const workflowStatusValidator = v.union(
   v.object({ running: v.array(v.any()), type: v.literal("inProgress") }),
 );
 
+const existingSyncRunOutcomeValidator = v.union(
+  connectionWorkflowResultValidator,
+  v.object({ status: v.literal("in_progress") }),
+);
+
 type ConnectionWorkflowResult = {
   attempts: number;
   cashSnapshotsWritten: number;
@@ -123,9 +129,54 @@ type DailyWorkflowResult = {
   status: "succeeded" | "partial" | "failed";
 };
 
+type IngestionResult = {
+  cashSnapshotsWritten: number;
+  importedTrades: number;
+  positionSnapshotsWritten: number;
+  skippedDuplicateTrades: number;
+};
+
+type StoredRawReport = {
+  rawReportId: Id<"brokerageRawReports">;
+  storageId: Id<"_storage">;
+};
+
+type IngestParsedReport = (
+  ctx: Pick<ActionCtx, "runMutation" | "storage">,
+  args: {
+    parseResult: ReturnType<typeof parseIbkrFlexActivityXml>;
+    syncRunId: Id<"brokerageSyncRuns">;
+  },
+  storedRawReport: StoredRawReport,
+) => Promise<IngestionResult>;
+
 type ActionConfig =
   | { baseUrl?: string; status: "ready"; token: string }
   | { errorMessage: string; status: "terminal_error" };
+
+function requireConnectionWorkflowResult(
+  value: unknown,
+): ConnectionWorkflowResult {
+  if (typeof value !== "object" || value === null) {
+    throw new Error("IBKR Flex child workflow returned an invalid result");
+  }
+  const result = value as Record<string, unknown>;
+  if (
+    typeof result.attempts !== "number" ||
+    typeof result.cashSnapshotsWritten !== "number" ||
+    typeof result.importedTrades !== "number" ||
+    typeof result.positionSnapshotsWritten !== "number" ||
+    typeof result.skippedDuplicateTrades !== "number" ||
+    typeof result.syncRunId !== "string" ||
+    (result.status !== "succeeded" &&
+      result.status !== "timed_out" &&
+      result.status !== "failed_retryable" &&
+      result.status !== "failed_terminal")
+  ) {
+    throw new Error("IBKR Flex child workflow returned an invalid result");
+  }
+  return result as ConnectionWorkflowResult;
+}
 
 function getActionConfig(
   env: Record<string, string | undefined> = process.env,
@@ -177,6 +228,115 @@ async function sha256Hex(value: string): Promise<string> {
     byte.toString(16).padStart(2, "0"),
   ).join("");
 }
+
+const ingestParsedReport: IngestParsedReport = async (ctx, args) => {
+  return await ctx.runMutation(
+    internal.brokerageIngestion.ingestParsedFlexReport,
+    {
+      cashSnapshots: args.parseResult.cashSnapshots,
+      errors: args.parseResult.errors,
+      positionSnapshots: args.parseResult.positionSnapshots,
+      syncRunId: args.syncRunId,
+      trades: args.parseResult.trades,
+      warnings: args.parseResult.warnings,
+    },
+  );
+};
+
+export async function storeAndIngestReadyStatement(
+  ctx: Pick<ActionCtx, "runMutation" | "storage">,
+  args: {
+    parseResult: ReturnType<typeof parseIbkrFlexActivityXml>;
+    rawXml: string;
+    syncRunId: Id<"brokerageSyncRuns">;
+    token: string;
+  },
+  ingest: IngestParsedReport = ingestParsedReport,
+): Promise<IngestionResult> {
+  const contentHash = await sha256Hex(args.rawXml);
+  const byteLength = new TextEncoder().encode(args.rawXml).byteLength;
+  let storageId: Id<"_storage"> | undefined;
+  let rawReportId: Id<"brokerageRawReports"> | undefined;
+  try {
+    storageId = await ctx.storage.store(
+      new Blob([args.rawXml], { type: "application/xml" }),
+    );
+    rawReportId = await ctx.runMutation(
+      internal.brokerageIngestion.storeRawReportReference,
+      {
+        byteLength,
+        contentHash,
+        storageId,
+        syncRunId: args.syncRunId,
+      },
+    );
+    return await ingest(
+      ctx,
+      { parseResult: args.parseResult, syncRunId: args.syncRunId },
+      { rawReportId, storageId },
+    );
+  } catch (error) {
+    if (storageId && rawReportId) {
+      try {
+        await ctx.runMutation(
+          internal.brokerageIngestion.rollbackRawReportReference,
+          { rawReportId, storageId, syncRunId: args.syncRunId },
+        );
+      } catch (rollbackError) {
+        console.error(
+          "IBKR Flex raw report rollback failed",
+          operationalErrorMessage(rollbackError, args.token),
+        );
+      }
+    }
+    if (storageId) {
+      try {
+        await ctx.storage.delete(storageId);
+      } catch (deleteError) {
+        console.error(
+          "IBKR Flex raw report blob delete failed",
+          operationalErrorMessage(deleteError, args.token),
+        );
+      }
+    }
+    throw new Error(operationalErrorMessage(error, args.token));
+  }
+}
+
+export const getSyncRunOutcome = internalQuery({
+  args: { syncRunId: v.id("brokerageSyncRuns") },
+  returns: existingSyncRunOutcomeValidator,
+  handler: async (ctx, args) => {
+    const syncRun = await ctx.db.get(args.syncRunId);
+    if (!syncRun) throw new Error("Brokerage sync run not found");
+    if (
+      syncRun.status !== "succeeded" &&
+      syncRun.status !== "failed_retryable" &&
+      syncRun.status !== "failed_terminal"
+    ) {
+      return { status: "in_progress" as const };
+    }
+
+    const cashSnapshotsWritten =
+      syncRun.status === "succeeded"
+        ? (
+            await ctx.db
+              .query("brokerageCashSnapshots")
+              .withIndex("by_syncRunId", (q) => q.eq("syncRunId", syncRun._id))
+              .collect()
+          ).length
+        : 0;
+    return {
+      attempts: 0,
+      cashSnapshotsWritten,
+      importedTrades: syncRun.importedTrades,
+      positionSnapshotsWritten: syncRun.positionSnapshotCount,
+      skippedDuplicateTrades: syncRun.skippedDuplicateTrades,
+      status: syncRun.status,
+      syncRunId: syncRun._id,
+    };
+  },
+});
 
 export const sendRequest = internalAction({
   args: { queryId: v.string() },
@@ -242,56 +402,13 @@ export const pollAndIngestStatement = internalAction({
       };
     }
 
-    const contentHash = await sha256Hex(statement.rawXml);
-    const byteLength = new TextEncoder().encode(statement.rawXml).byteLength;
-    let storageId: Id<"_storage"> | undefined;
-    let rawReportId: Id<"brokerageRawReports"> | undefined;
-    try {
-      storageId = await ctx.storage.store(
-        new Blob([statement.rawXml], { type: "application/xml" }),
-      );
-      rawReportId = await ctx.runMutation(
-        internal.brokerageIngestion.storeRawReportReference,
-        {
-          byteLength,
-          contentHash,
-          storageId,
-          syncRunId: args.syncRunId,
-        },
-      );
-      const result: {
-        cashSnapshotsWritten: number;
-        importedTrades: number;
-        positionSnapshotsWritten: number;
-        skippedDuplicateTrades: number;
-      } = await ctx.runMutation(
-        internal.brokerageIngestion.ingestParsedFlexReport,
-        {
-          cashSnapshots: parseResult.cashSnapshots,
-          errors: parseResult.errors,
-          positionSnapshots: parseResult.positionSnapshots,
-          syncRunId: args.syncRunId,
-          trades: parseResult.trades,
-          warnings: parseResult.warnings,
-        },
-      );
-      return { ...result, status: "ready" as const };
-    } catch (error) {
-      if (storageId && rawReportId) {
-        try {
-          await ctx.runMutation(
-            internal.brokerageIngestion.rollbackRawReportReference,
-            { rawReportId, storageId, syncRunId: args.syncRunId },
-          );
-        } catch {}
-      }
-      if (storageId) {
-        try {
-          await ctx.storage.delete(storageId);
-        } catch {}
-      }
-      throw new Error(operationalErrorMessage(error, config.token));
-    }
+    const result = await storeAndIngestReadyStatement(ctx, {
+      parseResult,
+      rawXml: statement.rawXml,
+      syncRunId: args.syncRunId,
+      token: config.token,
+    });
+    return { ...result, status: "ready" as const };
   },
 });
 
@@ -336,6 +453,44 @@ export const syncConnection = workflow
       },
       { name: "begin brokerage sync run" },
     );
+
+    if (!syncRun.created) {
+      const maxExistingRunWaits = Math.max(
+        maxPollAttempts,
+        DEFAULT_MAX_POLL_ATTEMPTS,
+      );
+      for (
+        let waitAttempt = 0;
+        waitAttempt <= maxExistingRunWaits;
+        waitAttempt++
+      ) {
+        const outcome = await step.runQuery(
+          internal.ibkrFlexWorkflow.getSyncRunOutcome,
+          { syncRunId: syncRun.syncRunId },
+          { name: `read existing brokerage sync run ${waitAttempt + 1}` },
+        );
+        if (outcome.status !== "in_progress") return outcome;
+        if (waitAttempt < maxExistingRunWaits) {
+          await step.sleep(
+            getIbkrPollDelayMs({
+              attempt: waitAttempt + 1,
+              initialPollIntervalMs,
+              maxPollIntervalMs,
+            }),
+            { name: `wait for existing brokerage sync run ${waitAttempt + 1}` },
+          );
+        }
+      }
+      return {
+        attempts: 0,
+        cashSnapshotsWritten: 0,
+        importedTrades: 0,
+        positionSnapshotsWritten: 0,
+        skippedDuplicateTrades: 0,
+        status: "failed_retryable",
+        syncRunId: syncRun.syncRunId,
+      };
+    }
 
     let request;
     try {
@@ -529,26 +684,33 @@ export const dailySync = workflow
     const results = await Promise.all(
       connections.map(async (connection) => {
         try {
-          return (await step.runWorkflow(
-            internal.ibkrFlexWorkflow.syncConnection,
-            {
-              connectionId: connection._id,
-              queryId: connection.queryId,
-              reportDate: args.reportDate,
-              reportType: "activity",
-              ...(args.initialPollIntervalMs === undefined
-                ? {}
-                : { initialPollIntervalMs: args.initialPollIntervalMs }),
-              ...(args.maxPollAttempts === undefined
-                ? {}
-                : { maxPollAttempts: args.maxPollAttempts }),
-              ...(args.maxPollIntervalMs === undefined
-                ? {}
-                : { maxPollIntervalMs: args.maxPollIntervalMs }),
-            },
-            { name: `sync IBKR connection ${connection._id}` },
-          )) as unknown as ConnectionWorkflowResult;
-        } catch {
+          const result = requireConnectionWorkflowResult(
+            await step.runWorkflow(
+              internal.ibkrFlexWorkflow.syncConnection,
+              {
+                connectionId: connection._id,
+                queryId: connection.queryId,
+                reportDate: args.reportDate,
+                reportType: "activity",
+                ...(args.initialPollIntervalMs === undefined
+                  ? {}
+                  : { initialPollIntervalMs: args.initialPollIntervalMs }),
+                ...(args.maxPollAttempts === undefined
+                  ? {}
+                  : { maxPollAttempts: args.maxPollAttempts }),
+                ...(args.maxPollIntervalMs === undefined
+                  ? {}
+                  : { maxPollIntervalMs: args.maxPollIntervalMs }),
+              },
+              { name: `sync IBKR connection ${connection._id}` },
+            ),
+          );
+          return result;
+        } catch (error) {
+          console.error(
+            `IBKR Flex sync failed for connection ${connection._id}`,
+            operationalErrorMessage(error),
+          );
           return null;
         }
       }),

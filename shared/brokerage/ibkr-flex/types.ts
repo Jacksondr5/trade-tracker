@@ -30,6 +30,7 @@ export type IbkrFlexCashSnapshot = {
   cash: number;
   currency: string;
   reportDate: string;
+  rowKind: "base_summary" | "currency";
 };
 
 export type IbkrFlexParseResult = {

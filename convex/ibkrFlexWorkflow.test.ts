@@ -5,8 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import batchWorkerSchema from "../node_modules/@convex-dev/batch-worker/dist/component/schema.js";
 import workflowSchema from "../node_modules/@convex-dev/workflow/dist/component/schema.js";
 import workpoolSchema from "../node_modules/@convex-dev/workpool/dist/component/schema.js";
+import { parseIbkrFlexActivityXml } from "../shared/brokerage/ibkr-flex/parser";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { storeAndIngestReadyStatement } from "./ibkrFlexWorkflow";
 import schema from "./schema";
 
 interface ImportMetaWithGlob extends ImportMeta {
@@ -21,7 +23,7 @@ const modules = (import.meta as ImportMetaWithGlob).glob([
 
 function normalizeComponentModules(
   packageModules: Record<string, () => Promise<unknown>>,
-  packageName: "workflow" | "workpool",
+  packageName: "batch-worker" | "workflow" | "workpool",
 ): Record<string, () => Promise<unknown>> {
   return Object.fromEntries(
     Object.entries(packageModules).map(([path, loader]) => [
@@ -43,15 +45,11 @@ const workpoolModules = normalizeComponentModules(
   ),
   "workpool",
 );
-const batchWorkerModules = Object.fromEntries(
-  Object.entries(
-    (import.meta as ImportMetaWithGlob).glob(
-      "../node_modules/@convex-dev/batch-worker/dist/component/**/*.js",
-    ),
-  ).map(([path, loader]) => [
-    path.replace("../node_modules/@convex-dev/batch-worker/dist", "."),
-    loader,
-  ]),
+const batchWorkerModules = normalizeComponentModules(
+  (import.meta as ImportMetaWithGlob).glob(
+    "../node_modules/@convex-dev/batch-worker/dist/component/**/*.js",
+  ),
+  "batch-worker",
 );
 
 const readyXml = `
@@ -172,8 +170,112 @@ describe("IBKR Flex Convex workflow", () => {
     expect(state.inboxTrades).toHaveLength(1);
     expect(state.positionSnapshots[0]).toMatchObject({ marketValue: 1895 });
     expect(state.cashSnapshots).toHaveLength(1);
+    expect(state.cashSnapshots[0]).toMatchObject({ rowKind: "currency" });
     expect(state.rawReports).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("joins an existing sync run without issuing a duplicate Flex request", async () => {
+    await createConnection();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(requestedXml))
+      .mockResolvedValueOnce(new Response(readyXml));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const firstWorkflowId = await startWorkflow();
+    const duplicateWorkflowId = await startWorkflow();
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, {
+        workflowId: firstWorkflowId,
+      }),
+    ).resolves.toMatchObject({
+      result: { runsFailed: 0, runsSucceeded: 1, status: "succeeded" },
+      type: "completed",
+    });
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, {
+        workflowId: duplicateWorkflowId,
+      }),
+    ).resolves.toMatchObject({
+      result: { runsFailed: 0, runsSucceeded: 1, status: "succeeded" },
+      type: "completed",
+    });
+    const syncRuns = await t.run(async (ctx) =>
+      ctx.db.query("brokerageSyncRuns").collect(),
+    );
+    expect(syncRuns).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("marks the run retryable after transient request retries are exhausted", async () => {
+    await createConnection();
+    const fetchMock = vi.fn().mockRejectedValue(new Error("temporary outage"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const workflowId = await startWorkflow();
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, { workflowId }),
+    ).resolves.toMatchObject({
+      result: { runsFailed: 1, status: "failed" },
+      type: "completed",
+    });
+    const [syncRun] = await t.run(async (ctx) =>
+      ctx.db.query("brokerageSyncRuns").collect(),
+    );
+    expect(syncRun).toMatchObject({
+      errorMessage: "temporary outage",
+      status: "failed_retryable",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("removes the raw report reference and blob when ingestion fails", async () => {
+    const connectionId = await createConnection();
+    const { syncRunId } = await t.mutation(
+      internal.brokerageIngestion.beginSyncRunForConnection,
+      {
+        connectionId,
+        queryId: "67890",
+        reportDate: "2026-05-14",
+        reportType: "activity",
+      },
+    );
+    const parseResult = parseIbkrFlexActivityXml(readyXml);
+    let storedStorageId: Id<"_storage"> | undefined;
+
+    await expect(
+      t.action(async (ctx) => {
+        return await storeAndIngestReadyStatement(
+          ctx,
+          {
+            parseResult,
+            rawXml: readyXml,
+            syncRunId,
+            token: "deployment-secret-token",
+          },
+          async (_ctx, _args, storedRawReport) => {
+            storedStorageId = storedRawReport.storageId;
+            throw new Error("forced ingestion failure");
+          },
+        );
+      }),
+    ).rejects.toThrow("forced ingestion failure");
+
+    const state = await t.run(async (ctx) => ({
+      rawReports: await ctx.db.query("brokerageRawReports").collect(),
+      syncRun: await ctx.db.get(syncRunId),
+    }));
+    expect(state.rawReports).toEqual([]);
+    expect(state.syncRun?.rawReportId).toBeUndefined();
+    expect(storedStorageId).toBeDefined();
+    await expect(
+      t.action(async (ctx) => await ctx.storage.get(storedStorageId!)),
+    ).resolves.toBeNull();
   });
 
   it("marks the run retryable when the report misses its polling cutoff", async () => {

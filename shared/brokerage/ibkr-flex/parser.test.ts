@@ -9,71 +9,132 @@ const fixturePath = join(
 );
 
 describe("parseIbkrFlexActivityXml", () => {
-  it("parses trades, positions, and cash snapshots from a sanitized Activity Flex report", () => {
+  it("parses the sanitized multi-account shape emitted by a real Activity Flex report", () => {
     const result = parseIbkrFlexActivityXml(readFileSync(fixturePath, "utf8"));
 
     expect(result.errors).toEqual([]);
     expect(result.trades).toHaveLength(2);
     expect(result.trades[0]).toMatchObject({
       assetType: "stock",
-      brokerageAccountId: "U1234567",
+      brokerageAccountId: "U2222222",
       currency: "USD",
       direction: "long",
       executionId: "0000e1.12345.01",
       externalId: "0000e1.12345.01",
       fees: -1.25,
       orderType: "LMT",
-      price: 189.5,
+      price: 190,
       quantity: 10,
       side: "buy",
       taxes: 0,
       ticker: "AAPL",
     });
-    expect(result.trades[0].date).toBe(Date.UTC(2026, 4, 14, 9, 30, 5));
+    expect(result.trades[0].date).toBe(Date.UTC(2026, 7, 5, 9, 30, 5));
 
     expect(result.positionSnapshots).toEqual([
       {
         assetType: "stock",
-        brokerageAccountId: "U1234567",
+        brokerageAccountId: "U2222222",
         currency: "USD",
-        marketValue: 1895,
+        marketValue: 1900,
         quantity: 10,
-        reportDate: "2026-05-14",
+        reportDate: "2026-08-05",
         ticker: "AAPL",
       },
       {
         assetType: "stock",
-        brokerageAccountId: "U1234567",
+        brokerageAccountId: "U2222222",
         currency: "USD",
-        marketValue: 1260.3,
+        marketValue: 1260,
         quantity: 3,
-        reportDate: "2026-05-14",
+        reportDate: "2026-08-05",
         ticker: "MSFT",
       },
     ]);
     expect(readFileSync(fixturePath, "utf8")).toContain(
-      'positionValue="1895.00"',
+      'positionValue="1900.00"',
     );
     expect(result.cashSnapshots).toEqual([
       {
-        brokerageAccountId: "U1234567",
-        cash: 12500.25,
+        brokerageAccountId: "U1111111",
+        cash: 75,
+        currency: "BASE_SUMMARY",
+        reportDate: "2026-08-05",
+        rowKind: "base_summary",
+      },
+      {
+        brokerageAccountId: "U1111111",
+        cash: -0.01,
+        currency: "JPY",
+        reportDate: "2026-08-05",
+        rowKind: "currency",
+      },
+      {
+        brokerageAccountId: "U1111111",
+        cash: 75,
         currency: "USD",
-        reportDate: "2026-05-14",
+        reportDate: "2026-08-05",
+        rowKind: "currency",
+      },
+      {
+        brokerageAccountId: "U2222222",
+        cash: 725,
+        currency: "BASE_SUMMARY",
+        reportDate: "2026-08-05",
+        rowKind: "base_summary",
       },
     ]);
+    expect(result.warnings).toEqual([
+      "No Trades section found",
+      "No OpenPositions section found",
+    ]);
+    const emptyAccountCash = result.cashSnapshots.filter(
+      (snapshot) => snapshot.brokerageAccountId === "U1111111",
+    );
+    expect(
+      emptyAccountCash.reduce((total, snapshot) => total + snapshot.cash, 0),
+    ).toBeCloseTo(149.99);
+    expect(
+      emptyAccountCash.filter(
+        (snapshot) => snapshot.rowKind === "base_summary",
+      ),
+    ).toEqual([
+      expect.objectContaining({ cash: 75, currency: "BASE_SUMMARY" }),
+    ]);
+    expect(
+      emptyAccountCash.filter((snapshot) => snapshot.rowKind === "currency"),
+    ).toHaveLength(2);
   });
 
   it("uses a stable fallback external id when an execution id is missing", () => {
-    const result = parseIbkrFlexActivityXml(readFileSync(fixturePath, "utf8"));
+    const result = parseIbkrFlexActivityXml(`
+      <FlexQueryResponse>
+        <FlexStatements>
+          <FlexStatement accountId="U1" toDate="20260805">
+            <Trades>
+              <Trade accountId="U1" symbol="MSFT" dateTime="20260805;103012" buySell="SELL" openCloseIndicator="C" quantity="-2" tradePrice="420" />
+            </Trades>
+          </FlexStatement>
+        </FlexStatements>
+      </FlexQueryResponse>
+    `);
 
-    expect(result.trades[1]).toMatchObject({
-      externalId: "ibkr-flex|U1234567|MSFT|20260514;103012|sell|420.1|2",
+    expect(result.trades[0]).toMatchObject({
+      externalId: "ibkr-flex|U1|MSFT|20260805;103012|sell|420|2",
       ticker: "MSFT",
     });
     expect(result.warnings).toContain(
       "Missing execution id for MSFT; used fallback external id",
     );
+  });
+
+  it("ignores the AssetSummary row nested inside Trades", () => {
+    const xml = readFileSync(fixturePath, "utf8");
+    const result = parseIbkrFlexActivityXml(xml);
+
+    expect(xml).toContain("<AssetSummary");
+    expect(result.trades).toHaveLength(2);
+    expect(result.errors).not.toContain("Trade row 3: symbol is required");
   });
 
   it("warns instead of failing when optional sections are missing", () => {

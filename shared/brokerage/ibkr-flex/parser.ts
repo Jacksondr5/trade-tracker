@@ -318,6 +318,10 @@ function parseCash(
     ),
     currency,
     reportDate,
+    rowKind:
+      currency.trim().toUpperCase() === "BASE_SUMMARY"
+        ? "base_summary"
+        : "currency",
   };
 }
 

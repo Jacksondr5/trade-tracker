@@ -99,6 +99,7 @@ const cashSnapshotValidator = v.object({
   cash: v.number(),
   currency: v.string(),
   reportDate: v.string(),
+  rowKind: v.union(v.literal("base_summary"), v.literal("currency")),
 });
 
 const POSITION_EPSILON = 0.00000001;
@@ -998,6 +999,7 @@ export const ingestParsedFlexReport = internalMutation({
         currency,
         ownerId: syncRun.ownerId,
         reportDate: snapshot.reportDate,
+        rowKind: snapshot.rowKind,
         syncRunId: syncRun._id,
       };
       if (existing) {

@@ -447,6 +447,7 @@ describe("brokerage ingestion", () => {
           cash: 12500.25,
           currency: "usd",
           reportDate: "2026-05-14",
+          rowKind: "currency" as const,
         },
       ],
       positionSnapshots: [
@@ -557,6 +558,91 @@ describe("brokerage ingestion", () => {
     await ingestPositionSnapshots(syncRunId, [{ quantity: 10 }]);
 
     expect(await listOpenReconciliationIssues()).toHaveLength(0);
+  });
+
+  it("ingests multiple brokerage accounts from one report under one connection", async () => {
+    const connectionId = await createConnection();
+    const syncRunId = await beginActivitySyncRun(connectionId);
+
+    const result = await t.mutation(
+      internal.brokerageIngestion.ingestParsedFlexReport,
+      {
+        cashSnapshots: [
+          {
+            brokerageAccountId: "U1111111",
+            cash: 75,
+            currency: "BASE_SUMMARY",
+            reportDate: "2026-05-14",
+            rowKind: "base_summary",
+          },
+          {
+            brokerageAccountId: "U1111111",
+            cash: -0.01,
+            currency: "JPY",
+            reportDate: "2026-05-14",
+            rowKind: "currency",
+          },
+          {
+            brokerageAccountId: "U1111111",
+            cash: 75,
+            currency: "USD",
+            reportDate: "2026-05-14",
+            rowKind: "currency",
+          },
+          {
+            brokerageAccountId: "U2222222",
+            cash: 725,
+            currency: "BASE_SUMMARY",
+            reportDate: "2026-05-14",
+            rowKind: "base_summary",
+          },
+        ],
+        positionSnapshots: [
+          {
+            assetType: "stock",
+            brokerageAccountId: "U1111111",
+            quantity: 1,
+            reportDate: "2026-05-14",
+            ticker: "AAPL",
+          },
+          {
+            assetType: "stock",
+            brokerageAccountId: "U2222222",
+            quantity: 2,
+            reportDate: "2026-05-14",
+            ticker: "AAPL",
+          },
+        ],
+        syncRunId,
+        trades: [],
+      },
+    );
+    const snapshots = await t.run(async (ctx) => ({
+      cash: await ctx.db.query("brokerageCashSnapshots").collect(),
+      positions: await ctx.db.query("brokeragePositionSnapshots").collect(),
+    }));
+
+    expect(result).toMatchObject({
+      cashSnapshotsWritten: 4,
+      positionSnapshotsWritten: 2,
+    });
+    expect(
+      snapshots.cash.map((snapshot) => snapshot.brokerageAccountId).sort(),
+    ).toEqual(["U1111111", "U1111111", "U1111111", "U2222222"]);
+    expect(
+      snapshots.cash.filter((snapshot) => snapshot.rowKind === "base_summary"),
+    ).toHaveLength(2);
+    expect(
+      snapshots.cash.filter((snapshot) => snapshot.rowKind === "currency"),
+    ).toHaveLength(2);
+    expect(
+      snapshots.positions.map((snapshot) => snapshot.brokerageAccountId).sort(),
+    ).toEqual(["U1111111", "U2222222"]);
+    expect(
+      [...snapshots.cash, ...snapshots.positions].every(
+        (snapshot) => snapshot.connectionId === connectionId,
+      ),
+    ).toBe(true);
   });
 
   it("opens position reconciliation issues for brokerage quantity mismatches", async () => {
@@ -847,6 +933,7 @@ describe("brokerage ingestion", () => {
           cash: 12500.25,
           currency: "USD",
           reportDate: "2026-05-14",
+          rowKind: "currency",
         },
       ],
       positionSnapshots: [
@@ -883,7 +970,7 @@ describe("brokerage ingestion", () => {
     };
 
     expect(validateBrokerageIngestFlexReportBody(body)).toMatchObject({
-      cashSnapshots: [{ brokerageAccountId: "U1234567" }],
+      cashSnapshots: [{ brokerageAccountId: "U1234567", rowKind: "currency" }],
       positionSnapshots: [{ assetType: "stock", ticker: "AAPL" }],
       rawXml: "<FlexQueryResponse/>",
       syncRunId: "sync-run-id",
@@ -896,5 +983,11 @@ describe("brokerage ingestion", () => {
         trades: [{ ...body.trades[0], side: "hold" }],
       }),
     ).toThrow("trades[0].side must be one of");
+    expect(() =>
+      validateBrokerageIngestFlexReportBody({
+        ...body,
+        cashSnapshots: [{ ...body.cashSnapshots[0], rowKind: "aggregate" }],
+      }),
+    ).toThrow("cashSnapshots[0].rowKind must be one of");
   });
 });
