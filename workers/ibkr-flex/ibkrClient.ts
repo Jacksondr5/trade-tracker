@@ -3,6 +3,8 @@ import type { IbkrFlexWorkerConfig } from "./config";
 
 type UnknownRecord = Record<string, unknown>;
 
+const IBKR_FLEX_REQUEST_TIMEOUT_MS = 90_000;
+
 export type IbkrStatementResult =
   | { rawXml: string; status: "ready" }
   | { message?: string; status: "not_ready" }
@@ -75,8 +77,7 @@ export class IbkrFlexClient {
     queryId: string;
     reportDate: string;
   }): Promise<{ referenceCode: string }> {
-    const url = this.url("FlexStatementService.SendRequest", {
-      date: args.reportDate,
+    const url = this.url("SendRequest", {
       q: args.queryId,
     });
     const xml = await this.getText(url);
@@ -94,7 +95,7 @@ export class IbkrFlexClient {
   }
 
   async getStatement(referenceCode: string): Promise<IbkrStatementResult> {
-    const url = this.url("FlexStatementService.GetStatement", {
+    const url = this.url("GetStatement", {
       q: referenceCode,
     });
     const xml = await this.getText(url);
@@ -129,12 +130,33 @@ export class IbkrFlexClient {
   }
 
   private async getText(url: URL): Promise<string> {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(
-        `IBKR Flex request failed ${response.status}: ${response.statusText}`,
-      );
+    const controller = new AbortController();
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      IBKR_FLEX_REQUEST_TIMEOUT_MS,
+    );
+
+    try {
+      const response = await fetch(url, {
+        headers: { "User-Agent": "TradeTracker/0.0.1" },
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new Error(
+          `IBKR Flex request failed ${response.status}: ${response.statusText}`,
+        );
+      }
+      return await response.text();
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error(
+          `IBKR Flex request timed out after ${IBKR_FLEX_REQUEST_TIMEOUT_MS}ms`,
+          { cause: error },
+        );
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
-    return await response.text();
   }
 }

@@ -12,6 +12,8 @@ describe("loadIbkrFlexWorkerConfig", () => {
       }),
     ).toMatchObject({
       brokerageIngestionBaseUrl: "https://example.convex.site",
+      ibkrFlexBaseUrl:
+        "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService",
       temporalAddress: "temporal:7233",
       temporalNamespace: "trade-tracker",
       temporalTaskQueue: "trade-tracker-portfolio-pipeline",

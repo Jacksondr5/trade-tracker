@@ -155,6 +155,20 @@ export const TRADES_INDEX_TEST_IDS = {
 } as const;
 
 export const IMPORTS_INDEX_TEST_IDS = {
+  brokerageConnectionAccountIdInput: "brokerage-connection-account-id-input",
+  brokerageConnectionCancelButton: "brokerage-connection-cancel-button",
+  brokerageConnectionConfigureButton: "brokerage-connection-configure-button",
+  brokerageConnectionForm: "brokerage-connection-form",
+  brokerageConnectionPauseButton: "brokerage-connection-pause-button",
+  brokerageConnectionQueryIdInput: "brokerage-connection-query-id-input",
+  brokerageConnectionResumeButton: "brokerage-connection-resume-button",
+  brokerageConnectionSaveButton: "brokerage-connection-save-button",
+  brokerageLatestFailure: "brokerage-sync-latest-failure",
+  brokerageLatestSuccess: "brokerage-sync-latest-success",
+  brokeragePendingImports: "brokerage-pending-imports",
+  brokerageReconciliationIssues: "brokerage-reconciliation-issues",
+  brokerageReconciliationToggle: "brokerage-reconciliation-toggle",
+  brokerageSyncStatus: "brokerage-sync-status",
   emptyState: "imports-empty-state",
   brokerageSelect: "brokerage-select",
   templateDownloadButton: "imports-template-download-button",

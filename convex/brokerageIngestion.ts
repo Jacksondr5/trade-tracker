@@ -33,6 +33,40 @@ const brokerageSyncRunStatusValidator = v.union(
   v.literal("failed_terminal"),
 );
 
+const brokerageReconciliationIssueSeverityValidator = v.union(
+  v.literal("info"),
+  v.literal("warning"),
+  v.literal("error"),
+);
+
+const brokerageSyncRunSummaryValidator = v.object({
+  _id: v.id("brokerageSyncRuns"),
+  completedAt: v.optional(v.number()),
+  errorMessage: v.optional(v.string()),
+  importedTrades: v.number(),
+  positionSnapshotCount: v.number(),
+  reconciliationIssueCount: v.number(),
+  reportDate: v.string(),
+  reportType: brokerageSyncReportTypeValidator,
+  status: brokerageSyncRunStatusValidator,
+  updatedAt: v.number(),
+});
+
+function toSyncRunSummary(run: Doc<"brokerageSyncRuns">) {
+  return {
+    _id: run._id,
+    completedAt: run.completedAt,
+    errorMessage: run.errorMessage,
+    importedTrades: run.importedTrades,
+    positionSnapshotCount: run.positionSnapshotCount,
+    reconciliationIssueCount: run.reconciliationIssueCount,
+    reportDate: run.reportDate,
+    reportType: run.reportType,
+    status: run.status,
+    updatedAt: run.updatedAt,
+  };
+}
+
 const normalizedTradeValidator = v.object({
   assetType: v.literal("stock"),
   brokerageAccountId: v.string(),
@@ -536,66 +570,141 @@ export const getBrokerageIngestionStatus = query({
       v.object({
         _id: v.id("brokerageConnections"),
         accountId: v.optional(v.string()),
+        connectionError: v.optional(v.string()),
         label: v.optional(v.string()),
         lastFailedSyncAt: v.optional(v.number()),
         lastSuccessfulSyncAt: v.optional(v.number()),
         queryId: v.optional(v.string()),
         source: v.literal("ibkr"),
         status: brokerageConnectionStatusValidator,
+        tokenExpiresAt: v.optional(v.number()),
+        tokenLabel: v.optional(v.string()),
         updatedAt: v.number(),
       }),
     ),
-    latestSyncRuns: v.array(
-      v.object({
-        _id: v.id("brokerageSyncRuns"),
-        completedAt: v.optional(v.number()),
-        reportDate: v.string(),
-        reportType: brokerageSyncReportTypeValidator,
-        status: brokerageSyncRunStatusValidator,
-        updatedAt: v.number(),
-      }),
-    ),
+    latestFailedSync: v.union(v.null(), brokerageSyncRunSummaryValidator),
+    latestSuccessfulSync: v.union(v.null(), brokerageSyncRunSummaryValidator),
+    latestSyncRuns: v.array(brokerageSyncRunSummaryValidator),
+    hasMoreOpenIssues: v.boolean(),
+    hasMorePendingImportedTrades: v.boolean(),
     openIssueCount: v.number(),
+    openIssues: v.array(
+      v.object({
+        _id: v.id("brokerageReconciliationIssues"),
+        actualQuantity: v.optional(v.number()),
+        expectedQuantity: v.optional(v.number()),
+        message: v.string(),
+        reportDate: v.string(),
+        severity: brokerageReconciliationIssueSeverityValidator,
+        ticker: v.optional(v.string()),
+        updatedAt: v.number(),
+      }),
+    ),
+    pendingImportedTradeCount: v.number(),
   }),
   handler: async (ctx) => {
     const ownerId = await requireUser(ctx);
-    const connections = await ctx.db
-      .query("brokerageConnections")
-      .withIndex("by_ownerId", (q) => q.eq("ownerId", ownerId))
-      .take(25);
-    const latestSyncRuns = await ctx.db
-      .query("brokerageSyncRuns")
-      .withIndex("by_ownerId_and_startedAt", (q) => q.eq("ownerId", ownerId))
-      .order("desc")
-      .take(10);
-    const openIssues = await ctx.db
-      .query("brokerageReconciliationIssues")
-      .withIndex("by_ownerId_and_status", (q) =>
-        q.eq("ownerId", ownerId).eq("status", "open"),
-      )
-      .take(101);
+    const [
+      connections,
+      latestSyncRuns,
+      openIssues,
+      pendingImportedTrades,
+      successfulRuns,
+      retryableFailedRuns,
+      terminalFailedRuns,
+    ] = await Promise.all([
+      ctx.db
+        .query("brokerageConnections")
+        .withIndex("by_ownerId", (q) => q.eq("ownerId", ownerId))
+        .take(25),
+      ctx.db
+        .query("brokerageSyncRuns")
+        .withIndex("by_ownerId_and_startedAt", (q) => q.eq("ownerId", ownerId))
+        .order("desc")
+        .take(10),
+      ctx.db
+        .query("brokerageReconciliationIssues")
+        .withIndex("by_ownerId_and_status_and_updatedAt", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "open"),
+        )
+        .order("desc")
+        .take(101),
+      ctx.db
+        .query("inboxTrades")
+        .withIndex("by_owner_source_status", (q) =>
+          q
+            .eq("ownerId", ownerId)
+            .eq("source", "ibkr")
+            .eq("status", "pending_review"),
+        )
+        .take(101),
+      ctx.db
+        .query("brokerageSyncRuns")
+        .withIndex("by_ownerId_and_status_and_updatedAt", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "succeeded"),
+        )
+        .order("desc")
+        .first(),
+      ctx.db
+        .query("brokerageSyncRuns")
+        .withIndex("by_ownerId_and_status_and_updatedAt", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "failed_retryable"),
+        )
+        .order("desc")
+        .first(),
+      ctx.db
+        .query("brokerageSyncRuns")
+        .withIndex("by_ownerId_and_status_and_updatedAt", (q) =>
+          q.eq("ownerId", ownerId).eq("status", "failed_terminal"),
+        )
+        .order("desc")
+        .first(),
+    ]);
+    const latestSuccessfulSync = successfulRuns;
+    const latestFailedSync =
+      retryableFailedRuns === null ||
+      (terminalFailedRuns !== null &&
+        terminalFailedRuns.updatedAt > retryableFailedRuns.updatedAt)
+        ? terminalFailedRuns
+        : retryableFailedRuns;
+    const reviewableIssues = openIssues.slice(0, 10);
 
     return {
       connections: connections.map((connection) => ({
         _id: connection._id,
         accountId: connection.accountId,
+        connectionError: connection.connectionError,
         label: connection.label,
         lastFailedSyncAt: connection.lastFailedSyncAt,
         lastSuccessfulSyncAt: connection.lastSuccessfulSyncAt,
         queryId: connection.queryId,
         source: connection.source,
         status: connection.status,
+        tokenExpiresAt: connection.tokenExpiresAt,
+        tokenLabel: connection.tokenLabel,
         updatedAt: connection.updatedAt,
       })),
-      latestSyncRuns: latestSyncRuns.map((run) => ({
-        _id: run._id,
-        completedAt: run.completedAt,
-        reportDate: run.reportDate,
-        reportType: run.reportType,
-        status: run.status,
-        updatedAt: run.updatedAt,
+      latestFailedSync: latestFailedSync
+        ? toSyncRunSummary(latestFailedSync)
+        : null,
+      latestSuccessfulSync: latestSuccessfulSync
+        ? toSyncRunSummary(latestSuccessfulSync)
+        : null,
+      latestSyncRuns: latestSyncRuns.map(toSyncRunSummary),
+      hasMoreOpenIssues: openIssues.length > 100,
+      hasMorePendingImportedTrades: pendingImportedTrades.length > 100,
+      openIssueCount: Math.min(openIssues.length, 100),
+      openIssues: reviewableIssues.map((issue) => ({
+        _id: issue._id,
+        actualQuantity: issue.actualQuantity,
+        expectedQuantity: issue.expectedQuantity,
+        message: issue.message,
+        reportDate: issue.reportDate,
+        severity: issue.severity,
+        ticker: issue.ticker,
+        updatedAt: issue.updatedAt,
       })),
-      openIssueCount: openIssues.length,
+      pendingImportedTradeCount: Math.min(pendingImportedTrades.length, 100),
     };
   },
 });

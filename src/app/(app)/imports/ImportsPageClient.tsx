@@ -18,6 +18,7 @@ import {
 } from "../../../../shared/e2e/testIds";
 import type { BrokerageSource } from "../../../../shared/imports/types";
 import { type EditTradeFormValues } from "./components/edit-trade-form";
+import { BrokerageSyncPanel } from "./components/brokerage-sync-panel";
 import { InboxTable } from "./components/inbox-table";
 import { InboxToolbar } from "./components/inbox-toolbar";
 import { useImportUpload } from "./hooks/use-import-upload";
@@ -41,6 +42,7 @@ const DEFAULT_EDIT_VALUES: EditTradeFormValues = {
 
 export default function ImportsPageClient({
   preloadedAccountMappings,
+  preloadedBrokerageIngestionStatus,
   preloadedCampaigns,
   preloadedInboxTradePriceMappings,
   preloadedInboxTrades,
@@ -49,6 +51,9 @@ export default function ImportsPageClient({
 }: {
   preloadedAccountMappings: Preloaded<
     typeof api.accountMappings.listAccountMappings
+  >;
+  preloadedBrokerageIngestionStatus: Preloaded<
+    typeof api.brokerageIngestion.getBrokerageIngestionStatus
   >;
   preloadedCampaigns: Preloaded<typeof api.campaigns.listCampaigns>;
   preloadedInboxTradePriceMappings: Preloaded<
@@ -166,7 +171,12 @@ export default function ImportsPageClient({
           isPriceMappingResolved(t._id)
         );
       }).length ?? 0,
-    [typedTrades, inlinePortfolioIds, inlineTradePlanIds, isPriceMappingResolved],
+    [
+      typedTrades,
+      inlinePortfolioIds,
+      inlineTradePlanIds,
+      isPriceMappingResolved,
+    ],
   );
 
   // "Missing plan" = valid + has portfolio + resolved mapping but no trade plan (amber)
@@ -183,7 +193,12 @@ export default function ImportsPageClient({
           isPriceMappingResolved(t._id)
         );
       }).length ?? 0,
-    [typedTrades, inlinePortfolioIds, inlineTradePlanIds, isPriceMappingResolved],
+    [
+      typedTrades,
+      inlinePortfolioIds,
+      inlineTradePlanIds,
+      isPriceMappingResolved,
+    ],
   );
 
   // "Needs review" = everything else (red)
@@ -422,7 +437,9 @@ export default function ImportsPageClient({
     void deleteAllInboxTrades()
       .catch((error) => {
         setErrorMessage(
-          error instanceof Error ? error.message : "Failed to delete all trades",
+          error instanceof Error
+            ? error.message
+            : "Failed to delete all trades",
         );
       })
       .finally(() => {
@@ -440,10 +457,10 @@ export default function ImportsPageClient({
         >
           Imports
         </h1>
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex w-full flex-wrap items-center gap-3 lg:w-auto">
           <label
             htmlFor="csv-file-input"
-            className="flex h-9 cursor-pointer items-center whitespace-nowrap rounded-md border border-olive-6 bg-olive-3 px-3 text-sm text-olive-12 hover:bg-olive-4"
+            className="flex h-9 cursor-pointer items-center rounded-md border border-olive-6 bg-olive-3 px-3 text-sm whitespace-nowrap text-olive-12 hover:bg-olive-4"
           >
             {selectedFile ? selectedFile.name : "Choose file"}
             <input
@@ -462,7 +479,7 @@ export default function ImportsPageClient({
           <Select
             dataTestId={IMPORTS_INDEX_TEST_IDS.brokerageSelect}
             id="brokerage-select"
-            className="w-[230px]"
+            className="min-w-[210px] flex-1 lg:w-[230px] lg:flex-none"
             value={brokerage}
             onChange={(e) =>
               onBrokerageChange(e.target.value as BrokerageSource)
@@ -494,6 +511,8 @@ export default function ImportsPageClient({
           </Button>
         </div>
       </div>
+
+      <BrokerageSyncPanel preloadedStatus={preloadedBrokerageIngestionStatus} />
 
       {/* Alerts */}
       <div className="mb-4 space-y-2">

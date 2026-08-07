@@ -55,7 +55,7 @@ export function loadIbkrFlexWorkerConfig(
     brokerageIngestionToken: parsed.data.BROKERAGE_INGESTION_TOKEN,
     ibkrFlexBaseUrl:
       parsed.data.IBKR_FLEX_BASE_URL?.replace(/\/+$/, "") ??
-      "https://gdcdyn.interactivebrokers.com/Universal/servlet",
+      "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService",
     ibkrFlexToken: parsed.data.IBKR_FLEX_TOKEN,
     temporalAddress: parsed.data.TEMPORAL_ADDRESS,
     temporalNamespace: parsed.data.TEMPORAL_NAMESPACE,

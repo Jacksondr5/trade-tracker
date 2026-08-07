@@ -2,7 +2,15 @@ import { expect, test } from "@playwright/test";
 import { waitForAuthenticatedApp } from "../helpers/app";
 import {
   APP_PAGE_TITLES,
+  getBrokerageConnectionConfigureButton,
+  getBrokerageConnectionForm,
+  getBrokerageConnectionQueryIdInput,
+  getBrokerageLatestFailure,
+  getBrokerageLatestSuccess,
+  getBrokeragePendingImports,
+  getBrokerageReconciliationIssues,
   getBrokerageSelect,
+  getBrokerageSyncStatus,
   getLinkedTradeRow,
   getTradePlansFilterStandalone,
   getTradePlansFilteredEmptyState,
@@ -72,5 +80,23 @@ test.describe("operational surfaces regression", () => {
 
     // Verify the brokerage select uses shared Select component
     await expect(getBrokerageSelect(page)).toBeVisible();
+
+    await expect(getBrokerageSyncStatus(page)).toBeVisible();
+    await expect(getBrokerageLatestSuccess(page)).toBeVisible();
+    await expect(getBrokerageLatestFailure(page)).toBeVisible();
+    await expect(getBrokeragePendingImports(page)).toBeVisible();
+    await expect(getBrokerageReconciliationIssues(page)).toBeVisible();
+
+    const connectionForm = getBrokerageConnectionForm(page);
+    const formWasVisible = await connectionForm.isVisible();
+    await getBrokerageConnectionConfigureButton(page).click();
+    if (formWasVisible) {
+      await expect(connectionForm).toBeHidden();
+      await getBrokerageConnectionConfigureButton(page).click();
+      await expect(connectionForm).toBeVisible();
+    } else {
+      await expect(connectionForm).toBeVisible();
+    }
+    await expect(getBrokerageConnectionQueryIdInput(page)).toBeVisible();
   });
 });
