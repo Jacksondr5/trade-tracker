@@ -73,12 +73,15 @@ async function importEncryptionKey(
   keyVersion: number,
   env: Record<string, string | undefined>,
 ): Promise<CryptoKey> {
-  const currentKeyVersion = currentEncryptionKeyVersion(env);
+  const versionedKey = env[encryptionKeyEnvironmentName(keyVersion)]?.trim();
+  const unversionedKey = env.BROKERAGE_TOKEN_ENCRYPTION_KEY?.trim();
   const encodedKey =
-    env[encryptionKeyEnvironmentName(keyVersion)]?.trim() ||
-    (keyVersion === currentKeyVersion
-      ? env.BROKERAGE_TOKEN_ENCRYPTION_KEY?.trim()
-      : undefined);
+    versionedKey ||
+    (keyVersion === DEFAULT_BROKERAGE_TOKEN_KEY_VERSION
+      ? unversionedKey
+      : unversionedKey && keyVersion === currentEncryptionKeyVersion(env)
+        ? unversionedKey
+        : undefined);
   if (!encodedKey) {
     throw new ConvexError(
       `Brokerage token encryption key version ${keyVersion} is not configured`,

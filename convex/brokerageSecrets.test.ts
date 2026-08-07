@@ -99,8 +99,8 @@ describe("brokerage connection secrets", () => {
       },
     );
     const rotatedEnvironment = {
-      BROKERAGE_TOKEN_ENCRYPTION_KEY: rotatedEncryptionKey,
-      BROKERAGE_TOKEN_ENCRYPTION_KEY_V1: encryptionKey,
+      BROKERAGE_TOKEN_ENCRYPTION_KEY: encryptionKey,
+      BROKERAGE_TOKEN_ENCRYPTION_KEY_V2: rotatedEncryptionKey,
       BROKERAGE_TOKEN_ENCRYPTION_KEY_VERSION: "2",
     };
     const versionTwo = await encryptBrokerageToken(
@@ -117,6 +117,26 @@ describe("brokerage connection secrets", () => {
     await expect(
       decryptBrokerageToken(versionTwo, binding, rotatedEnvironment),
     ).resolves.toBe("version-two-token");
+  });
+
+  it("decrypts an explicitly versioned row without parsing the current version", async () => {
+    const connectionId = await createConnection();
+    const binding = { connectionId, ownerId: "owner-a" };
+    const versionOne = await encryptBrokerageToken(
+      "explicit-version-one-token",
+      binding,
+      {
+        BROKERAGE_TOKEN_ENCRYPTION_KEY_V1: encryptionKey,
+        BROKERAGE_TOKEN_ENCRYPTION_KEY_VERSION: "1",
+      },
+    );
+
+    await expect(
+      decryptBrokerageToken(versionOne, binding, {
+        BROKERAGE_TOKEN_ENCRYPTION_KEY_V1: encryptionKey,
+        BROKERAGE_TOKEN_ENCRYPTION_KEY_VERSION: "not-a-version",
+      }),
+    ).resolves.toBe("explicit-version-one-token");
   });
 
   it("stores only encrypted material and exposes only configuration metadata", async () => {
