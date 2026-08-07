@@ -72,6 +72,20 @@ const pollResultValidator = v.union(
   }),
 );
 
+const connectionWorkflowStatuses = [
+  "succeeded",
+  "timed_out",
+  "failed_retryable",
+  "failed_terminal",
+] as const;
+const [
+  succeededStatus,
+  timedOutStatus,
+  failedRetryableStatus,
+  failedTerminalStatus,
+] = connectionWorkflowStatuses;
+type ConnectionWorkflowStatus = (typeof connectionWorkflowStatuses)[number];
+
 const connectionWorkflowResultValidator = v.object({
   attempts: v.number(),
   cashSnapshotsWritten: v.number(),
@@ -79,10 +93,10 @@ const connectionWorkflowResultValidator = v.object({
   positionSnapshotsWritten: v.number(),
   skippedDuplicateTrades: v.number(),
   status: v.union(
-    v.literal("succeeded"),
-    v.literal("timed_out"),
-    v.literal("failed_retryable"),
-    v.literal("failed_terminal"),
+    v.literal(succeededStatus),
+    v.literal(timedOutStatus),
+    v.literal(failedRetryableStatus),
+    v.literal(failedTerminalStatus),
   ),
   syncRunId: v.id("brokerageSyncRuns"),
 });
@@ -117,7 +131,7 @@ type ConnectionWorkflowResult = {
   importedTrades: number;
   positionSnapshotsWritten: number;
   skippedDuplicateTrades: number;
-  status: "succeeded" | "timed_out" | "failed_retryable" | "failed_terminal";
+  status: ConnectionWorkflowStatus;
   syncRunId: Id<"brokerageSyncRuns">;
 };
 
@@ -154,6 +168,12 @@ type ActionConfig =
   | { baseUrl?: string; status: "ready"; token: string }
   | { errorMessage: string; status: "terminal_error" };
 
+function isConnectionWorkflowStatus(
+  value: unknown,
+): value is ConnectionWorkflowStatus {
+  return connectionWorkflowStatuses.some((status) => status === value);
+}
+
 function requireConnectionWorkflowResult(
   value: unknown,
 ): ConnectionWorkflowResult {
@@ -168,10 +188,7 @@ function requireConnectionWorkflowResult(
     typeof result.positionSnapshotsWritten !== "number" ||
     typeof result.skippedDuplicateTrades !== "number" ||
     typeof result.syncRunId !== "string" ||
-    (result.status !== "succeeded" &&
-      result.status !== "timed_out" &&
-      result.status !== "failed_retryable" &&
-      result.status !== "failed_terminal")
+    !isConnectionWorkflowStatus(result.status)
   ) {
     throw new Error("IBKR Flex child workflow returned an invalid result");
   }

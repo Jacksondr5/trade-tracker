@@ -91,19 +91,23 @@ describe("parseIbkrFlexActivityXml", () => {
     const emptyAccountCash = result.cashSnapshots.filter(
       (snapshot) => snapshot.brokerageAccountId === "U1111111",
     );
+    const baseSummaryRows = emptyAccountCash.filter(
+      (snapshot) => snapshot.rowKind === "base_summary",
+    );
+    const currencyRows = emptyAccountCash.filter(
+      (snapshot) => snapshot.rowKind === "currency",
+    );
     expect(
-      emptyAccountCash.reduce((total, snapshot) => total + snapshot.cash, 0),
-    ).toBeCloseTo(149.99);
-    expect(
-      emptyAccountCash.filter(
-        (snapshot) => snapshot.rowKind === "base_summary",
-      ),
-    ).toEqual([
+      baseSummaryRows.reduce((total, snapshot) => total + snapshot.cash, 0),
+    ).toBe(75);
+    expect(baseSummaryRows).toEqual([
       expect.objectContaining({ cash: 75, currency: "BASE_SUMMARY" }),
     ]);
     expect(
-      emptyAccountCash.filter((snapshot) => snapshot.rowKind === "currency"),
-    ).toHaveLength(2);
+      Object.fromEntries(
+        currencyRows.map((snapshot) => [snapshot.currency, snapshot.cash]),
+      ),
+    ).toEqual({ JPY: -0.01, USD: 75 });
   });
 
   it("uses a stable fallback external id when an execution id is missing", () => {
