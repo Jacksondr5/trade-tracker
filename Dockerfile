@@ -12,7 +12,8 @@ WORKDIR /app
 
 FROM base AS prod-deps
 
-COPY package.json pnpm-lock.yaml ./
+# pnpm reads release-age policy from pnpm-workspace.yaml and build policy from package.json.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 RUN pnpm install --frozen-lockfile --prod
 
@@ -20,7 +21,7 @@ FROM base AS runtime
 
 ENV NODE_ENV=production
 
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY shared ./shared
 COPY workers ./workers
