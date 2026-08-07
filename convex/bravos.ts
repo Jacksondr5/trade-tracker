@@ -95,6 +95,17 @@ const mutableFollowUpFields = new Set<FollowUpField>([
 ]);
 
 const WORKER_DISPATCH_TIMEOUT_MS = 180_000;
+const BRAVOS_DEACTIVATED_MESSAGE = "Bravos import is deactivated";
+
+function isBravosEnabled() {
+  return process.env.BRAVOS_ENABLED === "true";
+}
+
+function assertBravosEnabled() {
+  if (!isBravosEnabled()) {
+    throw new ConvexError(BRAVOS_DEACTIVATED_MESSAGE);
+  }
+}
 
 function normalizeBravosSourceUrl(url: string): string {
   const parsed = new URL(url.trim());
@@ -453,6 +464,7 @@ export const requestSpecificBravosPostFetch = mutation({
   args: { sourceUrl: v.string() },
   returns: v.id("bravosSyncRuns"),
   handler: async (ctx, args) => {
+    assertBravosEnabled();
     const ownerId = await requireUser(ctx);
     const connection = await ensureConnection(ctx, ownerId);
     assertBravosConnectionReady(connection);
@@ -475,6 +487,7 @@ export const requestBravosListingScan = mutation({
   args: { listingUrl: v.optional(v.string()) },
   returns: v.id("bravosSyncRuns"),
   handler: async (ctx, args) => {
+    assertBravosEnabled();
     const ownerId = await requireUser(ctx);
     const connection = await ensureConnection(ctx, ownerId);
     if (!connection) {
@@ -507,6 +520,9 @@ export const requestScheduledBravosListingScans = internalMutation({
   args: {},
   returns: v.null(),
   handler: async (ctx) => {
+    if (!isBravosEnabled()) {
+      return null;
+    }
     if (process.env.BRAVOS_SCHEDULED_SCANS_ENABLED !== "true") {
       return null;
     }
@@ -553,6 +569,196 @@ export const dismissBravosReviewItem = mutation({
       reviewState: "dismissed",
     });
     return null;
+  },
+});
+
+const BRAVOS_CLEANUP_BATCH_SIZE = 10;
+
+/**
+ * Private, one-off cleanup support. It intentionally refuses to remove any
+ * plan with a known linked record. Those records need explicit approval about
+ * their disposition before a broader deletion path is added and invoked.
+ */
+export const deleteBravosPlansWithoutReferences = internalMutation({
+  args: {
+    cursor: v.union(v.string(), v.null()),
+    dryRun: v.boolean(),
+  },
+  returns: v.object({
+    bravosPlansInBatch: v.number(),
+    continueCursor: v.string(),
+    deletedPlans: v.number(),
+    isDone: v.boolean(),
+    plansWithAppliedReviewItems: v.number(),
+    plansWithCreatedImportTasks: v.number(),
+    plansWithInboxTrades: v.number(),
+    plansWithLinkedImportTasks: v.number(),
+    plansWithLinkedNotes: v.number(),
+    plansWithLinkedTrades: v.number(),
+    plansWithRetrospectives: v.number(),
+    plansWithSuggestedReviewItems: v.number(),
+    plansWithOtherBravosReviewItems: v.number(),
+    plansWithWatchlistItems: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query("tradePlans").order("asc").paginate({
+      cursor: args.cursor,
+      numItems: BRAVOS_CLEANUP_BATCH_SIZE,
+    });
+    let bravosPlansInBatch = 0;
+    let deletedPlans = 0;
+    let plansWithAppliedReviewItems = 0;
+    let plansWithCreatedImportTasks = 0;
+    let plansWithInboxTrades = 0;
+    let plansWithLinkedImportTasks = 0;
+    let plansWithLinkedNotes = 0;
+    let plansWithLinkedTrades = 0;
+    let plansWithRetrospectives = 0;
+    let plansWithSuggestedReviewItems = 0;
+    let plansWithOtherBravosReviewItems = 0;
+    let plansWithWatchlistItems = 0;
+
+    for (const tradePlan of page.page) {
+      // `sourceUrl` is the current schema-level Bravos identifier.
+      if (tradePlan.sourceUrl === undefined) {
+        continue;
+      }
+      bravosPlansInBatch += 1;
+      const [
+        trades,
+        notes,
+        inboxTrades,
+        retrospectives,
+        watchlistItems,
+        linkedImportTasks,
+        createdImportTasks,
+        appliedReviewItems,
+        suggestedReviewItems,
+        otherBravosReviewItems,
+      ] = await Promise.all([
+        ctx.db
+          .query("trades")
+          .withIndex("by_owner_tradePlanId", (q) =>
+            q.eq("ownerId", tradePlan.ownerId).eq("tradePlanId", tradePlan._id),
+          )
+          .take(1),
+        ctx.db
+          .query("notes")
+          .withIndex("by_owner_tradePlanId", (q) =>
+            q.eq("ownerId", tradePlan.ownerId).eq("tradePlanId", tradePlan._id),
+          )
+          .take(1),
+        ctx.db
+          .query("inboxTrades")
+          .withIndex("by_owner_status_tradePlanId", (q) =>
+            q
+              .eq("ownerId", tradePlan.ownerId)
+              .eq("status", "pending_review")
+              .eq("tradePlanId", tradePlan._id),
+          )
+          .take(1),
+        ctx.db
+          .query("retrospectives")
+          .withIndex("by_owner_parent", (q) =>
+            q.eq("ownerId", tradePlan.ownerId).eq("parentId", tradePlan._id),
+          )
+          .take(1),
+        ctx.db
+          .query("watchlist")
+          .withIndex("by_owner_tradePlanId", (q) =>
+            q.eq("ownerId", tradePlan.ownerId).eq("tradePlanId", tradePlan._id),
+          )
+          .take(1),
+        ctx.db
+          .query("importTasks")
+          .withIndex("by_owner_tradePlanId", (q) =>
+            q.eq("ownerId", tradePlan.ownerId).eq("tradePlanId", tradePlan._id),
+          )
+          .take(1),
+        ctx.db
+          .query("importTasks")
+          .withIndex("by_owner_createdTradePlanId", (q) =>
+            q
+              .eq("ownerId", tradePlan.ownerId)
+              .eq("createdTradePlanId", tradePlan._id),
+          )
+          .take(1),
+        ctx.db
+          .query("bravosReviewItems")
+          .withIndex("by_ownerId_and_appliedTradePlanId", (q) =>
+            q
+              .eq("ownerId", tradePlan.ownerId)
+              .eq("appliedTradePlanId", tradePlan._id),
+          )
+          .take(1),
+        ctx.db
+          .query("bravosReviewItems")
+          .withIndex("by_ownerId_and_suggestedTradePlanId", (q) =>
+            q
+              .eq("ownerId", tradePlan.ownerId)
+              .eq("suggestedTradePlanId", tradePlan._id),
+          )
+          .take(1),
+        // `proposedAction.targetTradePlanId` is nested and therefore cannot be
+        // indexed. Any remaining Bravos review history is a conservative
+        // blocker until the approved cleanup clears that history first.
+        ctx.db
+          .query("bravosReviewItems")
+          .withIndex("by_ownerId", (q) => q.eq("ownerId", tradePlan.ownerId))
+          .take(1),
+      ]);
+
+      if (trades.length > 0) {
+        plansWithLinkedTrades += 1;
+      }
+      if (notes.length > 0) {
+        plansWithLinkedNotes += 1;
+      }
+      if (inboxTrades.length > 0) plansWithInboxTrades += 1;
+      if (retrospectives.length > 0) plansWithRetrospectives += 1;
+      if (watchlistItems.length > 0) plansWithWatchlistItems += 1;
+      if (linkedImportTasks.length > 0) plansWithLinkedImportTasks += 1;
+      if (createdImportTasks.length > 0) plansWithCreatedImportTasks += 1;
+      if (appliedReviewItems.length > 0) plansWithAppliedReviewItems += 1;
+      if (suggestedReviewItems.length > 0) plansWithSuggestedReviewItems += 1;
+      if (otherBravosReviewItems.length > 0)
+        plansWithOtherBravosReviewItems += 1;
+      if (
+        trades.length > 0 ||
+        notes.length > 0 ||
+        inboxTrades.length > 0 ||
+        retrospectives.length > 0 ||
+        watchlistItems.length > 0 ||
+        linkedImportTasks.length > 0 ||
+        createdImportTasks.length > 0 ||
+        appliedReviewItems.length > 0 ||
+        suggestedReviewItems.length > 0 ||
+        otherBravosReviewItems.length > 0 ||
+        args.dryRun
+      ) {
+        continue;
+      }
+
+      await ctx.db.delete(tradePlan._id);
+      deletedPlans += 1;
+    }
+
+    return {
+      bravosPlansInBatch,
+      continueCursor: page.continueCursor,
+      deletedPlans,
+      isDone: page.isDone,
+      plansWithAppliedReviewItems,
+      plansWithCreatedImportTasks,
+      plansWithInboxTrades,
+      plansWithLinkedImportTasks,
+      plansWithLinkedNotes,
+      plansWithLinkedTrades,
+      plansWithRetrospectives,
+      plansWithSuggestedReviewItems,
+      plansWithOtherBravosReviewItems,
+      plansWithWatchlistItems,
+    };
   },
 });
 
@@ -686,7 +892,14 @@ export const approveBravosReviewItem = mutation({
 export const dispatchSyncRun = internalAction({
   args: { syncRunId: v.id("bravosSyncRuns") },
   returns: v.null(),
-  handler: async (_ctx, args) => {
+  handler: async (ctx, args) => {
+    if (!isBravosEnabled()) {
+      await ctx.runMutation(internal.bravos.markRunDispatchError, {
+        error: BRAVOS_DEACTIVATED_MESSAGE,
+        syncRunId: args.syncRunId,
+      });
+      return null;
+    }
     const workerUrl = process.env.BRAVOS_WORKER_URL;
     const workerSecret = process.env.BRAVOS_WORKER_SECRET;
     const missingEnvVars = [
@@ -702,7 +915,7 @@ export const dispatchSyncRun = internalAction({
       const message = `Bravos worker environment is missing ${missingEnvVars.join(
         " and ",
       )}`;
-      await _ctx.runMutation(internal.bravos.markRunDispatchError, {
+      await ctx.runMutation(internal.bravos.markRunDispatchError, {
         error: message,
         syncRunId: args.syncRunId,
       });
@@ -740,7 +953,7 @@ export const dispatchSyncRun = internalAction({
           : error instanceof Error
             ? `Bravos worker dispatch failed for ${new URL(configuredWorkerUrl).host}: ${error.message}`
             : "Bravos worker dispatch failed";
-      await _ctx.runMutation(internal.bravos.markRunDispatchError, {
+      await ctx.runMutation(internal.bravos.markRunDispatchError, {
         error: message,
         syncRunId: args.syncRunId,
       });
@@ -755,7 +968,7 @@ export const dispatchSyncRun = internalAction({
             1000,
           )}`
         : `Bravos worker dispatch failed: ${response.status}`;
-      await _ctx.runMutation(internal.bravos.markRunDispatchError, {
+      await ctx.runMutation(internal.bravos.markRunDispatchError, {
         error: message,
         syncRunId: args.syncRunId,
       });
@@ -800,6 +1013,7 @@ export const retryBravosSyncRun = mutation({
   args: { syncRunId: v.id("bravosSyncRuns") },
   returns: v.null(),
   handler: async (ctx, args) => {
+    assertBravosEnabled();
     const ownerId = await requireUser(ctx);
     const run = assertOwner(
       await ctx.db.get(args.syncRunId),

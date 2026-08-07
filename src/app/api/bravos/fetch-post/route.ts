@@ -4,12 +4,20 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { api } from "~/convex/_generated/api";
 import { env } from "~/env";
+import {
+  bravosDeactivatedResponse,
+  isBravosEnabled,
+} from "~/lib/bravos/disabled";
 
 const fetchPostRequestSchema = z.object({
   sourceUrl: z.string().url(),
 });
 
 export async function POST(request: Request) {
+  if (!isBravosEnabled()) {
+    return bravosDeactivatedResponse();
+  }
+
   const authState = await auth();
   const token = await authState.getToken({ template: "convex" });
   if (!token) {

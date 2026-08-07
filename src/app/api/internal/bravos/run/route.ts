@@ -7,6 +7,10 @@ import { env } from "~/env";
 import { extractBravosProposal } from "~/lib/bravos/ai-extraction";
 import { captureBrowserbasePage } from "~/lib/bravos/browserbase";
 import {
+  bravosDeactivatedResponse,
+  isBravosEnabled,
+} from "~/lib/bravos/disabled";
+import {
   extractBravosListingPage,
   extractBravosPostPayload,
 } from "~/lib/bravos/scraper";
@@ -151,6 +155,10 @@ async function processListingScan(args: {
 }
 
 export async function POST(request: Request) {
+  if (!isBravosEnabled()) {
+    return bravosDeactivatedResponse();
+  }
+
   const token = getBearerToken(request);
   if (!token || token !== env.BRAVOS_WORKER_SECRET) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

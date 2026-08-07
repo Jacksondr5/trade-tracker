@@ -266,9 +266,17 @@ export default defineSchema({
     syncRunId: v.optional(v.id("bravosSyncRuns")),
   })
     .index("by_ownerId", ["ownerId"])
+    .index("by_ownerId_and_appliedTradePlanId", [
+      "ownerId",
+      "appliedTradePlanId",
+    ])
     .index("by_ownerId_and_canonicalSourceIdentity", [
       "ownerId",
       "canonicalSourceIdentity",
+    ])
+    .index("by_ownerId_and_suggestedTradePlanId", [
+      "ownerId",
+      "suggestedTradePlanId",
     ])
     .index("by_ownerId_and_reviewState", ["ownerId", "reviewState"]),
 
@@ -300,7 +308,10 @@ export default defineSchema({
     sourceUrl: v.optional(v.string()),
     status: importTaskStatusValidator,
     tradePlanId: v.optional(v.id("tradePlans")),
-  }).index("by_owner", ["ownerId"]),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_tradePlanId", ["ownerId", "tradePlanId"])
+    .index("by_owner_createdTradePlanId", ["ownerId", "createdTradePlanId"]),
 
   notes: defineTable({
     campaignId: v.optional(v.id("campaigns")),
