@@ -1,1 +1,3 @@
+# Keep resolver policy here: pnpm v10 does not read minimumReleaseAge from package.json.
+# Build-script policy deliberately stays in package.json's pnpm field, so install paths must copy both files.
 minimumReleaseAge: 10080
