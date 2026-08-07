@@ -415,6 +415,50 @@ describe("brokerage ingestion", () => {
     });
   });
 
+  it.each(["failed_retryable", "failed_terminal"] as const)(
+    "requeues an existing %s sync run for a fresh attempt",
+    async (status) => {
+      const connectionId = await createConnection();
+      const first = await t.mutation(
+        internal.brokerageIngestion.beginSyncRunForConnection,
+        {
+          connectionId,
+          reportDate: "2026-05-14",
+          reportType: "activity",
+        },
+      );
+      await t.run(async (ctx) => {
+        await ctx.db.patch(first.syncRunId, {
+          completedAt: Date.now(),
+          errorMessage: "previous failure",
+          referenceCode: "stale-reference",
+          status,
+        });
+      });
+
+      const retry = await t.mutation(
+        internal.brokerageIngestion.beginSyncRunForConnection,
+        {
+          connectionId,
+          reportDate: "2026-05-14",
+          reportType: "activity",
+        },
+      );
+      const syncRun = await t.run(async (ctx) => ctx.db.get(first.syncRunId));
+
+      expect(retry).toEqual({
+        created: true,
+        ownerId,
+        queryId: "123456",
+        syncRunId: first.syncRunId,
+      });
+      expect(syncRun).toMatchObject({ status: "queued" });
+      expect(syncRun).not.toHaveProperty("completedAt");
+      expect(syncRun).not.toHaveProperty("errorMessage");
+      expect(syncRun).not.toHaveProperty("referenceCode");
+    },
+  );
+
   it("blocks starting a sync run for paused connections", async () => {
     const connectionId = await createConnection();
     await asUser().mutation(api.brokerageIngestion.pauseBrokerageConnection, {

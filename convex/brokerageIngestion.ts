@@ -776,6 +776,34 @@ export const beginSyncRunForConnection = internalMutation({
             .eq("queryId", queryId),
       )
       .unique();
+    // A terminal workflow has released ownership of this keyed run, so it can
+    // be requeued atomically. Non-terminal runs remain join-only: reclaiming
+    // one without canceling its workflow could issue a duplicate Flex request.
+    if (
+      existing?.status === "failed_retryable" ||
+      existing?.status === "failed_terminal"
+    ) {
+      const now = Date.now();
+      await ctx.db.patch(existing._id, {
+        completedAt: undefined,
+        errorMessage: undefined,
+        referenceCode: undefined,
+        requestedAt: now,
+        startedAt: now,
+        status: "queued",
+        updatedAt: now,
+      });
+      await ctx.db.patch(connection._id, {
+        connectionError: undefined,
+        updatedAt: now,
+      });
+      return {
+        created: true,
+        ownerId: connection.ownerId,
+        queryId,
+        syncRunId: existing._id,
+      };
+    }
     if (existing) {
       return {
         created: false,
