@@ -225,10 +225,16 @@ export const storeEncryptedToken = internalMutation({
     }
     const metadataPatch = args.metadata
       ? {
-          accountId: args.metadata.accountId,
-          label: args.metadata.label,
           queryId: args.metadata.queryId,
-          tokenExpiresAt: args.metadata.tokenExpiresAt,
+          ...(args.metadata.accountId === undefined
+            ? {}
+            : { accountId: args.metadata.accountId }),
+          ...(args.metadata.label === undefined
+            ? {}
+            : { label: args.metadata.label }),
+          ...(args.metadata.tokenExpiresAt === undefined
+            ? {}
+            : { tokenExpiresAt: args.metadata.tokenExpiresAt }),
         }
       : {};
     await ctx.db.patch(connection._id, {

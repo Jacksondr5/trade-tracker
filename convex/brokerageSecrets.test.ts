@@ -217,6 +217,12 @@ describe("brokerage connection secrets", () => {
     const connectionId = await createConnection();
     await asUser().action(api.brokerageSecrets.setIbkrConnectionToken, {
       connectionId,
+      metadata: {
+        accountId: "U1234567",
+        label: "Original label",
+        queryId: "123456",
+        tokenExpiresAt: 1_800_000_000_000,
+      },
       token: "first-secret",
     });
     const first = await t.run(async (ctx) =>
@@ -232,6 +238,7 @@ describe("brokerage connection secrets", () => {
     ).rejects.toThrow("Brokerage connection not found");
     await asUser().action(api.brokerageSecrets.setIbkrConnectionToken, {
       connectionId,
+      metadata: { queryId: "654321" },
       token: "replacement-secret",
     });
     const secrets = await t.run(async (ctx) =>
@@ -241,6 +248,13 @@ describe("brokerage connection secrets", () => {
     expect(secrets).toHaveLength(1);
     expect(secrets[0]._id).toBe(first._id);
     expect(secrets[0].ciphertext).not.toBe(first.ciphertext);
+    const connection = await t.run(async (ctx) => ctx.db.get(connectionId));
+    expect(connection).toMatchObject({
+      accountId: "U1234567",
+      label: "Original label",
+      queryId: "654321",
+      tokenExpiresAt: 1_800_000_000_000,
+    });
     await expect(
       decryptBrokerageToken(secrets[0], {
         connectionId,
