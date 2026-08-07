@@ -409,6 +409,7 @@ describe("brokerage ingestion", () => {
     expect(first.created).toBe(true);
     expect(second).toEqual({
       created: false,
+      ownerId: "owner-a",
       queryId: "123456",
       syncRunId: first.syncRunId,
     });

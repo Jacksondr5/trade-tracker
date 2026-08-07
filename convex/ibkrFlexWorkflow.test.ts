@@ -80,6 +80,7 @@ describe("IBKR Flex Convex workflow", () => {
     vi.useFakeTimers();
     vi.setSystemTime(Date.UTC(2026, 4, 15, 5, 0, 0));
     process.env.IBKR_FLEX_TOKEN = "deployment-secret-token";
+    process.env.IBKR_FLEX_TOKEN_OWNER_ID = "owner-a";
     t = convexTest(schema, modules);
     t.registerComponent("workflow", workflowSchema, workflowModules);
     t.registerComponent("workflow/workpool", workpoolSchema, workpoolModules);
@@ -94,16 +95,19 @@ describe("IBKR Flex Convex workflow", () => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     delete process.env.IBKR_FLEX_TOKEN;
+    delete process.env.IBKR_FLEX_TOKEN_OWNER_ID;
     delete process.env.IBKR_FLEX_BASE_URL;
   });
 
-  async function createConnection(): Promise<Id<"brokerageConnections">> {
+  async function createConnection(
+    ownerId = "owner-a",
+  ): Promise<Id<"brokerageConnections">> {
     return await t.run(async (ctx) => {
       return await ctx.db.insert("brokerageConnections", {
         accountId: "U1234567",
         createdAt: Date.now(),
         label: "IBKR Main",
-        ownerId: "owner-a",
+        ownerId,
         queryId: "67890",
         source: "ibkr",
         status: "active",
@@ -337,6 +341,67 @@ describe("IBKR Flex Convex workflow", () => {
     expect(state.connection).toMatchObject({
       connectionError:
         "IBKR Flex token is not configured in the Convex deployment environment",
+      status: "error",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the deployment credential owner is not configured", async () => {
+    await createConnection();
+    delete process.env.IBKR_FLEX_TOKEN_OWNER_ID;
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const workflowId = await startWorkflow();
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, { workflowId }),
+    ).resolves.toMatchObject({
+      result: { runsFailed: 1, status: "failed" },
+      type: "completed",
+    });
+    const state = await t.run(async (ctx) => ({
+      connection: (await ctx.db.query("brokerageConnections").collect())[0],
+      syncRun: (await ctx.db.query("brokerageSyncRuns").collect())[0],
+    }));
+    expect(state.syncRun).toMatchObject({
+      errorMessage:
+        "IBKR Flex credential owner is not configured in the Convex deployment environment",
+      status: "failed_terminal",
+    });
+    expect(state.connection).toMatchObject({
+      connectionError:
+        "IBKR Flex credential owner is not configured in the Convex deployment environment",
+      status: "error",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does not use the deployment credential for a different owner", async () => {
+    await createConnection("owner-b");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const workflowId = await startWorkflow();
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, { workflowId }),
+    ).resolves.toMatchObject({
+      result: { runsFailed: 1, status: "failed" },
+      type: "completed",
+    });
+    const state = await t.run(async (ctx) => ({
+      connection: (await ctx.db.query("brokerageConnections").collect())[0],
+      syncRun: (await ctx.db.query("brokerageSyncRuns").collect())[0],
+    }));
+    expect(state.syncRun).toMatchObject({
+      errorMessage: "No IBKR credential is configured for this connection.",
+      status: "failed_terminal",
+    });
+    expect(state.connection).toMatchObject({
+      connectionError: "No IBKR credential is configured for this connection.",
       status: "error",
     });
     expect(fetchMock).not.toHaveBeenCalled();
