@@ -189,6 +189,47 @@ describe("bravos review queue", () => {
     ).rejects.toThrow("Bravos cleanup review history exceeds its bounded safety limit");
   });
 
+  it("allows the owner-plan limit but fails closed above it", async () => {
+    await t.run(async (ctx) => {
+      for (const index of Array.from(
+        { length: 500 },
+        (_, value) => value,
+      )) {
+        await ctx.db.insert("tradePlans", {
+          instrumentSymbol: "QQQ",
+          name: `Manual plan ${index}`,
+          ownerId,
+          rationale: "Existing rationale",
+          status: "watching",
+        });
+      }
+    });
+
+    await expect(
+      t.mutation(internal.bravos.cleanupBravosPlansAndDerivedRecords, {
+        dryRun: true,
+        ownerId,
+      }),
+    ).resolves.toMatchObject({ bravosPlans: 0 });
+
+    await t.run(async (ctx) => {
+      await ctx.db.insert("tradePlans", {
+        instrumentSymbol: "QQQ",
+        name: "Manual plan 500",
+        ownerId,
+        rationale: "Existing rationale",
+        status: "watching",
+      });
+    });
+
+    await expect(
+      t.mutation(internal.bravos.cleanupBravosPlansAndDerivedRecords, {
+        dryRun: true,
+        ownerId,
+      }),
+    ).rejects.toThrow("Bravos cleanup owner plan set exceeds its bounded safety limit");
+  });
+
   it("reports dry-run effects and cleans Bravos-derived records without touching trades", async () => {
     const tradePlanId = await insertTradePlan({
       sourceUrl: "https://bravosresearch.com/post/2",
