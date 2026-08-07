@@ -293,7 +293,7 @@ function parsePosition(
     assetType: "stock",
     brokerageAccountId: accountId,
     currency: firstText(row, ["currency"]),
-    marketValue: numberFrom(row, ["marketValue", "value"]),
+    marketValue: numberFrom(row, ["positionValue", "marketValue", "value"]),
     quantity: requiredNumber(row, ["position", "quantity", "qty"], "position"),
     reportDate,
     ticker,
@@ -318,6 +318,10 @@ function parseCash(
     ),
     currency,
     reportDate,
+    rowKind:
+      currency.trim().toUpperCase() === "BASE_SUMMARY"
+        ? "base_summary"
+        : "currency",
   };
 }
 

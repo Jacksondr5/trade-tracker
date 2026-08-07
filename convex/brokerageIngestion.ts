@@ -99,6 +99,7 @@ const cashSnapshotValidator = v.object({
   cash: v.number(),
   currency: v.string(),
   reportDate: v.string(),
+  rowKind: v.union(v.literal("base_summary"), v.literal("currency")),
 });
 
 const POSITION_EPSILON = 0.00000001;
@@ -750,6 +751,7 @@ export const beginSyncRunForConnection = internalMutation({
   },
   returns: v.object({
     created: v.boolean(),
+    ownerId: v.string(),
     queryId: v.string(),
     syncRunId: v.id("brokerageSyncRuns"),
   }),
@@ -774,7 +776,14 @@ export const beginSyncRunForConnection = internalMutation({
             .eq("queryId", queryId),
       )
       .unique();
-    if (existing) return { created: false, queryId, syncRunId: existing._id };
+    if (existing) {
+      return {
+        created: false,
+        ownerId: connection.ownerId,
+        queryId,
+        syncRunId: existing._id,
+      };
+    }
 
     const now = Date.now();
     const syncRunId = await ctx.db.insert("brokerageSyncRuns", {
@@ -793,7 +802,7 @@ export const beginSyncRunForConnection = internalMutation({
       status: "queued",
       updatedAt: now,
     });
-    return { created: true, queryId, syncRunId };
+    return { created: true, ownerId: connection.ownerId, queryId, syncRunId };
   },
 });
 
@@ -998,6 +1007,7 @@ export const ingestParsedFlexReport = internalMutation({
         currency,
         ownerId: syncRun.ownerId,
         reportDate: snapshot.reportDate,
+        rowKind: snapshot.rowKind,
         syncRunId: syncRun._id,
       };
       if (existing) {

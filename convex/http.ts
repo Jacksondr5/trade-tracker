@@ -35,6 +35,7 @@ type HttpCashSnapshot = {
   cash: number;
   currency: string;
   reportDate: string;
+  rowKind: "base_summary" | "currency";
 };
 type BrokerageIngestFlexReportBody = {
   cashSnapshots: HttpCashSnapshot[];
@@ -255,6 +256,12 @@ function requireCashSnapshots(body: JsonObject): HttpCashSnapshot[] {
       cash: requireNumber(snapshot, "cash", `${base}.cash`),
       currency: requireString(snapshot, "currency", `${base}.currency`),
       reportDate: requireString(snapshot, "reportDate", `${base}.reportDate`),
+      rowKind: requireLiteral(
+        snapshot,
+        "rowKind",
+        ["base_summary", "currency"],
+        `${base}.rowKind`,
+      ),
     };
   });
 }
