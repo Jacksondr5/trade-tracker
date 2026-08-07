@@ -2304,9 +2304,6 @@ packages:
   '@types/eslint@9.6.1':
     resolution: {integrity: sha512-FXx2pKgId/WyYo2jXw63kk7/+TY7u7AziEJxJAnSFzHlqTAS3Ync6SvgYAN/k4/PQpnnVuzoMuVnByKK2qp0ag==}
 
-  '@types/estree@1.0.8':
-    resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
-
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
 
@@ -3069,9 +3066,6 @@ packages:
   es-iterator-helpers@1.3.2:
     resolution: {integrity: sha512-HVLACW1TppGYjJ8H6/jqH/pqOtKRw6wMlrB23xfExmFWxFquAIWCmwoLsOyN96K4a5KbmOf5At9ZUO3GZbetAw==}
     engines: {node: '>= 0.4'}
-
-  es-module-lexer@2.1.0:
-    resolution: {integrity: sha512-n27zTYMjYu1aj4MjCWzSP7G9r75utsaoc8m61weK+W8JMBGGQybd43GstCXZ3WNmSFtGT9wi59qQTW6mhTR5LQ==}
 
   es-module-lexer@2.3.1:
     resolution: {integrity: sha512-shc1dbU90Yl/xq1QrC7QRtfcwURZuVRfPhZbDoldJ1cn1gzDvBaBWlv0eFolj5+0znnPJz5TXLxsN77X/12KTA==}
@@ -3987,10 +3981,6 @@ packages:
     resolution: {integrity: sha512-V7+vQEJ06Z+c5tSye8S+nHUfI51xoXIXjHQ99cQtKUkQqqO1kO/KCJUfZXuB47h/YBlDhah2H3hdUGXn8ie0oA==}
     engines: {node: '>=8.6'}
 
-  picomatch@4.0.4:
-    resolution: {integrity: sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A==}
-    engines: {node: '>=12'}
-
   picomatch@4.0.5:
     resolution: {integrity: sha512-RvwwcruNjI1ncT5xRakeyS9Lf8lcItv34KD+aif+VH9kduAyfYBipGh12274xtenIPZ119/R9BdTBa8gAwSh0A==}
     engines: {node: '>=12'}
@@ -4011,10 +4001,6 @@ packages:
 
   postcss@8.4.31:
     resolution: {integrity: sha512-PS08Iboia9mts/2ygV3eLpY5ghnUcfLV/EXTOW1E2qYxJKGGBUtNjN76FYHnMs36RmARn41bC0AZmn+rR0OVpQ==}
-    engines: {node: ^10 || ^12 || >=14}
-
-  postcss@8.5.12:
-    resolution: {integrity: sha512-W62t/Se6rA0Az3DfCL0AqJwXuKwBeYg6nOaIgzP+xZ7N5BFCI7DYi1qs6ygUYT6rvfi6t9k65UMLJC+PHZpDAA==}
     engines: {node: ^10 || ^12 || >=14}
 
   postcss@8.5.25:
@@ -4518,10 +4504,6 @@ packages:
   tinyexec@1.2.4:
     resolution: {integrity: sha512-SHf/r48b7vOrjve9PxJo3MN5v5yuyjHvdUcrQffT3WXMUfnGmHDVbC4k3sHJaJTgZCwpUplIaAo5ANtMyp3YHg==}
     engines: {node: '>=18'}
-
-  tinyglobby@0.2.16:
-    resolution: {integrity: sha512-pn99VhoACYR8nFHhxqix+uvsbXineAasWm5ojXoN8xEwK5Kd3/TrhNn1wByuD52UxWRLy8pu+kRMniEi6Eq9Zg==}
-    engines: {node: '>=12.0.0'}
 
   tinyglobby@0.2.17:
     resolution: {integrity: sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g==}
@@ -6578,14 +6560,12 @@ snapshots:
   '@types/eslint-scope@3.7.7':
     dependencies:
       '@types/eslint': 9.6.1
-      '@types/estree': 1.0.8
+      '@types/estree': 1.0.9
 
   '@types/eslint@9.6.1':
     dependencies:
-      '@types/estree': 1.0.8
+      '@types/estree': 1.0.9
       '@types/json-schema': 7.0.15
-
-  '@types/estree@1.0.8': {}
 
   '@types/estree@1.0.9': {}
 
@@ -6680,7 +6660,7 @@ snapshots:
       debug: 4.4.3
       minimatch: 10.2.5
       semver: 7.7.4
-      tinyglobby: 0.2.16
+      tinyglobby: 0.2.17
       ts-api-utils: 2.5.0(typescript@6.0.3)
       typescript: 6.0.3
     transitivePeerDependencies:
@@ -7464,8 +7444,6 @@ snapshots:
       iterator.prototype: 1.1.5
       math-intrinsics: 1.1.0
 
-  es-module-lexer@2.1.0: {}
-
   es-module-lexer@2.3.1: {}
 
   es-object-atoms@1.1.1:
@@ -7620,7 +7598,7 @@ snapshots:
       get-tsconfig: 4.14.0
       is-bun-module: 2.0.0
       stable-hash: 0.0.5
-      tinyglobby: 0.2.16
+      tinyglobby: 0.2.17
       unrs-resolver: 1.11.1
     optionalDependencies:
       eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.59.1(eslint@9.39.4(jiti@2.6.1))(typescript@6.0.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.4(jiti@2.6.1))
@@ -7748,7 +7726,7 @@ snapshots:
       '@humanfs/node': 0.16.8
       '@humanwhocodes/module-importer': 1.0.1
       '@humanwhocodes/retry': 0.4.3
-      '@types/estree': 1.0.8
+      '@types/estree': 1.0.9
       ajv: 6.15.0
       chalk: 4.1.2
       cross-spawn: 7.0.6
@@ -7844,10 +7822,6 @@ snapshots:
   fastq@1.20.1:
     dependencies:
       reusify: 1.1.0
-
-  fdir@6.5.0(picomatch@4.0.4):
-    optionalDependencies:
-      picomatch: 4.0.4
 
   fdir@6.5.0(picomatch@4.0.5):
     optionalDependencies:
@@ -8475,8 +8449,6 @@ snapshots:
 
   picomatch@2.3.2: {}
 
-  picomatch@4.0.4: {}
-
   picomatch@4.0.5: {}
 
   playwright-core@1.59.1: {}
@@ -8490,12 +8462,6 @@ snapshots:
   possible-typed-array-names@1.1.0: {}
 
   postcss@8.4.31:
-    dependencies:
-      nanoid: 3.3.16
-      picocolors: 1.1.1
-      source-map-js: 1.2.1
-
-  postcss@8.5.12:
     dependencies:
       nanoid: 3.3.16
       picocolors: 1.1.1
@@ -8890,7 +8856,7 @@ snapshots:
       is-plain-obj: 4.1.0
       semver: 7.7.4
       sort-object-keys: 2.1.0
-      tinyglobby: 0.2.16
+      tinyglobby: 0.2.17
 
   source-map-js@1.2.1: {}
 
@@ -9056,11 +9022,6 @@ snapshots:
 
   tinyexec@1.2.4: {}
 
-  tinyglobby@0.2.16:
-    dependencies:
-      fdir: 6.5.0(picomatch@4.0.4)
-      picomatch: 4.0.4
-
   tinyglobby@0.2.17:
     dependencies:
       fdir: 6.5.0(picomatch@4.0.5)
@@ -9220,7 +9181,7 @@ snapshots:
       esbuild: 0.27.7
       fdir: 6.5.0(picomatch@4.0.5)
       picomatch: 4.0.5
-      postcss: 8.5.12
+      postcss: 8.5.25
       rollup: 4.62.3
       tinyglobby: 0.2.17
     optionalDependencies:
@@ -9272,7 +9233,7 @@ snapshots:
   webpack@5.106.2(@swc/core@1.15.33)(lightningcss@1.32.0)(postcss@8.5.25):
     dependencies:
       '@types/eslint-scope': 3.7.7
-      '@types/estree': 1.0.8
+      '@types/estree': 1.0.9
       '@types/json-schema': 7.0.15
       '@webassemblyjs/ast': 1.14.1
       '@webassemblyjs/wasm-edit': 1.14.1
@@ -9282,7 +9243,7 @@ snapshots:
       browserslist: 4.28.2
       chrome-trace-event: 1.0.4
       enhanced-resolve: 5.21.0
-      es-module-lexer: 2.1.0
+      es-module-lexer: 2.3.1
       eslint-scope: 5.1.1
       events: 3.3.0
       glob-to-regexp: 0.4.1
