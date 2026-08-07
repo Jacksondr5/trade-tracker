@@ -16,10 +16,12 @@ import type * as campaigns from "../campaigns.js";
 import type * as crons from "../crons.js";
 import type * as e2eSeed from "../e2eSeed.js";
 import type * as http from "../http.js";
+import type * as ibkrFlexWorkflow from "../ibkrFlexWorkflow.js";
 import type * as importTasks from "../importTasks.js";
 import type * as imports from "../imports.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_brokerageFreshness from "../lib/brokerageFreshness.js";
+import type * as lib_ibkrSchedule from "../lib/ibkrSchedule.js";
 import type * as lib_marketCalendar from "../lib/marketCalendar.js";
 import type * as lib_marketDataInstruments from "../lib/marketDataInstruments.js";
 import type * as lib_statuses from "../lib/statuses.js";
@@ -53,10 +55,12 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   e2eSeed: typeof e2eSeed;
   http: typeof http;
+  ibkrFlexWorkflow: typeof ibkrFlexWorkflow;
   importTasks: typeof importTasks;
   imports: typeof imports;
   "lib/auth": typeof lib_auth;
   "lib/brokerageFreshness": typeof lib_brokerageFreshness;
+  "lib/ibkrSchedule": typeof lib_ibkrSchedule;
   "lib/marketCalendar": typeof lib_marketCalendar;
   "lib/marketDataInstruments": typeof lib_marketDataInstruments;
   "lib/statuses": typeof lib_statuses;
@@ -102,4 +106,6 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  workflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"workflow">;
+};

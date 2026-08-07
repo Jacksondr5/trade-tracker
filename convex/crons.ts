@@ -10,6 +10,13 @@ crons.cron(
   {},
 );
 
+crons.cron(
+  "nightly IBKR Flex brokerage sync kickoff",
+  "0 5 * * *",
+  internal.ibkrFlexWorkflow.dispatchNightlySync,
+  {},
+);
+
 crons.interval(
   "rate-limited market data fetch worker",
   { minutes: 2 },

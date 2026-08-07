@@ -51,6 +51,9 @@ describe("parseIbkrFlexActivityXml", () => {
         ticker: "MSFT",
       },
     ]);
+    expect(readFileSync(fixturePath, "utf8")).toContain(
+      'positionValue="1895.00"',
+    );
     expect(result.cashSnapshots).toEqual([
       {
         brokerageAccountId: "U1234567",
