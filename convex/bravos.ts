@@ -83,8 +83,10 @@ const bravosProposedActionValidator = v.union(
 );
 
 type BravosProposedAction = Doc<"bravosReviewItems">["proposedAction"];
-type FollowUpField =
-  Extract<BravosProposedAction, { kind: "apply_follow_up" }>["fieldUpdates"][number]["field"];
+type FollowUpField = Extract<
+  BravosProposedAction,
+  { kind: "apply_follow_up" }
+>["fieldUpdates"][number]["field"];
 
 const mutableFollowUpFields = new Set<FollowUpField>([
   "entryConditions",
@@ -124,9 +126,7 @@ function normalizeBravosSourceUrl(url: string): string {
   return parsed.toString();
 }
 
-function buildBravosSourceIdentity(args: {
-  sourceUrl: string;
-}): string {
+function buildBravosSourceIdentity(args: { sourceUrl: string }): string {
   return normalizeBravosSourceUrl(args.sourceUrl);
 }
 
@@ -167,7 +167,7 @@ function hasPendingBravosLoginSession(
 ) {
   return Boolean(
     connection?.browserbaseLoginSessionId &&
-      connection.browserbaseLoginSessionReleasedAt === undefined,
+    connection.browserbaseLoginSessionReleasedAt === undefined,
   );
 }
 
@@ -184,7 +184,9 @@ function assertBravosConnectionReady(
   }
 }
 
-function normalizeOptionalString(value: string | undefined): string | undefined {
+function normalizeOptionalString(
+  value: string | undefined,
+): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
 }
@@ -494,8 +496,8 @@ export const requestBravosListingScan = mutation({
       throw new ConvexError("Unable to create Bravos connection");
     }
     assertBravosConnectionReady(connection);
-    const listingUrl = normalizeOptionalString(args.listingUrl) ??
-      connection.listingUrl;
+    const listingUrl =
+      normalizeOptionalString(args.listingUrl) ?? connection.listingUrl;
     if (!listingUrl) {
       throw new ConvexError("Bravos listing URL is required before scanning");
     }
@@ -572,192 +574,418 @@ export const dismissBravosReviewItem = mutation({
   },
 });
 
-const BRAVOS_CLEANUP_BATCH_SIZE = 10;
+const BRAVOS_CLEANUP_CHILD_LIMIT = 500;
+const BRAVOS_CLEANUP_MAX_OWNER_PLANS = 500;
+const BRAVOS_CLEANUP_MAX_REVIEW_ITEMS = 500;
+const BRAVOS_CLEANUP_MAX_WRITES = 15_000;
+
+function isBravosTradePlan(tradePlan: Doc<"tradePlans">) {
+  if (!tradePlan.sourceUrl) return false;
+  try {
+    const hostname = new URL(tradePlan.sourceUrl).hostname.toLowerCase();
+    return (
+      hostname === "bravosresearch.com" ||
+      hostname.endsWith(".bravosresearch.com")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function actionWithoutDeletedTarget(args: {
+  action: BravosProposedAction;
+  deletedPlanIds: Set<Id<"tradePlans">>;
+}) {
+  const { action, deletedPlanIds } = args;
+  if (
+    (action.kind === "apply_follow_up" || action.kind === "note_only") &&
+    action.targetTradePlanId &&
+    deletedPlanIds.has(action.targetTradePlanId)
+  ) {
+    const withoutTarget = { ...action };
+    delete withoutTarget.targetTradePlanId;
+    return { action: withoutTarget, cleared: true };
+  }
+  return { action, cleared: false };
+}
+
+function matchesLegacyBravosImportTaskNote(args: {
+  note: Doc<"notes">;
+  tasks: Doc<"importTasks">[];
+}) {
+  return args.tasks.some((task) => {
+    if (
+      task.mode !== "follow-up" ||
+      task.status !== "done" ||
+      !task.extractedData
+    ) {
+      return false;
+    }
+    try {
+      const parsed: unknown = JSON.parse(task.extractedData);
+      return (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        "noteContent" in parsed &&
+        typeof parsed.noteContent === "string" &&
+        parsed.noteContent.trim() === args.note.content.trim()
+      );
+    } catch {
+      return false;
+    }
+  });
+}
 
 /**
- * Private, one-off cleanup support. It intentionally refuses to remove any
- * plan with a known linked record. Those records need explicit approval about
- * their disposition before a broader deletion path is added and invoked.
+ * Private, one-off cleanup support. It evaluates one owner's bounded plan set
+ * in one transaction, deleting only Bravos-domain plans whose notes have
+ * durable Bravos provenance; user-content references are blockers. Dry runs
+ * return the same projected effects and eligible-plan identities as real runs.
  */
-export const deleteBravosPlansWithoutReferences = internalMutation({
+export const cleanupBravosPlansAndDerivedRecords = internalMutation({
   args: {
-    cursor: v.union(v.string(), v.null()),
     dryRun: v.boolean(),
+    ownerId: v.string(),
   },
   returns: v.object({
-    bravosPlansInBatch: v.number(),
-    continueCursor: v.string(),
+    bravosPlans: v.number(),
+    clearedAppliedReviewItemNoteIds: v.number(),
+    clearedAppliedReviewItemPlanIds: v.number(),
+    clearedApprovedActionTargets: v.number(),
+    clearedCreatedImportTaskPlanIds: v.number(),
+    clearedInboxTradePlanIds: v.number(),
+    clearedLinkedImportTaskPlanIds: v.number(),
+    clearedProposedActionTargets: v.number(),
+    clearedSuggestedReviewItemPlanIds: v.number(),
+    deletedNotes: v.number(),
     deletedPlans: v.number(),
-    isDone: v.boolean(),
-    plansWithAppliedReviewItems: v.number(),
-    plansWithCreatedImportTasks: v.number(),
-    plansWithInboxTrades: v.number(),
-    plansWithLinkedImportTasks: v.number(),
-    plansWithLinkedNotes: v.number(),
-    plansWithLinkedTrades: v.number(),
+    deletedReadyReviewItems: v.number(),
+    eligiblePlanCount: v.number(),
+    eligiblePlans: v.array(
+      v.object({
+        id: v.id("tradePlans"),
+        name: v.string(),
+        sourceUrl: v.string(),
+      }),
+    ),
+    eligiblePlansWithoutNotes: v.number(),
+    patchedImportTasks: v.number(),
+    patchedReviewItems: v.number(),
     plansWithRetrospectives: v.number(),
-    plansWithSuggestedReviewItems: v.number(),
-    plansWithOtherBravosReviewItems: v.number(),
+    plansWithUnknownNotes: v.number(),
     plansWithWatchlistItems: v.number(),
+    unlinkedTrades: v.number(),
   }),
   handler: async (ctx, args) => {
-    const page = await ctx.db.query("tradePlans").order("asc").paginate({
-      cursor: args.cursor,
-      numItems: BRAVOS_CLEANUP_BATCH_SIZE,
-    });
-    let bravosPlansInBatch = 0;
-    let deletedPlans = 0;
-    let plansWithAppliedReviewItems = 0;
-    let plansWithCreatedImportTasks = 0;
-    let plansWithInboxTrades = 0;
-    let plansWithLinkedImportTasks = 0;
-    let plansWithLinkedNotes = 0;
-    let plansWithLinkedTrades = 0;
+    const [page, reviewPage] = await Promise.all([
+      ctx.db
+        .query("tradePlans")
+        .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
+        .order("asc")
+        .paginate({ cursor: null, numItems: BRAVOS_CLEANUP_MAX_OWNER_PLANS }),
+      ctx.db
+        .query("bravosReviewItems")
+        .withIndex("by_ownerId", (q) => q.eq("ownerId", args.ownerId))
+        .order("asc")
+        .paginate({ cursor: null, numItems: BRAVOS_CLEANUP_MAX_REVIEW_ITEMS }),
+    ]);
+    if (!reviewPage.isDone) {
+      throw new ConvexError(
+        "Bravos cleanup review history exceeds its bounded safety limit",
+      );
+    }
+    if (!page.isDone) {
+      throw new ConvexError(
+        "Bravos cleanup owner plan set exceeds its bounded safety limit",
+      );
+    }
+
+    const readyReviewItems = reviewPage.page.filter(
+      (item) => item.reviewState === "ready",
+    );
+    const plansToDelete: Array<{
+      inboxTrades: Doc<"inboxTrades">[];
+      importTasks: Doc<"importTasks">[];
+      notes: Doc<"notes">[];
+      tradePlan: Doc<"tradePlans">;
+      trades: Doc<"trades">[];
+    }> = [];
+    let bravosPlans = 0;
     let plansWithRetrospectives = 0;
-    let plansWithSuggestedReviewItems = 0;
-    let plansWithOtherBravosReviewItems = 0;
+    let plansWithUnknownNotes = 0;
     let plansWithWatchlistItems = 0;
 
     for (const tradePlan of page.page) {
-      // `sourceUrl` is the current schema-level Bravos identifier.
-      if (tradePlan.sourceUrl === undefined) {
-        continue;
-      }
-      bravosPlansInBatch += 1;
+      if (!isBravosTradePlan(tradePlan)) continue;
+      bravosPlans += 1;
       const [
         trades,
         notes,
         inboxTrades,
         retrospectives,
         watchlistItems,
-        linkedImportTasks,
-        createdImportTasks,
-        appliedReviewItems,
-        suggestedReviewItems,
-        otherBravosReviewItems,
+        linkedTasks,
+        createdTasks,
       ] = await Promise.all([
+        // Trade Tracker is a single-user app. Keep cleanup ownership-scoped so
+        // an invalid cross-owner reference fails application ownership checks
+        // rather than causing this one-off mutation to touch another user.
         ctx.db
           .query("trades")
           .withIndex("by_owner_tradePlanId", (q) =>
-            q.eq("ownerId", tradePlan.ownerId).eq("tradePlanId", tradePlan._id),
+            q.eq("ownerId", args.ownerId).eq("tradePlanId", tradePlan._id),
           )
-          .take(1),
+          .take(BRAVOS_CLEANUP_CHILD_LIMIT + 1),
         ctx.db
           .query("notes")
           .withIndex("by_owner_tradePlanId", (q) =>
-            q.eq("ownerId", tradePlan.ownerId).eq("tradePlanId", tradePlan._id),
+            q.eq("ownerId", args.ownerId).eq("tradePlanId", tradePlan._id),
           )
-          .take(1),
+          .take(BRAVOS_CLEANUP_CHILD_LIMIT + 1),
         ctx.db
           .query("inboxTrades")
           .withIndex("by_owner_status_tradePlanId", (q) =>
             q
-              .eq("ownerId", tradePlan.ownerId)
+              .eq("ownerId", args.ownerId)
               .eq("status", "pending_review")
               .eq("tradePlanId", tradePlan._id),
           )
-          .take(1),
+          .take(BRAVOS_CLEANUP_CHILD_LIMIT + 1),
         ctx.db
           .query("retrospectives")
           .withIndex("by_owner_parent", (q) =>
-            q.eq("ownerId", tradePlan.ownerId).eq("parentId", tradePlan._id),
+            q.eq("ownerId", args.ownerId).eq("parentId", tradePlan._id),
           )
-          .take(1),
+          .take(BRAVOS_CLEANUP_CHILD_LIMIT + 1),
         ctx.db
           .query("watchlist")
           .withIndex("by_owner_tradePlanId", (q) =>
-            q.eq("ownerId", tradePlan.ownerId).eq("tradePlanId", tradePlan._id),
+            q.eq("ownerId", args.ownerId).eq("tradePlanId", tradePlan._id),
           )
-          .take(1),
+          .take(BRAVOS_CLEANUP_CHILD_LIMIT + 1),
         ctx.db
           .query("importTasks")
           .withIndex("by_owner_tradePlanId", (q) =>
-            q.eq("ownerId", tradePlan.ownerId).eq("tradePlanId", tradePlan._id),
+            q.eq("ownerId", args.ownerId).eq("tradePlanId", tradePlan._id),
           )
-          .take(1),
+          .take(BRAVOS_CLEANUP_CHILD_LIMIT + 1),
         ctx.db
           .query("importTasks")
           .withIndex("by_owner_createdTradePlanId", (q) =>
             q
-              .eq("ownerId", tradePlan.ownerId)
+              .eq("ownerId", args.ownerId)
               .eq("createdTradePlanId", tradePlan._id),
           )
-          .take(1),
-        ctx.db
-          .query("bravosReviewItems")
-          .withIndex("by_ownerId_and_appliedTradePlanId", (q) =>
-            q
-              .eq("ownerId", tradePlan.ownerId)
-              .eq("appliedTradePlanId", tradePlan._id),
-          )
-          .take(1),
-        ctx.db
-          .query("bravosReviewItems")
-          .withIndex("by_ownerId_and_suggestedTradePlanId", (q) =>
-            q
-              .eq("ownerId", tradePlan.ownerId)
-              .eq("suggestedTradePlanId", tradePlan._id),
-          )
-          .take(1),
-        // `proposedAction.targetTradePlanId` is nested and therefore cannot be
-        // indexed. Any remaining Bravos review history is a conservative
-        // blocker until the approved cleanup clears that history first.
-        ctx.db
-          .query("bravosReviewItems")
-          .withIndex("by_ownerId", (q) => q.eq("ownerId", tradePlan.ownerId))
-          .take(1),
+          .take(BRAVOS_CLEANUP_CHILD_LIMIT + 1),
       ]);
-
-      if (trades.length > 0) {
-        plansWithLinkedTrades += 1;
+      if (
+        [
+          trades,
+          notes,
+          inboxTrades,
+          retrospectives,
+          watchlistItems,
+          linkedTasks,
+          createdTasks,
+        ].some((records) => records.length > BRAVOS_CLEANUP_CHILD_LIMIT)
+      ) {
+        throw new ConvexError(
+          `Bravos cleanup found more than ${BRAVOS_CLEANUP_CHILD_LIMIT} linked records for plan ${tradePlan._id}`,
+        );
       }
-      if (notes.length > 0) {
-        plansWithLinkedNotes += 1;
-      }
-      if (inboxTrades.length > 0) plansWithInboxTrades += 1;
+      const importTasks = Array.from(
+        new Map(
+          [...linkedTasks, ...createdTasks].map((task) => [task._id, task]),
+        ).values(),
+      );
+      const bravosNotes = notes.filter(
+        (note) =>
+          reviewPage.page.some((item) => item.appliedNoteId === note._id) ||
+          note.content ===
+            `Imported from service post: ${tradePlan.sourceUrl}` ||
+          matchesLegacyBravosImportTaskNote({ note, tasks: importTasks }),
+      );
+      const hasUnknownNotes = bravosNotes.length !== notes.length;
+      if (hasUnknownNotes) plansWithUnknownNotes += 1;
       if (retrospectives.length > 0) plansWithRetrospectives += 1;
       if (watchlistItems.length > 0) plansWithWatchlistItems += 1;
-      if (linkedImportTasks.length > 0) plansWithLinkedImportTasks += 1;
-      if (createdImportTasks.length > 0) plansWithCreatedImportTasks += 1;
-      if (appliedReviewItems.length > 0) plansWithAppliedReviewItems += 1;
-      if (suggestedReviewItems.length > 0) plansWithSuggestedReviewItems += 1;
-      if (otherBravosReviewItems.length > 0)
-        plansWithOtherBravosReviewItems += 1;
       if (
-        trades.length > 0 ||
-        notes.length > 0 ||
-        inboxTrades.length > 0 ||
+        hasUnknownNotes ||
         retrospectives.length > 0 ||
-        watchlistItems.length > 0 ||
-        linkedImportTasks.length > 0 ||
-        createdImportTasks.length > 0 ||
-        appliedReviewItems.length > 0 ||
-        suggestedReviewItems.length > 0 ||
-        otherBravosReviewItems.length > 0 ||
-        args.dryRun
+        watchlistItems.length > 0
       ) {
         continue;
       }
+      plansToDelete.push({
+        inboxTrades,
+        importTasks,
+        notes: bravosNotes,
+        tradePlan,
+        trades,
+      });
+    }
 
-      await ctx.db.delete(tradePlan._id);
-      deletedPlans += 1;
+    const deletedPlanIds = new Set(
+      plansToDelete.map(({ tradePlan }) => tradePlan._id),
+    );
+    const deletedNoteIds = new Set(
+      plansToDelete.flatMap(({ notes }) => notes.map((note) => note._id)),
+    );
+    const readyReviewItemIds = new Set(
+      readyReviewItems.map((item) => item._id),
+    );
+    const reviewPatches = new Map<
+      Id<"bravosReviewItems">,
+      Partial<Doc<"bravosReviewItems">>
+    >();
+    let clearedAppliedReviewItemNoteIds = 0;
+    let clearedAppliedReviewItemPlanIds = 0;
+    let clearedApprovedActionTargets = 0;
+    let clearedSuggestedReviewItemPlanIds = 0;
+    let clearedProposedActionTargets = 0;
+
+    for (const item of reviewPage.page) {
+      if (readyReviewItemIds.has(item._id)) continue;
+      const patch: Partial<Doc<"bravosReviewItems">> = {};
+      if (
+        item.appliedTradePlanId &&
+        deletedPlanIds.has(item.appliedTradePlanId)
+      ) {
+        patch.appliedTradePlanId = undefined;
+        clearedAppliedReviewItemPlanIds += 1;
+      }
+      if (
+        item.suggestedTradePlanId &&
+        deletedPlanIds.has(item.suggestedTradePlanId)
+      ) {
+        patch.suggestedTradePlanId = undefined;
+        clearedSuggestedReviewItemPlanIds += 1;
+      }
+      if (item.appliedNoteId && deletedNoteIds.has(item.appliedNoteId)) {
+        patch.appliedNoteId = undefined;
+        clearedAppliedReviewItemNoteIds += 1;
+      }
+      const proposed = actionWithoutDeletedTarget({
+        action: item.proposedAction,
+        deletedPlanIds,
+      });
+      if (proposed.cleared) {
+        patch.proposedAction = proposed.action;
+        clearedProposedActionTargets += 1;
+      }
+      if (item.approvedAction) {
+        const approved = actionWithoutDeletedTarget({
+          action: item.approvedAction,
+          deletedPlanIds,
+        });
+        if (approved.cleared) {
+          patch.approvedAction = approved.action;
+          clearedApprovedActionTargets += 1;
+        }
+      }
+      if (Object.keys(patch).length > 0) reviewPatches.set(item._id, patch);
+    }
+
+    const deletedNotes = plansToDelete.reduce(
+      (total, item) => total + item.notes.length,
+      0,
+    );
+    const unlinkedTrades = plansToDelete.reduce(
+      (total, item) => total + item.trades.length,
+      0,
+    );
+    const clearedInboxTradePlanIds = plansToDelete.reduce(
+      (total, item) => total + item.inboxTrades.length,
+      0,
+    );
+    const importTasksToPatch = new Map(
+      plansToDelete.flatMap((item) =>
+        item.importTasks.map((task) => [task._id, task] as const),
+      ),
+    );
+    const patchedImportTasks = importTasksToPatch.size;
+    const importTaskValues = [...importTasksToPatch.values()];
+    const clearedLinkedImportTaskPlanIds = importTaskValues.filter(
+      (task) =>
+        task.tradePlanId !== undefined && deletedPlanIds.has(task.tradePlanId),
+    ).length;
+    const clearedCreatedImportTaskPlanIds = importTaskValues.filter(
+      (task) =>
+        task.createdTradePlanId !== undefined &&
+        deletedPlanIds.has(task.createdTradePlanId),
+    ).length;
+    const eligiblePlans = plansToDelete.map(({ tradePlan }) => ({
+      id: tradePlan._id,
+      name: tradePlan.name,
+      sourceUrl: tradePlan.sourceUrl!,
+    }));
+    const eligiblePlansWithoutNotes = plansToDelete.filter(
+      ({ notes }) => notes.length === 0,
+    ).length;
+    const mutationWrites =
+      readyReviewItems.length +
+      deletedNotes +
+      unlinkedTrades +
+      clearedInboxTradePlanIds +
+      importTasksToPatch.size +
+      reviewPatches.size +
+      plansToDelete.length;
+    if (mutationWrites > BRAVOS_CLEANUP_MAX_WRITES) {
+      throw new ConvexError(
+        "Bravos cleanup effects exceed its bounded transaction write limit",
+      );
+    }
+
+    if (!args.dryRun) {
+      for (const item of readyReviewItems) await ctx.db.delete(item._id);
+      for (const item of plansToDelete) {
+        for (const note of item.notes) await ctx.db.delete(note._id);
+        for (const trade of item.trades)
+          await ctx.db.patch(trade._id, { tradePlanId: undefined });
+        for (const inboxTrade of item.inboxTrades)
+          await ctx.db.patch(inboxTrade._id, { tradePlanId: undefined });
+      }
+      for (const task of importTasksToPatch.values()) {
+        await ctx.db.patch(task._id, {
+          createdTradePlanId:
+            task.createdTradePlanId &&
+            deletedPlanIds.has(task.createdTradePlanId)
+              ? undefined
+              : task.createdTradePlanId,
+          tradePlanId:
+            task.tradePlanId && deletedPlanIds.has(task.tradePlanId)
+              ? undefined
+              : task.tradePlanId,
+        });
+      }
+      for (const [reviewItemId, patch] of reviewPatches)
+        await ctx.db.patch(reviewItemId, patch);
+      for (const { tradePlan } of plansToDelete)
+        await ctx.db.delete(tradePlan._id);
     }
 
     return {
-      bravosPlansInBatch,
-      continueCursor: page.continueCursor,
-      deletedPlans,
-      isDone: page.isDone,
-      plansWithAppliedReviewItems,
-      plansWithCreatedImportTasks,
-      plansWithInboxTrades,
-      plansWithLinkedImportTasks,
-      plansWithLinkedNotes,
-      plansWithLinkedTrades,
+      bravosPlans,
+      clearedAppliedReviewItemNoteIds,
+      clearedAppliedReviewItemPlanIds,
+      clearedApprovedActionTargets,
+      clearedCreatedImportTaskPlanIds,
+      clearedInboxTradePlanIds,
+      clearedLinkedImportTaskPlanIds,
+      clearedProposedActionTargets,
+      clearedSuggestedReviewItemPlanIds,
+      deletedNotes,
+      deletedPlans: plansToDelete.length,
+      deletedReadyReviewItems: readyReviewItems.length,
+      eligiblePlanCount: eligiblePlans.length,
+      eligiblePlans,
+      eligiblePlansWithoutNotes,
+      patchedImportTasks,
+      patchedReviewItems: reviewPatches.size,
       plansWithRetrospectives,
-      plansWithSuggestedReviewItems,
-      plansWithOtherBravosReviewItems,
+      plansWithUnknownNotes,
       plansWithWatchlistItems,
+      unlinkedTrades,
     };
   },
 });
@@ -785,13 +1013,21 @@ export const approveBravosReviewItem = mutation({
         tradePlanId: item.appliedTradePlanId ?? null,
       };
     }
-    if (item.reviewState !== "ready" && item.reviewState !== "needs_attention") {
-      throw new ConvexError(`Cannot approve item in state: ${item.reviewState}`);
+    if (
+      item.reviewState !== "ready" &&
+      item.reviewState !== "needs_attention"
+    ) {
+      throw new ConvexError(
+        `Cannot approve item in state: ${item.reviewState}`,
+      );
     }
 
     const action = item.proposedAction;
     const now = Date.now();
-    const importedNoteDate = noteDateFromSourcePostDate(item.sourcePostDate, now);
+    const importedNoteDate = noteDateFromSourcePostDate(
+      item.sourcePostDate,
+      now,
+    );
     let tradePlanId: Id<"tradePlans"> | null = null;
     let noteId: Id<"notes"> | null = null;
 
@@ -865,7 +1101,11 @@ export const approveBravosReviewItem = mutation({
         item.suggestedTradePlanId ??
         null;
       if (tradePlanId) {
-        assertOwner(await ctx.db.get(tradePlanId), ownerId, "Trade plan not found");
+        assertOwner(
+          await ctx.db.get(tradePlanId),
+          ownerId,
+          "Trade plan not found",
+        );
       }
       noteId = await ctx.db.insert("notes", {
         chartUrls: item.imageUrls.length > 0 ? item.imageUrls : undefined,
@@ -947,12 +1187,11 @@ export const dispatchSyncRun = internalAction({
     } catch (error) {
       const isTimeoutError =
         error instanceof DOMException && error.name === "AbortError";
-      const message =
-        isTimeoutError
-          ? `Bravos worker dispatch timed out after ${WORKER_DISPATCH_TIMEOUT_MS}ms`
-          : error instanceof Error
-            ? `Bravos worker dispatch failed for ${new URL(configuredWorkerUrl).host}: ${error.message}`
-            : "Bravos worker dispatch failed";
+      const message = isTimeoutError
+        ? `Bravos worker dispatch timed out after ${WORKER_DISPATCH_TIMEOUT_MS}ms`
+        : error instanceof Error
+          ? `Bravos worker dispatch failed for ${new URL(configuredWorkerUrl).host}: ${error.message}`
+          : "Bravos worker dispatch failed";
       await ctx.runMutation(internal.bravos.markRunDispatchError, {
         error: message,
         syncRunId: args.syncRunId,
