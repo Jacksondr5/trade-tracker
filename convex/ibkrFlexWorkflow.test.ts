@@ -187,8 +187,8 @@ describe("IBKR Flex Convex workflow", () => {
       .mockResolvedValueOnce(new Response(readyXml));
     vi.stubGlobal("fetch", fetchMock);
 
-    const firstWorkflowId = await startWorkflow();
-    const duplicateWorkflowId = await startWorkflow();
+    const firstWorkflowId = await startWorkflow(24);
+    const duplicateWorkflowId = await startWorkflow(24);
     await finishWorkflow();
 
     await expect(
@@ -214,6 +214,34 @@ describe("IBKR Flex Convex workflow", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("bounds a stranded in-flight join by the caller poll budget", async () => {
+    const connectionId = await createConnection();
+    const { syncRunId } = await t.mutation(
+      internal.brokerageIngestion.beginSyncRunForConnection,
+      {
+        connectionId,
+        reportDate: "2026-05-14",
+        reportType: "activity",
+      },
+    );
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const workflowId = await startWorkflow(1);
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, { workflowId }),
+    ).resolves.toMatchObject({
+      result: { runsFailed: 1, runsSucceeded: 0, status: "failed" },
+      type: "completed",
+    });
+    await expect(
+      t.run(async (ctx) => ctx.db.get(syncRunId)),
+    ).resolves.toMatchObject({ status: "queued" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("marks the run retryable after transient request retries are exhausted", async () => {
     await createConnection();
     const fetchMock = vi.fn().mockRejectedValue(new Error("temporary outage"));
@@ -236,6 +264,40 @@ describe("IBKR Flex Convex workflow", () => {
       status: "failed_retryable",
     });
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("retries a failed-retryable run without creating a duplicate run", async () => {
+    await createConnection();
+    const fetchMock = vi.fn().mockRejectedValue(new Error("temporary outage"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await startWorkflow();
+    await finishWorkflow();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    fetchMock.mockReset();
+    fetchMock
+      .mockResolvedValueOnce(new Response(requestedXml))
+      .mockResolvedValueOnce(new Response(readyXml));
+
+    const retryWorkflowId = await startWorkflow();
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, {
+        workflowId: retryWorkflowId,
+      }),
+    ).resolves.toMatchObject({
+      result: { runsFailed: 0, runsSucceeded: 1, status: "succeeded" },
+      type: "completed",
+    });
+    const syncRuns = await t.run(async (ctx) =>
+      ctx.db.query("brokerageSyncRuns").collect(),
+    );
+    expect(syncRuns).toHaveLength(1);
+    expect(syncRuns[0]).toMatchObject({ status: "succeeded" });
+    expect(syncRuns[0]).not.toHaveProperty("errorMessage");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("removes the raw report reference and blob when ingestion fails", async () => {
@@ -376,6 +438,49 @@ describe("IBKR Flex Convex workflow", () => {
       status: "error",
     });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("retries a terminally failed run after credential configuration is fixed", async () => {
+    const connectionId = await createConnection();
+    delete process.env.IBKR_FLEX_TOKEN_OWNER_ID;
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await startWorkflow();
+    await finishWorkflow();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    process.env.IBKR_FLEX_TOKEN_OWNER_ID = "owner-a";
+    await t.run(async (ctx) => {
+      await ctx.db.patch(connectionId, { status: "active" });
+    });
+    fetchMock
+      .mockResolvedValueOnce(new Response(requestedXml))
+      .mockResolvedValueOnce(new Response(readyXml));
+
+    const retryWorkflowId = await startWorkflow();
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, {
+        workflowId: retryWorkflowId,
+      }),
+    ).resolves.toMatchObject({
+      result: { runsFailed: 0, runsSucceeded: 1, status: "succeeded" },
+      type: "completed",
+    });
+    const state = await t.run(async (ctx) => ({
+      connection: await ctx.db.get(connectionId),
+      syncRuns: await ctx.db.query("brokerageSyncRuns").collect(),
+    }));
+    expect(state.syncRuns).toHaveLength(1);
+    expect(state.syncRuns[0]).toMatchObject({ status: "succeeded" });
+    expect(state.syncRuns[0]).not.toHaveProperty("errorMessage");
+    expect(state.connection).toMatchObject({
+      status: "active",
+    });
+    expect(state.connection).not.toHaveProperty("connectionError");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("does not use the deployment credential for a different owner", async () => {
