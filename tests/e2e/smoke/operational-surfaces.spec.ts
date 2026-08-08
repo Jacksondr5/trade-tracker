@@ -1,12 +1,23 @@
 import { expect, test } from "@playwright/test";
+import { E2E_SMOKE_FIXTURES } from "../../../shared/e2e/smokeFixtures";
 import { waitForAuthenticatedApp } from "../helpers/app";
+import { runConvexFunction } from "../helpers/convex";
+import { getConfiguredBaseUrl, isLocalPlaywrightTarget } from "../helpers/env";
 import {
   APP_PAGE_TITLES,
+  getBrokerageConnectionAccountIdClearButton,
+  getBrokerageConnectionAccountIdInput,
+  getBrokerageConnectionAccountIdUndoButton,
   getBrokerageConnectionConfigureButton,
   getBrokerageConnectionForm,
+  getBrokerageConnectionLabelClearButton,
+  getBrokerageConnectionLabelInput,
+  getBrokerageConnectionLabelUndoButton,
   getBrokerageConnectionQueryIdInput,
   getBrokerageConnectionReplaceTokenButton,
+  getBrokerageConnectionSaveButton,
   getBrokerageConnectionTokenInput,
+  getBrokerageConnectionTokenExpiryInput,
   getBrokerageConnectionTokenStatus,
   getBrokerageLatestFailure,
   getBrokerageLatestSuccess,
@@ -123,5 +134,90 @@ test.describe("operational surfaces regression", () => {
       await replaceTokenButton.click();
     }
     await expect(tokenInput).toHaveValue("");
+  });
+
+  test("IBKR metadata fields stage independent Clear and Undo actions", async ({
+    page,
+  }) => {
+    const configuredBaseUrl = getConfiguredBaseUrl();
+    test.skip(
+      !configuredBaseUrl || !isLocalPlaywrightTarget(configuredBaseUrl),
+      "Deterministic brokerage metadata is only seeded for local E2E targets.",
+    );
+
+    await page.goto("/imports");
+    await waitForAuthenticatedApp(page, APP_PAGE_TITLES.imports);
+
+    const labelInput = getBrokerageConnectionLabelInput(page);
+    const accountIdInput = getBrokerageConnectionAccountIdInput(page);
+    const saveButton = getBrokerageConnectionSaveButton(page);
+    await expect(labelInput).toHaveValue(
+      E2E_SMOKE_FIXTURES.brokerageConnection.label,
+    );
+    await expect(accountIdInput).toHaveValue(
+      E2E_SMOKE_FIXTURES.brokerageConnection.accountId,
+    );
+
+    await labelInput.fill("");
+    await expect(saveButton).toBeDisabled();
+    await getBrokerageConnectionLabelClearButton(page).click();
+    await expect(labelInput).toBeDisabled();
+    await expect(labelInput).toHaveValue("");
+    await expect(getBrokerageConnectionLabelUndoButton(page)).toBeVisible();
+    await expect(saveButton).toBeEnabled();
+
+    await getBrokerageConnectionAccountIdClearButton(page).click();
+    await expect(accountIdInput).toBeDisabled();
+    await expect(accountIdInput).toHaveValue("");
+    await expect(getBrokerageConnectionAccountIdUndoButton(page)).toBeVisible();
+    await expect(saveButton).toBeEnabled();
+
+    await getBrokerageConnectionLabelUndoButton(page).click();
+    await getBrokerageConnectionAccountIdUndoButton(page).click();
+    await expect(labelInput).toBeEnabled();
+    await expect(labelInput).toHaveValue(
+      E2E_SMOKE_FIXTURES.brokerageConnection.label,
+    );
+    await expect(accountIdInput).toBeEnabled();
+    await expect(accountIdInput).toHaveValue(
+      E2E_SMOKE_FIXTURES.brokerageConnection.accountId,
+    );
+  });
+
+  test("first-time IBKR setup allows Account ID and Label to remain unset", async ({
+    page,
+  }) => {
+    const configuredBaseUrl = getConfiguredBaseUrl();
+    test.skip(
+      !configuredBaseUrl || !isLocalPlaywrightTarget(configuredBaseUrl),
+      "Deterministic brokerage metadata is only seeded for local E2E targets.",
+    );
+
+    runConvexFunction("e2eSeed:setBrokerageConnectionMetadataFixture", {
+      state: "unset",
+    });
+    try {
+      await page.goto("/imports");
+      await waitForAuthenticatedApp(page, APP_PAGE_TITLES.imports);
+
+      await expect(getBrokerageConnectionLabelInput(page)).toHaveValue("");
+      await expect(getBrokerageConnectionAccountIdInput(page)).toHaveValue("");
+      await expect(getBrokerageConnectionLabelClearButton(page)).toHaveCount(0);
+      await expect(
+        getBrokerageConnectionAccountIdClearButton(page),
+      ).toHaveCount(0);
+      await expect(getBrokerageConnectionTokenExpiryInput(page)).toHaveValue(
+        "",
+      );
+      await getBrokerageConnectionTokenExpiryInput(page).fill("2027-12-31");
+      await getBrokerageConnectionTokenInput(page).fill(
+        "unsaved-first-setup-token-draft",
+      );
+      await expect(getBrokerageConnectionSaveButton(page)).toBeEnabled();
+    } finally {
+      runConvexFunction("e2eSeed:setBrokerageConnectionMetadataFixture", {
+        state: "persisted",
+      });
+    }
   });
 });

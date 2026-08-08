@@ -589,6 +589,10 @@ export function getBrokerageConnectionQueryIdInput(page: Page): Locator {
   );
 }
 
+export function getBrokerageConnectionSaveButton(page: Page): Locator {
+  return page.getByTestId(IMPORTS_INDEX_TEST_IDS.brokerageConnectionSaveButton);
+}
+
 export function getBrokerageConnectionReplaceTokenButton(page: Page): Locator {
   return page.getByTestId(
     IMPORTS_INDEX_TEST_IDS.brokerageConnectionReplaceTokenButton,

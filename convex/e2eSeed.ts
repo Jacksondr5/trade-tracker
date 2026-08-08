@@ -325,9 +325,41 @@ async function upsertInboxTrade(
   return (await ctx.db.get(inboxTradeId))!;
 }
 
+async function upsertBrokerageConnection(ctx: MutationCtx, ownerId: string) {
+  const fixture = E2E_SMOKE_FIXTURES.brokerageConnection;
+  const existing = await ctx.db
+    .query("brokerageConnections")
+    .withIndex("by_ownerId_and_source", (q) =>
+      q.eq("ownerId", ownerId).eq("source", "ibkr"),
+    )
+    .unique();
+  const now = Date.now();
+  const patch = {
+    accountId: fixture.accountId,
+    connectionError: undefined,
+    label: fixture.label,
+    ownerId,
+    queryId: fixture.queryId,
+    source: "ibkr" as const,
+    status: "needs_setup" as const,
+    tokenExpiresAt: fixture.tokenExpiresAt,
+    updatedAt: now,
+  };
+  if (existing) {
+    await ctx.db.patch(existing._id, patch);
+    return (await ctx.db.get(existing._id))!;
+  }
+  const connectionId = await ctx.db.insert("brokerageConnections", {
+    ...patch,
+    createdAt: now,
+  });
+  return (await ctx.db.get(connectionId))!;
+}
+
 export const setupPreviewData = internalMutation({
   args: {},
   returns: v.object({
+    brokerageConnectionId: v.id("brokerageConnections"),
     campaignId: v.id("campaigns"),
     linkedTradePlanId: v.id("tradePlans"),
     portfolioId: v.id("portfolios"),
@@ -335,6 +367,7 @@ export const setupPreviewData = internalMutation({
   }),
   handler: async (ctx) => {
     const ownerId = getPlaywrightOwnerId();
+    const brokerageConnection = await upsertBrokerageConnection(ctx, ownerId);
     const portfolio = await upsertPortfolio(ctx, ownerId);
     const campaign = await upsertCampaign(ctx, ownerId);
     await upsertAuxiliaryCampaign(ctx, {
@@ -379,6 +412,7 @@ export const setupPreviewData = internalMutation({
     }
 
     return {
+      brokerageConnectionId: brokerageConnection._id,
       campaignId: campaign._id,
       linkedTradePlanId: linkedTradePlan._id,
       portfolioId: portfolio._id,
@@ -391,6 +425,8 @@ export const resetPlaywrightData = internalMutation({
   args: {},
   returns: v.object({
     accountMappingsDeleted: v.number(),
+    brokerageConnectionSecretsDeleted: v.number(),
+    brokerageConnectionsDeleted: v.number(),
     campaignsDeleted: v.number(),
     inboxTradesDeleted: v.number(),
     retrospectivesDeleted: v.number(),
@@ -403,6 +439,22 @@ export const resetPlaywrightData = internalMutation({
   }),
   handler: async (ctx) => {
     const ownerId = getPlaywrightOwnerId();
+    const brokerageConnections = await ctx.db
+      .query("brokerageConnections")
+      .withIndex("by_ownerId", (q) => q.eq("ownerId", ownerId))
+      .collect();
+    const brokerageConnectionSecrets = (
+      await Promise.all(
+        brokerageConnections.map((connection) =>
+          ctx.db
+            .query("brokerageConnectionSecrets")
+            .withIndex("by_connectionId", (q) =>
+              q.eq("connectionId", connection._id),
+            )
+            .unique(),
+        ),
+      )
+    ).filter((secret) => secret !== null);
     const notes = await ctx.db
       .query("notes")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
@@ -446,6 +498,12 @@ export const resetPlaywrightData = internalMutation({
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
       .collect();
 
+    for (const doc of brokerageConnectionSecrets) {
+      await ctx.db.delete(doc._id);
+    }
+    for (const doc of brokerageConnections) {
+      await ctx.db.delete(doc._id);
+    }
     for (const doc of notes) {
       await ctx.db.delete(doc._id);
     }
@@ -479,6 +537,8 @@ export const resetPlaywrightData = internalMutation({
 
     return {
       accountMappingsDeleted: accountMappings.length,
+      brokerageConnectionSecretsDeleted: brokerageConnectionSecrets.length,
+      brokerageConnectionsDeleted: brokerageConnections.length,
       campaignsDeleted: campaigns.length,
       inboxTradesDeleted: inboxTrades.length,
       notesDeleted: notes.length,
@@ -489,6 +549,34 @@ export const resetPlaywrightData = internalMutation({
       tradesDeleted: trades.length,
       watchlistDeleted: watchlistItems.length,
     };
+  },
+});
+
+export const setBrokerageConnectionMetadataFixture = internalMutation({
+  args: {
+    state: v.union(v.literal("persisted"), v.literal("unset")),
+  },
+  returns: v.union(v.literal("persisted"), v.literal("unset")),
+  handler: async (ctx, args) => {
+    const ownerId = getPlaywrightOwnerId();
+    const connection = await ctx.db
+      .query("brokerageConnections")
+      .withIndex("by_ownerId_and_source", (q) =>
+        q.eq("ownerId", ownerId).eq("source", "ibkr"),
+      )
+      .unique();
+    if (!connection) {
+      throw new ConvexError("Playwright brokerage connection is not seeded.");
+    }
+    const fixture = E2E_SMOKE_FIXTURES.brokerageConnection;
+    await ctx.db.patch(connection._id, {
+      accountId: args.state === "persisted" ? fixture.accountId : undefined,
+      label: args.state === "persisted" ? fixture.label : undefined,
+      tokenExpiresAt:
+        args.state === "persisted" ? fixture.tokenExpiresAt : undefined,
+      updatedAt: Date.now(),
+    });
+    return args.state;
   },
 });
 

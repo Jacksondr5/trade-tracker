@@ -30,13 +30,8 @@ const connectionSchema = z.object({
   accountId: z
     .string()
     .trim()
-    .min(1, "Account ID is required; use Clear to remove it")
     .max(40, "Account ID must be 40 characters or less"),
-  label: z
-    .string()
-    .trim()
-    .min(1, "Label is required; use Clear to remove it")
-    .max(80, "Label must be 80 characters or less"),
+  label: z.string().trim().max(80, "Label must be 80 characters or less"),
   queryId: z
     .string()
     .trim()
@@ -89,14 +84,49 @@ function toEndOfUtcDay(date: string): number {
 
 function toOptionalStringPatch(args: {
   cleared: boolean;
+  fieldName: string;
   persistedValue: string | undefined;
   value: string;
 }) {
   if (args.cleared) return { kind: "clear" as const };
   const value = args.value.trim();
+  if (!value) {
+    if (args.persistedValue === undefined) return undefined;
+    throw new Error(
+      `${args.fieldName} cannot be empty; use Clear to remove it`,
+    );
+  }
   return value === args.persistedValue
     ? undefined
     : { kind: "set" as const, value };
+}
+
+function validateOptionalMetadataFields(args: {
+  cleared: { accountId: boolean; label: boolean };
+  persisted: { accountId: string | undefined; label: string | undefined };
+  value: ConnectionFormValues;
+}) {
+  const result = connectionSchema.safeParse(args.value);
+  const fieldErrors = result.success
+    ? {}
+    : { ...result.error.flatten().fieldErrors };
+  if (
+    args.persisted.accountId !== undefined &&
+    !args.cleared.accountId &&
+    !args.value.accountId.trim()
+  ) {
+    fieldErrors.accountId = [
+      "Account ID cannot be empty; use Clear to remove it",
+    ];
+  }
+  if (
+    args.persisted.label !== undefined &&
+    !args.cleared.label &&
+    !args.value.label.trim()
+  ) {
+    fieldErrors.label = ["Label cannot be empty; use Clear to remove it"];
+  }
+  return Object.keys(fieldErrors).length === 0 ? undefined : fieldErrors;
 }
 
 export function BrokerageSyncPanel({
@@ -156,10 +186,15 @@ export function BrokerageSyncPanel({
   const form = useAppForm({
     defaultValues: connectionFormValues satisfies ConnectionFormValues,
     validators: {
-      onChange: ({ value }) => {
-        const result = connectionSchema.safeParse(value);
-        return result.success ? undefined : result.error.flatten().fieldErrors;
-      },
+      onChange: ({ value }) =>
+        validateOptionalMetadataFields({
+          cleared: clearedMetadata,
+          persisted: {
+            accountId: connection?.accountId,
+            label: connection?.label,
+          },
+          value,
+        }),
     },
     onSubmit: async ({ value }) => {
       setFeedback(null);
@@ -168,11 +203,13 @@ export function BrokerageSyncPanel({
         const token = parsed.token.trim();
         const accountId = toOptionalStringPatch({
           cleared: clearedMetadata.accountId,
+          fieldName: "Account ID",
           persistedValue: connection?.accountId,
           value: parsed.accountId,
         });
         const label = toOptionalStringPatch({
           cleared: clearedMetadata.label,
+          fieldName: "Label",
           persistedValue: connection?.label,
           value: parsed.label,
         });
@@ -247,6 +284,18 @@ export function BrokerageSyncPanel({
     setClearedMetadata({ accountId: false, label: false });
     setIsReplacingToken(!connection?.tokenConfigured);
     setIsEditing((current) => !current);
+  };
+
+  const handleMetadataClearToggle = (field: "accountId" | "label") => {
+    const persistedValue = connection?.[field];
+    if (persistedValue === undefined) return;
+    if (!clearedMetadata[field]) {
+      form.setFieldValue(field, persistedValue);
+    }
+    setClearedMetadata((current) => ({
+      ...current,
+      [field]: !current[field],
+    }));
   };
 
   const handleConnectionStatusChange = async () => {
@@ -495,12 +544,7 @@ export function BrokerageSyncPanel({
                                 ? IMPORTS_INDEX_TEST_IDS.brokerageConnectionLabelUndoButton
                                 : IMPORTS_INDEX_TEST_IDS.brokerageConnectionLabelClearButton
                             }
-                            onClick={() =>
-                              setClearedMetadata((current) => ({
-                                ...current,
-                                label: !current.label,
-                              }))
-                            }
+                            onClick={() => handleMetadataClearToggle("label")}
                             size="sm"
                             type="button"
                             variant="link"
@@ -539,10 +583,7 @@ export function BrokerageSyncPanel({
                                 : IMPORTS_INDEX_TEST_IDS.brokerageConnectionAccountIdClearButton
                             }
                             onClick={() =>
-                              setClearedMetadata((current) => ({
-                                ...current,
-                                accountId: !current.accountId,
-                              }))
+                              handleMetadataClearToggle("accountId")
                             }
                             size="sm"
                             type="button"

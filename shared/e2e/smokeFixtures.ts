@@ -1,5 +1,6 @@
-const TRADES_VIEWER_MATCH_DATES = Array.from({ length: 12 }, (_, index) =>
-  Date.parse("2026-01-01T14:30:00.000Z") - index * 86_400_000,
+const TRADES_VIEWER_MATCH_DATES = Array.from(
+  { length: 12 },
+  (_, index) => Date.parse("2026-01-01T14:30:00.000Z") - index * 86_400_000,
 );
 
 const TRADES_VIEWER_MATCH_TRADES = TRADES_VIEWER_MATCH_DATES.map(
@@ -31,6 +32,12 @@ const TRADES_VIEWER_FILLER_TRADES = Array.from({ length: 55 }, (_, index) => ({
 }));
 
 export const E2E_SMOKE_FIXTURES = {
+  brokerageConnection: {
+    accountId: "U-E2E-123456",
+    label: "E2E IBKR connection",
+    queryId: "987654",
+    tokenExpiresAt: Date.parse("2027-12-31T23:59:59.999Z"),
+  },
   campaign: {
     name: "E2E Macro Rotation",
     status: "active" as const,
