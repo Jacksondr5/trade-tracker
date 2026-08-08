@@ -54,14 +54,16 @@ pnpm install
 
 ## Playwright Testing
 
-Use `playwright-interactive` first for UI work in this repo. It is the default because it keeps a persistent browser session alive through `js_repl`, which is better for iterative frontend development and repeated post-edit verification. Only fall back to `playwright` CLI if the interactive workflow fails, the `js_repl` session becomes unhealthy, or the task is intentionally a one-off CLI-style check. If you fallback, flag this to the user as an issue that needs to be fixed.
+When the harness provides `js_repl`, use `playwright-interactive` first for UI work in this repo. It is the Codex default because it keeps a persistent browser session alive, which is better for iterative frontend development and repeated post-edit verification. Harnesses without `js_repl` should use the `playwright` CLI skill directly; that is expected behavior, not a fallback failure. When `js_repl` is available, fall back to the CLI only if the interactive workflow fails, the session becomes unhealthy, or the task is intentionally a one-off CLI-style check. If an available interactive workflow fails, flag that failure to the user.
 
 Shared rules:
 
 - Start the app first: `pnpm dev` and `pnpm convex dev`
 - If the agent starts Next.js itself, read the `pnpm dev` output and capture the actual local URL/port that Next assigned
 - If the server is already running, verify the active local URL/port before opening Playwright; do not assume `3000`
-- For Playwright-based work, prefer `127.0.0.1` over `localhost` when both are available
+- Reuse the exact host and port recorded in the saved auth state when possible; `localhost` and `127.0.0.1` are different origins for Clerk state
+- If the running app uses a different origin from the saved auth state, refresh authentication on that origin and save the new state rather than switching hosts and expecting the old state to remain valid
+- Set `PLAYWRIGHT_BASE_URL` (preferred) or `APP_URL` to that exact origin before running `pnpm test:e2e:setup` or another Playwright command; the test helpers intentionally fail when neither is configured
 - Playwright credentials live in `.env.local` as `PLAYWRIGHT_USERNAME` and `PLAYWRIGHT_PASSWORD`
 - Standard shared auth state file: `output/playwright/auth.json`
 - Preferred auth refresh command: `pnpm test:e2e:setup`
@@ -93,7 +95,7 @@ Use this first for UI tasks, especially when the agent expects to make code edit
 - Save refreshed auth state back to `output/playwright/auth.json` after a manual login succeeds
 
 ```js
-var TARGET_URL = "http://127.0.0.1:3000"; // Replace with the actual detected local URL.
+var TARGET_URL = "http://127.0.0.1:3000"; // Current saved-auth origin; change only when using auth refreshed for another detected origin.
 
 await context.storageState({ path: "output/playwright/auth.json" });
 
@@ -105,11 +107,11 @@ page = await context.newPage();
 await page.goto(TARGET_URL, { waitUntil: "domcontentloaded" });
 ```
 
-### `playwright` CLI Fallback
+### `playwright` CLI Workflow
 
-Use this only if `playwright-interactive` fails, the `js_repl` session is unavailable, or the interactive browser state becomes unhealthy.
+Use this directly on harnesses without `js_repl`. On harnesses with `js_repl`, use it if `playwright-interactive` fails, the interactive browser state becomes unhealthy, or the task is intentionally a one-off CLI-style check.
 
-- Invoke the skill wrapper directly: `"$HOME/.codex/skills/playwright/scripts/playwright_cli.sh"`
+- Invoke the shared skill wrapper directly: `"$HOME/.agents/skills/playwright/scripts/playwright_cli.sh"`
 - The wrapper must be executable; if direct execution fails, fix the file permissions before continuing
 - Use the actual detected local URL in every CLI command; do not hardcode `3000` if Next started on another port
 - Prefer headed mode for local debugging
@@ -119,9 +121,9 @@ Use this only if `playwright-interactive` fails, the `js_repl` session is unavai
 - Load `output/playwright/auth.json` before doing a manual login if the file exists
 
 ```bash
-export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
-export PWCLI="$CODEX_HOME/skills/playwright/scripts/playwright_cli.sh"
-export APP_URL="http://127.0.0.1:3000" # Replace with the actual detected local URL.
+export PWCLI="$HOME/.agents/skills/playwright/scripts/playwright_cli.sh"
+export PLAYWRIGHT_BASE_URL="http://127.0.0.1:3000" # Current saved-auth origin; replace if auth is refreshed elsewhere.
+export APP_URL="$PLAYWRIGHT_BASE_URL"
 source .env.local
 
 "$PWCLI" open "$APP_URL" --headed
@@ -143,9 +145,21 @@ Notes:
 - If auth restoration behaves unexpectedly, confirm the agent is using the correct detected origin because cookies are origin-specific
 
 <!-- convex-ai-start -->
+
 This project uses [Convex](https://convex.dev) as its backend.
 
-When working on Convex code, **always read `convex/_generated/ai/guidelines.md` first** for important guidelines on how to correctly use Convex APIs and patterns. The file contains rules that override what you may have learned about Convex from training data.
+When working on Convex code, **always read
+`convex/_generated/ai/guidelines.md` first** for important guidelines on
+how to correctly use Convex APIs and patterns. The file contains rules that
+override what you may have learned about Convex from training data.
 
-Convex agent skills for common tasks can be installed by running `npx convex ai-files install`.
+Convex agent skills for common tasks can be installed by running
+`npx convex ai-files install`.
+
 <!-- convex-ai-end -->
+
+## Shared Agent Skills
+
+Convex agent skills are intentionally installed at user scope through the shared `npx skills` store, not inside this repository. The empty `aiFiles.skills.agents` list in `convex.json` prevents `npx convex dev` and `npx convex ai-files install` from recreating repo-local skill copies. Accordingly, `npx convex ai-files status` may report that agent skills are not installed even though the approved global skills are available; do not “fix” that warning by adding repo-local agents. Continue using `npx convex ai-files update` to refresh the generated guidelines and managed documentation section.
+
+The generated guidelines show Convex's newer table-scoped database calls, but existing two-argument calls such as `ctx.db.patch(id, value)` and `ctx.db.delete(id)` remain valid in this repository. Preserve the surrounding module's established form; do not convert call sites opportunistically in unrelated changes.

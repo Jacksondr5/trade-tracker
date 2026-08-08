@@ -1,4 +1,8 @@
 reviews:
   path_filters:
-    - "!.agents"
-    - "!skills"
+    # Vendor-managed agent skills and generated guidance are reviewed upstream.
+    - "!.agents/**"
+    - "!.claude/skills/**"
+    - "!skills/**"
+    - "!skills-lock.json"
+    - "!convex/_generated/ai/**"
