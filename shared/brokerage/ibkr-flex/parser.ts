@@ -330,6 +330,7 @@ export function parseIbkrFlexActivityXml(xml: string): IbkrFlexParseResult {
     cashSnapshots: [],
     errors: [],
     positionSnapshots: [],
+    reportAccountIds: [],
     trades: [],
     warnings: [],
   };
@@ -351,7 +352,14 @@ export function parseIbkrFlexActivityXml(xml: string): IbkrFlexParseResult {
     return { ...result, errors: ["No FlexStatement section found"] };
   }
 
+  const reportAccountIds = new Set<string>();
   for (const statement of statements) {
+    const statementAccountId = firstText(statement, [
+      "accountId",
+      "acctId",
+      "ibAccountId",
+    ]);
+    if (statementAccountId) reportAccountIds.add(statementAccountId);
     const reportDate = reportDateFromStatement(statement);
     if (!reportDate) {
       result.errors.push("FlexStatement is missing a report date");
@@ -402,5 +410,6 @@ export function parseIbkrFlexActivityXml(xml: string): IbkrFlexParseResult {
     }
   }
 
+  result.reportAccountIds = Array.from(reportAccountIds);
   return result;
 }

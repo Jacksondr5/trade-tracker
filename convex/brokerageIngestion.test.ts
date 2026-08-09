@@ -9,7 +9,6 @@ import {
   validateBrokerageIngestFlexReportBody,
 } from "./http";
 import schema from "./schema";
-import { E2E_SMOKE_FIXTURES } from "../shared/e2e/smokeFixtures";
 
 interface ImportMetaWithGlob extends ImportMeta {
   glob(pattern: string | string[]): Record<string, () => Promise<unknown>>;
@@ -20,10 +19,6 @@ const modules = (import.meta as ImportMetaWithGlob).glob([
   "!./**/*.test.ts",
   "!./**/*.spec.ts",
 ]);
-const BRIDGE_EXPECTED_ACCOUNT_IDS = [
-  E2E_SMOKE_FIXTURES.brokerageConnection.accountId,
-  "U-E2E-654321",
-];
 
 function stubTwelveDataResolutionFetch() {
   vi.stubGlobal(
@@ -81,7 +76,7 @@ describe("brokerage ingestion", () => {
     return await asUser().mutation(
       api.brokerageIngestion.upsertIbkrConnection,
       {
-        accountId: { kind: "set", value: "U1234567" },
+        expectedAccountIds: { kind: "set", value: ["U1234567"] },
         label: { kind: "set", value: "IBKR Main" },
         queryId: "123456",
       },
@@ -144,6 +139,7 @@ describe("brokerage ingestion", () => {
       quantity: number;
       ticker?: string;
     }>,
+    reportDate = "2026-05-14",
   ) {
     return await t.mutation(
       internal.brokerageIngestion.ingestParsedFlexReport,
@@ -153,7 +149,7 @@ describe("brokerage ingestion", () => {
           assetType: "stock" as const,
           brokerageAccountId: position.brokerageAccountId ?? "U1234567",
           quantity: position.quantity,
-          reportDate: "2026-05-14",
+          reportDate,
           ticker: position.ticker ?? "AAPL",
         })),
         syncRunId,
@@ -175,7 +171,10 @@ describe("brokerage ingestion", () => {
     const sameConnectionId = await asUser().mutation(
       api.brokerageIngestion.upsertIbkrConnection,
       {
-        accountId: { kind: "set", value: "U1234567" },
+        expectedAccountIds: {
+          kind: "set",
+          value: [" U1234567 ", "U7654321", "U1234567"],
+        },
         label: { kind: "set", value: "IBKR Updated" },
         queryId: "654321",
       },
@@ -188,61 +187,19 @@ describe("brokerage ingestion", () => {
     expect(sameConnectionId).toBe(connectionId);
     expect(status.connections).toHaveLength(1);
     expect(status.connections[0]).toMatchObject({
-      accountId: "U1234567",
+      expectedAccountIds: ["U1234567", "U7654321"],
       label: "IBKR Updated",
       queryId: "654321",
       source: "ibkr",
       status: "active",
     });
-    expect(status.connections[0]).not.toHaveProperty("expectedAccountIds");
     const storedConnection = await t.run(async (ctx) =>
       ctx.db.get(connectionId),
     );
     expect(storedConnection).toMatchObject({
-      expectedAccountIds: ["U1234567"],
+      expectedAccountIds: ["U1234567", "U7654321"],
     });
     expect(storedConnection).not.toHaveProperty("accountId");
-  });
-
-  it("prefers canonical metadata and replaces it through the legacy account contract", async () => {
-    const fixture = E2E_SMOKE_FIXTURES.brokerageConnection;
-    const connectionId = await t.run(async (ctx) => {
-      return await ctx.db.insert("brokerageConnections", {
-        accountId: "ULEGACY",
-        createdAt: 1,
-        expectedAccountIds: BRIDGE_EXPECTED_ACCOUNT_IDS,
-        ownerId,
-        queryId: "123456",
-        source: "ibkr",
-        status: "active",
-        updatedAt: 1,
-      });
-    });
-
-    const before = await asUser().query(
-      api.brokerageIngestion.getBrokerageIngestionStatus,
-      {},
-    );
-    expect(before.connections[0]?.accountId).toBe(
-      BRIDGE_EXPECTED_ACCOUNT_IDS[0],
-    );
-
-    await asUser().mutation(api.brokerageIngestion.upsertIbkrConnection, {
-      accountId: { kind: "set", value: fixture.accountId },
-    });
-
-    const storedConnection = await t.run(async (ctx) =>
-      ctx.db.get(connectionId),
-    );
-    expect(storedConnection).toMatchObject({
-      expectedAccountIds: [fixture.accountId],
-    });
-    expect(storedConnection).not.toHaveProperty("accountId");
-    const after = await asUser().query(
-      api.brokerageIngestion.getBrokerageIngestionStatus,
-      {},
-    );
-    expect(after.connections[0]?.accountId).toBe(fixture.accountId);
   });
 
   it("preserves existing IBKR credentials when omitted in upsert updates", async () => {
@@ -270,7 +227,7 @@ describe("brokerage ingestion", () => {
     const connectionId = await createConnection();
 
     await asUser().mutation(api.brokerageIngestion.upsertIbkrConnection, {
-      accountId: { kind: "clear" },
+      expectedAccountIds: { kind: "clear" },
       label: { kind: "clear" },
     });
 
@@ -292,6 +249,11 @@ describe("brokerage ingestion", () => {
         label: { kind: "set", value: "   " },
       }),
     ).rejects.toThrow("Label cannot be empty");
+    await expect(
+      asUser().mutation(api.brokerageIngestion.upsertIbkrConnection, {
+        expectedAccountIds: { kind: "set", value: [] },
+      }),
+    ).rejects.toThrow("Expected account IDs cannot be empty");
   });
 
   it("returns the operational details needed to review brokerage ingestion", async () => {
@@ -538,6 +500,132 @@ describe("brokerage ingestion", () => {
       expect(syncRun).not.toHaveProperty("referenceCode");
     },
   );
+
+  it("force-requeues a succeeded sync run while the default path reuses it", async () => {
+    const connectionId = await createConnection();
+    const first = await t.mutation(
+      internal.brokerageIngestion.beginSyncRunForConnection,
+      {
+        connectionId,
+        reportDate: "2026-05-14",
+        reportType: "activity",
+      },
+    );
+    const storageId = await t.action(async (ctx) =>
+      ctx.storage.store(new Blob(["old report"])),
+    );
+    const rawReportId = await t.mutation(
+      internal.brokerageIngestion.storeRawReportReference,
+      {
+        byteLength: 10,
+        contentHash: "old-hash",
+        storageId,
+        syncRunId: first.syncRunId,
+      },
+    );
+    await t.run(async (ctx) => {
+      await ctx.db.patch(first.syncRunId, {
+        completedAt: Date.now(),
+        referenceCode: "stale-reference",
+        status: "succeeded",
+      });
+    });
+
+    await expect(
+      t.mutation(internal.brokerageIngestion.beginSyncRunForConnection, {
+        connectionId,
+        reportDate: "2026-05-14",
+        reportType: "activity",
+      }),
+    ).resolves.toMatchObject({ created: false, syncRunId: first.syncRunId });
+
+    await expect(
+      t.mutation(internal.brokerageIngestion.beginSyncRunForConnection, {
+        connectionId,
+        force: true,
+        reportDate: "2026-05-14",
+        reportType: "activity",
+      }),
+    ).resolves.toMatchObject({
+      created: true,
+      previousRawReportId: rawReportId,
+      syncRunId: first.syncRunId,
+    });
+    const requeuedRun = await t.run(async (ctx) => ctx.db.get(first.syncRunId));
+    expect(requeuedRun).toMatchObject({ status: "queued" });
+    expect(requeuedRun).not.toHaveProperty("rawReportId");
+    expect(requeuedRun).not.toHaveProperty("completedAt");
+    expect(requeuedRun).not.toHaveProperty("referenceCode");
+  });
+
+  it.each([
+    "queued",
+    "requesting",
+    "waiting_for_statement",
+    "processing",
+  ] as const)(
+    "does not force-reclaim an in-progress %s sync run",
+    async (status) => {
+      const connectionId = await createConnection();
+      const first = await t.mutation(
+        internal.brokerageIngestion.beginSyncRunForConnection,
+        {
+          connectionId,
+          reportDate: "2026-05-14",
+          reportType: "activity",
+        },
+      );
+      await t.run(async (ctx) => {
+        await ctx.db.patch(first.syncRunId, { status });
+      });
+
+      await expect(
+        t.mutation(internal.brokerageIngestion.beginSyncRunForConnection, {
+          connectionId,
+          force: true,
+          reportDate: "2026-05-14",
+          reportType: "activity",
+        }),
+      ).resolves.toMatchObject({ created: false, syncRunId: first.syncRunId });
+      await expect(
+        t.run(async (ctx) => ctx.db.get(first.syncRunId)),
+      ).resolves.toMatchObject({ status });
+    },
+  );
+
+  it("force-requeues a succeeded run and reactivates its errored connection", async () => {
+    const connectionId = await createConnection();
+    const first = await t.mutation(
+      internal.brokerageIngestion.beginSyncRunForConnection,
+      {
+        connectionId,
+        reportDate: "2026-05-14",
+        reportType: "activity",
+      },
+    );
+    await t.run(async (ctx) => {
+      await ctx.db.patch(first.syncRunId, {
+        completedAt: Date.now(),
+        status: "succeeded",
+      });
+      await ctx.db.patch(connectionId, {
+        connectionError: "Earlier completeness failure",
+        status: "error",
+      });
+    });
+
+    await expect(
+      t.mutation(internal.brokerageIngestion.beginSyncRunForConnection, {
+        connectionId,
+        force: true,
+        reportDate: "2026-05-14",
+        reportType: "activity",
+      }),
+    ).resolves.toMatchObject({ created: true, syncRunId: first.syncRunId });
+    await expect(
+      t.run(async (ctx) => ctx.db.get(connectionId)),
+    ).resolves.toMatchObject({ status: "active" });
+  });
 
   it("blocks starting a sync run for paused connections", async () => {
     const connectionId = await createConnection();
@@ -790,23 +878,122 @@ describe("brokerage ingestion", () => {
     });
   });
 
-  it("resolves open position reconciliation issues when later snapshots match", async () => {
+  it("keeps one persistent discrepancy across report dates", async () => {
     const connectionId = await createConnection();
-    const syncRunId = await beginActivitySyncRun(connectionId);
+    const firstSyncRunId = await beginActivitySyncRun(
+      connectionId,
+      "2026-05-14",
+    );
     await insertAcceptedTrade({ quantity: 10 });
-    await ingestPositionSnapshots(syncRunId, [{ quantity: 8 }]);
+    await ingestPositionSnapshots(
+      firstSyncRunId,
+      [{ quantity: 8 }],
+      "2026-05-14",
+    );
+    const [firstIssue] = await listOpenReconciliationIssues();
 
-    await ingestPositionSnapshots(syncRunId, [{ quantity: 10 }]);
+    const secondSyncRunId = await beginActivitySyncRun(
+      connectionId,
+      "2026-05-15",
+    );
+    await ingestPositionSnapshots(
+      secondSyncRunId,
+      [{ quantity: 8 }],
+      "2026-05-15",
+    );
 
-    const issues = await t.run(async (ctx) => {
-      return await ctx.db.query("brokerageReconciliationIssues").collect();
-    });
+    const issues = await t.run(async (ctx) =>
+      ctx.db.query("brokerageReconciliationIssues").collect(),
+    );
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatchObject({
+      _id: firstIssue?._id,
       issueType: "position_mismatch",
+      reportDate: "2026-05-15",
+      status: "open",
+      syncRunId: secondSyncRunId,
+    });
+  });
+
+  it("resolves an earlier missing position when it returns on a later date", async () => {
+    const connectionId = await createConnection();
+    const firstSyncRunId = await beginActivitySyncRun(
+      connectionId,
+      "2026-05-14",
+    );
+    await insertAcceptedTrade({ quantity: 10 });
+    await ingestPositionSnapshots(firstSyncRunId, [], "2026-05-14");
+
+    const secondSyncRunId = await beginActivitySyncRun(
+      connectionId,
+      "2026-05-15",
+    );
+    await ingestPositionSnapshots(
+      secondSyncRunId,
+      [{ quantity: 10 }],
+      "2026-05-15",
+    );
+
+    const issues = await t.run(async (ctx) =>
+      ctx.db.query("brokerageReconciliationIssues").collect(),
+    );
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({
+      issueType: "missing_brokerage_position",
       status: "resolved",
+      syncRunId: secondSyncRunId,
     });
     expect(issues[0].resolvedAt).toEqual(expect.any(Number));
+  });
+
+  it("supersedes corrected issue types without clearing unrelated discrepancies", async () => {
+    const connectionId = await createConnection();
+    const firstSyncRunId = await beginActivitySyncRun(
+      connectionId,
+      "2026-05-14",
+    );
+    await insertAcceptedTrade({ quantity: 10, ticker: "AAPL" });
+    await insertAcceptedTrade({ quantity: 5, ticker: "AA" });
+    await ingestPositionSnapshots(firstSyncRunId, [], "2026-05-14");
+
+    const secondSyncRunId = await beginActivitySyncRun(
+      connectionId,
+      "2026-05-15",
+    );
+    await ingestPositionSnapshots(
+      secondSyncRunId,
+      [{ quantity: 8, ticker: "AAPL" }],
+      "2026-05-15",
+    );
+
+    const issues = await t.run(async (ctx) =>
+      ctx.db.query("brokerageReconciliationIssues").collect(),
+    );
+    const openIssues = issues.filter((issue) => issue.status === "open");
+    expect(openIssues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          issueType: "missing_brokerage_position",
+          reportDate: "2026-05-15",
+          ticker: "AA",
+        }),
+        expect.objectContaining({
+          issueType: "position_mismatch",
+          reportDate: "2026-05-15",
+          ticker: "AAPL",
+        }),
+      ]),
+    );
+    expect(openIssues).toHaveLength(2);
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          issueType: "missing_brokerage_position",
+          status: "resolved",
+          ticker: "AAPL",
+        }),
+      ]),
+    );
   });
 
   it("reports mismatched valuation freshness when open position issues exist", async () => {

@@ -9,7 +9,10 @@ import { parseIbkrFlexActivityXml } from "../shared/brokerage/ibkr-flex/parser";
 import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { encryptBrokerageToken } from "./brokerageSecrets";
-import { storeAndIngestReadyStatement } from "./ibkrFlexWorkflow";
+import {
+  retainIncompleteReport,
+  storeAndIngestReadyStatement,
+} from "./ibkrFlexWorkflow";
 import schema from "./schema";
 
 interface ImportMetaWithGlob extends ImportMeta {
@@ -71,8 +74,38 @@ const readyXml = `
   </FlexQueryResponse>
 `;
 
+const multiAccountReadyXml = `
+  <FlexQueryResponse>
+    <FlexStatements count="2">
+      <FlexStatement accountId="U1111111" toDate="20260514">
+        <Trades></Trades>
+        <OpenPositions></OpenPositions>
+        <CashReport>
+          <CashReportCurrency accountId="U1111111" currency="BASE_SUMMARY" endingCash="75.00" />
+        </CashReport>
+      </FlexStatement>
+      <FlexStatement accountId="U2222222" toDate="20260514">
+        <Trades>
+          <AssetSummary accountId="U2222222" assetCategory="STK" symbol="" quantity="0" tradePrice="" currency="USD" />
+          <Trade accountId="U2222222" assetCategory="STK" symbol="MSFT" dateTime="20260514;103012" buySell="SELL" openCloseIndicator="C" quantity="-2" tradePrice="420.00" ibExecID="exec-2" currency="USD" />
+        </Trades>
+        <OpenPositions>
+          <OpenPosition accountId="U2222222" assetCategory="STK" symbol="MSFT" position="3" positionValue="1260.00" currency="USD" />
+        </OpenPositions>
+        <CashReport>
+          <CashReportCurrency accountId="U2222222" currency="BASE_SUMMARY" endingCash="725.00" />
+        </CashReport>
+      </FlexStatement>
+    </FlexStatements>
+  </FlexQueryResponse>
+`;
+
 const requestedXml =
   "<FlexStatementResponse><Status>Success</Status><ReferenceCode>12345</ReferenceCode></FlexStatementResponse>";
+const changedReadyXml = readyXml.replace(
+  "<FlexStatements>",
+  '<FlexStatements count="1">',
+);
 const encryptionKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
 describe("IBKR Flex Convex workflow", () => {
@@ -102,11 +135,12 @@ describe("IBKR Flex Convex workflow", () => {
   async function createConnection(
     ownerId = "owner-a",
     token: string | null = `${ownerId}-secret-token`,
+    expectedAccountIds?: string[],
   ): Promise<Id<"brokerageConnections">> {
     const connectionId = await t.run(async (ctx) => {
       return await ctx.db.insert("brokerageConnections", {
-        accountId: "U1234567",
         createdAt: Date.now(),
+        expectedAccountIds,
         label: "IBKR Main",
         ownerId,
         queryId: "67890",
@@ -132,9 +166,10 @@ describe("IBKR Flex Convex workflow", () => {
     return connectionId;
   }
 
-  async function startWorkflow(maxPollAttempts = 1) {
+  async function startWorkflow(maxPollAttempts = 1, force?: boolean) {
     return await t.mutation(internal.ibkrFlexWorkflow.dailySync, {
       args: {
+        ...(force === undefined ? {} : { force }),
         initialPollIntervalMs: 1_000,
         maxPollAttempts,
         maxPollIntervalMs: 1_000,
@@ -149,7 +184,7 @@ describe("IBKR Flex Convex workflow", () => {
   }
 
   it("durably requests, retrieves, stores, ingests, and completes a report", async () => {
-    await createConnection();
+    await createConnection("owner-a", "owner-a-secret-token", ["U1234567"]);
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(new Response(requestedXml))
@@ -192,6 +227,168 @@ describe("IBKR Flex Convex workflow", () => {
     expect(state.cashSnapshots[0]).toMatchObject({ rowKind: "currency" });
     expect(state.rawReports).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("skips completeness validation when expected accounts are unset", async () => {
+    await createConnection();
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(requestedXml))
+        .mockResolvedValueOnce(new Response(readyXml)),
+    );
+
+    const workflowId = await startWorkflow();
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, { workflowId }),
+    ).resolves.toMatchObject({
+      result: { runsFailed: 0, runsSucceeded: 1, status: "succeeded" },
+      type: "completed",
+    });
+  });
+
+  it("retains the raw report but skips ingestion and reconciliation when an expected account is missing", async () => {
+    const connectionId = await createConnection(
+      "owner-a",
+      "owner-a-secret-token",
+      ["U1234567", "U7654321"],
+    );
+    await t.run(async (ctx) => {
+      await ctx.db.insert("trades", {
+        assetType: "stock",
+        brokerageAccountId: "U7654321",
+        date: Date.UTC(2026, 4, 14, 16),
+        direction: "long",
+        ownerId: "owner-a",
+        price: 100,
+        quantity: 19,
+        side: "buy",
+        source: "ibkr",
+        ticker: "MSFT",
+      });
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(requestedXml))
+        .mockResolvedValueOnce(new Response(readyXml)),
+    );
+
+    const workflowId = await startWorkflow();
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, { workflowId }),
+    ).resolves.toMatchObject({
+      result: { runsFailed: 1, runsSucceeded: 0, status: "failed" },
+      type: "completed",
+    });
+    const state = await t.run(async (ctx) => ({
+      cashSnapshots: await ctx.db.query("brokerageCashSnapshots").collect(),
+      connection: await ctx.db.get(connectionId),
+      inboxTrades: await ctx.db.query("inboxTrades").collect(),
+      positionSnapshots: await ctx.db
+        .query("brokeragePositionSnapshots")
+        .collect(),
+      rawReports: await ctx.db.query("brokerageRawReports").collect(),
+      reconciliationIssues: await ctx.db
+        .query("brokerageReconciliationIssues")
+        .collect(),
+      syncRuns: await ctx.db.query("brokerageSyncRuns").collect(),
+    }));
+    expect(state.syncRuns).toHaveLength(1);
+    expect(state.syncRuns[0]).toMatchObject({
+      errorMessage:
+        "Report is missing expected account(s): U7654321. Report contained: U1234567.",
+      importedTrades: 0,
+      positionSnapshotCount: 0,
+      reconciliationIssueCount: 0,
+      status: "failed_terminal",
+    });
+    expect(state.connection).toMatchObject({ status: "error" });
+    expect(state.inboxTrades).toEqual([]);
+    expect(state.positionSnapshots).toEqual([]);
+    expect(state.cashSnapshots).toEqual([]);
+    expect(state.reconciliationIssues).toEqual([]);
+    expect(state.rawReports).toHaveLength(1);
+    expect(state.rawReports[0]).toMatchObject({
+      byteLength: new TextEncoder().encode(readyXml).byteLength,
+      syncRunId: state.syncRuns[0]?._id,
+    });
+    expect(state.rawReports[0]?.contentHash).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it("keeps completeness failures terminal when raw-report storage also fails", async () => {
+    const connectionId = await createConnection();
+    const { syncRunId } = await t.mutation(
+      internal.brokerageIngestion.beginSyncRunForConnection,
+      {
+        connectionId,
+        reportDate: "2026-05-14",
+        reportType: "activity",
+      },
+    );
+
+    const result = await t.action(async (ctx) =>
+      retainIncompleteReport(
+        ctx,
+        {
+          completenessError:
+            "Report is missing expected account(s): U7654321. Report contained: U1234567.",
+          rawXml: readyXml,
+          reusedPreviousRawReport: false,
+          syncRunId,
+          token: "redacted-token",
+        },
+        async () => {
+          throw new Error("storage unavailable");
+        },
+      ),
+    );
+
+    expect(result).toEqual({
+      errorMessage:
+        "Report is missing expected account(s): U7654321. Report contained: U1234567. Raw report storage failed: storage unavailable",
+      status: "terminal_error",
+    });
+  });
+
+  it("accepts a multi-account report when every expected account is present", async () => {
+    await createConnection("owner-a", "owner-a-secret-token", [
+      "U1111111",
+      "U2222222",
+    ]);
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(requestedXml))
+        .mockResolvedValueOnce(new Response(multiAccountReadyXml)),
+    );
+
+    const workflowId = await startWorkflow();
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, { workflowId }),
+    ).resolves.toMatchObject({
+      result: { runsFailed: 0, runsSucceeded: 1, status: "succeeded" },
+      type: "completed",
+    });
+    const state = await t.run(async (ctx) => ({
+      cashSnapshots: await ctx.db.query("brokerageCashSnapshots").collect(),
+      inboxTrades: await ctx.db.query("inboxTrades").collect(),
+      positionSnapshots: await ctx.db
+        .query("brokeragePositionSnapshots")
+        .collect(),
+    }));
+    expect(state.inboxTrades).toHaveLength(1);
+    expect(state.positionSnapshots).toHaveLength(1);
+    expect(state.cashSnapshots).toHaveLength(2);
   });
 
   it("never persists the plaintext token in workflow arguments or step results", async () => {
@@ -346,6 +543,200 @@ describe("IBKR Flex Convex workflow", () => {
     expect(syncRuns[0]).toMatchObject({ status: "succeeded" });
     expect(syncRuns[0]).not.toHaveProperty("errorMessage");
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("reuses an identical raw report on a non-forced retryable requeue", async () => {
+    await createConnection("owner-a", "owner-a-secret-token", ["U1234567"]);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(requestedXml))
+      .mockResolvedValueOnce(new Response(readyXml));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await startWorkflow();
+    await finishWorkflow();
+    const [firstRun] = await t.run(async (ctx) =>
+      ctx.db.query("brokerageSyncRuns").collect(),
+    );
+    await t.run(async (ctx) => {
+      await ctx.db.patch(firstRun!._id, {
+        completedAt: Date.now(),
+        errorMessage: "Retry after a downstream interruption",
+        status: "failed_retryable",
+      });
+    });
+
+    fetchMock
+      .mockResolvedValueOnce(new Response(requestedXml))
+      .mockResolvedValueOnce(new Response(readyXml));
+    const retryWorkflowId = await startWorkflow();
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, {
+        workflowId: retryWorkflowId,
+      }),
+    ).resolves.toMatchObject({
+      result: { runsFailed: 0, runsSucceeded: 1, status: "succeeded" },
+      type: "completed",
+    });
+    const state = await t.run(async (ctx) => ({
+      cashSnapshots: await ctx.db.query("brokerageCashSnapshots").collect(),
+      inboxTrades: await ctx.db.query("inboxTrades").collect(),
+      positionSnapshots: await ctx.db
+        .query("brokeragePositionSnapshots")
+        .collect(),
+      rawReports: await ctx.db.query("brokerageRawReports").collect(),
+      syncRuns: await ctx.db.query("brokerageSyncRuns").collect(),
+    }));
+    expect(state.syncRuns).toHaveLength(1);
+    expect(state.syncRuns[0]).toMatchObject({
+      importedTrades: 1,
+      positionSnapshotCount: 1,
+      skippedDuplicateTrades: 1,
+      status: "succeeded",
+    });
+    expect(state.syncRuns[0]?.rawReportId).toBe(state.rawReports[0]?._id);
+    expect(state.rawReports).toHaveLength(1);
+    expect(state.inboxTrades).toHaveLength(1);
+    expect(state.positionSnapshots).toHaveLength(1);
+    expect(state.cashSnapshots).toHaveLength(1);
+  });
+
+  it("force-reruns a succeeded date and repoints the audit artifact without duplicating state", async () => {
+    const connectionId = await createConnection(
+      "owner-a",
+      "owner-a-secret-token",
+      ["U1234567"],
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(requestedXml))
+      .mockResolvedValueOnce(new Response(readyXml));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await startWorkflow();
+    await finishWorkflow();
+    const firstState = await t.run(async (ctx) => ({
+      issueIds: (
+        await ctx.db.query("brokerageReconciliationIssues").collect()
+      ).map((issue) => issue._id),
+      rawReports: await ctx.db.query("brokerageRawReports").collect(),
+    }));
+    await t.run(async (ctx) => {
+      await ctx.db.patch(connectionId, {
+        connectionError: "Earlier completeness failure",
+        status: "error",
+      });
+    });
+
+    fetchMock
+      .mockResolvedValueOnce(new Response(requestedXml))
+      .mockResolvedValueOnce(new Response(changedReadyXml));
+    const forcedWorkflowId = await startWorkflow(1, true);
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, {
+        workflowId: forcedWorkflowId,
+      }),
+    ).resolves.toMatchObject({
+      result: { runsFailed: 0, runsSucceeded: 1, status: "succeeded" },
+      type: "completed",
+    });
+    const state = await t.run(async (ctx) => ({
+      cashSnapshots: await ctx.db.query("brokerageCashSnapshots").collect(),
+      inboxTrades: await ctx.db.query("inboxTrades").collect(),
+      positionSnapshots: await ctx.db
+        .query("brokeragePositionSnapshots")
+        .collect(),
+      rawReports: await ctx.db.query("brokerageRawReports").collect(),
+      reconciliationIssues: await ctx.db
+        .query("brokerageReconciliationIssues")
+        .collect(),
+      syncRuns: await ctx.db.query("brokerageSyncRuns").collect(),
+      connection: await ctx.db.get(connectionId),
+    }));
+    expect(state.syncRuns).toHaveLength(1);
+    expect(state.syncRuns[0]).toMatchObject({
+      importedTrades: 1,
+      positionSnapshotCount: 1,
+      skippedDuplicateTrades: 1,
+      status: "succeeded",
+    });
+    expect(state.connection).toMatchObject({ status: "active" });
+    expect(state.inboxTrades).toHaveLength(1);
+    expect(state.positionSnapshots).toHaveLength(1);
+    expect(state.cashSnapshots).toHaveLength(1);
+    expect(state.rawReports).toHaveLength(2);
+    const currentRawReport = state.rawReports.find(
+      (rawReport) => rawReport._id === state.syncRuns[0]?.rawReportId,
+    );
+    expect(currentRawReport).toMatchObject({
+      byteLength: new TextEncoder().encode(changedReadyXml).byteLength,
+    });
+    expect(currentRawReport?.contentHash).not.toBe(
+      firstState.rawReports[0]?.contentHash,
+    );
+    expect(state.reconciliationIssues.map((issue) => issue._id)).toEqual(
+      firstState.issueIds,
+    );
+    expect(state.reconciliationIssues).toHaveLength(firstState.issueIds.length);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("surfaces an identical cached report instead of succeeding a forced re-sync", async () => {
+    await createConnection("owner-a", "owner-a-secret-token", ["U1234567"]);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(requestedXml))
+      .mockResolvedValueOnce(new Response(readyXml));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await startWorkflow();
+    await finishWorkflow();
+
+    fetchMock
+      .mockResolvedValueOnce(new Response(requestedXml))
+      .mockResolvedValueOnce(new Response(readyXml));
+    const forcedWorkflowId = await startWorkflow(1, true);
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, {
+        workflowId: forcedWorkflowId,
+      }),
+    ).resolves.toMatchObject({
+      result: { runsFailed: 1, runsSucceeded: 0, status: "failed" },
+      type: "completed",
+    });
+    const state = await t.run(async (ctx) => ({
+      cashSnapshots: await ctx.db.query("brokerageCashSnapshots").collect(),
+      inboxTrades: await ctx.db.query("inboxTrades").collect(),
+      positionSnapshots: await ctx.db
+        .query("brokeragePositionSnapshots")
+        .collect(),
+      rawReports: await ctx.db.query("brokerageRawReports").collect(),
+      reconciliationIssues: await ctx.db
+        .query("brokerageReconciliationIssues")
+        .collect(),
+      syncRuns: await ctx.db.query("brokerageSyncRuns").collect(),
+    }));
+    expect(state.syncRuns).toHaveLength(1);
+    expect(state.syncRuns[0]).toMatchObject({
+      errorMessage:
+        "Forced re-sync returned an identical report (IBKR served a cached statement). Regenerate it by editing the Flex query, or wait for the reporting period to roll over.",
+      importedTrades: 1,
+      positionSnapshotCount: 1,
+      status: "failed_terminal",
+    });
+    expect(state.inboxTrades).toHaveLength(1);
+    expect(state.positionSnapshots).toHaveLength(1);
+    expect(state.cashSnapshots).toHaveLength(1);
+    expect(state.rawReports).toHaveLength(1);
+    expect(state.syncRuns[0]?.rawReportId).toBe(state.rawReports[0]?._id);
+    expect(state.reconciliationIssues).toHaveLength(2);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it("removes the raw report reference and blob when ingestion fails", async () => {

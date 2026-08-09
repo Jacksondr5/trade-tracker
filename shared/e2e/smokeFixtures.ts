@@ -33,7 +33,7 @@ const TRADES_VIEWER_FILLER_TRADES = Array.from({ length: 55 }, (_, index) => ({
 
 export const E2E_SMOKE_FIXTURES = {
   brokerageConnection: {
-    accountId: "U-E2E-123456",
+    expectedAccountIds: ["U-E2E-123456", "U-E2E-654321"],
     label: "E2E IBKR connection",
     queryId: "987654",
     tokenExpiresAt: Date.parse("2027-12-31T23:59:59.999Z"),

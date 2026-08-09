@@ -335,8 +335,8 @@ async function upsertBrokerageConnection(ctx: MutationCtx, ownerId: string) {
     .unique();
   const now = Date.now();
   const patch = {
-    accountId: fixture.accountId,
     connectionError: undefined,
+    expectedAccountIds: [...fixture.expectedAccountIds],
     label: fixture.label,
     ownerId,
     queryId: fixture.queryId,
@@ -346,10 +346,7 @@ async function upsertBrokerageConnection(ctx: MutationCtx, ownerId: string) {
     updatedAt: now,
   };
   if (existing) {
-    await ctx.db.patch(existing._id, {
-      ...patch,
-      expectedAccountIds: undefined,
-    });
+    await ctx.db.patch(existing._id, patch);
     return (await ctx.db.get(existing._id))!;
   }
   const connectionId = await ctx.db.insert("brokerageConnections", {
@@ -573,8 +570,10 @@ export const setBrokerageConnectionMetadataFixture = internalMutation({
     }
     const fixture = E2E_SMOKE_FIXTURES.brokerageConnection;
     await ctx.db.patch(connection._id, {
-      accountId: args.state === "persisted" ? fixture.accountId : undefined,
-      expectedAccountIds: undefined,
+      expectedAccountIds:
+        args.state === "persisted"
+          ? [...fixture.expectedAccountIds]
+          : undefined,
       label: args.state === "persisted" ? fixture.label : undefined,
       tokenExpiresAt:
         args.state === "persisted" ? fixture.tokenExpiresAt : undefined,

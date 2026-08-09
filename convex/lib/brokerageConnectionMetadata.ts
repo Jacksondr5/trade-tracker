@@ -5,8 +5,17 @@ export const optionalMetadataStringPatchValidator = v.union(
   v.object({ kind: v.literal("clear") }),
 );
 
+export const optionalMetadataStringArrayPatchValidator = v.union(
+  v.object({ kind: v.literal("set"), value: v.array(v.string()) }),
+  v.object({ kind: v.literal("clear") }),
+);
+
 export type OptionalMetadataStringPatch = Infer<
   typeof optionalMetadataStringPatchValidator
+>;
+
+export type OptionalMetadataStringArrayPatch = Infer<
+  typeof optionalMetadataStringArrayPatchValidator
 >;
 
 export function resolveOptionalMetadataStringPatch(args: {
@@ -29,21 +38,33 @@ export function resolveOptionalMetadataStringPatch(args: {
   return value;
 }
 
-export function resolveLegacyAccountIdBridgePatch(
-  patch: OptionalMetadataStringPatch,
-): {
-  accountId: undefined;
-  expectedAccountIds: string[] | undefined;
-} {
-  const accountId = resolveOptionalMetadataStringPatch({
-    fieldName: "Account ID",
-    maxLength: 40,
-    patch,
-  });
-  return {
-    accountId: undefined,
-    expectedAccountIds: accountId === undefined ? undefined : [accountId],
-  };
+export function resolveOptionalMetadataStringArrayPatch(args: {
+  fieldName: string;
+  itemName: string;
+  maxItemLength: number;
+  maxItems: number;
+  patch: OptionalMetadataStringArrayPatch;
+}): string[] | undefined {
+  if (args.patch.kind === "clear") return undefined;
+  const values = Array.from(
+    new Set(args.patch.value.map((value) => value.trim()).filter(Boolean)),
+  );
+  if (values.length === 0) {
+    throw new ConvexError(
+      `${args.fieldName} cannot be empty; use the explicit clear action to remove it`,
+    );
+  }
+  if (values.length > args.maxItems) {
+    throw new ConvexError(
+      `${args.fieldName} must contain ${args.maxItems} items or fewer`,
+    );
+  }
+  if (values.some((value) => value.length > args.maxItemLength)) {
+    throw new ConvexError(
+      `Each ${args.itemName} must be ${args.maxItemLength} characters or less`,
+    );
+  }
+  return values;
 }
 
 export function validateTokenExpiresAt(value: number): number {

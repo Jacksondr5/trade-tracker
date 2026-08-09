@@ -6,6 +6,25 @@ This document records settled product decisions: what was decided, when, and why
 
 Add an entry when a decision is genuinely settled. Do not record open questions or proposals here.
 
+## 2026-08-09 — Partial brokerage reports fail closed and re-syncs must converge
+
+Jackson's first production Flex proof returned only one of two intended IBKR
+accounts but was recorded as successful. The empty partial report then created
+false missing-position issues, and a corrected re-run left the stale raw report
+and contradictory issues attached to the same date. Jackson chose an explicit
+expected-account list on each connection as the completeness boundary: if a
+report omits any configured account, retain the raw report for diagnosis but do
+not ingest or reconcile it. Leaving the list unset keeps the guard opt-in.
+
+Manual force re-sync is the supported recovery path for a terminal or previously
+succeeded keyed run; scheduled runs keep their normal dedupe behavior and an
+in-flight run is never reclaimed. Because IBKR can cache a statement for a
+query and period, an identical forced result is surfaced as a terminal cached-
+report outcome rather than clean success. A changed re-sync repoints the run's
+raw-report audit reference and recomputes persistent reconciliation issues so
+corrected state resolves contradictions without clearing unrelated legitimate
+issues.
+
 ## 2026-08-06 — Brokerage ingestion uses Convex-native durable workflows
 
 Jackson chose to move IBKR Flex orchestration from the planned self-hosted
