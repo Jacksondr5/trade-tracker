@@ -58,7 +58,7 @@ When the harness provides `js_repl`, use `playwright-interactive` first for UI w
 
 Shared rules:
 
-- Start the app first: `pnpm dev` and `pnpm convex dev`
+- Start Next.js with `pnpm dev` and Convex with `npx convex dev`; run them in separate terminals
 - If the agent starts Next.js itself, read the `pnpm dev` output and capture the actual local URL/port that Next assigned
 - If the server is already running, verify the active local URL/port before opening Playwright; do not assume `3000`
 - Reuse the exact host and port recorded in the saved auth state when possible; `localhost` and `127.0.0.1` are different origins for Clerk state
@@ -161,5 +161,7 @@ Convex agent skills for common tasks can be installed by running
 ## Shared Agent Skills
 
 Convex agent skills are intentionally installed at user scope through the shared `npx skills` store, not inside this repository. The empty `aiFiles.skills.agents` list in `convex.json` prevents `npx convex dev` and `npx convex ai-files install` from recreating repo-local skill copies. Accordingly, `npx convex ai-files status` may report that agent skills are not installed even though the approved global skills are available; do not “fix” that warning by adding repo-local agents. Continue using `npx convex ai-files update` to refresh the generated guidelines and managed documentation section.
+
+The user-scoped Convex catalog is curated separately from this repository; `npx convex ai-files install` does not install it while `aiFiles.skills.agents` is empty. Verify the approved home-level selection with `npx skills ls -g`. Do not run `npx skills add get-convex/agent-skills --all --global`: the full upstream bundle includes intentionally excluded broad, noisy, and unavailable workflows.
 
 The generated guidelines show Convex's newer table-scoped database calls, but existing two-argument calls such as `ctx.db.patch(id, value)` and `ctx.db.delete(id)` remain valid in this repository. Preserve the surrounding module's established form; do not convert call sites opportunistically in unrelated changes.
