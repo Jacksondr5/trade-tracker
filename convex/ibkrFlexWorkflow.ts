@@ -168,6 +168,15 @@ type StoreRawReport = (
   },
 ) => Promise<StoredRawReport>;
 
+type RollbackRawReport = (
+  ctx: Pick<ActionCtx, "runMutation">,
+  args: {
+    rawReportId: Id<"brokerageRawReports">;
+    storageId: Id<"_storage">;
+    syncRunId: Id<"brokerageSyncRuns">;
+  },
+) => Promise<boolean>;
+
 type ActionConfig =
   | {
       baseUrl?: string;
@@ -284,11 +293,16 @@ async function sha256Hex(value: string): Promise<string> {
 }
 
 function normalizedAccountIds(accountIds: string[] | undefined): string[] {
-  return Array.from(
-    new Set(
-      (accountIds ?? []).map((accountId) => accountId.trim()).filter(Boolean),
-    ),
-  );
+  const accountIdByComparisonKey = new Map<string, string>();
+  for (const accountId of accountIds ?? []) {
+    const trimmedAccountId = accountId.trim();
+    if (!trimmedAccountId) continue;
+    const comparisonKey = trimmedAccountId.toUpperCase();
+    if (!accountIdByComparisonKey.has(comparisonKey)) {
+      accountIdByComparisonKey.set(comparisonKey, trimmedAccountId);
+    }
+  }
+  return Array.from(accountIdByComparisonKey.values());
 }
 
 export function reportCompletenessError(args: {
@@ -298,9 +312,11 @@ export function reportCompletenessError(args: {
   const expectedAccountIds = normalizedAccountIds(args.expectedAccountIds);
   if (expectedAccountIds.length === 0) return undefined;
   const reportAccountIds = normalizedAccountIds(args.reportAccountIds);
-  const reportAccountIdSet = new Set(reportAccountIds);
+  const reportAccountIdSet = new Set(
+    reportAccountIds.map((accountId) => accountId.toUpperCase()),
+  );
   const missingAccountIds = expectedAccountIds.filter(
-    (accountId) => !reportAccountIdSet.has(accountId),
+    (accountId) => !reportAccountIdSet.has(accountId.toUpperCase()),
   );
   if (missingAccountIds.length === 0) return undefined;
   return `Report is missing expected account(s): ${missingAccountIds.join(
@@ -411,6 +427,12 @@ export async function storeAndIngestReadyStatement(
     token: string;
   },
   ingest: IngestParsedReport = ingestParsedReport,
+  rollback: RollbackRawReport = async (rollbackCtx, rollbackArgs) => {
+    return await rollbackCtx.runMutation(
+      internal.brokerageIngestion.rollbackRawReportReference,
+      rollbackArgs,
+    );
+  },
 ): Promise<IngestionResult> {
   const storedRawReport = await storeRawReport(ctx, args);
   try {
@@ -420,28 +442,28 @@ export async function storeAndIngestReadyStatement(
       storedRawReport,
     );
   } catch (error) {
+    let rolledBack = false;
     try {
-      await ctx.runMutation(
-        internal.brokerageIngestion.rollbackRawReportReference,
-        {
-          rawReportId: storedRawReport.rawReportId,
-          storageId: storedRawReport.storageId,
-          syncRunId: args.syncRunId,
-        },
-      );
+      rolledBack = await rollback(ctx, {
+        rawReportId: storedRawReport.rawReportId,
+        storageId: storedRawReport.storageId,
+        syncRunId: args.syncRunId,
+      });
     } catch (rollbackError) {
       console.error(
         "IBKR Flex raw report rollback failed",
         operationalErrorMessage(rollbackError, args.token),
       );
     }
-    try {
-      await ctx.storage.delete(storedRawReport.storageId);
-    } catch (deleteError) {
-      console.error(
-        "IBKR Flex raw report blob delete failed",
-        operationalErrorMessage(deleteError, args.token),
-      );
+    if (rolledBack) {
+      try {
+        await ctx.storage.delete(storedRawReport.storageId);
+      } catch (deleteError) {
+        console.error(
+          "IBKR Flex raw report blob delete failed",
+          operationalErrorMessage(deleteError, args.token),
+        );
+      }
     }
     throw new Error(operationalErrorMessage(error, args.token));
   }
@@ -874,6 +896,7 @@ export const syncConnection = workflow
 export const dailySync = workflow
   .define({
     args: {
+      connectionId: v.optional(v.id("brokerageConnections")),
       initialPollIntervalMs: v.optional(v.number()),
       force: v.optional(v.boolean()),
       maxPollAttempts: v.optional(v.number()),
@@ -883,7 +906,7 @@ export const dailySync = workflow
     returns: dailyWorkflowResultValidator,
   })
   .handler(async (step, args): Promise<DailyWorkflowResult> => {
-    const connections: Array<{
+    const dueConnections: Array<{
       _id: Id<"brokerageConnections">;
       ownerId: string;
       queryId: string;
@@ -893,6 +916,17 @@ export const dailySync = workflow
       { ...(args.force === true ? { includeError: true } : {}) },
       { name: "list due IBKR connections" },
     );
+    const connections =
+      args.connectionId === undefined
+        ? dueConnections
+        : dueConnections.filter(
+            (connection) => connection._id === args.connectionId,
+          );
+    if (args.connectionId !== undefined && connections.length === 0) {
+      throw new Error(
+        `No eligible IBKR connection matched ${args.connectionId}. The connection must have a Query ID and be active, or be in error with force enabled.`,
+      );
+    }
     const results = await Promise.all(
       connections.map(async (connection) => {
         try {
@@ -950,11 +984,16 @@ async function startDailySync(
   ctx: Parameters<typeof start>[0],
   reportDate: string,
   force?: boolean,
+  connectionId?: Id<"brokerageConnections">,
 ): Promise<WorkflowId> {
   return await start(
     ctx,
     internal.ibkrFlexWorkflow.dailySync,
-    { reportDate, ...(force === undefined ? {} : { force }) },
+    {
+      ...(connectionId === undefined ? {} : { connectionId }),
+      reportDate,
+      ...(force === undefined ? {} : { force }),
+    },
     { startAsync: true },
   );
 }
@@ -988,13 +1027,24 @@ export const dispatchNightlySync = internalMutation({
 });
 
 export const startManualSync = internalMutation({
-  args: { force: v.optional(v.boolean()), reportDate: v.optional(v.string()) },
+  args: {
+    connectionId: v.optional(v.id("brokerageConnections")),
+    force: v.optional(v.boolean()),
+    reportDate: v.optional(v.string()),
+  },
   returns: v.string(),
   handler: async (ctx, args): Promise<string> => {
+    if (args.connectionId !== undefined) {
+      const connection = await ctx.db.get(args.connectionId);
+      if (!connection || connection.source !== "ibkr") {
+        throw new Error(`IBKR connection ${args.connectionId} was not found.`);
+      }
+    }
     return await startDailySync(
       ctx,
       args.reportDate ?? getPriorBusinessDate(Date.now()),
       args.force,
+      args.connectionId,
     );
   },
 });

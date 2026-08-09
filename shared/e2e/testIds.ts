@@ -159,8 +159,8 @@ export const IMPORTS_INDEX_TEST_IDS = {
   brokerageConnectionConfigureButton: "brokerage-connection-configure-button",
   brokerageConnectionExpectedAccountIdsClearButton:
     "brokerage-connection-expected-account-ids-clear-button",
-  brokerageConnectionExpectedAccountIdsInput:
-    "brokerage-connection-expected-account-ids-input",
+  brokerageConnectionExpectedAccountIdsTextarea:
+    "brokerage-connection-expected-account-ids-textarea",
   brokerageConnectionExpectedAccountIdsUndoButton:
     "brokerage-connection-expected-account-ids-undo-button",
   brokerageConnectionForm: "brokerage-connection-form",

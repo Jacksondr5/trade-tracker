@@ -555,11 +555,11 @@ export function getBrokerageConnectionExpectedAccountIdsClearButton(
   );
 }
 
-export function getBrokerageConnectionExpectedAccountIdsInput(
+export function getBrokerageConnectionExpectedAccountIdsTextarea(
   page: Page,
 ): Locator {
   return page.getByTestId(
-    IMPORTS_INDEX_TEST_IDS.brokerageConnectionExpectedAccountIdsInput,
+    IMPORTS_INDEX_TEST_IDS.brokerageConnectionExpectedAccountIdsTextarea,
   );
 }
 

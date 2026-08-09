@@ -526,7 +526,11 @@ describe("brokerage ingestion", () => {
     await t.run(async (ctx) => {
       await ctx.db.patch(first.syncRunId, {
         completedAt: Date.now(),
+        importedTrades: 3,
+        positionSnapshotCount: 4,
+        reconciliationIssueCount: 5,
         referenceCode: "stale-reference",
+        skippedDuplicateTrades: 6,
         status: "succeeded",
       });
     });
@@ -552,7 +556,13 @@ describe("brokerage ingestion", () => {
       syncRunId: first.syncRunId,
     });
     const requeuedRun = await t.run(async (ctx) => ctx.db.get(first.syncRunId));
-    expect(requeuedRun).toMatchObject({ status: "queued" });
+    expect(requeuedRun).toMatchObject({
+      importedTrades: 0,
+      positionSnapshotCount: 0,
+      reconciliationIssueCount: 0,
+      skippedDuplicateTrades: 0,
+      status: "queued",
+    });
     expect(requeuedRun).not.toHaveProperty("rawReportId");
     expect(requeuedRun).not.toHaveProperty("completedAt");
     expect(requeuedRun).not.toHaveProperty("referenceCode");
@@ -625,6 +635,36 @@ describe("brokerage ingestion", () => {
     await expect(
       t.run(async (ctx) => ctx.db.get(connectionId)),
     ).resolves.toMatchObject({ status: "active" });
+  });
+
+  it("force-starts a new report date for an errored connection", async () => {
+    const connectionId = await createConnection();
+    await t.run(async (ctx) => {
+      await ctx.db.patch(connectionId, {
+        connectionError: "Earlier report was incomplete",
+        status: "error",
+      });
+    });
+
+    await expect(
+      t.mutation(internal.brokerageIngestion.beginSyncRunForConnection, {
+        connectionId,
+        force: true,
+        reportDate: "2026-05-15",
+        reportType: "activity",
+      }),
+    ).resolves.toMatchObject({ created: true, ownerId, queryId: "123456" });
+    const state = await t.run(async (ctx) => ({
+      connection: await ctx.db.get(connectionId),
+      syncRuns: await ctx.db.query("brokerageSyncRuns").collect(),
+    }));
+    expect(state.connection).toMatchObject({ status: "active" });
+    expect(state.connection).not.toHaveProperty("connectionError");
+    expect(state.syncRuns).toHaveLength(1);
+    expect(state.syncRuns[0]).toMatchObject({
+      reportDate: "2026-05-15",
+      status: "queued",
+    });
   });
 
   it("blocks starting a sync run for paused connections", async () => {
@@ -1210,11 +1250,13 @@ describe("brokerage ingestion", () => {
       },
     );
 
-    await t.mutation(internal.brokerageIngestion.rollbackRawReportReference, {
-      rawReportId,
-      storageId,
-      syncRunId,
-    });
+    await expect(
+      t.mutation(internal.brokerageIngestion.rollbackRawReportReference, {
+        rawReportId,
+        storageId,
+        syncRunId,
+      }),
+    ).resolves.toBe(true);
 
     const syncRun = await t.run(async (ctx) => await ctx.db.get(syncRunId));
     const rawReport = await t.run(async (ctx) => await ctx.db.get(rawReportId));

@@ -624,9 +624,9 @@ export function BrokerageSyncPanel({
               <div>
                 <form.AppField name="expectedAccountIds">
                   {(field) => (
-                    <field.FieldInput
+                    <field.FieldTextarea
                       dataTestId={
-                        IMPORTS_INDEX_TEST_IDS.brokerageConnectionExpectedAccountIdsInput
+                        IMPORTS_INDEX_TEST_IDS.brokerageConnectionExpectedAccountIdsTextarea
                       }
                       disabled={clearedMetadata.expectedAccountIds}
                       displayValue={
@@ -655,7 +655,11 @@ export function BrokerageSyncPanel({
                           </Button>
                         ) : undefined
                       }
-                      placeholder="U1234567, U7654321"
+                      placeholder={
+                        "U1234567, U7654321\nor one account per line"
+                      }
+                      resize="vertical"
+                      rows={2}
                     />
                   )}
                 </form.AppField>
@@ -665,8 +669,8 @@ export function BrokerageSyncPanel({
                   </p>
                 ) : (
                   <p className="mt-1.5 text-xs text-olive-11">
-                    Comma-separated. A sync fails before ingestion if any are
-                    absent from the report.
+                    Separate with commas or new lines. A sync fails before
+                    ingestion if any are absent from the report.
                   </p>
                 )}
               </div>

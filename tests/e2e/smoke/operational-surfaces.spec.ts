@@ -7,7 +7,7 @@ import {
   APP_PAGE_TITLES,
   getBrokerageConnectionConfigureButton,
   getBrokerageConnectionExpectedAccountIdsClearButton,
-  getBrokerageConnectionExpectedAccountIdsInput,
+  getBrokerageConnectionExpectedAccountIdsTextarea,
   getBrokerageConnectionExpectedAccountIdsUndoButton,
   getBrokerageConnectionForm,
   getBrokerageConnectionLabelClearButton,
@@ -149,13 +149,13 @@ test.describe("operational surfaces regression", () => {
     await waitForAuthenticatedApp(page, APP_PAGE_TITLES.imports);
 
     const labelInput = getBrokerageConnectionLabelInput(page);
-    const expectedAccountIdsInput =
-      getBrokerageConnectionExpectedAccountIdsInput(page);
+    const expectedAccountIdsTextarea =
+      getBrokerageConnectionExpectedAccountIdsTextarea(page);
     const saveButton = getBrokerageConnectionSaveButton(page);
     await expect(labelInput).toHaveValue(
       E2E_SMOKE_FIXTURES.brokerageConnection.label,
     );
-    await expect(expectedAccountIdsInput).toHaveValue(
+    await expect(expectedAccountIdsTextarea).toHaveValue(
       E2E_SMOKE_FIXTURES.brokerageConnection.expectedAccountIds.join(", "),
     );
 
@@ -168,8 +168,8 @@ test.describe("operational surfaces regression", () => {
     await expect(saveButton).toBeEnabled();
 
     await getBrokerageConnectionExpectedAccountIdsClearButton(page).click();
-    await expect(expectedAccountIdsInput).toBeDisabled();
-    await expect(expectedAccountIdsInput).toHaveValue("");
+    await expect(expectedAccountIdsTextarea).toBeDisabled();
+    await expect(expectedAccountIdsTextarea).toHaveValue("");
     await expect(
       getBrokerageConnectionExpectedAccountIdsUndoButton(page),
     ).toBeVisible();
@@ -181,8 +181,28 @@ test.describe("operational surfaces regression", () => {
     await expect(labelInput).toHaveValue(
       E2E_SMOKE_FIXTURES.brokerageConnection.label,
     );
-    await expect(expectedAccountIdsInput).toBeEnabled();
-    await expect(expectedAccountIdsInput).toHaveValue(
+    await expect(expectedAccountIdsTextarea).toBeEnabled();
+    await expect(expectedAccountIdsTextarea).toHaveValue(
+      E2E_SMOKE_FIXTURES.brokerageConnection.expectedAccountIds.join(", "),
+    );
+    await expect(expectedAccountIdsTextarea).toHaveJSProperty(
+      "tagName",
+      "TEXTAREA",
+    );
+    await expectedAccountIdsTextarea.fill(
+      E2E_SMOKE_FIXTURES.brokerageConnection.expectedAccountIds.join("\n"),
+    );
+    await expect(saveButton).toBeEnabled();
+    await expect(expectedAccountIdsTextarea).toHaveValue(
+      E2E_SMOKE_FIXTURES.brokerageConnection.expectedAccountIds.join("\n"),
+    );
+    await getBrokerageConnectionConfigureButton(page).click();
+    await expect(getBrokerageConnectionForm(page)).toBeHidden();
+    await getBrokerageConnectionConfigureButton(page).click();
+    await expect(getBrokerageConnectionForm(page)).toBeVisible();
+    await expect(
+      getBrokerageConnectionExpectedAccountIdsTextarea(page),
+    ).toHaveValue(
       E2E_SMOKE_FIXTURES.brokerageConnection.expectedAccountIds.join(", "),
     );
   });
@@ -205,7 +225,7 @@ test.describe("operational surfaces regression", () => {
 
       await expect(getBrokerageConnectionLabelInput(page)).toHaveValue("");
       await expect(
-        getBrokerageConnectionExpectedAccountIdsInput(page),
+        getBrokerageConnectionExpectedAccountIdsTextarea(page),
       ).toHaveValue("");
       await expect(getBrokerageConnectionLabelClearButton(page)).toHaveCount(0);
       await expect(

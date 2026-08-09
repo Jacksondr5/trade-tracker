@@ -875,7 +875,7 @@ export const beginSyncRunForConnection = internalMutation({
     const canRecoverConnectionError =
       args.force === true &&
       connection.status === "error" &&
-      canRequeueTerminalRun;
+      (canRequeueTerminalRun || existing === null);
     if (
       canRequeueTerminalRun &&
       (connection.status === "active" || canRecoverConnectionError)
@@ -885,9 +885,13 @@ export const beginSyncRunForConnection = internalMutation({
       await ctx.db.patch(existing._id, {
         completedAt: undefined,
         errorMessage: undefined,
+        importedTrades: 0,
+        positionSnapshotCount: 0,
         rawReportId: undefined,
+        reconciliationIssueCount: 0,
         referenceCode: undefined,
         requestedAt: now,
+        skippedDuplicateTrades: 0,
         startedAt: now,
         status: "queued",
         updatedAt: now,
@@ -905,7 +909,14 @@ export const beginSyncRunForConnection = internalMutation({
         syncRunId: existing._id,
       };
     }
-    if (connection.status !== "active") {
+    if (canRecoverConnectionError) {
+      const now = Date.now();
+      await ctx.db.patch(connection._id, {
+        connectionError: undefined,
+        status: "active",
+        updatedAt: now,
+      });
+    } else if (connection.status !== "active") {
       throw new ConvexError("Brokerage connection is not active");
     }
     if (existing) {
@@ -1053,21 +1064,21 @@ export const rollbackRawReportReference = internalMutation({
     storageId: v.id("_storage"),
     syncRunId: v.id("brokerageSyncRuns"),
   },
-  returns: v.null(),
+  returns: v.boolean(),
   handler: async (ctx, args) => {
     const { syncRun } = await getSyncRunWithConnection(ctx, args.syncRunId);
-    if (syncRun.rawReportId !== args.rawReportId) return null;
+    if (syncRun.rawReportId !== args.rawReportId) return false;
 
     const rawReport = await ctx.db.get(args.rawReportId);
-    if (!rawReport || rawReport.syncRunId !== syncRun._id) return null;
-    if (rawReport.storageId !== args.storageId) return null;
+    if (!rawReport || rawReport.syncRunId !== syncRun._id) return false;
+    if (rawReport.storageId !== args.storageId) return false;
 
     await ctx.db.delete(rawReport._id);
     await ctx.db.patch(syncRun._id, {
       rawReportId: undefined,
       updatedAt: Date.now(),
     });
-    return null;
+    return true;
   },
 });
 

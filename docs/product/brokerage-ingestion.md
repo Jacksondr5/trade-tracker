@@ -133,8 +133,9 @@ For IBKR Flex Web Service, the implemented workflow is:
    child workflow per connection for the expected report date.
 2. An internal mutation creates the keyed sync run, joins an existing
    succeeded or in-flight run, or atomically requeues a terminal failed run. A
-   manual sync may explicitly force-requeue a succeeded run, but it never
-   reclaims an in-flight run and nightly syncs keep the normal join behavior.
+   manual sync may explicitly force-requeue a succeeded run or start a new date
+   for an errored connection, but it never reclaims an in-flight run and
+   nightly syncs keep the normal join behavior.
 3. A Convex action decrypts that connection's token and calls `SendRequest`.
    The action returns the reference code, which a following internal mutation
    records on the run.
@@ -145,7 +146,9 @@ For IBKR Flex Web Service, the implemented workflow is:
    its Flex statements with the connection's optional expected-account list.
    If any expected account is absent, the action retains the raw XML and hash,
    then fails terminally before any trade, snapshot, or reconciliation write.
-   An unset expected-account list skips this guard.
+   The comparison trims both sources and ignores letter case while preserving
+   the configured and reported casing in operator-facing messages. An unset
+   expected-account list skips this guard.
 6. For a complete report, the action stores the raw XML in Convex file storage,
    records its content hash, and submits normalized results to an internal
    ingestion mutation. A parser failure is terminal and does not retain the raw
@@ -176,6 +179,14 @@ without duplicating inbox trades, snapshots, or reconciliation issues.
 An ordinary retry that receives byte-identical content reuses the existing raw
 report. A forced re-sync that receives identical content fails visibly because
 IBKR served the cached statement and the system learned nothing new.
+
+Requeue starts a fresh attempt on the same durable key. It resets completion,
+error, reference-code, current raw-report pointer, request/start timestamps,
+status, and the imported-trade, skipped-duplicate, position-snapshot, and
+reconciliation-issue counters. It deliberately preserves the run ID and key
+fields (`connectionId`, owner, source, report type/date, and query ID), while
+prior raw-report rows and already-ingested canonical records remain historical
+or idempotently replaceable evidence.
 
 ## Reconciliation
 
@@ -279,6 +290,19 @@ connection into `error`; the reclaim clears the old terminal state and
 reactivates the connection. Force cannot make IBKR regenerate a cached Flex
 statement. If the content hash is unchanged, the failure tells the operator to
 edit the Flex query or wait for the reporting period to roll over.
+
+Operator recovery should scope the force to the connection being repaired:
+
+```bash
+pnpm exec convex run ibkrFlexWorkflow:startManualSync '{"connectionId":"<connection-id>","force":true,"reportDate":"YYYY-MM-DD"}' --prod
+```
+
+Omitting `connectionId` deliberately preserves the date-wide operator command,
+which forces every eligible IBKR connection. A supplied ID is an operator scope
+and typo guard, not an authorization boundary: the internal mutation validates
+that it names a real IBKR connection, and the workflow fails visibly if that
+connection is not eligible for the requested sync. Nightly runs never force and
+remain unscoped.
 
 ## Operational Verification
 
