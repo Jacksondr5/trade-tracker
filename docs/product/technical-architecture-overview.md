@@ -82,16 +82,18 @@ An internal worker runtime may be introduced when the work is primarily:
 
 In those cases, Convex remains the system of record and workflow coordinator. The worker should receive bounded job identifiers, perform capture or processing, and write results back through explicit Convex functions. It must not own a separate data model, authorization model, or canonical mutation path.
 
-Temporal may be used as the orchestration runtime for long-running ingestion
-workflows with durable delays and retry semantics, such as IBKR Flex report
-generation. Temporal workflows should orchestrate deterministic steps only;
-external API calls, parsing, storage writes, and Convex API calls belong in
-activities. Convex remains the product database and user-facing source of truth.
+Long-running ingestion that fits Convex's action limits should use a
+Convex-native durable workflow. The IBKR Flex pipeline follows this model:
+`@convex-dev/workflow` owns durable sequencing, polling delays, bounded action
+retries, and per-connection fan-out; Convex actions own external requests and
+parsing; and internal mutations own canonical writes. This keeps orchestration
+and product state together without an always-on worker service.
 
 Prefer this split:
 
 - Convex owns durable state, dedupe, review workflow, authorization, and canonical domain mutations.
-- Worker runtimes own external I/O, browser sessions, AI calls, and heavyweight processing.
+- Convex actions own bounded external I/O and processing that fits their runtime limits.
+- Worker runtimes own browser sessions, AI calls, or heavyweight processing only when those workloads do not fit Convex.
 - Shared pure modules own parsing, normalization, and validation contracts where practical.
 
 ### Product documentation
