@@ -44,10 +44,11 @@ brokerage ingestion:
 - encrypted, connection-bound brokerage credentials in a separate secrets table
 
 The `@convex-dev/workflow` component coordinates the long-running parts of the
-sync: scheduling, Flex Web Service requests, durable waits, bounded retries, and
-per-connection fan-out. Convex actions perform the external requests and XML
-parsing, while internal mutations own all canonical product writes. There is no
-separate brokerage worker or second product data model.
+sync: Flex Web Service requests, durable waits, bounded action retries, and
+per-connection fan-out. Convex cron and scheduler functions initiate the sync.
+Convex actions perform the external requests and XML parsing, while internal
+mutations own all canonical product writes. There is no separate brokerage
+worker or second product data model.
 
 ## Initial Provider
 
@@ -118,26 +119,31 @@ sync completes.
 
 Each per-connection sync has a durable identity based on:
 
-- owner
 - brokerage connection
 - report type
 - query ID
 - report date
+
+Ownership is inherited from the connection and recorded on the run; it is not
+part of the uniqueness key.
 
 For IBKR Flex Web Service, the implemented workflow is:
 
 1. The nightly Convex job selects active IBKR connections and starts one durable
    child workflow per connection for the expected report date.
 2. An internal mutation creates the keyed sync run, joins an existing
-   succeeded or in-flight run, or atomically requeues a failed run.
-3. A Convex action decrypts that connection's token, calls `SendRequest`, and
-   records the returned reference code.
+   succeeded or in-flight run, or atomically requeues a `failed_retryable` or
+   `failed_terminal` run.
+3. A Convex action decrypts that connection's token and calls `SendRequest`.
+   The action returns the reference code, which a following internal mutation
+   records on the run.
 4. The workflow durably waits and retries `GetStatement` with bounded
    exponential backoff until the report is ready, a terminal error occurs, or
    the polling cutoff is reached.
-5. When ready, an action stores the raw XML in Convex file storage, records its
-   content hash, parses the report, and submits normalized results to an
-   internal ingestion mutation.
+5. When ready, an action parses the report. If parsing succeeds, it stores the
+   raw XML in Convex file storage, records its content hash, and submits
+   normalized results to an internal ingestion mutation. A parser failure is
+   terminal and does not retain the raw XML.
 6. The ingestion mutation stages new trades for review, writes position and
    cash snapshots, reconciles positions, and updates the sync run.
 
@@ -202,8 +208,10 @@ IBKR Flex tokens are sensitive credentials.
 
 Each brokerage connection owns its own write-only token. Encrypt tokens with
 AES-GCM in a Convex action before writing them to the separate
-`brokerageConnectionSecrets` table. The encryption key comes from the Convex
-deployment environment; each encrypted row records a key version so future key
+`brokerageConnectionSecrets` table. Every encryption generates a fresh,
+cryptographically random 12-byte IV. The table stores that IV, the ciphertext
+including its authentication tag, and the key version as internal-only fields.
+The encryption key comes from the Convex deployment environment so future key
 rotation can distinguish old and new ciphertext. Client-facing queries may
 return safe metadata such as whether a token is configured and when it expires,
 but must never return ciphertext, IVs, or plaintext.
@@ -218,24 +226,25 @@ plaintext local to that action. It must never become a workflow argument or a
 workflow step return value because `@convex-dev/workflow` durably journals both.
 Do not log or echo plaintext tokens.
 
-Raw brokerage reports are sensitive financial records. Store only what is
-needed for audit and debugging. The first implementation should use Convex
-storage for raw Flex XML and store the storage reference plus content hash in
-normal tables. Daily reports are expected to be small, but keeping the raw
-payload out of ordinary queryable documents preserves a cleaner security and
-client-query boundary.
+Raw brokerage reports are sensitive financial records. After a report parses
+successfully, retain only what is needed to audit or debug its ingestion. Store
+that raw Flex XML in Convex storage and keep the storage reference plus content
+hash in normal tables. Daily reports are expected to be small, but keeping the
+raw payload out of ordinary queryable documents preserves a cleaner security
+and client-query boundary. Parser failures happen before storage, so this raw
+report record is not available for diagnosing a parser mismatch.
 
 Keep raw report access internal.
 
 ## Failure Handling
 
-Expected retryable failures include:
-
-- IBKR report not ready
-- temporary IBKR server load
-- transient network errors
-- rate limits
-- transient Convex action or workflow-step failures
+Expected retryable failures include temporary IBKR server load, transient
+network errors, and rate limits while sending or polling a Flex request. Each
+request action is attempted up to three times. A report that is not ready uses
+durable polling with a default cutoff of 24 attempts and exponential delays
+capped at 15 minutes. Reaching that cutoff records `failed_retryable` on the run
+and returns a `timed_out` workflow result, allowing a later sync to requeue the
+same keyed run.
 
 Expected terminal or user-action failures include:
 
@@ -243,7 +252,6 @@ Expected terminal or user-action failures include:
 - invalid query ID
 - report schema no longer matching the parser
 - missing required report sections
-- repeated report generation failure past the cutoff
 
 Terminal failures should update Convex sync status and surface a clear
 operational issue. They should not block the rest of the product from loading.

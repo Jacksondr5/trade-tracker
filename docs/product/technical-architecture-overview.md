@@ -84,10 +84,10 @@ In those cases, Convex remains the system of record and workflow coordinator. Th
 
 Long-running ingestion that fits Convex's action limits should use a
 Convex-native durable workflow. The IBKR Flex pipeline follows this model:
-`@convex-dev/workflow` owns durable sequencing, delays, retries, and
-per-connection fan-out; Convex actions own external requests and parsing; and
-internal mutations own canonical writes. This keeps orchestration and product
-state together without an always-on worker service.
+`@convex-dev/workflow` owns durable sequencing, polling delays, bounded action
+retries, and per-connection fan-out; Convex actions own external requests and
+parsing; and internal mutations own canonical writes. This keeps orchestration
+and product state together without an always-on worker service.
 
 Prefer this split:
 
