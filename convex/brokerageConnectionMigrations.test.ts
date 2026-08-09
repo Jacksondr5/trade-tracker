@@ -116,6 +116,7 @@ describe("brokerage connection account metadata migration", () => {
   });
 
   it("clears stale canonical expectations when the legacy E2E fixture is reseeded", async () => {
+    const previousOwnerId = process.env.PLAYWRIGHT_OWNER_ID;
     process.env.PLAYWRIGHT_OWNER_ID = "playwright-bridge-owner";
     try {
       const seeded = await t.mutation(internal.e2eSeed.setupPreviewData, {});
@@ -145,7 +146,11 @@ describe("brokerage connection account metadata migration", () => {
       );
       expect(connection).not.toHaveProperty("expectedAccountIds");
     } finally {
-      delete process.env.PLAYWRIGHT_OWNER_ID;
+      if (previousOwnerId === undefined) {
+        delete process.env.PLAYWRIGHT_OWNER_ID;
+      } else {
+        process.env.PLAYWRIGHT_OWNER_ID = previousOwnerId;
+      }
     }
   });
 
