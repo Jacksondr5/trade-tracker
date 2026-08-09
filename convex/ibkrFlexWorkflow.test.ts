@@ -561,6 +561,17 @@ describe("IBKR Flex Convex workflow", () => {
     expect(state.positionSnapshots).toHaveLength(1);
     expect(state.cashSnapshots).toHaveLength(1);
     expect(state.rawReports).toHaveLength(2);
+    const currentRawReport = state.rawReports.find(
+      (rawReport) => rawReport._id === state.syncRuns[0]?.rawReportId,
+    );
+    expect(currentRawReport).toMatchObject({
+      byteLength: new TextEncoder().encode(changedReadyXml).byteLength,
+    });
+    expect(currentRawReport?.contentHash).not.toBe(
+      state.rawReports.find(
+        (rawReport) => rawReport._id !== currentRawReport?._id,
+      )?.contentHash,
+    );
     expect(state.reconciliationIssues.map((issue) => issue._id)).toEqual(
       firstIssueIds,
     );
@@ -617,6 +628,7 @@ describe("IBKR Flex Convex workflow", () => {
     expect(state.positionSnapshots).toHaveLength(1);
     expect(state.cashSnapshots).toHaveLength(1);
     expect(state.rawReports).toHaveLength(1);
+    expect(state.syncRuns[0]?.rawReportId).toBe(state.rawReports[0]?._id);
     expect(state.reconciliationIssues).toHaveLength(2);
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });

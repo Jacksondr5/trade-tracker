@@ -28,6 +28,9 @@ but never queued or in-progress runs. Scheduled syncs retain skip-if-succeeded
 behavior. IBKR caches generated reports by query and reporting period, so force
 cannot promise upstream regeneration. A byte-identical forced result must fail
 visibly as cached rather than masquerading as a useful successful refresh.
+Each requeue also replaces the run's current raw-report pointer when content
+changes, and same-date reconciliation supersedes stale issue kinds instead of
+accumulating contradictory warnings.
 
 ## 2026-08-04 — Diagnosis: the app failed on deposits versus withdrawals, not capture speed
 

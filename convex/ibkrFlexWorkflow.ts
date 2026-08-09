@@ -146,7 +146,6 @@ type IngestionResult = {
 };
 
 type StoredRawReport = {
-  previousRawReportId?: Id<"brokerageRawReports">;
   rawReportId: Id<"brokerageRawReports">;
   storageId: Id<"_storage">;
 };
@@ -306,7 +305,6 @@ async function storeRawReport(
   ctx: Pick<ActionCtx, "runMutation" | "storage">,
   args: {
     rawXml: string;
-    replaceRawReportId?: Id<"brokerageRawReports">;
     syncRunId: Id<"brokerageSyncRuns">;
     token: string;
   },
@@ -318,33 +316,16 @@ async function storeRawReport(
     storageId = await ctx.storage.store(
       new Blob([args.rawXml], { type: "application/xml" }),
     );
-    const rawReportId = args.replaceRawReportId
-      ? await ctx.runMutation(
-          internal.brokerageIngestion.replaceRawReportReference,
-          {
-            byteLength,
-            contentHash,
-            previousRawReportId: args.replaceRawReportId,
-            storageId,
-            syncRunId: args.syncRunId,
-          },
-        )
-      : await ctx.runMutation(
-          internal.brokerageIngestion.storeRawReportReference,
-          {
-            byteLength,
-            contentHash,
-            storageId,
-            syncRunId: args.syncRunId,
-          },
-        );
-    return {
-      ...(args.replaceRawReportId === undefined
-        ? {}
-        : { previousRawReportId: args.replaceRawReportId }),
-      rawReportId,
-      storageId,
-    };
+    const rawReportId = await ctx.runMutation(
+      internal.brokerageIngestion.storeRawReportReference,
+      {
+        byteLength,
+        contentHash,
+        storageId,
+        syncRunId: args.syncRunId,
+      },
+    );
+    return { rawReportId, storageId };
   } catch (error) {
     if (storageId) {
       try {
@@ -379,7 +360,6 @@ export async function storeAndIngestReadyStatement(
   args: {
     parseResult: ReturnType<typeof parseIbkrFlexActivityXml>;
     rawXml: string;
-    replaceRawReportId?: Id<"brokerageRawReports">;
     syncRunId: Id<"brokerageSyncRuns">;
     token: string;
   },
@@ -394,26 +374,14 @@ export async function storeAndIngestReadyStatement(
     );
   } catch (error) {
     try {
-      if (storedRawReport.previousRawReportId) {
-        await ctx.runMutation(
-          internal.brokerageIngestion.rollbackRawReportReplacement,
-          {
-            previousRawReportId: storedRawReport.previousRawReportId,
-            rawReportId: storedRawReport.rawReportId,
-            storageId: storedRawReport.storageId,
-            syncRunId: args.syncRunId,
-          },
-        );
-      } else {
-        await ctx.runMutation(
-          internal.brokerageIngestion.rollbackRawReportReference,
-          {
-            rawReportId: storedRawReport.rawReportId,
-            storageId: storedRawReport.storageId,
-            syncRunId: args.syncRunId,
-          },
-        );
-      }
+      await ctx.runMutation(
+        internal.brokerageIngestion.rollbackRawReportReference,
+        {
+          rawReportId: storedRawReport.rawReportId,
+          storageId: storedRawReport.storageId,
+          syncRunId: args.syncRunId,
+        },
+      );
     } catch (rollbackError) {
       console.error(
         "IBKR Flex raw report rollback failed",
@@ -496,6 +464,7 @@ export const pollAndIngestStatement = internalAction({
     connectionId: v.id("brokerageConnections"),
     force: v.optional(v.boolean()),
     ownerId: v.string(),
+    previousRawReportId: v.optional(v.id("brokerageRawReports")),
     referenceCode: v.string(),
     syncRunId: v.id("brokerageSyncRuns"),
   },
@@ -527,13 +496,23 @@ export const pollAndIngestStatement = internalAction({
     }
 
     const contentHash = await sha256Hex(statement.rawXml);
-    const currentRawReport = args.force
-      ? await ctx.runQuery(
-          internal.brokerageIngestion.getCurrentRawReportForSyncRun,
-          { syncRunId: args.syncRunId },
-        )
+    const previousRawReportId = args.force
+      ? args.previousRawReportId
+      : undefined;
+    const previousRawReport = previousRawReportId
+      ? await ctx.runQuery(internal.brokerageIngestion.getRawReportForSyncRun, {
+          rawReportId: previousRawReportId,
+          syncRunId: args.syncRunId,
+        })
       : null;
-    if (currentRawReport?.contentHash === contentHash) {
+    if (previousRawReportId && previousRawReport?.contentHash === contentHash) {
+      await ctx.runMutation(
+        internal.brokerageIngestion.reuseRawReportReference,
+        {
+          rawReportId: previousRawReportId,
+          syncRunId: args.syncRunId,
+        },
+      );
       return {
         errorMessage:
           "Forced re-sync returned an identical report (IBKR served a cached statement). Regenerate it by editing the Flex query, or wait for the reporting period to roll over.",
@@ -560,7 +539,6 @@ export const pollAndIngestStatement = internalAction({
     if (completenessError) {
       await storeRawReport(ctx, {
         rawXml: statement.rawXml,
-        replaceRawReportId: currentRawReport?.rawReportId,
         syncRunId: args.syncRunId,
         token: config.token,
       });
@@ -573,7 +551,6 @@ export const pollAndIngestStatement = internalAction({
     const result = await storeAndIngestReadyStatement(ctx, {
       parseResult,
       rawXml: statement.rawXml,
-      replaceRawReportId: currentRawReport?.rawReportId,
       syncRunId: args.syncRunId,
       token: config.token,
     });
@@ -612,6 +589,7 @@ export const syncConnection = workflow
     const syncRun: {
       created: boolean;
       ownerId: string;
+      previousRawReportId?: Id<"brokerageRawReports">;
       queryId: string;
       syncRunId: Id<"brokerageSyncRuns">;
     } = await step.runMutation(
@@ -733,6 +711,9 @@ export const syncConnection = workflow
             connectionId: args.connectionId,
             ...(args.force === undefined ? {} : { force: args.force }),
             ownerId: syncRun.ownerId,
+            ...(syncRun.previousRawReportId === undefined
+              ? {}
+              : { previousRawReportId: syncRun.previousRawReportId }),
             referenceCode: request.referenceCode,
             syncRunId: syncRun.syncRunId,
           },

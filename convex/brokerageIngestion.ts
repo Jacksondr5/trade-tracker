@@ -123,6 +123,8 @@ type ReconciliationIssueType =
 
 type PositionReconciliationKey =
   `${string}:${"crypto" | "stock"}:${string}:${ReconciliationDirection}`;
+type PositionReconciliationIssueKey =
+  `${ReconciliationIssueType}|${PositionReconciliationKey}`;
 
 type ReconciledPosition = {
   assetType: "crypto" | "stock";
@@ -182,6 +184,13 @@ function reconciliationIssueKey(
     direction: issue.direction,
     ticker: issue.ticker,
   });
+}
+
+function positionReconciliationIssueKey(
+  issueType: ReconciliationIssueType,
+  positionKey: PositionReconciliationKey,
+): PositionReconciliationIssueKey {
+  return `${issueType}|${positionKey}`;
 }
 
 function getPositionMismatchMessage(args: {
@@ -376,6 +385,7 @@ async function upsertPositionReconciliationIssue(
   const existing = existingOpenIssues.find(
     (issue) =>
       issue.connectionId === args.connectionId &&
+      issue.reportDate === args.reportDate &&
       issue.issueType === args.issueType &&
       reconciliationIssueKey(issue) === key,
   );
@@ -433,7 +443,7 @@ async function reconcilePositionsForSyncRun(
     ctx,
     args.syncRunId,
   );
-  const discrepancyKeys = new Set<PositionReconciliationKey>();
+  const discrepancyKeys = new Set<PositionReconciliationIssueKey>();
   let openIssueCount = 0;
 
   const allKeys = new Set<PositionReconciliationKey>([
@@ -461,7 +471,7 @@ async function reconcilePositionsForSyncRun(
           ? "missing_brokerage_position"
           : "position_mismatch";
 
-    discrepancyKeys.add(key);
+    discrepancyKeys.add(positionReconciliationIssueKey(issueType, key));
     const created = await upsertPositionReconciliationIssue(ctx, {
       actualQuantity,
       connectionId: args.connectionId,
@@ -484,6 +494,7 @@ async function reconcilePositionsForSyncRun(
     .collect();
   for (const issue of openIssues) {
     if (issue.connectionId !== args.connectionId) continue;
+    if (issue.reportDate !== args.reportDate) continue;
     if (
       issue.issueType !== "position_mismatch" &&
       issue.issueType !== "missing_local_position" &&
@@ -492,7 +503,12 @@ async function reconcilePositionsForSyncRun(
       continue;
     }
     const issueKey = reconciliationIssueKey(issue);
-    if (issueKey !== null && !discrepancyKeys.has(issueKey)) {
+    if (
+      issueKey !== null &&
+      !discrepancyKeys.has(
+        positionReconciliationIssueKey(issue.issueType, issueKey),
+      )
+    ) {
       await ctx.db.patch(issue._id, {
         resolvedAt: now,
         status: "resolved",
@@ -814,6 +830,7 @@ export const beginSyncRunForConnection = internalMutation({
   returns: v.object({
     created: v.boolean(),
     ownerId: v.string(),
+    previousRawReportId: v.optional(v.id("brokerageRawReports")),
     queryId: v.string(),
     syncRunId: v.id("brokerageSyncRuns"),
   }),
@@ -849,9 +866,11 @@ export const beginSyncRunForConnection = internalMutation({
       (connection.status === "active" || canRecoverConnectionError)
     ) {
       const now = Date.now();
+      const previousRawReportId = existing.rawReportId;
       await ctx.db.patch(existing._id, {
         completedAt: undefined,
         errorMessage: undefined,
+        rawReportId: undefined,
         referenceCode: undefined,
         requestedAt: now,
         startedAt: now,
@@ -866,6 +885,7 @@ export const beginSyncRunForConnection = internalMutation({
       return {
         created: true,
         ownerId: connection.ownerId,
+        previousRawReportId,
         queryId,
         syncRunId: existing._id,
       };
@@ -974,67 +994,41 @@ export const storeRawReportReference = internalMutation({
   },
 });
 
-export const getCurrentRawReportForSyncRun = internalQuery({
-  args: { syncRunId: v.id("brokerageSyncRuns") },
-  returns: v.union(
-    v.null(),
-    v.object({
-      contentHash: v.string(),
-      rawReportId: v.id("brokerageRawReports"),
-    }),
-  ),
+export const getRawReportForSyncRun = internalQuery({
+  args: {
+    rawReportId: v.id("brokerageRawReports"),
+    syncRunId: v.id("brokerageSyncRuns"),
+  },
+  returns: v.union(v.null(), v.object({ contentHash: v.string() })),
   handler: async (ctx, args) => {
     const { syncRun } = await getSyncRunWithConnection(ctx, args.syncRunId);
-    if (!syncRun.rawReportId) return null;
-    const rawReport = await ctx.db.get(syncRun.rawReportId);
+    const rawReport = await ctx.db.get(args.rawReportId);
     if (!rawReport || rawReport.syncRunId !== syncRun._id) return null;
-    return {
-      contentHash: rawReport.contentHash,
-      rawReportId: rawReport._id,
-    };
+    return { contentHash: rawReport.contentHash };
   },
 });
 
-export const replaceRawReportReference = internalMutation({
+export const reuseRawReportReference = internalMutation({
   args: {
-    byteLength: v.number(),
-    contentHash: v.string(),
-    previousRawReportId: v.id("brokerageRawReports"),
-    storageId: v.id("_storage"),
+    rawReportId: v.id("brokerageRawReports"),
     syncRunId: v.id("brokerageSyncRuns"),
   },
-  returns: v.id("brokerageRawReports"),
+  returns: v.null(),
   handler: async (ctx, args) => {
-    const { connection, syncRun } = await getSyncRunWithConnection(
-      ctx,
-      args.syncRunId,
-    );
-    if (syncRun.rawReportId !== args.previousRawReportId) {
-      throw new ConvexError("Brokerage raw report changed during replacement");
+    const { syncRun } = await getSyncRunWithConnection(ctx, args.syncRunId);
+    if (syncRun.rawReportId && syncRun.rawReportId !== args.rawReportId) {
+      throw new ConvexError("Brokerage raw report changed during reuse");
     }
-    const previousRawReport = await ctx.db.get(args.previousRawReportId);
-    if (!previousRawReport || previousRawReport.syncRunId !== syncRun._id) {
-      throw new ConvexError("Previous brokerage raw report not found");
+    const rawReport = await ctx.db.get(args.rawReportId);
+    if (!rawReport || rawReport.syncRunId !== syncRun._id) {
+      throw new ConvexError("Brokerage raw report not found");
     }
-
-    const rawReportId = await ctx.db.insert("brokerageRawReports", {
-      byteLength: args.byteLength,
-      connectionId: connection._id,
-      contentHash: args.contentHash,
-      createdAt: Date.now(),
-      ownerId: syncRun.ownerId,
-      reportDate: syncRun.reportDate,
-      reportType: syncRun.reportType,
-      source: syncRun.source,
-      storageId: args.storageId,
-      syncRunId: syncRun._id,
-    });
     await ctx.db.patch(syncRun._id, {
-      rawReportId,
+      rawReportId: rawReport._id,
       status: "processing",
       updatedAt: Date.now(),
     });
-    return rawReportId;
+    return null;
   },
 });
 
@@ -1056,41 +1050,6 @@ export const rollbackRawReportReference = internalMutation({
     await ctx.db.delete(rawReport._id);
     await ctx.db.patch(syncRun._id, {
       rawReportId: undefined,
-      updatedAt: Date.now(),
-    });
-    return null;
-  },
-});
-
-export const rollbackRawReportReplacement = internalMutation({
-  args: {
-    previousRawReportId: v.id("brokerageRawReports"),
-    rawReportId: v.id("brokerageRawReports"),
-    storageId: v.id("_storage"),
-    syncRunId: v.id("brokerageSyncRuns"),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const { syncRun } = await getSyncRunWithConnection(ctx, args.syncRunId);
-    if (syncRun.rawReportId !== args.rawReportId) return null;
-
-    const [rawReport, previousRawReport] = await Promise.all([
-      ctx.db.get(args.rawReportId),
-      ctx.db.get(args.previousRawReportId),
-    ]);
-    if (
-      !rawReport ||
-      rawReport.syncRunId !== syncRun._id ||
-      rawReport.storageId !== args.storageId ||
-      !previousRawReport ||
-      previousRawReport.syncRunId !== syncRun._id
-    ) {
-      return null;
-    }
-
-    await ctx.db.delete(rawReport._id);
-    await ctx.db.patch(syncRun._id, {
-      rawReportId: previousRawReport._id,
       updatedAt: Date.now(),
     });
     return null;

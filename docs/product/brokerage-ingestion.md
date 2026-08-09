@@ -178,6 +178,9 @@ duplicate Flex request. IBKR may still serve a cached statement for the same
 query and reporting period. If a forced run receives content identical to the
 current stored report, fail it with an explicit cached-report message instead
 of reporting a clean but unchanged success; do not write a duplicate raw report.
+Requeue clears the run's current raw-report pointer. Identical content restores
+the prior pointer, while changed content writes a new artifact and repoints the
+run so the current audit record always matches the data that was ingested.
 
 ## Reconciliation
 
@@ -194,6 +197,12 @@ state:
 
 Reconciliation issues should be durable, reviewable, and tied to the sync run
 that produced them.
+
+Reconciliation is a same-date recomputation for an owner and connection, not an
+append-only warning stream. Re-running a date must resolve prior position issues
+that are no longer in the computed issue set, including when the same position
+changes issue type. Legitimate discrepancies that remain in the new set stay
+open.
 
 Completeness validation is a precondition for reconciliation. A report missing
 an explicitly expected account must produce no trade, position, or cash writes

@@ -502,6 +502,18 @@ describe("brokerage ingestion", () => {
         reportType: "activity",
       },
     );
+    const storageId = await t.action(async (ctx) =>
+      ctx.storage.store(new Blob(["old report"])),
+    );
+    const rawReportId = await t.mutation(
+      internal.brokerageIngestion.storeRawReportReference,
+      {
+        byteLength: 10,
+        contentHash: "old-hash",
+        storageId,
+        syncRunId: first.syncRunId,
+      },
+    );
     await t.run(async (ctx) => {
       await ctx.db.patch(first.syncRunId, {
         completedAt: Date.now(),
@@ -525,10 +537,14 @@ describe("brokerage ingestion", () => {
         reportDate: "2026-05-14",
         reportType: "activity",
       }),
-    ).resolves.toMatchObject({ created: true, syncRunId: first.syncRunId });
-    await expect(
-      t.run(async (ctx) => ctx.db.get(first.syncRunId)),
-    ).resolves.toMatchObject({ status: "queued" });
+    ).resolves.toMatchObject({
+      created: true,
+      previousRawReportId: rawReportId,
+      syncRunId: first.syncRunId,
+    });
+    const requeuedRun = await t.run(async (ctx) => ctx.db.get(first.syncRunId));
+    expect(requeuedRun).toMatchObject({ status: "queued" });
+    expect(requeuedRun).not.toHaveProperty("rawReportId");
   });
 
   it.each([
@@ -739,6 +755,64 @@ describe("brokerage ingestion", () => {
     await ingestPositionSnapshots(syncRunId, [{ quantity: 10 }]);
 
     expect(await listOpenReconciliationIssues()).toHaveLength(0);
+  });
+
+  it("supersedes same-date reconciliation issue types without clearing legitimate issues", async () => {
+    const connectionId = await createConnection();
+    const syncRunId = await beginActivitySyncRun(connectionId);
+    await insertAcceptedTrade({ quantity: 10, ticker: "AAPL" });
+    await insertAcceptedTrade({ quantity: 5, ticker: "AA" });
+
+    await ingestPositionSnapshots(syncRunId, []);
+    expect(await listOpenReconciliationIssues()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          issueType: "missing_brokerage_position",
+          ticker: "AA",
+        }),
+        expect.objectContaining({
+          issueType: "missing_brokerage_position",
+          ticker: "AAPL",
+        }),
+      ]),
+    );
+
+    await ingestPositionSnapshots(syncRunId, [{ quantity: 8, ticker: "AAPL" }]);
+
+    const issues = await t.run(async (ctx) =>
+      ctx.db.query("brokerageReconciliationIssues").collect(),
+    );
+    const openIssues = issues.filter((issue) => issue.status === "open");
+    expect(openIssues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          issueType: "missing_brokerage_position",
+          ticker: "AA",
+        }),
+        expect.objectContaining({
+          issueType: "position_mismatch",
+          ticker: "AAPL",
+        }),
+      ]),
+    );
+    expect(openIssues).toHaveLength(2);
+    expect(openIssues).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          issueType: "missing_brokerage_position",
+          ticker: "AAPL",
+        }),
+      ]),
+    );
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          issueType: "missing_brokerage_position",
+          status: "resolved",
+          ticker: "AAPL",
+        }),
+      ]),
+    );
   });
 
   it("ingests multiple brokerage accounts from one report under one connection", async () => {
