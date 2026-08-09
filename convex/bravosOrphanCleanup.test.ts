@@ -149,6 +149,48 @@ describe("known Bravos orphan repair", () => {
     );
   });
 
+  it("fails closed when the approved note no longer exists", async () => {
+    const orphan = await insertOrphan();
+    await t.run(async (ctx) => {
+      await ctx.db.delete(orphan.noteId);
+    });
+
+    await expect(
+      t.mutation(internal.bravosOrphanCleanup.repairKnownBravosOrphan, {
+        dryRun: false,
+        importTaskId: orphan.importTaskId,
+        missingTradePlanId: orphan.tradePlanId,
+        noteId: orphan.noteId,
+      }),
+    ).rejects.toThrow("expected note or import task is missing");
+    expect(await t.run((ctx) => ctx.db.get(orphan.importTaskId))).toMatchObject(
+      { createdTradePlanId: orphan.tradePlanId },
+    );
+  });
+
+  it("fails closed when the note and task owners no longer match", async () => {
+    const orphan = await insertOrphan();
+    await t.run(async (ctx) => {
+      await ctx.db.patch(orphan.noteId, { ownerId: "owner-b" });
+    });
+
+    await expect(
+      t.mutation(internal.bravosOrphanCleanup.repairKnownBravosOrphan, {
+        dryRun: false,
+        importTaskId: orphan.importTaskId,
+        missingTradePlanId: orphan.tradePlanId,
+        noteId: orphan.noteId,
+      }),
+    ).rejects.toThrow("records no longer match the approved provenance");
+    expect(await t.run((ctx) => ctx.db.get(orphan.noteId))).toMatchObject({
+      ownerId: "owner-b",
+      tradePlanId: orphan.tradePlanId,
+    });
+    expect(await t.run((ctx) => ctx.db.get(orphan.importTaskId))).toMatchObject(
+      { createdTradePlanId: orphan.tradePlanId, ownerId },
+    );
+  });
+
   it("fails closed when a review action targets the missing trade plan", async () => {
     const orphan = await insertOrphan();
     await t.run(async (ctx) => {
@@ -260,7 +302,7 @@ describe("known Bravos orphan repair", () => {
     const orphan = await insertOrphan();
     await t.run(async (ctx) => {
       const now = Date.now();
-      for (const index of Array.from({ length: 500 }, (_, value) => value)) {
+      for (let index = 0; index < 500; index += 1) {
         await ctx.db.insert("bravosReviewItems", {
           canonicalSourceIdentity: `${sourceUrl}?review=${index}`,
           classification: "initiate",
