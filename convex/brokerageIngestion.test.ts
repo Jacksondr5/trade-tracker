@@ -20,6 +20,10 @@ const modules = (import.meta as ImportMetaWithGlob).glob([
   "!./**/*.test.ts",
   "!./**/*.spec.ts",
 ]);
+const BRIDGE_EXPECTED_ACCOUNT_IDS = [
+  E2E_SMOKE_FIXTURES.brokerageConnection.accountId,
+  "U-E2E-654321",
+];
 
 function stubTwelveDataResolutionFetch() {
   vi.stubGlobal(
@@ -206,7 +210,7 @@ describe("brokerage ingestion", () => {
       return await ctx.db.insert("brokerageConnections", {
         accountId: "ULEGACY",
         createdAt: 1,
-        expectedAccountIds: fixture.expectedAccountIds,
+        expectedAccountIds: BRIDGE_EXPECTED_ACCOUNT_IDS,
         ownerId,
         queryId: "123456",
         source: "ibkr",
@@ -220,7 +224,7 @@ describe("brokerage ingestion", () => {
       {},
     );
     expect(before.connections[0]?.accountId).toBe(
-      fixture.expectedAccountIds[0],
+      BRIDGE_EXPECTED_ACCOUNT_IDS[0],
     );
 
     await asUser().mutation(api.brokerageIngestion.upsertIbkrConnection, {

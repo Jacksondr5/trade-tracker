@@ -115,6 +115,40 @@ describe("brokerage connection account metadata migration", () => {
     expect(connection).not.toHaveProperty("expectedAccountIds");
   });
 
+  it("clears stale canonical expectations when the legacy E2E fixture is reseeded", async () => {
+    process.env.PLAYWRIGHT_OWNER_ID = "playwright-bridge-owner";
+    try {
+      const seeded = await t.mutation(internal.e2eSeed.setupPreviewData, {});
+      await t.run(async (ctx) => {
+        await ctx.db.patch(seeded.brokerageConnectionId, {
+          expectedAccountIds: ["USTALE", "USECONDARY"],
+        });
+      });
+
+      await t.mutation(internal.e2eSeed.setupPreviewData, {});
+      let connection = await t.run(async (ctx) =>
+        ctx.db.get(seeded.brokerageConnectionId),
+      );
+      expect(connection).not.toHaveProperty("expectedAccountIds");
+
+      await t.run(async (ctx) => {
+        await ctx.db.patch(seeded.brokerageConnectionId, {
+          expectedAccountIds: ["USTALE-AGAIN"],
+        });
+      });
+      await t.mutation(
+        internal.e2eSeed.setBrokerageConnectionMetadataFixture,
+        { state: "persisted" },
+      );
+      connection = await t.run(async (ctx) =>
+        ctx.db.get(seeded.brokerageConnectionId),
+      );
+      expect(connection).not.toHaveProperty("expectedAccountIds");
+    } finally {
+      delete process.env.PLAYWRIGHT_OWNER_ID;
+    }
+  });
+
   it("fails closed when the deployment exceeds the reviewed safety bound", async () => {
     await t.run(async (ctx) => {
       for (let index = 0; index < 101; index += 1) {
