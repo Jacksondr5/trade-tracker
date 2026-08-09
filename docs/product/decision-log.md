@@ -6,6 +6,29 @@ This document records settled product decisions: what was decided, when, and why
 
 Add an entry when a decision is genuinely settled. Do not record open questions or proposals here.
 
+## 2026-08-09 — IBKR report completeness is explicit and fail-closed
+
+The first production Flex sync returned a valid but incomplete report: it
+contained one dormant account while omitting the active account, yet ingestion
+succeeded and reconciliation opened misleading missing-position issues. The
+Flex Web Service token was scoped more narrowly than the query, so the report
+itself could not reveal which account was absent.
+
+Jackson approved an explicit per-connection `expectedAccountIds` set. When it
+is configured, every expected account must appear as a statement-level account
+in the report. A mismatch stores the raw report for diagnosis, then terminally
+fails before trades, snapshots, cash, or reconciliation are written. An unset
+expectation preserves current behavior. One connection may cover multiple
+accounts.
+
+The same incident left a wrong-but-succeeded keyed run blocking both manual and
+scheduled correction for that report date. Manual sync therefore gains an
+explicit force option that may reclaim terminal runs, including succeeded runs,
+but never queued or in-progress runs. Scheduled syncs retain skip-if-succeeded
+behavior. IBKR caches generated reports by query and reporting period, so force
+cannot promise upstream regeneration. A byte-identical forced result must fail
+visibly as cached rather than masquerading as a useful successful refresh.
+
 ## 2026-08-04 — Diagnosis: the app failed on deposits versus withdrawals, not capture speed
 
 Jackson opened the AI-capture exploration believing the problem was time: no room in a workday to open the app, screenshot charts, and type. Working through why months of non-use actually happened, a sharper diagnosis emerged and Jackson confirmed it matched his experience: "there's always a mountain of deposit tasks in front of me... Creating that faster payoff that keeps me interacting with the system is a key to success."

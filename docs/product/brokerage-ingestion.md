@@ -41,6 +41,11 @@ Convex remains the system of record for product state:
 - reconciliation issues
 - connection metadata that is safe to store in the product database
 
+An IBKR connection may carry an optional set of expected brokerage account IDs.
+This is an explicit completeness expectation, not an ingestion scope: one Flex
+connection may intentionally cover multiple IBKR accounts, and every account in
+the set must appear as a `FlexStatement` before the report can be ingested.
+
 Temporal orchestrates the external ingestion workflow:
 
 - scheduling IBKR Flex syncs
@@ -138,8 +143,12 @@ For IBKR Flex Web Service, the expected workflow is:
    and hash.
 6. An activity parses the report into normalized trade candidates, position
    snapshots, and cash snapshots.
-7. An activity calls Convex ingestion functions.
-8. Convex stages new trades for review, writes snapshots, updates sync status,
+7. If expected account IDs are configured, the workflow compares them with the
+   statement-level account IDs in the report. A missing expected account fails
+   the run terminally before ingestion or reconciliation; the raw report and
+   hash remain stored for diagnosis.
+8. An activity calls Convex ingestion functions.
+9. Convex stages new trades for review, writes snapshots, updates sync status,
    and records reconciliation issues.
 
 Workflow code must only orchestrate deterministic steps. Network calls, XML
@@ -153,13 +162,22 @@ Use stable keys for dedupe:
 
 - workflow ID for the orchestration attempt
 - sync run uniqueness for `(ownerId, connectionId, reportType, reportDate,
-  queryId)`
+queryId)`
 - raw report content hash for duplicate report retrieval
 - broker-native execution ID when importing trades
 - fallback composite keys only when IBKR does not provide a stable execution ID
 
 Convex ingestion mutations should accept repeated calls for the same report
 without duplicating inbox trades, snapshots, or reconciliation issues.
+
+Scheduled runs keep skip-if-succeeded semantics for an existing keyed run. An
+operator may explicitly force a manual sync for a terminal keyed run, including
+a previously succeeded run, after correcting an upstream report problem. Force
+must never reclaim a queued or in-progress run because that could issue a
+duplicate Flex request. IBKR may still serve a cached statement for the same
+query and reporting period. If a forced run receives content identical to the
+current stored report, fail it with an explicit cached-report message instead
+of reporting a clean but unchanged success; do not write a duplicate raw report.
 
 ## Reconciliation
 
@@ -176,6 +194,10 @@ state:
 
 Reconciliation issues should be durable, reviewable, and tied to the sync run
 that produced them.
+
+Completeness validation is a precondition for reconciliation. A report missing
+an explicitly expected account must produce no trade, position, or cash writes
+and must not create or update reconciliation issues.
 
 The first version should focus on position quantity mismatches. Cash
 reconciliation can follow after position sync behavior is stable.
@@ -243,6 +265,7 @@ Expected terminal or user-action failures include:
 - invalid query ID
 - report schema no longer matching the parser
 - missing required report sections
+- an expected brokerage account missing from the report
 - repeated report generation failure past the cutoff
 
 Terminal failures should update Convex sync status and surface a clear

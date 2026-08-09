@@ -1,1 +1,3 @@
 export const MAX_IBKR_FLEX_TOKEN_LENGTH = 4_096;
+export const MAX_IBKR_EXPECTED_ACCOUNT_IDS = 25;
+export const MAX_IBKR_ACCOUNT_ID_LENGTH = 40;

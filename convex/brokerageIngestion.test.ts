@@ -76,7 +76,7 @@ describe("brokerage ingestion", () => {
     return await asUser().mutation(
       api.brokerageIngestion.upsertIbkrConnection,
       {
-        accountId: { kind: "set", value: "U1234567" },
+        expectedAccountIds: { kind: "set", value: ["U1234567"] },
         label: { kind: "set", value: "IBKR Main" },
         queryId: "123456",
       },
@@ -170,7 +170,10 @@ describe("brokerage ingestion", () => {
     const sameConnectionId = await asUser().mutation(
       api.brokerageIngestion.upsertIbkrConnection,
       {
-        accountId: { kind: "set", value: "U1234567" },
+        expectedAccountIds: {
+          kind: "set",
+          value: ["U1234567", "U7654321"],
+        },
         label: { kind: "set", value: "IBKR Updated" },
         queryId: "654321",
       },
@@ -183,7 +186,7 @@ describe("brokerage ingestion", () => {
     expect(sameConnectionId).toBe(connectionId);
     expect(status.connections).toHaveLength(1);
     expect(status.connections[0]).toMatchObject({
-      accountId: "U1234567",
+      expectedAccountIds: ["U1234567", "U7654321"],
       label: "IBKR Updated",
       queryId: "654321",
       source: "ibkr",
@@ -216,7 +219,7 @@ describe("brokerage ingestion", () => {
     const connectionId = await createConnection();
 
     await asUser().mutation(api.brokerageIngestion.upsertIbkrConnection, {
-      accountId: { kind: "clear" },
+      expectedAccountIds: { kind: "clear" },
       label: { kind: "clear" },
     });
 
@@ -225,7 +228,7 @@ describe("brokerage ingestion", () => {
       queryId: "123456",
       status: "active",
     });
-    expect(connection).not.toHaveProperty("accountId");
+    expect(connection).not.toHaveProperty("expectedAccountIds");
     expect(connection).not.toHaveProperty("label");
   });
 
@@ -237,6 +240,11 @@ describe("brokerage ingestion", () => {
         label: { kind: "set", value: "   " },
       }),
     ).rejects.toThrow("Label cannot be empty");
+    await expect(
+      asUser().mutation(api.brokerageIngestion.upsertIbkrConnection, {
+        expectedAccountIds: { kind: "set", value: [] },
+      }),
+    ).rejects.toThrow("Expected account IDs cannot be empty");
   });
 
   it("returns the operational details needed to review brokerage ingestion", async () => {
@@ -483,6 +491,109 @@ describe("brokerage ingestion", () => {
       expect(syncRun).not.toHaveProperty("referenceCode");
     },
   );
+
+  it("force-requeues a succeeded sync run while the default path reuses it", async () => {
+    const connectionId = await createConnection();
+    const first = await t.mutation(
+      internal.brokerageIngestion.beginSyncRunForConnection,
+      {
+        connectionId,
+        reportDate: "2026-05-14",
+        reportType: "activity",
+      },
+    );
+    await t.run(async (ctx) => {
+      await ctx.db.patch(first.syncRunId, {
+        completedAt: Date.now(),
+        referenceCode: "stale-reference",
+        status: "succeeded",
+      });
+    });
+
+    await expect(
+      t.mutation(internal.brokerageIngestion.beginSyncRunForConnection, {
+        connectionId,
+        reportDate: "2026-05-14",
+        reportType: "activity",
+      }),
+    ).resolves.toMatchObject({ created: false, syncRunId: first.syncRunId });
+
+    await expect(
+      t.mutation(internal.brokerageIngestion.beginSyncRunForConnection, {
+        connectionId,
+        force: true,
+        reportDate: "2026-05-14",
+        reportType: "activity",
+      }),
+    ).resolves.toMatchObject({ created: true, syncRunId: first.syncRunId });
+    await expect(
+      t.run(async (ctx) => ctx.db.get(first.syncRunId)),
+    ).resolves.toMatchObject({ status: "queued" });
+  });
+
+  it.each([
+    "queued",
+    "requesting",
+    "waiting_for_statement",
+    "processing",
+  ] as const)(
+    "does not force-reclaim an in-progress %s sync run",
+    async (status) => {
+      const connectionId = await createConnection();
+      const first = await t.mutation(
+        internal.brokerageIngestion.beginSyncRunForConnection,
+        {
+          connectionId,
+          reportDate: "2026-05-14",
+          reportType: "activity",
+        },
+      );
+      await t.run(async (ctx) => {
+        await ctx.db.patch(first.syncRunId, { status });
+      });
+
+      await expect(
+        t.mutation(internal.brokerageIngestion.beginSyncRunForConnection, {
+          connectionId,
+          force: true,
+          reportDate: "2026-05-14",
+          reportType: "activity",
+        }),
+      ).resolves.toMatchObject({ created: false, syncRunId: first.syncRunId });
+      await expect(
+        t.run(async (ctx) => ctx.db.get(first.syncRunId)),
+      ).resolves.toMatchObject({ status });
+    },
+  );
+
+  it("reactivates an errored connection when its terminal run is requeued", async () => {
+    const connectionId = await createConnection();
+    const first = await t.mutation(
+      internal.brokerageIngestion.beginSyncRunForConnection,
+      {
+        connectionId,
+        reportDate: "2026-05-14",
+        reportType: "activity",
+      },
+    );
+    await t.mutation(internal.brokerageIngestion.markSyncRunFailed, {
+      errorMessage: "Report incomplete",
+      failureType: "terminal",
+      syncRunId: first.syncRunId,
+    });
+
+    await expect(
+      t.mutation(internal.brokerageIngestion.beginSyncRunForConnection, {
+        connectionId,
+        force: true,
+        reportDate: "2026-05-14",
+        reportType: "activity",
+      }),
+    ).resolves.toMatchObject({ created: true, syncRunId: first.syncRunId });
+    await expect(
+      t.run(async (ctx) => ctx.db.get(connectionId)),
+    ).resolves.toMatchObject({ status: "active" });
+  });
 
   it("blocks starting a sync run for paused connections", async () => {
     const connectionId = await createConnection();

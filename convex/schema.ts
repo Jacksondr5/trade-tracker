@@ -548,9 +548,11 @@ export default defineSchema({
     .index("by_ownerId_and_status", ["ownerId", "status"]),
 
   brokerageConnections: defineTable({
+    // Legacy field retained only for the migration-ready deployment commit.
     accountId: v.optional(v.string()),
     connectionError: v.optional(v.string()),
     createdAt: v.number(),
+    expectedAccountIds: v.optional(v.array(v.string())),
     label: v.optional(v.string()),
     lastFailedSyncAt: v.optional(v.number()),
     lastSuccessfulSyncAt: v.optional(v.number()),

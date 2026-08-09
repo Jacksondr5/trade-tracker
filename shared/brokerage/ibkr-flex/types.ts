@@ -37,6 +37,7 @@ export type IbkrFlexParseResult = {
   cashSnapshots: IbkrFlexCashSnapshot[];
   errors: string[];
   positionSnapshots: IbkrFlexPositionSnapshot[];
+  reportAccountIds: string[];
   trades: IbkrFlexTrade[];
   warnings: string[];
 };

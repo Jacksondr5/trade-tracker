@@ -3,12 +3,18 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery } from "./_generated/server";
 import {
-  optionalMetadataStringPatchValidator,
+  optionalMetadataStringArrayPatchValidator,
   resolveOptionalMetadataStringPatch,
+  resolveOptionalMetadataStringArrayPatch,
+  optionalMetadataStringPatchValidator,
   validateTokenExpiresAt,
 } from "./lib/brokerageConnectionMetadata";
 import { requireUser } from "./lib/auth";
-import { MAX_IBKR_FLEX_TOKEN_LENGTH } from "../shared/brokerage/constants";
+import {
+  MAX_IBKR_ACCOUNT_ID_LENGTH,
+  MAX_IBKR_EXPECTED_ACCOUNT_IDS,
+  MAX_IBKR_FLEX_TOKEN_LENGTH,
+} from "../shared/brokerage/constants";
 
 export const DEFAULT_BROKERAGE_TOKEN_KEY_VERSION = 1;
 const AES_KEY_BYTES = 32;
@@ -26,7 +32,7 @@ type BrokerageTokenBinding = {
 };
 
 const brokerageTokenMetadataValidator = v.object({
-  accountId: v.optional(optionalMetadataStringPatchValidator),
+  expectedAccountIds: v.optional(optionalMetadataStringArrayPatchValidator),
   label: v.optional(optionalMetadataStringPatchValidator),
   queryId: v.string(),
   tokenExpiresAt: v.number(),
@@ -235,13 +241,15 @@ export const storeEncryptedToken = internalMutation({
     const metadataPatch = {
       queryId: args.metadata.queryId,
       tokenExpiresAt: validateTokenExpiresAt(args.metadata.tokenExpiresAt),
-      ...(args.metadata.accountId === undefined
+      ...(args.metadata.expectedAccountIds === undefined
         ? {}
         : {
-            accountId: resolveOptionalMetadataStringPatch({
-              fieldName: "Account ID",
-              maxLength: 40,
-              patch: args.metadata.accountId,
+            expectedAccountIds: resolveOptionalMetadataStringArrayPatch({
+              fieldName: "Expected account IDs",
+              itemName: "account ID",
+              maxItemLength: MAX_IBKR_ACCOUNT_ID_LENGTH,
+              maxItems: MAX_IBKR_EXPECTED_ACCOUNT_IDS,
+              patch: args.metadata.expectedAccountIds,
             }),
           }),
       ...(args.metadata.label === undefined
@@ -273,6 +281,7 @@ export const getEncryptedTokenForConnection = internalQuery({
     v.null(),
     v.object({
       ciphertext: v.string(),
+      expectedAccountIds: v.optional(v.array(v.string())),
       iv: v.string(),
       keyVersion: v.number(),
     }),
@@ -289,6 +298,7 @@ export const getEncryptedTokenForConnection = internalQuery({
     if (!secret || secret.ownerId !== args.ownerId) return null;
     return {
       ciphertext: secret.ciphertext,
+      expectedAccountIds: connection.expectedAccountIds,
       iv: secret.iv,
       keyVersion: secret.keyVersion,
     };

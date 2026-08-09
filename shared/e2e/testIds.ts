@@ -155,13 +155,14 @@ export const TRADES_INDEX_TEST_IDS = {
 } as const;
 
 export const IMPORTS_INDEX_TEST_IDS = {
-  brokerageConnectionAccountIdInput: "brokerage-connection-account-id-input",
-  brokerageConnectionAccountIdClearButton:
-    "brokerage-connection-account-id-clear-button",
-  brokerageConnectionAccountIdUndoButton:
-    "brokerage-connection-account-id-undo-button",
   brokerageConnectionCancelButton: "brokerage-connection-cancel-button",
   brokerageConnectionConfigureButton: "brokerage-connection-configure-button",
+  brokerageConnectionExpectedAccountIdsClearButton:
+    "brokerage-connection-expected-account-ids-clear-button",
+  brokerageConnectionExpectedAccountIdsInput:
+    "brokerage-connection-expected-account-ids-input",
+  brokerageConnectionExpectedAccountIdsUndoButton:
+    "brokerage-connection-expected-account-ids-undo-button",
   brokerageConnectionForm: "brokerage-connection-form",
   brokerageConnectionLabelClearButton:
     "brokerage-connection-label-clear-button",

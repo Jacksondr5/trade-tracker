@@ -5,8 +5,17 @@ export const optionalMetadataStringPatchValidator = v.union(
   v.object({ kind: v.literal("clear") }),
 );
 
+export const optionalMetadataStringArrayPatchValidator = v.union(
+  v.object({ kind: v.literal("set"), value: v.array(v.string()) }),
+  v.object({ kind: v.literal("clear") }),
+);
+
 export type OptionalMetadataStringPatch = Infer<
   typeof optionalMetadataStringPatchValidator
+>;
+
+export type OptionalMetadataStringArrayPatch = Infer<
+  typeof optionalMetadataStringArrayPatchValidator
 >;
 
 export function resolveOptionalMetadataStringPatch(args: {
@@ -27,6 +36,38 @@ export function resolveOptionalMetadataStringPatch(args: {
     );
   }
   return value;
+}
+
+export function resolveOptionalMetadataStringArrayPatch(args: {
+  fieldName: string;
+  itemName: string;
+  maxItemLength: number;
+  maxItems: number;
+  patch: OptionalMetadataStringArrayPatch;
+}): string[] | undefined {
+  if (args.patch.kind === "clear") return undefined;
+  const values = Array.from(
+    new Set(args.patch.value.map((value) => value.trim()).filter(Boolean)),
+  );
+  if (values.length === 0) {
+    throw new ConvexError(
+      `${args.fieldName} cannot be empty; use the explicit clear action to remove it`,
+    );
+  }
+  if (values.length > args.maxItems) {
+    throw new ConvexError(
+      `${args.fieldName} must contain ${args.maxItems} items or fewer`,
+    );
+  }
+  const oversizedValue = values.find(
+    (value) => value.length > args.maxItemLength,
+  );
+  if (oversizedValue) {
+    throw new ConvexError(
+      `Each ${args.itemName} must be ${args.maxItemLength} characters or less`,
+    );
+  }
+  return values;
 }
 
 export function validateTokenExpiresAt(value: number): number {

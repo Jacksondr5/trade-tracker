@@ -13,6 +13,7 @@ describe("parseIbkrFlexActivityXml", () => {
     const result = parseIbkrFlexActivityXml(readFileSync(fixturePath, "utf8"));
 
     expect(result.errors).toEqual([]);
+    expect(result.reportAccountIds).toEqual(["U1111111", "U2222222"]);
     expect(result.trades).toHaveLength(2);
     expect(result.trades[0]).toMatchObject({
       assetType: "stock",
