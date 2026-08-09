@@ -11,6 +11,7 @@
 import type * as accountMappings from "../accountMappings.js";
 import type * as analytics from "../analytics.js";
 import type * as bravos from "../bravos.js";
+import type * as bravosOrphanCleanup from "../bravosOrphanCleanup.js";
 import type * as brokerageIngestion from "../brokerageIngestion.js";
 import type * as brokerageSecrets from "../brokerageSecrets.js";
 import type * as campaigns from "../campaigns.js";
@@ -52,6 +53,7 @@ declare const fullApi: ApiFromModules<{
   accountMappings: typeof accountMappings;
   analytics: typeof analytics;
   bravos: typeof bravos;
+  bravosOrphanCleanup: typeof bravosOrphanCleanup;
   brokerageIngestion: typeof brokerageIngestion;
   brokerageSecrets: typeof brokerageSecrets;
   campaigns: typeof campaigns;
