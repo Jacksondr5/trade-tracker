@@ -9,6 +9,7 @@ import {
   validateBrokerageIngestFlexReportBody,
 } from "./http";
 import schema from "./schema";
+import { E2E_SMOKE_FIXTURES } from "../shared/e2e/smokeFixtures";
 
 interface ImportMetaWithGlob extends ImportMeta {
   glob(pattern: string | string[]): Record<string, () => Promise<unknown>>;
@@ -19,6 +20,10 @@ const modules = (import.meta as ImportMetaWithGlob).glob([
   "!./**/*.test.ts",
   "!./**/*.spec.ts",
 ]);
+const BRIDGE_EXPECTED_ACCOUNT_IDS = [
+  E2E_SMOKE_FIXTURES.brokerageConnection.accountId,
+  "U-E2E-654321",
+];
 
 function stubTwelveDataResolutionFetch() {
   vi.stubGlobal(
@@ -189,6 +194,55 @@ describe("brokerage ingestion", () => {
       source: "ibkr",
       status: "active",
     });
+    expect(status.connections[0]).not.toHaveProperty("expectedAccountIds");
+    const storedConnection = await t.run(async (ctx) =>
+      ctx.db.get(connectionId),
+    );
+    expect(storedConnection).toMatchObject({
+      expectedAccountIds: ["U1234567"],
+    });
+    expect(storedConnection).not.toHaveProperty("accountId");
+  });
+
+  it("prefers canonical metadata and replaces it through the legacy account contract", async () => {
+    const fixture = E2E_SMOKE_FIXTURES.brokerageConnection;
+    const connectionId = await t.run(async (ctx) => {
+      return await ctx.db.insert("brokerageConnections", {
+        accountId: "ULEGACY",
+        createdAt: 1,
+        expectedAccountIds: BRIDGE_EXPECTED_ACCOUNT_IDS,
+        ownerId,
+        queryId: "123456",
+        source: "ibkr",
+        status: "active",
+        updatedAt: 1,
+      });
+    });
+
+    const before = await asUser().query(
+      api.brokerageIngestion.getBrokerageIngestionStatus,
+      {},
+    );
+    expect(before.connections[0]?.accountId).toBe(
+      BRIDGE_EXPECTED_ACCOUNT_IDS[0],
+    );
+
+    await asUser().mutation(api.brokerageIngestion.upsertIbkrConnection, {
+      accountId: { kind: "set", value: fixture.accountId },
+    });
+
+    const storedConnection = await t.run(async (ctx) =>
+      ctx.db.get(connectionId),
+    );
+    expect(storedConnection).toMatchObject({
+      expectedAccountIds: [fixture.accountId],
+    });
+    expect(storedConnection).not.toHaveProperty("accountId");
+    const after = await asUser().query(
+      api.brokerageIngestion.getBrokerageIngestionStatus,
+      {},
+    );
+    expect(after.connections[0]?.accountId).toBe(fixture.accountId);
   });
 
   it("preserves existing IBKR credentials when omitted in upsert updates", async () => {
@@ -226,6 +280,7 @@ describe("brokerage ingestion", () => {
       status: "active",
     });
     expect(connection).not.toHaveProperty("accountId");
+    expect(connection).not.toHaveProperty("expectedAccountIds");
     expect(connection).not.toHaveProperty("label");
   });
 

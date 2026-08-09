@@ -4,6 +4,7 @@ import type { Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery } from "./_generated/server";
 import {
   optionalMetadataStringPatchValidator,
+  resolveLegacyAccountIdBridgePatch,
   resolveOptionalMetadataStringPatch,
   validateTokenExpiresAt,
 } from "./lib/brokerageConnectionMetadata";
@@ -237,13 +238,7 @@ export const storeEncryptedToken = internalMutation({
       tokenExpiresAt: validateTokenExpiresAt(args.metadata.tokenExpiresAt),
       ...(args.metadata.accountId === undefined
         ? {}
-        : {
-            accountId: resolveOptionalMetadataStringPatch({
-              fieldName: "Account ID",
-              maxLength: 40,
-              patch: args.metadata.accountId,
-            }),
-          }),
+        : resolveLegacyAccountIdBridgePatch(args.metadata.accountId)),
       ...(args.metadata.label === undefined
         ? {}
         : {

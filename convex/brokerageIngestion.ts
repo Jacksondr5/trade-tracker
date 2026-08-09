@@ -8,6 +8,7 @@ import {
 import { assertOwner, requireUser } from "./lib/auth";
 import {
   optionalMetadataStringPatchValidator,
+  resolveLegacyAccountIdBridgePatch,
   resolveOptionalMetadataStringPatch,
   validateTokenExpiresAt,
 } from "./lib/brokerageConnectionMetadata";
@@ -70,6 +71,15 @@ function toSyncRunSummary(run: Doc<"brokerageSyncRuns">) {
     status: run.status,
     updatedAt: run.updatedAt,
   };
+}
+
+function accountIdForLegacyClient(
+  connection: Pick<
+    Doc<"brokerageConnections">,
+    "accountId" | "expectedAccountIds"
+  >,
+): string | undefined {
+  return connection.expectedAccountIds?.[0] ?? connection.accountId;
 }
 
 const normalizedTradeValidator = v.object({
@@ -528,13 +538,7 @@ export const upsertIbkrConnection = mutation({
       await ctx.db.patch(existing._id, {
         ...(args.accountId === undefined
           ? {}
-          : {
-              accountId: resolveOptionalMetadataStringPatch({
-                fieldName: "Account ID",
-                maxLength: 40,
-                patch: args.accountId,
-              }),
-            }),
+          : resolveLegacyAccountIdBridgePatch(args.accountId)),
         connectionError: undefined,
         ...(args.label === undefined
           ? {}
@@ -555,14 +559,9 @@ export const upsertIbkrConnection = mutation({
 
     const status = args.status ?? (args.queryId ? "active" : "needs_setup");
     return await ctx.db.insert("brokerageConnections", {
-      accountId:
-        args.accountId === undefined
-          ? undefined
-          : resolveOptionalMetadataStringPatch({
-              fieldName: "Account ID",
-              maxLength: 40,
-              patch: args.accountId,
-            }),
+      ...(args.accountId === undefined
+        ? {}
+        : resolveLegacyAccountIdBridgePatch(args.accountId)),
       createdAt: now,
       label:
         args.label === undefined
@@ -724,7 +723,7 @@ export const getBrokerageIngestionStatus = query({
     return {
       connections: connections.map((connection) => ({
         _id: connection._id,
-        accountId: connection.accountId,
+        accountId: accountIdForLegacyClient(connection),
         connectionError: connection.connectionError,
         label: connection.label,
         lastFailedSyncAt: connection.lastFailedSyncAt,

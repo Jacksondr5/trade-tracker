@@ -551,6 +551,7 @@ export default defineSchema({
     accountId: v.optional(v.string()),
     connectionError: v.optional(v.string()),
     createdAt: v.number(),
+    expectedAccountIds: v.optional(v.array(v.string())),
     label: v.optional(v.string()),
     lastFailedSyncAt: v.optional(v.number()),
     lastSuccessfulSyncAt: v.optional(v.number()),

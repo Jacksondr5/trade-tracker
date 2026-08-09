@@ -280,7 +280,7 @@ describe("brokerage connection secrets", () => {
     expect(secrets[0].ciphertext).not.toBe(first.ciphertext);
     const connection = await t.run(async (ctx) => ctx.db.get(connectionId));
     expect(connection).toMatchObject({
-      accountId: "U1234567",
+      expectedAccountIds: ["U1234567"],
       label: "Original label",
       queryId: "654321",
       status: "paused",
@@ -292,6 +292,32 @@ describe("brokerage connection secrets", () => {
         ownerId: "owner-a",
       }),
     ).resolves.toBe("replacement-secret");
+  });
+
+  it("replaces the canonical expected list through legacy token metadata", async () => {
+    const connectionId = await createConnection();
+    await t.run(async (ctx) => {
+      await ctx.db.patch(connectionId, {
+        accountId: "ULEGACY",
+        expectedAccountIds: ["UCANONICAL", "USECONDARY"],
+      });
+    });
+
+    await asUser().action(api.brokerageSecrets.setIbkrConnectionToken, {
+      connectionId,
+      metadata: {
+        accountId: { kind: "set", value: " UREPLACEMENT " },
+        queryId: "123456",
+        tokenExpiresAt: 1_800_000_000_000,
+      },
+      token: "replacement-secret",
+    });
+
+    const connection = await t.run(async (ctx) => ctx.db.get(connectionId));
+    expect(connection).toMatchObject({
+      expectedAccountIds: ["UREPLACEMENT"],
+    });
+    expect(connection).not.toHaveProperty("accountId");
   });
 
   it("applies explicit metadata clears atomically with a token replacement", async () => {
@@ -325,6 +351,7 @@ describe("brokerage connection secrets", () => {
       tokenExpiresAt: 1_900_000_000_000,
     });
     expect(connection).not.toHaveProperty("accountId");
+    expect(connection).not.toHaveProperty("expectedAccountIds");
     expect(connection).not.toHaveProperty("label");
   });
 
