@@ -29,6 +29,23 @@ export function resolveOptionalMetadataStringPatch(args: {
   return value;
 }
 
+export function resolveLegacyAccountIdBridgePatch(
+  patch: OptionalMetadataStringPatch,
+): {
+  accountId: undefined;
+  expectedAccountIds: string[] | undefined;
+} {
+  const accountId = resolveOptionalMetadataStringPatch({
+    fieldName: "Account ID",
+    maxLength: 40,
+    patch,
+  });
+  return {
+    accountId: undefined,
+    expectedAccountIds: accountId === undefined ? undefined : [accountId],
+  };
+}
+
 export function validateTokenExpiresAt(value: number): number {
   if (!Number.isFinite(value) || value <= 0) {
     throw new ConvexError("IBKR Flex token expiration date is required");
