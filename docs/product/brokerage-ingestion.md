@@ -200,10 +200,23 @@ review surface should make the freshness problem visible.
 
 IBKR Flex tokens are sensitive credentials.
 
-Store raw tokens outside normal user-facing Convex documents when practical.
-Convex may store metadata such as token label, expiration date, last validated
-time, and status. Temporal activities or the worker runtime may read the secret
-from deployment secret storage.
+Each brokerage connection owns its own write-only token. Encrypt tokens with
+AES-GCM in a Convex action before writing them to the separate
+`brokerageConnectionSecrets` table. The encryption key comes from the Convex
+deployment environment; each encrypted row records a key version so future key
+rotation can distinguish old and new ciphertext. Client-facing queries may
+return safe metadata such as whether a token is configured and when it expires,
+but must never return ciphertext, IVs, or plaintext.
+
+Key rotation uses an active version plus retained versioned deployment keys so
+old rows remain decryptable while replacement writes use the new version. A
+separate rotation command or bulk migration is not required for the initial
+implementation.
+
+Decrypt a token only inside the action that is about to call IBKR, and keep the
+plaintext local to that action. It must never become a workflow argument or a
+workflow step return value because `@convex-dev/workflow` durably journals both.
+Do not log or echo plaintext tokens.
 
 Raw brokerage reports are sensitive financial records. Store only what is
 needed for audit and debugging. The first implementation should use Convex

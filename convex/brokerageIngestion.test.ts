@@ -76,10 +76,9 @@ describe("brokerage ingestion", () => {
     return await asUser().mutation(
       api.brokerageIngestion.upsertIbkrConnection,
       {
-        accountId: "U1234567",
-        label: "IBKR Main",
+        accountId: { kind: "set", value: "U1234567" },
+        label: { kind: "set", value: "IBKR Main" },
         queryId: "123456",
-        tokenLabel: "homelab-secret",
       },
     );
   }
@@ -171,8 +170,8 @@ describe("brokerage ingestion", () => {
     const sameConnectionId = await asUser().mutation(
       api.brokerageIngestion.upsertIbkrConnection,
       {
-        accountId: "U1234567",
-        label: "IBKR Updated",
+        accountId: { kind: "set", value: "U1234567" },
+        label: { kind: "set", value: "IBKR Updated" },
         queryId: "654321",
       },
     );
@@ -196,7 +195,7 @@ describe("brokerage ingestion", () => {
     const connectionId = await createConnection();
 
     await asUser().mutation(api.brokerageIngestion.upsertIbkrConnection, {
-      label: "Renamed connection",
+      label: { kind: "set", value: "Renamed connection" },
     });
 
     const status = await asUser().query(
@@ -211,6 +210,33 @@ describe("brokerage ingestion", () => {
       queryId: "123456",
       status: "active",
     });
+  });
+
+  it("clears optional connection metadata only through explicit patches", async () => {
+    const connectionId = await createConnection();
+
+    await asUser().mutation(api.brokerageIngestion.upsertIbkrConnection, {
+      accountId: { kind: "clear" },
+      label: { kind: "clear" },
+    });
+
+    const connection = await t.run(async (ctx) => ctx.db.get(connectionId));
+    expect(connection).toMatchObject({
+      queryId: "123456",
+      status: "active",
+    });
+    expect(connection).not.toHaveProperty("accountId");
+    expect(connection).not.toHaveProperty("label");
+  });
+
+  it("rejects empty metadata set patches instead of treating them as clears", async () => {
+    await createConnection();
+
+    await expect(
+      asUser().mutation(api.brokerageIngestion.upsertIbkrConnection, {
+        label: { kind: "set", value: "   " },
+      }),
+    ).rejects.toThrow("Label cannot be empty");
   });
 
   it("returns the operational details needed to review brokerage ingestion", async () => {
@@ -281,7 +307,6 @@ describe("brokerage ingestion", () => {
     expect(status.connections[0]).toMatchObject({
       connectionError: "IBKR rejected the Flex token",
       tokenExpiresAt,
-      tokenLabel: "homelab-secret",
     });
     expect(status.latestFailedSync).toMatchObject({
       errorMessage: "IBKR rejected the Flex token",

@@ -1,0 +1,1 @@
+export const MAX_IBKR_FLEX_TOKEN_LENGTH = 4_096;
