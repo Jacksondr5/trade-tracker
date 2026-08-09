@@ -31,7 +31,8 @@ Brokerage ingestion should not become:
 
 ## Canonical Model
 
-Convex remains the system of record for product state:
+Convex is both the system of record and the durable orchestration runtime for
+brokerage ingestion:
 
 - accepted trades
 - inbox trades
@@ -39,23 +40,19 @@ Convex remains the system of record for product state:
 - portfolio valuation rows
 - brokerage sync runs
 - reconciliation issues
-- connection metadata that is safe to store in the product database
+- connection metadata that is safe to expose to the product
+- encrypted, connection-bound brokerage credentials in a separate secrets table
 
-Temporal orchestrates the external ingestion workflow:
-
-- scheduling IBKR Flex syncs
-- calling the Flex Web Service
-- waiting while reports are generated
-- retrying transient failures
-- invoking Convex functions with bounded, idempotent results
-
-Temporal must not own a separate product data model. If a user-facing state is
-needed, write it back to Convex through explicit ingestion functions.
+The `@convex-dev/workflow` component coordinates the long-running parts of the
+sync: scheduling, Flex Web Service requests, durable waits, bounded retries, and
+per-connection fan-out. Convex actions perform the external requests and XML
+parsing, while internal mutations own all canonical product writes. There is no
+separate brokerage worker or second product data model.
 
 ## Initial Provider
 
-Initial automated brokerage ingestion should target Interactive Brokers through
-IBKR Flex Web Service.
+Initial automated brokerage ingestion targets Interactive Brokers through IBKR
+Flex Web Service.
 
 IBKR Flex Web Service is the preferred source because:
 
@@ -75,8 +72,7 @@ delivery workflow is simpler than direct request/retry orchestration.
 
 ## Report Types
 
-The first implementation should use an Activity Flex Query for the prior
-business day.
+The automated sync uses an Activity Flex Query for the prior business day.
 
 The Activity Flex Query should include, as available:
 
@@ -92,8 +88,10 @@ not replace, the daily Activity report.
 
 ## Schedule Timing
 
-The Activity Flex sync should start at 1:00 a.m. Eastern Time for the prior
-business day.
+The Activity Flex sync starts at 1:00 a.m. Eastern Time for the prior business
+day. A single Convex cron fires at 05:00 UTC. It starts immediately during
+Eastern daylight time and uses a durable one-hour delay during Eastern standard
+time, avoiding duplicate runs around daylight-saving transitions.
 
 IBKR Activity Statements are not the right source for a final same-evening
 valuation. They are updated after the reporting backend closes the prior day and
@@ -118,7 +116,7 @@ sync completes.
 
 ## Sync Workflow
 
-Each scheduled sync should have a durable identity based on:
+Each per-connection sync has a durable identity based on:
 
 - owner
 - brokerage connection
@@ -126,24 +124,26 @@ Each scheduled sync should have a durable identity based on:
 - query ID
 - report date
 
-For IBKR Flex Web Service, the expected workflow is:
+For IBKR Flex Web Service, the implemented workflow is:
 
-1. Temporal starts a sync workflow for the expected report date.
-2. Temporal records or confirms a Convex sync run exists.
-3. An activity calls `/SendRequest` and stores the returned reference code in
-   Convex.
-4. The workflow waits and retries `/GetStatement` until the report is ready, a
-   terminal error occurs, or a configured cutoff is reached.
-5. An activity stores the raw report content or a content-addressed reference
-   and hash.
-6. An activity parses the report into normalized trade candidates, position
-   snapshots, and cash snapshots.
-7. An activity calls Convex ingestion functions.
-8. Convex stages new trades for review, writes snapshots, updates sync status,
-   and records reconciliation issues.
+1. The nightly Convex job selects active IBKR connections and starts one durable
+   child workflow per connection for the expected report date.
+2. An internal mutation creates the keyed sync run, joins an existing
+   succeeded or in-flight run, or atomically requeues a failed run.
+3. A Convex action decrypts that connection's token, calls `SendRequest`, and
+   records the returned reference code.
+4. The workflow durably waits and retries `GetStatement` with bounded
+   exponential backoff until the report is ready, a terminal error occurs, or
+   the polling cutoff is reached.
+5. When ready, an action stores the raw XML in Convex file storage, records its
+   content hash, parses the report, and submits normalized results to an
+   internal ingestion mutation.
+6. The ingestion mutation stages new trades for review, writes position and
+   cash snapshots, reconciles positions, and updates the sync run.
 
-Workflow code must only orchestrate deterministic steps. Network calls, XML
-parsing, raw report storage, and Convex API calls belong in Temporal activities.
+Workflow arguments and step results must contain only the minimum durable
+coordination data. Credentials never enter the workflow journal. External I/O
+and parsing stay in actions; canonical writes stay in internal mutations.
 
 ## Idempotency
 
@@ -151,10 +151,10 @@ Every ingestion step must be safe to retry.
 
 Use stable keys for dedupe:
 
-- workflow ID for the orchestration attempt
-- sync run uniqueness for `(ownerId, connectionId, reportType, reportDate,
-  queryId)`
-- raw report content hash for duplicate report retrieval
+- sync run uniqueness for `(connectionId, reportType, reportDate, queryId)`;
+  ownership is inherited from the connection and recorded on the run
+- one raw report attachment per sync run, with a content hash for audit and
+  duplicate identification
 - broker-native execution ID when importing trades
 - fallback composite keys only when IBKR does not provide a stable execution ID
 
@@ -235,7 +235,7 @@ Expected retryable failures include:
 - temporary IBKR server load
 - transient network errors
 - rate limits
-- worker restarts
+- transient Convex action or workflow-step failures
 
 Expected terminal or user-action failures include:
 
@@ -248,24 +248,24 @@ Expected terminal or user-action failures include:
 Terminal failures should update Convex sync status and surface a clear
 operational issue. They should not block the rest of the product from loading.
 
-## Deployment
+## Operational Verification
 
-The Temporal worker should follow the existing self-hosted homelab pattern used
-by `pr-review-orchestrator`.
+The automated path is not considered proven by unit tests or a successful
+deployment alone. A production acceptance run should use a real Activity Flex
+Query containing trades, open positions, and cash data for the prior business
+day, then verify that one sync:
 
-Expected deployment shape:
+- completes without exposing the write-only token
+- stores a raw report reference and content hash
+- stages new executions in the import inbox without duplicates
+- writes position and cash snapshots for every account in the report
+- creates or resolves reviewable reconciliation issues
+- exposes the resulting sync and freshness state in the product
 
-- self-hosted Temporal cluster
-- dedicated namespace for Trade Tracker portfolio ingestion
-- dedicated task queue for portfolio pipeline work
-- worker service configured through environment variables
-- secrets mounted through deployment secret files or environment management
-- Convex HTTP service token used for worker-to-Convex ingestion calls
-
-The worker should be independently deployable from the Next.js app and Convex
-deployment. Convex remains the durable product database; the worker can be
-restarted or redeployed without losing pipeline state because Temporal and
-Convex retain workflow and product state respectively.
+After the manual acceptance run, observe at least one unattended 1:00 a.m.
+Eastern run. This proves brokerage ingestion only. The broader brokerage to
+market-data to valuation parent pipeline remains separate work and must not be
+claimed as complete from this sync alone.
 
 ## User Experience
 
