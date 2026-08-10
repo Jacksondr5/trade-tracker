@@ -290,17 +290,19 @@ connection remains eligible for the next scheduled sync, while the failed sync
 run, connection error, and failure timestamp explain why the latest attempt
 did not succeed. A paused connection remains excluded from scheduling.
 
-A manual force may recover the keyed terminal run without changing the
-connection status. Force cannot make IBKR regenerate a cached Flex statement.
-If the content hash is unchanged, the failure tells the operator to edit the
-Flex query or wait for the reporting period to roll over.
+A manual force may recover the keyed terminal run without changing a normally
+active connection's status. It reactivates a legacy errored connection only as
+part of that explicit recovery. Force cannot make IBKR regenerate a cached Flex
+statement. If the content hash is unchanged, the failure tells the operator to
+edit the Flex query or wait for the reporting period to roll over.
 
-`error` remains a supported connection status for compatibility with existing
-data and future configuration-validation states, but sync-run failures do not
-set it. The scheduler selects `active` connections during nightly execution;
-its force-only `includeError` path remains to let an operator recover a
-pre-existing errored connection. Retire the enum only through a separate schema
-migration decision.
+`error` remains a schema-supported legacy connection status for compatibility.
+No current app write path assigns it: public connection updates accept only
+`active`, `paused`, or `needs_setup`, and sync-run failure and success mutations
+preserve the existing connection status. The scheduler selects `active`
+connections during nightly execution; its force-only `includeError` path
+remains to let an operator recover a pre-existing errored connection. Retire
+the enum only through a separate schema-migration decision.
 
 Operator recovery should scope the force to the connection being repaired:
 

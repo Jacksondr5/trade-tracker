@@ -30,6 +30,7 @@ import {
 } from "../../../../../shared/brokerage/constants";
 import { IMPORTS_INDEX_TEST_IDS } from "../../../../../shared/e2e/testIds";
 import {
+  hasInFlightRetryAfterCurrentFailure,
   hasCurrentSyncFailure,
   parseExpectedAccountIds,
   toOptionalStringArrayPatch,
@@ -370,6 +371,10 @@ export function BrokerageSyncPanel({
     lastFailedSyncAt: connection?.lastFailedSyncAt,
     lastSuccessfulSyncAt: connection?.lastSuccessfulSyncAt,
   });
+  const inFlightRetryAfterCurrentFailure = hasInFlightRetryAfterCurrentFailure({
+    currentSyncFailure,
+    latestSyncRunStatus: status.latestSyncRuns[0]?.status,
+  });
 
   return (
     <Card
@@ -386,7 +391,14 @@ export function BrokerageSyncPanel({
               {statusPresentation.label}
             </Badge>
             {currentSyncFailure ? (
-              <Badge variant="danger">Last sync failed</Badge>
+              <Badge
+                data-testid={
+                  IMPORTS_INDEX_TEST_IDS.brokerageCurrentFailureBadge
+                }
+                variant="danger"
+              >
+                Last sync failed
+              </Badge>
             ) : null}
             {connection?.label ? (
               <span className="text-xs text-olive-11">{connection.label}</span>
@@ -451,18 +463,27 @@ export function BrokerageSyncPanel({
           <p
             className={cn(
               "mt-1 text-sm",
-              latestFailure ? "text-red-11" : "text-olive-12",
+              latestFailure || inFlightRetryAfterCurrentFailure
+                ? "text-red-11"
+                : "text-olive-12",
             )}
           >
             {latestFailure
               ? (latestFailure.errorMessage ??
                 `Failed for ${latestFailure.reportDate}`)
-              : "No failures recorded"}
+              : inFlightRetryAfterCurrentFailure
+                ? "Retrying after last failure"
+                : "No failures recorded"}
           </p>
           {latestFailure ? (
             <p className="mt-1 text-xs text-olive-11">
               {latestFailure.reportDate} ·{" "}
               {formatDate(latestFailure.completedAt ?? latestFailure.updatedAt)}
+            </p>
+          ) : inFlightRetryAfterCurrentFailure &&
+            connection?.lastFailedSyncAt ? (
+            <p className="mt-1 text-xs text-olive-11">
+              Last failure · {formatDate(connection.lastFailedSyncAt)}
             </p>
           ) : null}
         </div>

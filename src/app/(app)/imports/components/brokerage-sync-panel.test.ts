@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { IMPORTS_INDEX_TEST_IDS } from "../../../../../shared/e2e/testIds";
 import {
+  hasInFlightRetryAfterCurrentFailure,
   hasCurrentSyncFailure,
   parseExpectedAccountIds,
   toOptionalStringArrayPatch,
@@ -42,5 +44,32 @@ describe("expected account ID form helpers", () => {
         lastSuccessfulSyncAt: undefined,
       }),
     ).toBe(false);
+  });
+
+  it("identifies an in-flight retry after a current failure", () => {
+    expect(
+      hasInFlightRetryAfterCurrentFailure({
+        currentSyncFailure: true,
+        latestSyncRunStatus: "waiting_for_statement",
+      }),
+    ).toBe(true);
+    expect(
+      hasInFlightRetryAfterCurrentFailure({
+        currentSyncFailure: true,
+        latestSyncRunStatus: "succeeded",
+      }),
+    ).toBe(false);
+    expect(
+      hasInFlightRetryAfterCurrentFailure({
+        currentSyncFailure: false,
+        latestSyncRunStatus: "queued",
+      }),
+    ).toBe(false);
+  });
+
+  it("registers the current-failure badge in the shared selector contract", () => {
+    expect(IMPORTS_INDEX_TEST_IDS.brokerageCurrentFailureBadge).toBe(
+      "brokerage-current-failure-badge",
+    );
   });
 });

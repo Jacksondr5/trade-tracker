@@ -19,6 +19,18 @@ export function hasCurrentSyncFailure(args: {
   );
 }
 
+export function hasInFlightRetryAfterCurrentFailure(args: {
+  currentSyncFailure: boolean;
+  latestSyncRunStatus: string | undefined;
+}): boolean {
+  return (
+    args.currentSyncFailure &&
+    ["queued", "requesting", "waiting_for_statement", "processing"].includes(
+      args.latestSyncRunStatus ?? "",
+    )
+  );
+}
+
 export function toOptionalStringArrayPatch(args: {
   cleared: boolean;
   fieldName: string;
