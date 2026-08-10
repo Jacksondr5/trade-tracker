@@ -24,6 +24,7 @@ When an agent starts work on a Linear ticket in this repo:
 ## Commands
 
 ```bash
+pnpm agent:down   # Stop this worktree's recorded local environment
 pnpm agent:up     # Provision and start this worktree's isolated local environment
 pnpm dev          # Start Next.js only (normally use agent:up instead)
 pnpm build        # Production build
@@ -40,10 +41,13 @@ This repo uses Vitest for unit-style tests and Playwright for end-to-end tests. 
 New Git worktrees may be missing `.env.local`, `node_modules/`, and a Convex deployment. Bootstrap and start all three with one command:
 
 ```bash
-pnpm agent:up
+pnpm agent:up & # First invocation is long-running; keep this shell/session alive.
+pnpm agent:up   # Second invocation prints the exact endpoints and exits.
 ```
 
-`agent:up` installs dependencies when needed, bootstraps local secrets without retaining another checkout's Convex binding, assigns deterministic ports from the worktree path, selects a worktree-local Convex backend, and waits for both services to be ready. It then prints the exact app origin, Convex URL, and origin-keyed Playwright auth-state path. It is idempotent: rerunning it while this worktree's environment is already healthy prints the same values and exits.
+The first `agent:up` invocation supervises Convex and Next.js in the foreground, so launch it as a backgrounded or long-running terminal process and leave that process running. It installs dependencies when needed, bootstraps local secrets without retaining another checkout's Convex binding, assigns deterministic ports from the worktree path, selects a worktree-local Convex backend, and waits for both services to be ready. A second foreground invocation is the authoritative way to print the exact app origin, Convex URL, and origin-keyed Playwright auth-state path; it exits immediately when the supervised environment is healthy.
+
+Stop the recorded environment with `pnpm agent:down`. `agent:up` automatically recovers a stale `output/agent/runtime.json` lease when it can prove ownership of the recorded child process. If a different process owns one of the deterministic ports, it refuses to start and prints the conflicting ports instead of treating that process as healthy.
 
 Do not copy `.env.local` manually or run reset/seed commands against a deployment inherited from another checkout. Local Playwright setup refuses to reset data unless `.env.local` and `.convex/local/default` identify the same worktree-local backend.
 
@@ -88,14 +92,15 @@ Use this first for UI tasks, especially when the agent expects to make code edit
 var TARGET_URL = "<App origin printed by pnpm agent:up>";
 var AUTH_STATE_FILE = "<Playwright auth state path printed by pnpm agent:up>";
 
-await context.storageState({ path: AUTH_STATE_FILE });
-
 context = await browser.newContext({
   viewport: { width: 1600, height: 900 },
   storageState: AUTH_STATE_FILE,
 });
 page = await context.newPage();
 await page.goto(TARGET_URL, { waitUntil: "domcontentloaded" });
+
+// Run this only after a manual login succeeds in this live context.
+// await context.storageState({ path: AUTH_STATE_FILE });
 ```
 
 ### `playwright` CLI Workflow

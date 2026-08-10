@@ -1,7 +1,10 @@
-import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  authFileForOrigin,
+  parseDotenv,
+} from "../../../scripts/agent-environment.mjs";
 
 function findProjectRoot(startDir: string): string {
   let currentDir = startDir;
@@ -22,45 +25,20 @@ const DOTENV_LOCAL_PATH = path.join(ROOT_DIR, ".env.local");
 
 export const PLAYWRIGHT_ENV_FILE = DOTENV_LOCAL_PATH;
 
-function loadDotenvLocal(): Record<string, string> {
+export function loadDotenvLocal(): Record<string, string> {
   if (!fs.existsSync(DOTENV_LOCAL_PATH)) {
     return {};
   }
 
-  return Object.fromEntries(
-    fs
-      .readFileSync(DOTENV_LOCAL_PATH, "utf8")
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(
-        (line) =>
-          line.length > 0 && !line.startsWith("#") && line.includes("="),
-      )
-      .map((line) => {
-        const delimiterIndex = line.indexOf("=");
-        const key = line.slice(0, delimiterIndex).trim();
-        let value = line.slice(delimiterIndex + 1).trim();
-
-        if (
-          value.length >= 2 &&
-          ((value.startsWith('"') && value.endsWith('"')) ||
-            (value.startsWith("'") && value.endsWith("'")))
-        ) {
-          value = value.slice(1, -1);
-        }
-
-        return [key, value];
-      }),
-  );
+  return parseDotenv(fs.readFileSync(DOTENV_LOCAL_PATH, "utf8"));
 }
-
-const dotenvLocal = loadDotenvLocal();
 
 function normalizeClerkFrontendApiUrl(value: string): string {
   return value.replace(/^https?:\/\//, "").replace(/\/$/, "");
 }
 
 export function getConfiguredBaseUrl(): string | null {
+  const dotenvLocal = loadDotenvLocal();
   const configuredBaseUrl =
     process.env.PLAYWRIGHT_BASE_URL?.trim() ||
     dotenvLocal.PLAYWRIGHT_BASE_URL?.trim() ||
@@ -85,26 +63,19 @@ export function getBaseUrl(): string {
 }
 
 export function getAuthFileForBaseUrl(baseUrl: string): string {
-  const parsed = new URL(baseUrl);
-  const readableOrigin =
-    `${parsed.protocol.slice(0, -1)}-${parsed.hostname}-${parsed.port || "default"}`
-      .toLowerCase()
-      .replace(/[^a-z0-9-]+/g, "-");
-  const originHash = createHash("sha256")
-    .update(parsed.origin)
-    .digest("hex")
-    .slice(0, 8);
-
-  return path.join(
-    ROOT_DIR,
-    "output",
-    "playwright",
-    "auth",
-    `${readableOrigin}-${originHash}.json`,
-  );
+  return authFileForOrigin(baseUrl, ROOT_DIR);
 }
 
-export const PLAYWRIGHT_AUTH_FILE = getAuthFileForBaseUrl(getBaseUrl());
+export function getPlaywrightAuthFile(): string {
+  const dotenvLocal = loadDotenvLocal();
+  const configured =
+    process.env.PLAYWRIGHT_AUTH_FILE?.trim() ||
+    dotenvLocal.PLAYWRIGHT_AUTH_FILE?.trim();
+
+  return configured
+    ? path.resolve(ROOT_DIR, configured)
+    : getAuthFileForBaseUrl(getBaseUrl());
+}
 
 function shouldUseBypassHeaders(baseUrl: string): boolean {
   try {
@@ -129,6 +100,7 @@ export function isLocalPlaywrightTarget(baseUrl: string): boolean {
 }
 
 export function getBypassHeaders(): Record<string, string> | undefined {
+  const dotenvLocal = loadDotenvLocal();
   const bypassSecret = (
     process.env.VERCEL_AUTOMATION_BYPASS_SECRET ??
     dotenvLocal.VERCEL_AUTOMATION_BYPASS_SECRET
@@ -155,6 +127,7 @@ export function getBypassBootstrapUrl(): string | undefined {
 }
 
 function getRequiredEnv(name: string): string {
+  const dotenvLocal = loadDotenvLocal();
   const value = (process.env[name] ?? dotenvLocal[name])?.trim();
 
   if (!value) {

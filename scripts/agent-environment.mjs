@@ -79,6 +79,28 @@ export function parseDotenv(contents) {
   );
 }
 
+export function quoteDotenvValue(value) {
+  if (value.includes("\n") || value.includes("\r") || value.includes("'")) {
+    throw new Error(
+      "Generated environment values must not contain newlines or single quotes.",
+    );
+  }
+  return `'${value}'`;
+}
+
+export function readLocalConvexConfig(filePath) {
+  const config = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  if (
+    typeof config.adminKey !== "string" ||
+    config.adminKey.length === 0 ||
+    typeof config.ports?.cloud !== "number" ||
+    !Number.isInteger(config.ports.cloud)
+  ) {
+    throw new Error("Local Convex config is incomplete.");
+  }
+  return { adminKey: config.adminKey, cloudPort: config.ports.cloud };
+}
+
 export function updateDotenvFile(filePath, updates) {
   const existing = fs.existsSync(filePath)
     ? fs.readFileSync(filePath, "utf8")
@@ -94,7 +116,7 @@ export function updateDotenvFile(filePath, updates) {
 
       const value = remainingUpdates.get(match[1]);
       remainingUpdates.delete(match[1]);
-      return value === null ? null : `${match[1]}=${value}`;
+      return value === null ? null : `${match[1]}=${quoteDotenvValue(value)}`;
     })
     .filter((line) => line !== null);
 
@@ -106,7 +128,7 @@ export function updateDotenvFile(filePath, updates) {
   }
   for (const [key, value] of remainingUpdates) {
     if (value !== null) {
-      updatedLines.push(`${key}=${value}`);
+      updatedLines.push(`${key}=${quoteDotenvValue(value)}`);
     }
   }
   updatedLines.push("");

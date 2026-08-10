@@ -663,20 +663,22 @@ export const seedTradePlanInboxScenarios = internalMutation({
 
     const linkedSuggestedExternalId = `${args.scope}-${E2E_SMOKE_FIXTURES.inboxTrades.linkedSuggested.fixtureKey}`;
     const standaloneAssignedExternalId = `${args.scope}-${E2E_SMOKE_FIXTURES.inboxTrades.standaloneAssigned.fixtureKey}`;
+    const linkedAssetType = "stock" as const;
+    const standaloneAssetType = "crypto" as const;
 
     await upsertResolvedMarketDataInstrument(ctx, {
-      assetType: "stock",
+      assetType: linkedAssetType,
       ownerId,
       symbol: linkedTradePlan.instrumentSymbol,
     });
     await upsertResolvedMarketDataInstrument(ctx, {
-      assetType: "crypto",
+      assetType: standaloneAssetType,
       ownerId,
       symbol: standaloneTradePlan.instrumentSymbol,
     });
 
     await upsertInboxTrade(ctx, {
-      assetType: "stock",
+      assetType: linkedAssetType,
       brokerageAccountId: "playwright-linked-account",
       date: E2E_SMOKE_FIXTURES.inboxTrades.linkedSuggested.date,
       direction: "long",
@@ -690,7 +692,7 @@ export const seedTradePlanInboxScenarios = internalMutation({
     });
 
     await upsertInboxTrade(ctx, {
-      assetType: "crypto",
+      assetType: standaloneAssetType,
       brokerageAccountId: "playwright-standalone-account",
       date: E2E_SMOKE_FIXTURES.inboxTrades.standaloneAssigned.date,
       direction: "short",

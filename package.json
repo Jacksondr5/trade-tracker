@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "agent:down": "node scripts/agent-up.mjs --down",
     "agent:up": "node scripts/agent-up.mjs",
     "build": "next build",
     "dev": "next dev",

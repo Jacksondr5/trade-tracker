@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -6,6 +7,7 @@ import {
   authFileForOrigin,
   deriveAgentEnvironment,
   parseDotenv,
+  readLocalConvexConfig,
   updateDotenvFile,
 } from "./agent-environment.mjs";
 
@@ -70,17 +72,41 @@ test("authFileForOrigin keys state by the complete origin", () => {
 test("updateDotenvFile preserves unrelated values and updates scoped values", () => {
   const directory = temporaryDirectory();
   const envFile = path.join(directory, ".env.local");
-  fs.writeFileSync(envFile, "SECRET=keep\nAPP_URL=http://old\n");
+  fs.writeFileSync(
+    envFile,
+    "SECRET=keep\nAPP_URL=http://old\nCONVEX_DEPLOY_KEY=inherited\n",
+  );
 
   updateDotenvFile(envFile, {
-    APP_URL: "http://localhost:12345",
+    APP_URL: "http://localhost:12345/path # $ ` value",
     CONVEX_DEPLOY_KEY: null,
     PLAYWRIGHT_BASE_URL: "http://localhost:12345",
   });
 
   expect(parseDotenv(fs.readFileSync(envFile, "utf8"))).toEqual({
-    APP_URL: "http://localhost:12345",
+    APP_URL: "http://localhost:12345/path # $ ` value",
     PLAYWRIGHT_BASE_URL: "http://localhost:12345",
     SECRET: "keep",
   });
+
+  const sourced = spawnSync(
+    "sh",
+    ["-c", '. "$1"; printf "%s" "$APP_URL"', "sh", envFile],
+    { encoding: "utf8" },
+  );
+  expect(sourced.status).toBe(0);
+  expect(sourced.stdout).toBe("http://localhost:12345/path # $ ` value");
+});
+
+test("readLocalConvexConfig rejects malformed and incomplete files", () => {
+  const directory = temporaryDirectory();
+  const configFile = path.join(directory, "config.json");
+
+  fs.writeFileSync(configFile, "{malformed");
+  expect(() => readLocalConvexConfig(configFile)).toThrow(SyntaxError);
+
+  fs.writeFileSync(configFile, JSON.stringify({ ports: { cloud: 3210 } }));
+  expect(() => readLocalConvexConfig(configFile)).toThrow(
+    "Local Convex config is incomplete.",
+  );
 });

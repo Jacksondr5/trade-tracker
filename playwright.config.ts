@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
-import { PLAYWRIGHT_AUTH_FILE, getBaseUrl } from "./tests/e2e/helpers/env";
+import { getBaseUrl, getPlaywrightAuthFile } from "./tests/e2e/helpers/env";
+
+const playwrightAuthFile = getPlaywrightAuthFile();
 
 export default defineConfig({
   globalSetup: "./tests/e2e/setup/global.setup.ts",
@@ -33,7 +35,7 @@ export default defineConfig({
       testIgnore: [/.*\.setup\.ts/, /public-home\.spec\.ts/],
       use: {
         ...devices["Desktop Chrome"],
-        storageState: PLAYWRIGHT_AUTH_FILE,
+        storageState: playwrightAuthFile,
       },
     },
     {

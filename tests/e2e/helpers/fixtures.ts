@@ -1,38 +1,21 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { readLocalConvexConfig } from "../../../scripts/agent-environment.mjs";
 import {
   PLAYWRIGHT_ENV_FILE,
   getProjectRoot,
   isLocalPlaywrightTarget,
+  loadDotenvLocal,
 } from "./env";
 
-function readLocalEnvironment(): Record<string, string> {
-  return Object.fromEntries(
-    fs
-      .readFileSync(PLAYWRIGHT_ENV_FILE, "utf8")
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(
-        (line) =>
-          line.length > 0 && !line.startsWith("#") && line.includes("="),
-      )
-      .map((line) => {
-        const delimiterIndex = line.indexOf("=");
-        return [
-          line.slice(0, delimiterIndex).trim(),
-          line
-            .slice(delimiterIndex + 1)
-            .trim()
-            .replace(/^(['"])(.*)\1$/, "$2"),
-        ];
-      }),
-  );
-}
+type LocalConvexTarget = { adminKey: string; url: string };
 
-export function assertIsolatedAgentDeployment(baseUrl: string): void {
+export function assertIsolatedAgentDeployment(
+  baseUrl: string,
+): LocalConvexTarget | null {
   if (!isLocalPlaywrightTarget(baseUrl)) {
-    return;
+    return null;
   }
 
   if (!fs.existsSync(PLAYWRIGHT_ENV_FILE)) {
@@ -40,7 +23,7 @@ export function assertIsolatedAgentDeployment(baseUrl: string): void {
       "Refusing to reset Playwright data: .env.local is missing. Start the isolated environment with pnpm agent:up.",
     );
   }
-  const localEnvironment = readLocalEnvironment();
+  const localEnvironment = loadDotenvLocal();
   const deployment = localEnvironment.CONVEX_DEPLOYMENT;
   const convexUrl = localEnvironment.NEXT_PUBLIC_CONVEX_URL;
   const localConfigPath = path.join(
@@ -56,9 +39,15 @@ export function assertIsolatedAgentDeployment(baseUrl: string): void {
     );
   }
 
-  const localConfig = JSON.parse(fs.readFileSync(localConfigPath, "utf8")) as {
-    ports?: { cloud?: number };
-  };
+  let localConfig: { adminKey: string; cloudPort: number };
+  try {
+    localConfig = readLocalConvexConfig(localConfigPath);
+  } catch {
+    throw new Error(
+      "Refusing to reset Playwright data: this worktree's local Convex config is unreadable. Run pnpm agent:up.",
+    );
+  }
+  const localCloudPort = localConfig.cloudPort;
   let configuredConvexPort: number | null = null;
   try {
     const parsedConvexUrl = new URL(convexUrl ?? "");
@@ -74,11 +63,16 @@ export function assertIsolatedAgentDeployment(baseUrl: string): void {
       "Refusing to reset Playwright data: NEXT_PUBLIC_CONVEX_URL is not local.",
     );
   }
-  if (configuredConvexPort !== localConfig.ports?.cloud) {
+  if (configuredConvexPort !== localCloudPort) {
     throw new Error(
       "Refusing to reset Playwright data: .env.local does not match this worktree's local Convex backend.",
     );
   }
+
+  return {
+    adminKey: localConfig.adminKey,
+    url: `http://127.0.0.1:${localCloudPort}`,
+  };
 }
 
 function parseConvexRunOutput<T>(output: string): T {
@@ -104,22 +98,36 @@ function parseConvexRunOutput<T>(output: string): T {
   throw new Error(`Failed to parse Convex run output as JSON:\n${trimmed}`);
 }
 
-function runConvexFunction<T>(functionName: string): T {
-  // clerkSetup loads .env.local into this process. Convex's local deployment
-  // selector must read its worktree metadata from the file itself; passing the
-  // `local:` value as an inherited shell variable makes the CLI treat it like a
-  // cloud selector. Remove deployment-selection variables before spawning.
+function runConvexFunction<T>(
+  functionName: string,
+  target: LocalConvexTarget,
+): T {
+  // Name the destructive target explicitly. These flags take precedence over
+  // deploy keys and selectors loaded from either the process or .env.local.
   const convexEnvironment = { ...process.env };
   delete convexEnvironment.CONVEX_DEPLOYMENT;
   delete convexEnvironment.CONVEX_DEPLOY_KEY;
   delete convexEnvironment.CONVEX_SELF_HOSTED_ADMIN_KEY;
   delete convexEnvironment.CONVEX_SELF_HOSTED_URL;
-  const output = execFileSync("pnpm", ["exec", "convex", "run", functionName], {
-    cwd: getProjectRoot(),
-    encoding: "utf8",
-    env: convexEnvironment,
-    timeout: 30_000,
-  });
+  const output = execFileSync(
+    "pnpm",
+    [
+      "exec",
+      "convex",
+      "run",
+      "--url",
+      target.url,
+      "--admin-key",
+      target.adminKey,
+      functionName,
+    ],
+    {
+      cwd: getProjectRoot(),
+      encoding: "utf8",
+      env: convexEnvironment,
+      timeout: 30_000,
+    },
+  );
 
   return parseConvexRunOutput<T>(output);
 }
@@ -129,7 +137,10 @@ export function setupPlaywrightFixtureState(baseUrl: string): void {
     return;
   }
 
-  assertIsolatedAgentDeployment(baseUrl);
-  runConvexFunction("e2eSeed:resetPlaywrightData");
-  runConvexFunction("e2eSeed:setupPreviewData");
+  const target = assertIsolatedAgentDeployment(baseUrl);
+  if (!target) {
+    return;
+  }
+  runConvexFunction("e2eSeed:resetPlaywrightData", target);
+  runConvexFunction("e2eSeed:setupPreviewData", target);
 }

@@ -53,6 +53,7 @@ test-workspace/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+/output/agent/
 /output/playwright/
 /.playwright-cli/
 
