@@ -647,7 +647,7 @@ function printRuntimeLeases(leases = discoverRuntimeLeases()) {
           : !lease.supervisorAlive
             ? "yes (default)"
             : lease.worktreePresent === false
-              ? "yes (--missing-worktree)"
+              ? "no (manual PID action)"
               : lease.worktreePresent === null
                 ? "no (worktree unknown)"
                 : "no",
@@ -658,26 +658,18 @@ function printRuntimeLeases(leases = discoverRuntimeLeases()) {
   );
 }
 
-async function reapRuntimeLeases({
-  automatic = false,
-  includeMissingWorktree = false,
-}) {
+async function reapRuntimeLeases({ automatic = false }) {
   const leases = discoverRuntimeLeases();
   let failures = 0;
   let reaped = 0;
   for (const lease of leases) {
-    const shouldReap = shouldReapAgentRuntime(lease, {
-      includeMissingWorktree,
-    });
+    const shouldReap = shouldReapAgentRuntime(lease);
     if (!shouldReap) continue;
 
     try {
       await stopRecordedRuntime(lease.runtime, lease.runtimePath);
       reaped += 1;
-      const reapReason = lease.supervisorAlive ? "missing-worktree" : "orphan";
-      console.log(
-        `Reaped ${reapReason} agent environment: ${lease.runtime.identity}`,
-      );
+      console.log(`Reaped orphan agent environment: ${lease.runtime.identity}`);
     } catch (error) {
       failures += 1;
       console.error(
@@ -699,9 +691,7 @@ async function main() {
     return;
   }
   if (process.argv.includes("--reap")) {
-    const failures = await reapRuntimeLeases({
-      includeMissingWorktree: process.argv.includes("--missing-worktree"),
-    });
+    const failures = await reapRuntimeLeases({});
     if (failures > 0) process.exitCode = 1;
     return;
   }

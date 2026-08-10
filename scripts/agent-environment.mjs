@@ -80,14 +80,8 @@ export function getWorktreePresence(worktreePath, statSync = fs.statSync) {
   }
 }
 
-export function shouldReapAgentRuntime(
-  { supervisorAlive, worktreePresent },
-  { includeMissingWorktree = false } = {},
-) {
-  return (
-    supervisorAlive === false ||
-    (includeMissingWorktree && worktreePresent === false)
-  );
+export function shouldReapAgentRuntime({ supervisorAlive }) {
+  return supervisorAlive === false;
 }
 
 export function formatAgentAge(ageMs) {
