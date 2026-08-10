@@ -5,7 +5,8 @@ import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import {
   classifyAgentRuntime,
-  formatAgentIdleTime,
+  formatAgentAge,
+  getWorktreePresence,
   authFileForOrigin,
   deriveAgentEnvironment,
   parseDotenv,
@@ -72,53 +73,56 @@ test("authFileForOrigin keys state by the complete origin", () => {
 });
 
 describe("agent runtime classification", () => {
-  const runtime = { lastUsedAt: "2026-08-09T12:00:00.000Z" };
+  const runtime = { startedAt: "2026-08-09T12:00:00.000Z" };
   const now = Date.parse("2026-08-09T17:00:00.000Z");
 
-  test("treats a missing worktree or dead exact supervisor as orphaned", () => {
+  test("only treats a dead exact supervisor as orphaned", () => {
     expect(
       classifyAgentRuntime(runtime, {
         now,
-        staleTtlMs: 4 * 60 * 60_000,
         supervisorAlive: true,
-        worktreePresent: false,
-      }).classification,
-    ).toBe("orphan");
-    expect(
-      classifyAgentRuntime(runtime, {
-        now,
-        staleTtlMs: 4 * 60 * 60_000,
-        supervisorAlive: false,
-        worktreePresent: true,
-      }).classification,
-    ).toBe("orphan");
-  });
-
-  test("keeps live present runtimes active until the stale TTL", () => {
-    expect(
-      classifyAgentRuntime(runtime, {
-        now: Date.parse("2026-08-09T15:00:00.000Z"),
-        staleTtlMs: 4 * 60 * 60_000,
-        supervisorAlive: true,
-        worktreePresent: true,
       }).classification,
     ).toBe("active");
     expect(
       classifyAgentRuntime(runtime, {
         now,
-        staleTtlMs: 4 * 60 * 60_000,
-        supervisorAlive: true,
-        worktreePresent: true,
+        supervisorAlive: false,
       }).classification,
-    ).toBe("stale");
+    ).toBe("orphan");
   });
 
-  test("formats idle time for lifecycle output", () => {
-    expect(formatAgentIdleTime(null)).toBe("unknown");
-    expect(formatAgentIdleTime(45_000)).toBe("45s");
-    expect(formatAgentIdleTime(12 * 60_000)).toBe("12m");
-    expect(formatAgentIdleTime(5 * 60 * 60_000)).toBe("5h");
-    expect(formatAgentIdleTime(2 * 24 * 60 * 60_000)).toBe("2d");
+  test("reports lease age from its start time", () => {
+    expect(
+      classifyAgentRuntime(runtime, { now, supervisorAlive: true }),
+    ).toEqual({ ageMs: 5 * 60 * 60_000, classification: "active" });
+  });
+
+  test("distinguishes only ENOENT from unknown worktree stat failures", () => {
+    expect(getWorktreePresence("/worktree", () => ({}))).toBe(true);
+    expect(
+      getWorktreePresence("/worktree", () => {
+        throw Object.assign(new Error("missing"), { code: "ENOENT" });
+      }),
+    ).toBe(false);
+    const unknownPresence = getWorktreePresence("/worktree", () => {
+      throw Object.assign(new Error("denied"), { code: "EACCES" });
+    });
+    expect(unknownPresence).toBeNull();
+    expect(
+      classifyAgentRuntime(runtime, {
+        now,
+        supervisorAlive: true,
+        worktreePresent: unknownPresence,
+      }).classification,
+    ).toBe("active");
+  });
+
+  test("formats age for lifecycle output", () => {
+    expect(formatAgentAge(null)).toBe("unknown");
+    expect(formatAgentAge(45_000)).toBe("45s");
+    expect(formatAgentAge(12 * 60_000)).toBe("12m");
+    expect(formatAgentAge(5 * 60 * 60_000)).toBe("5h");
+    expect(formatAgentAge(2 * 24 * 60 * 60_000)).toBe("2d");
   });
 });
 

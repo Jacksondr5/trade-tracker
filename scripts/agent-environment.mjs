@@ -9,7 +9,6 @@ const PROJECT_ROOT = path.resolve(
 );
 
 const PORT_SLOT_COUNT = 8_000;
-export const DEFAULT_AGENT_STALE_TTL_MS = 4 * 60 * 60 * 1_000;
 
 export function deriveAgentEnvironment(worktreePath = PROJECT_ROOT) {
   const identity = fs.realpathSync(worktreePath);
@@ -55,37 +54,39 @@ export function authFileForOrigin(origin, projectRoot = PROJECT_ROOT) {
 
 export function classifyAgentRuntime(
   runtime,
-  {
-    now = Date.now(),
-    staleTtlMs = DEFAULT_AGENT_STALE_TTL_MS,
-    supervisorAlive,
-    worktreePresent,
-  },
+  { now = Date.now(), supervisorAlive },
 ) {
-  const lastUsedAt = Date.parse(
-    runtime?.lastUsedAt ?? runtime?.startedAt ?? "",
-  );
-  const idleMs = Number.isFinite(lastUsedAt)
-    ? Math.max(0, now - lastUsedAt)
+  const startedAt = Date.parse(runtime?.startedAt ?? "");
+  const ageMs = Number.isFinite(startedAt)
+    ? Math.max(0, now - startedAt)
     : null;
 
-  if (!worktreePresent || !supervisorAlive) {
-    return { classification: "orphan", idleMs };
-  }
-  if (idleMs !== null && idleMs >= staleTtlMs) {
-    return { classification: "stale", idleMs };
-  }
-  return { classification: "active", idleMs };
+  return {
+    ageMs,
+    classification: supervisorAlive ? "active" : "orphan",
+  };
 }
 
-export function formatAgentIdleTime(idleMs) {
-  if (idleMs === null) return "unknown";
-  if (idleMs < 60_000) return `${Math.floor(idleMs / 1_000)}s`;
-  if (idleMs < 60 * 60_000) return `${Math.floor(idleMs / 60_000)}m`;
-  if (idleMs < 24 * 60 * 60_000) {
-    return `${Math.floor(idleMs / (60 * 60_000))}h`;
+export function getWorktreePresence(worktreePath, statSync = fs.statSync) {
+  if (typeof worktreePath !== "string" || worktreePath.length === 0) {
+    return null;
   }
-  return `${Math.floor(idleMs / (24 * 60 * 60_000))}d`;
+  try {
+    statSync(worktreePath);
+    return true;
+  } catch (error) {
+    return error?.code === "ENOENT" ? false : null;
+  }
+}
+
+export function formatAgentAge(ageMs) {
+  if (ageMs === null) return "unknown";
+  if (ageMs < 60_000) return `${Math.floor(ageMs / 1_000)}s`;
+  if (ageMs < 60 * 60_000) return `${Math.floor(ageMs / 60_000)}m`;
+  if (ageMs < 24 * 60 * 60_000) {
+    return `${Math.floor(ageMs / (60 * 60_000))}h`;
+  }
+  return `${Math.floor(ageMs / (24 * 60 * 60_000))}d`;
 }
 
 export function parseDotenv(contents) {
