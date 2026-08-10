@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import {
+  classifyAgentRuntime,
+  formatAgentIdleTime,
   authFileForOrigin,
   deriveAgentEnvironment,
   parseDotenv,
@@ -67,6 +69,57 @@ test("authFileForOrigin keys state by the complete origin", () => {
   expect(first).not.toBe(second);
   expect(first).not.toBe(third);
   expect(first).toContain(path.join("output", "playwright", "auth"));
+});
+
+describe("agent runtime classification", () => {
+  const runtime = { lastUsedAt: "2026-08-09T12:00:00.000Z" };
+  const now = Date.parse("2026-08-09T17:00:00.000Z");
+
+  test("treats a missing worktree or dead exact supervisor as orphaned", () => {
+    expect(
+      classifyAgentRuntime(runtime, {
+        now,
+        staleTtlMs: 4 * 60 * 60_000,
+        supervisorAlive: true,
+        worktreePresent: false,
+      }).classification,
+    ).toBe("orphan");
+    expect(
+      classifyAgentRuntime(runtime, {
+        now,
+        staleTtlMs: 4 * 60 * 60_000,
+        supervisorAlive: false,
+        worktreePresent: true,
+      }).classification,
+    ).toBe("orphan");
+  });
+
+  test("keeps live present runtimes active until the stale TTL", () => {
+    expect(
+      classifyAgentRuntime(runtime, {
+        now: Date.parse("2026-08-09T15:00:00.000Z"),
+        staleTtlMs: 4 * 60 * 60_000,
+        supervisorAlive: true,
+        worktreePresent: true,
+      }).classification,
+    ).toBe("active");
+    expect(
+      classifyAgentRuntime(runtime, {
+        now,
+        staleTtlMs: 4 * 60 * 60_000,
+        supervisorAlive: true,
+        worktreePresent: true,
+      }).classification,
+    ).toBe("stale");
+  });
+
+  test("formats idle time for lifecycle output", () => {
+    expect(formatAgentIdleTime(null)).toBe("unknown");
+    expect(formatAgentIdleTime(45_000)).toBe("45s");
+    expect(formatAgentIdleTime(12 * 60_000)).toBe("12m");
+    expect(formatAgentIdleTime(5 * 60 * 60_000)).toBe("5h");
+    expect(formatAgentIdleTime(2 * 24 * 60 * 60_000)).toBe("2d");
+  });
 });
 
 test("updateDotenvFile preserves unrelated values and updates scoped values", () => {

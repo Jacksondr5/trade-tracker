@@ -3,7 +3,10 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import {
+  classifyAgentRuntime,
+  DEFAULT_AGENT_STALE_TTL_MS,
   deriveAgentEnvironment,
+  formatAgentIdleTime,
   getProjectRoot,
   parseDotenv,
   readLocalConvexConfig,
@@ -19,12 +22,34 @@ const LOCAL_CONFIG_PATH = path.join(
   "default",
   "config.json",
 );
-const RUNTIME_PATH = path.join(PROJECT_ROOT, "output", "agent", "runtime.json");
+const LEGACY_RUNTIME_PATH = path.join(
+  PROJECT_ROOT,
+  "output",
+  "agent",
+  "runtime.json",
+);
 const SUPPORTED_CONVEX_CLI_VERSION = "1.43.0";
 const FUNCTION_SPEC_RETRY_MS = 2_000;
 const environment = deriveAgentEnvironment();
+const GIT_COMMON_DIR = getGitCommonDir();
+const RUNTIME_DIRECTORY = path.join(GIT_COMMON_DIR, "agent-environments");
+const RUNTIME_PATH = path.join(
+  RUNTIME_DIRECTORY,
+  `${environment.identityHash}.json`,
+);
 let convexFunctionsReady = false;
 let lastFunctionSpecCheckAt = 0;
+
+function getGitCommonDir() {
+  const result = spawnSync("git", ["rev-parse", "--git-common-dir"], {
+    cwd: PROJECT_ROOT,
+    encoding: "utf8",
+  });
+  if (result.status !== 0 || result.stdout.trim().length === 0) {
+    throw new Error("Could not locate this repository's shared Git directory.");
+  }
+  return path.resolve(PROJECT_ROOT, result.stdout.trim());
+}
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -210,11 +235,11 @@ function portIsListening(port, host) {
   });
 }
 
-async function occupiedAgentPorts() {
+async function occupiedAgentPorts(targetEnvironment = environment) {
   const ports = [
-    environment.appPort,
-    environment.convexCloudPort,
-    environment.convexSitePort,
+    targetEnvironment.appPort,
+    targetEnvironment.convexCloudPort,
+    targetEnvironment.convexSitePort,
   ];
   const states = await Promise.all(
     ports.map(async (port) =>
@@ -297,12 +322,88 @@ async function environmentIsReady() {
   return (await endpointsAreReady()) && convexFunctionsAreReady();
 }
 
-function readRuntime() {
+function readRuntime(runtimePath = RUNTIME_PATH) {
   try {
-    return JSON.parse(fs.readFileSync(RUNTIME_PATH, "utf8"));
+    return JSON.parse(fs.readFileSync(runtimePath, "utf8"));
   } catch {
     return null;
   }
+}
+
+function registeredWorktrees() {
+  const result = spawnSync("git", ["worktree", "list", "--porcelain"], {
+    cwd: PROJECT_ROOT,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      "Could not enumerate Git worktrees for agent environments.",
+    );
+  }
+  return result.stdout
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith("worktree "))
+    .map((line) => line.slice("worktree ".length));
+}
+
+function discoverRuntimeLeases() {
+  const runtimePaths = [];
+  if (fs.existsSync(RUNTIME_DIRECTORY)) {
+    runtimePaths.push(
+      ...fs
+        .readdirSync(RUNTIME_DIRECTORY)
+        .filter((entry) => entry.endsWith(".json"))
+        .map((entry) => path.join(RUNTIME_DIRECTORY, entry)),
+    );
+  }
+  for (const worktree of registeredWorktrees()) {
+    const legacyPath = path.join(worktree, "output", "agent", "runtime.json");
+    if (fs.existsSync(legacyPath)) {
+      runtimePaths.push(legacyPath);
+    }
+  }
+
+  const seenIdentities = new Set();
+  return runtimePaths.flatMap((runtimePath) => {
+    const runtime = readRuntime(runtimePath);
+    if (!runtime || typeof runtime.identityHash !== "string") {
+      return [{ classification: "invalid", runtime: null, runtimePath }];
+    }
+    if (seenIdentities.has(runtime.identityHash)) {
+      return [];
+    }
+    seenIdentities.add(runtime.identityHash);
+    const supervisorAlive = processMatches(
+      runtime.pid,
+      runtime.supervisorStartIdentity,
+    );
+    const worktreePresent =
+      typeof runtime.identity === "string" && fs.existsSync(runtime.identity);
+    return [
+      {
+        ...classifyAgentRuntime(runtime, {
+          staleTtlMs: DEFAULT_AGENT_STALE_TTL_MS,
+          supervisorAlive,
+          worktreePresent,
+        }),
+        runtime,
+        runtimePath,
+        supervisorAlive,
+        worktreePresent,
+      },
+    ];
+  });
+}
+
+function currentRuntimeLease() {
+  const sharedRuntime = readRuntime(RUNTIME_PATH);
+  if (sharedRuntime) {
+    return { runtime: sharedRuntime, runtimePath: RUNTIME_PATH };
+  }
+  const legacyRuntime = readRuntime(LEGACY_RUNTIME_PATH);
+  return legacyRuntime
+    ? { runtime: legacyRuntime, runtimePath: LEGACY_RUNTIME_PATH }
+    : null;
 }
 
 function runtimeChildren(runtime) {
@@ -316,11 +417,11 @@ function printEnvironment() {
   console.log(`Playwright auth state: ${environment.authFile}\n`);
 }
 
-async function waitForExistingRuntime(runtime) {
+async function waitForExistingRuntime(runtime, runtimePath) {
   let childrenDeadline = null;
   let announcedProvisioning = false;
   while (processMatches(runtime.pid, runtime.supervisorStartIdentity)) {
-    const currentRuntime = readRuntime();
+    const currentRuntime = readRuntime(runtimePath);
     const children = runtimeChildren(currentRuntime);
     if (children.length === 0) {
       if (!announcedProvisioning) {
@@ -342,6 +443,7 @@ async function waitForExistingRuntime(runtime) {
       ) &&
       (await environmentIsReady())
     ) {
+      touchRuntimeLease(runtimePath, currentRuntime);
       printEnvironment();
       return "ready";
     }
@@ -373,6 +475,7 @@ function writeRuntime() {
       {
         ...environment,
         pid: process.pid,
+        lastUsedAt: new Date().toISOString(),
         startedAt: new Date().toISOString(),
         supervisorStartIdentity,
       },
@@ -393,6 +496,26 @@ function updateOwnedRuntime(updates) {
     JSON.stringify({ ...runtime, ...updates }, null, 2),
     { mode: 0o600 },
   );
+}
+
+function touchRuntimeLease(runtimePath, expectedRuntime) {
+  const runtime = readRuntime(runtimePath);
+  if (
+    runtime?.pid !== expectedRuntime.pid ||
+    runtime?.supervisorStartIdentity !== expectedRuntime.supervisorStartIdentity
+  ) {
+    return false;
+  }
+  fs.writeFileSync(
+    runtimePath,
+    JSON.stringify(
+      { ...runtime, lastUsedAt: new Date().toISOString() },
+      null,
+      2,
+    ),
+    { mode: 0o600 },
+  );
+  return true;
 }
 
 function signalChildProcessGroup(pid, signal) {
@@ -436,11 +559,25 @@ async function waitForProcessExit(pid, startIdentity, timeoutMs = 10_000) {
   return !processMatches(pid, startIdentity);
 }
 
-async function stopRecordedRuntime(runtime) {
-  if (runtime.identityHash !== environment.identityHash) {
+async function stopRecordedRuntime(
+  runtime,
+  runtimePath,
+  expectedIdentityHash = null,
+) {
+  if (
+    expectedIdentityHash !== null &&
+    runtime.identityHash !== expectedIdentityHash
+  ) {
     throw new Error(
-      `${RUNTIME_PATH} belongs to a different worktree. Refusing to stop any process.`,
+      `${runtimePath} belongs to a different worktree. Refusing to stop any process.`,
     );
+  }
+  if (
+    !Number.isInteger(runtime.appPort) ||
+    !Number.isInteger(runtime.convexCloudPort) ||
+    !Number.isInteger(runtime.convexSitePort)
+  ) {
+    throw new Error(`Malformed agent environment lease: ${runtimePath}`);
   }
 
   if (processMatches(runtime.pid, runtime.supervisorStartIdentity)) {
@@ -453,7 +590,7 @@ async function stopRecordedRuntime(runtime) {
       !(await stopChildProcessGroup(child.pid))
     ) {
       throw new Error(
-        `Could not stop the recorded ${child.label} process group in ${RUNTIME_PATH}.`,
+        `Could not stop the recorded ${child.label} process group in ${runtimePath}.`,
       );
     }
   }
@@ -464,27 +601,27 @@ async function stopRecordedRuntime(runtime) {
     )
   ) {
     throw new Error(
-      `Could not stop the processes recorded in ${RUNTIME_PATH}; stop them manually before deleting the lease.`,
+      `Could not stop the processes recorded in ${runtimePath}; stop them manually before deleting the lease.`,
     );
   }
 
-  const occupiedPorts = await occupiedAgentPorts();
+  const occupiedPorts = await occupiedAgentPorts(runtime);
   if (occupiedPorts.length > 0) {
     throw new Error(
-      `${portConflictGuidance(occupiedPorts)} Preserving lease ${RUNTIME_PATH} so cleanup can be retried.`,
+      `${portConflictGuidance(occupiedPorts)} Preserving lease ${runtimePath} so cleanup can be retried.`,
     );
   }
 
-  fs.rmSync(RUNTIME_PATH, { force: true });
+  fs.rmSync(runtimePath, { force: true });
 }
 
-async function recoverStaleRuntime(runtime) {
+async function recoverStaleRuntime(runtime, runtimePath) {
   if (processMatches(runtime.pid, runtime.supervisorStartIdentity)) {
     return false;
   }
 
-  console.log(`Recovering stale agent lease: ${RUNTIME_PATH}`);
-  await stopRecordedRuntime(runtime);
+  console.log(`Recovering stale agent lease: ${runtimePath}`);
+  await stopRecordedRuntime(runtime, runtimePath);
   return true;
 }
 
@@ -510,41 +647,126 @@ async function removeOwnedRuntime() {
   fs.rmSync(RUNTIME_PATH, { force: true });
 }
 
+function printRuntimeLeases(leases = discoverRuntimeLeases()) {
+  if (leases.length === 0) {
+    console.log("No recorded agent environments.");
+    return;
+  }
+  console.table(
+    leases.map((lease) => ({
+      alive:
+        lease.classification === "invalid" ? "unknown" : lease.supervisorAlive,
+      classification: lease.classification,
+      idle:
+        lease.classification === "invalid"
+          ? "unknown"
+          : formatAgentIdleTime(lease.idleMs),
+      origin: lease.runtime?.origin ?? "unknown",
+      pid: lease.runtime?.pid ?? "unknown",
+      port: lease.runtime?.appPort ?? "unknown",
+      worktree: lease.runtime?.identity ?? `invalid: ${lease.runtimePath}`,
+      worktreePresent:
+        lease.classification === "invalid" ? "unknown" : lease.worktreePresent,
+    })),
+  );
+}
+
+async function reapRuntimeLeases({ automatic = false, includeStale = false }) {
+  const leases = discoverRuntimeLeases();
+  let failures = 0;
+  let reaped = 0;
+  for (const lease of leases) {
+    const shouldReap =
+      lease.classification === "orphan" ||
+      (includeStale && lease.classification === "stale");
+    if (!shouldReap) continue;
+
+    try {
+      await stopRecordedRuntime(lease.runtime, lease.runtimePath);
+      reaped += 1;
+      console.log(
+        `Reaped ${lease.classification} agent environment: ${lease.runtime.identity}`,
+      );
+    } catch (error) {
+      failures += 1;
+      console.error(
+        `Could not reap ${lease.runtime?.identity ?? lease.runtimePath}: ${error instanceof Error ? error.message : error}`,
+      );
+    }
+  }
+
+  if (!automatic) {
+    printRuntimeLeases(discoverRuntimeLeases());
+    if (
+      !includeStale &&
+      leases.some((lease) => lease.classification === "stale")
+    ) {
+      console.log(
+        "Stale live environments were reported only. Re-run pnpm agent:reap --stale after confirming they are no longer in use.",
+      );
+    }
+    console.log(`Reaped ${reaped} agent environment(s).`);
+  }
+  return failures;
+}
+
 async function main() {
+  if (process.argv.includes("--ls")) {
+    printRuntimeLeases();
+    return;
+  }
+  if (process.argv.includes("--reap")) {
+    const failures = await reapRuntimeLeases({
+      includeStale: process.argv.includes("--stale"),
+    });
+    if (failures > 0) process.exitCode = 1;
+    return;
+  }
   if (process.argv.includes("--down")) {
-    const runtime = readRuntime();
-    if (!runtime) {
+    const lease = currentRuntimeLease();
+    if (!lease) {
       console.log(
         "No recorded agent environment is running for this worktree.",
       );
       return;
     }
-    await stopRecordedRuntime(runtime);
+    await stopRecordedRuntime(
+      lease.runtime,
+      lease.runtimePath,
+      environment.identityHash,
+    );
     console.log("Agent environment stopped.");
     return;
   }
 
-  const existingRuntime = readRuntime();
+  await reapRuntimeLeases({ automatic: true });
+
+  const existingLease = currentRuntimeLease();
+  const existingRuntime = existingLease?.runtime ?? null;
+  const existingRuntimePath = existingLease?.runtimePath ?? RUNTIME_PATH;
   if (
     existingRuntime?.identityHash === environment.identityHash &&
     processMatches(existingRuntime.pid, existingRuntime.supervisorStartIdentity)
   ) {
-    const waitResult = await waitForExistingRuntime(existingRuntime);
+    const waitResult = await waitForExistingRuntime(
+      existingRuntime,
+      existingRuntimePath,
+    );
     if (waitResult === "ready") {
       return;
     }
     if (waitResult === "supervisor-exited") {
-      const staleRuntime = readRuntime();
+      const staleRuntime = readRuntime(existingRuntimePath);
       if (staleRuntime) {
-        await recoverStaleRuntime(staleRuntime);
+        await recoverStaleRuntime(staleRuntime, existingRuntimePath);
       }
     } else {
       throw new Error(
-        `This worktree's agent environment children are running but did not become ready. Run pnpm agent:down, then rerun pnpm agent:up. Lease: ${RUNTIME_PATH}`,
+        `This worktree's agent environment children are running but did not become ready. Run pnpm agent:down, then rerun pnpm agent:up. Lease: ${existingRuntimePath}`,
       );
     }
   } else if (existingRuntime) {
-    await recoverStaleRuntime(existingRuntime);
+    await recoverStaleRuntime(existingRuntime, existingRuntimePath);
   }
 
   const occupiedPorts = await occupiedAgentPorts();
@@ -562,7 +784,7 @@ async function main() {
       if (
         runtime &&
         processMatches(runtime.pid, runtime.supervisorStartIdentity) &&
-        (await waitForExistingRuntime(runtime)) === "ready"
+        (await waitForExistingRuntime(runtime, RUNTIME_PATH)) === "ready"
       ) {
         return;
       }

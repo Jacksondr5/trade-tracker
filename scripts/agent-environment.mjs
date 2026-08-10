@@ -9,6 +9,7 @@ const PROJECT_ROOT = path.resolve(
 );
 
 const PORT_SLOT_COUNT = 8_000;
+export const DEFAULT_AGENT_STALE_TTL_MS = 4 * 60 * 60 * 1_000;
 
 export function deriveAgentEnvironment(worktreePath = PROJECT_ROOT) {
   const identity = fs.realpathSync(worktreePath);
@@ -50,6 +51,41 @@ export function authFileForOrigin(origin, projectRoot = PROJECT_ROOT) {
     "auth",
     `${readableOrigin}-${originHash}.json`,
   );
+}
+
+export function classifyAgentRuntime(
+  runtime,
+  {
+    now = Date.now(),
+    staleTtlMs = DEFAULT_AGENT_STALE_TTL_MS,
+    supervisorAlive,
+    worktreePresent,
+  },
+) {
+  const lastUsedAt = Date.parse(
+    runtime?.lastUsedAt ?? runtime?.startedAt ?? "",
+  );
+  const idleMs = Number.isFinite(lastUsedAt)
+    ? Math.max(0, now - lastUsedAt)
+    : null;
+
+  if (!worktreePresent || !supervisorAlive) {
+    return { classification: "orphan", idleMs };
+  }
+  if (idleMs !== null && idleMs >= staleTtlMs) {
+    return { classification: "stale", idleMs };
+  }
+  return { classification: "active", idleMs };
+}
+
+export function formatAgentIdleTime(idleMs) {
+  if (idleMs === null) return "unknown";
+  if (idleMs < 60_000) return `${Math.floor(idleMs / 1_000)}s`;
+  if (idleMs < 60 * 60_000) return `${Math.floor(idleMs / 60_000)}m`;
+  if (idleMs < 24 * 60 * 60_000) {
+    return `${Math.floor(idleMs / (60 * 60_000))}h`;
+  }
+  return `${Math.floor(idleMs / (24 * 60 * 60_000))}d`;
 }
 
 export function parseDotenv(contents) {
