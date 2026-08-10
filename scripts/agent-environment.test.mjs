@@ -7,6 +7,7 @@ import {
   classifyAgentRuntime,
   formatAgentAge,
   getWorktreePresence,
+  shouldReapAgentRuntime,
   authFileForOrigin,
   deriveAgentEnvironment,
   parseDotenv,
@@ -76,24 +77,37 @@ describe("agent runtime classification", () => {
   const runtime = { startedAt: "2026-08-09T12:00:00.000Z" };
   const now = Date.parse("2026-08-09T17:00:00.000Z");
 
-  test("only treats a dead exact supervisor as orphaned", () => {
+  test("reports dead-supervisor and strict-missing-worktree leases as orphaned", () => {
     expect(
       classifyAgentRuntime(runtime, {
         now,
         supervisorAlive: true,
+        worktreePresent: true,
       }).classification,
     ).toBe("active");
     expect(
       classifyAgentRuntime(runtime, {
         now,
+        supervisorAlive: true,
+        worktreePresent: false,
+      }).classification,
+    ).toBe("orphan");
+    expect(
+      classifyAgentRuntime(runtime, {
+        now,
         supervisorAlive: false,
+        worktreePresent: true,
       }).classification,
     ).toBe("orphan");
   });
 
   test("reports lease age from its start time", () => {
     expect(
-      classifyAgentRuntime(runtime, { now, supervisorAlive: true }),
+      classifyAgentRuntime(runtime, {
+        now,
+        supervisorAlive: true,
+        worktreePresent: true,
+      }),
     ).toEqual({ ageMs: 5 * 60 * 60_000, classification: "active" });
   });
 
@@ -115,6 +129,26 @@ describe("agent runtime classification", () => {
         worktreePresent: unknownPresence,
       }).classification,
     ).toBe("active");
+  });
+
+  test("requires explicit opt-in to reap a live missing-worktree lease", () => {
+    const liveMissing = { supervisorAlive: true, worktreePresent: false };
+    const liveUnknown = { supervisorAlive: true, worktreePresent: null };
+
+    expect(shouldReapAgentRuntime(liveMissing)).toBe(false);
+    expect(
+      shouldReapAgentRuntime(liveMissing, { includeMissingWorktree: true }),
+    ).toBe(true);
+    expect(
+      shouldReapAgentRuntime(liveUnknown, { includeMissingWorktree: true }),
+    ).toBe(false);
+    expect(
+      shouldReapAgentRuntime({
+        supervisorAlive: false,
+        worktreePresent: null,
+      }),
+    ).toBe(true);
+    expect(shouldReapAgentRuntime({})).toBe(false);
   });
 
   test("formats age for lifecycle output", () => {

@@ -27,6 +27,7 @@ When an agent starts work on a Linear ticket in this repo:
 pnpm agent:down       # Stop this worktree's recorded local environment
 pnpm agent:ls         # List every recorded environment and its lifecycle state
 pnpm agent:reap       # Stop environments whose exact supervisor is dead
+pnpm agent:reap --missing-worktree # Also stop strict-ENOENT worktree leases
 pnpm agent:up         # Provision and supervise this worktree's isolated environment
 pnpm dev              # Start Next.js only (normally use agent:up instead)
 pnpm build            # Production build
@@ -53,7 +54,7 @@ On a cold worktree, the second invocation can remain in the foreground while the
 
 Run `pnpm agent:down` when the task is finished. It cleanly stops this worktree's Next.js and local Convex processes, releases the lease, and is safe to run when nothing is active.
 
-Lifecycle leases are stored in the repository's shared Git directory so they remain discoverable after a worktree is deleted. Every `agent:up` automatically reaps environments whose exact supervisor process is no longer alive. It never auto-reaps an environment whose supervisor is still alive, even if its worktree cannot be found. `pnpm agent:ls` reports every lease, origin, port, PID, liveness, worktree presence, age, and classification. `pnpm agent:reap` applies the same conservative dead-supervisor rule on demand. If a different process owns a deterministic port, lifecycle commands preserve the lease and print exact `lsof` guidance instead of treating that process as healthy.
+Lifecycle leases are stored in the repository's shared Git directory so they remain discoverable after a worktree is deleted. Every `agent:up` automatically reaps environments whose exact supervisor process is no longer alive. It never auto-reaps an environment whose supervisor is still alive, even if its worktree cannot be found. `pnpm agent:ls` reports every lease, origin, port, PID, liveness, worktree presence, age, classification, and how it can be reaped. `pnpm agent:reap` applies the same conservative dead-supervisor rule on demand. After reviewing `agent:ls`, `pnpm agent:reap --missing-worktree` additionally reaps live environments only when a worktree stat definitively returns `ENOENT`; permission errors, unavailable mounts, and all other unknown worktree states are refused. If a different process owns a deterministic port, lifecycle commands preserve the lease and print exact `lsof` guidance instead of treating that process as healthy.
 
 Do not copy `.env.local` manually or run reset/seed commands against a deployment inherited from another checkout. Local Playwright setup refuses to reset data unless `.env.local` and `.convex/local/default` identify the same worktree-local backend.
 

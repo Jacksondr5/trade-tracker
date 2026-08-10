@@ -10,6 +10,7 @@ import {
   getWorktreePresence,
   parseDotenv,
   readLocalConvexConfig,
+  shouldReapAgentRuntime,
   updateDotenvFile,
 } from "./agent-environment.mjs";
 
@@ -382,6 +383,7 @@ function discoverRuntimeLeases() {
       {
         ...classifyAgentRuntime(runtime, {
           supervisorAlive,
+          worktreePresent,
         }),
         runtime,
         runtimePath,
@@ -639,6 +641,16 @@ function printRuntimeLeases(leases = discoverRuntimeLeases()) {
       origin: lease.runtime?.origin ?? "unknown",
       pid: lease.runtime?.pid ?? "unknown",
       port: lease.runtime?.appPort ?? "unknown",
+      reapable:
+        lease.classification === "invalid"
+          ? "no (invalid lease)"
+          : !lease.supervisorAlive
+            ? "yes (default)"
+            : lease.worktreePresent === false
+              ? "yes (--missing-worktree)"
+              : lease.worktreePresent === null
+                ? "no (worktree unknown)"
+                : "no",
       worktree: lease.runtime?.identity ?? `invalid: ${lease.runtimePath}`,
       worktreePresent:
         lease.classification === "invalid" ? "unknown" : lease.worktreePresent,
@@ -646,19 +658,25 @@ function printRuntimeLeases(leases = discoverRuntimeLeases()) {
   );
 }
 
-async function reapRuntimeLeases({ automatic = false }) {
+async function reapRuntimeLeases({
+  automatic = false,
+  includeMissingWorktree = false,
+}) {
   const leases = discoverRuntimeLeases();
   let failures = 0;
   let reaped = 0;
   for (const lease of leases) {
-    const shouldReap = lease.classification === "orphan";
+    const shouldReap = shouldReapAgentRuntime(lease, {
+      includeMissingWorktree,
+    });
     if (!shouldReap) continue;
 
     try {
       await stopRecordedRuntime(lease.runtime, lease.runtimePath);
       reaped += 1;
+      const reapReason = lease.supervisorAlive ? "missing-worktree" : "orphan";
       console.log(
-        `Reaped ${lease.classification} agent environment: ${lease.runtime.identity}`,
+        `Reaped ${reapReason} agent environment: ${lease.runtime.identity}`,
       );
     } catch (error) {
       failures += 1;
@@ -681,7 +699,9 @@ async function main() {
     return;
   }
   if (process.argv.includes("--reap")) {
-    const failures = await reapRuntimeLeases({});
+    const failures = await reapRuntimeLeases({
+      includeMissingWorktree: process.argv.includes("--missing-worktree"),
+    });
     if (failures > 0) process.exitCode = 1;
     return;
   }

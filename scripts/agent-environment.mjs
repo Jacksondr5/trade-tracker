@@ -54,7 +54,7 @@ export function authFileForOrigin(origin, projectRoot = PROJECT_ROOT) {
 
 export function classifyAgentRuntime(
   runtime,
-  { now = Date.now(), supervisorAlive },
+  { now = Date.now(), supervisorAlive, worktreePresent },
 ) {
   const startedAt = Date.parse(runtime?.startedAt ?? "");
   const ageMs = Number.isFinite(startedAt)
@@ -63,7 +63,8 @@ export function classifyAgentRuntime(
 
   return {
     ageMs,
-    classification: supervisorAlive ? "active" : "orphan",
+    classification:
+      !supervisorAlive || worktreePresent === false ? "orphan" : "active",
   };
 }
 
@@ -77,6 +78,16 @@ export function getWorktreePresence(worktreePath, statSync = fs.statSync) {
   } catch (error) {
     return error?.code === "ENOENT" ? false : null;
   }
+}
+
+export function shouldReapAgentRuntime(
+  { supervisorAlive, worktreePresent },
+  { includeMissingWorktree = false } = {},
+) {
+  return (
+    supervisorAlive === false ||
+    (includeMissingWorktree && worktreePresent === false)
+  );
 }
 
 export function formatAgentAge(ageMs) {
