@@ -4,10 +4,6 @@ import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import {
-  isBrokerageIngestionRequestAuthorized,
-  validateBrokerageIngestFlexReportBody,
-} from "./http";
 import schema from "./schema";
 
 interface ImportMetaWithGlob extends ImportMeta {
@@ -57,7 +53,6 @@ describe("brokerage ingestion", () => {
 
   beforeEach(() => {
     process.env.TWELVE_DATA_API_KEY = "test-key";
-    process.env.BROKERAGE_INGESTION_TOKEN = "service-token";
     stubTwelveDataResolutionFetch();
     t = convexTest(schema, modules);
   });
@@ -65,7 +60,6 @@ describe("brokerage ingestion", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     delete process.env.TWELVE_DATA_API_KEY;
-    delete process.env.BROKERAGE_INGESTION_TOKEN;
   });
 
   function asUser() {
@@ -1397,83 +1391,4 @@ describe("brokerage ingestion", () => {
     expect(rawReport).toBeNull();
   });
 
-  it("rejects invalid service tokens before HTTP route work runs", () => {
-    const unauthorized = new Request("https://convex.test", {
-      headers: { authorization: "Bearer wrong" },
-      method: "POST",
-    });
-    const authorized = new Request("https://convex.test", {
-      headers: { authorization: "Bearer service-token" },
-      method: "POST",
-    });
-
-    expect(isBrokerageIngestionRequestAuthorized(unauthorized)).toBe(false);
-    expect(isBrokerageIngestionRequestAuthorized(authorized)).toBe(true);
-  });
-
-  it("validates nested Flex report HTTP payload fields by object keys", () => {
-    const body = {
-      cashSnapshots: [
-        {
-          brokerageAccountId: "U1234567",
-          cash: 12500.25,
-          currency: "USD",
-          reportDate: "2026-05-14",
-          rowKind: "currency",
-        },
-      ],
-      positionSnapshots: [
-        {
-          assetType: "stock",
-          brokerageAccountId: "U1234567",
-          marketValue: 1895,
-          quantity: 10,
-          reportDate: "2026-05-14",
-          ticker: "AAPL",
-        },
-      ],
-      rawXml: "<FlexQueryResponse/>",
-      syncRunId: "sync-run-id",
-      trades: [
-        {
-          assetType: "stock",
-          brokerageAccountId: "U1234567",
-          currency: "USD",
-          date: Date.UTC(2026, 4, 14, 9, 30, 5),
-          direction: "long",
-          executionId: "exec-1",
-          externalId: "0000e1.12345.01",
-          fees: -1.25,
-          orderType: "LMT",
-          price: 189.5,
-          quantity: 10,
-          side: "buy",
-          taxes: 0,
-          ticker: "AAPL",
-        },
-      ],
-      warnings: ["warning"],
-    };
-
-    expect(validateBrokerageIngestFlexReportBody(body)).toMatchObject({
-      cashSnapshots: [{ brokerageAccountId: "U1234567", rowKind: "currency" }],
-      positionSnapshots: [{ assetType: "stock", ticker: "AAPL" }],
-      rawXml: "<FlexQueryResponse/>",
-      syncRunId: "sync-run-id",
-      trades: [{ side: "buy", ticker: "AAPL" }],
-      warnings: ["warning"],
-    });
-    expect(() =>
-      validateBrokerageIngestFlexReportBody({
-        ...body,
-        trades: [{ ...body.trades[0], side: "hold" }],
-      }),
-    ).toThrow("trades[0].side must be one of");
-    expect(() =>
-      validateBrokerageIngestFlexReportBody({
-        ...body,
-        cashSnapshots: [{ ...body.cashSnapshots[0], rowKind: "aggregate" }],
-      }),
-    ).toThrow("cashSnapshots[0].rowKind must be one of");
-  });
 });
