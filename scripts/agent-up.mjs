@@ -31,6 +31,7 @@ const LEGACY_RUNTIME_PATH = path.join(
 );
 const SUPPORTED_CONVEX_CLI_VERSION = "1.43.0";
 const FUNCTION_SPEC_RETRY_MS = 2_000;
+const AGENT_COMMAND_FLAGS = new Set(["--down", "--ls", "--reap"]);
 const environment = deriveAgentEnvironment();
 const GIT_COMMON_DIR = getGitCommonDir();
 const RUNTIME_DIRECTORY = path.join(GIT_COMMON_DIR, "agent-environments");
@@ -686,6 +687,19 @@ async function reapRuntimeLeases({ automatic = false }) {
 }
 
 async function main() {
+  const unsupportedFlag = process.argv
+    .slice(2)
+    .find(
+      (argument) =>
+        argument.startsWith("-") && !AGENT_COMMAND_FLAGS.has(argument),
+    );
+  if (unsupportedFlag) {
+    console.error(
+      `Unknown agent environment option ${unsupportedFlag}. Supported command flags: --ls, --reap, --down.`,
+    );
+    process.exitCode = 1;
+    return;
+  }
   if (process.argv.includes("--ls")) {
     printRuntimeLeases();
     return;

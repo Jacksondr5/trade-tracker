@@ -197,3 +197,24 @@ test("readLocalConvexConfig rejects malformed and incomplete files", () => {
     "Local Convex config is incomplete.",
   );
 });
+
+test("agent CLI rejects unknown flags before lifecycle dispatch", () => {
+  for (const args of [
+    ["--reap", "--missing-worktree"],
+    ["--reap", "--stale"],
+    ["--ls", "--lss"],
+    ["--down", "--force"],
+  ]) {
+    const result = spawnSync(
+      process.execPath,
+      [path.join(import.meta.dirname, "agent-up.mjs"), ...args],
+      { encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      `Unknown agent environment option ${args[1]}`,
+    );
+    expect(result.stdout).toBe("");
+  }
+});
