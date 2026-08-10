@@ -5,10 +5,10 @@ import { runConvexFunction } from "../helpers/convex";
 import { getConfiguredBaseUrl, isLocalPlaywrightTarget } from "../helpers/env";
 import {
   APP_PAGE_TITLES,
-  getBrokerageConnectionAccountIdClearButton,
-  getBrokerageConnectionAccountIdInput,
-  getBrokerageConnectionAccountIdUndoButton,
   getBrokerageConnectionConfigureButton,
+  getBrokerageConnectionExpectedAccountIdsClearButton,
+  getBrokerageConnectionExpectedAccountIdsTextarea,
+  getBrokerageConnectionExpectedAccountIdsUndoButton,
   getBrokerageConnectionForm,
   getBrokerageConnectionLabelClearButton,
   getBrokerageConnectionLabelInput,
@@ -149,13 +149,14 @@ test.describe("operational surfaces regression", () => {
     await waitForAuthenticatedApp(page, APP_PAGE_TITLES.imports);
 
     const labelInput = getBrokerageConnectionLabelInput(page);
-    const accountIdInput = getBrokerageConnectionAccountIdInput(page);
+    const expectedAccountIdsTextarea =
+      getBrokerageConnectionExpectedAccountIdsTextarea(page);
     const saveButton = getBrokerageConnectionSaveButton(page);
     await expect(labelInput).toHaveValue(
       E2E_SMOKE_FIXTURES.brokerageConnection.label,
     );
-    await expect(accountIdInput).toHaveValue(
-      E2E_SMOKE_FIXTURES.brokerageConnection.accountId,
+    await expect(expectedAccountIdsTextarea).toHaveValue(
+      E2E_SMOKE_FIXTURES.brokerageConnection.expectedAccountIds.join(", "),
     );
 
     await labelInput.fill("");
@@ -166,25 +167,47 @@ test.describe("operational surfaces regression", () => {
     await expect(getBrokerageConnectionLabelUndoButton(page)).toBeVisible();
     await expect(saveButton).toBeEnabled();
 
-    await getBrokerageConnectionAccountIdClearButton(page).click();
-    await expect(accountIdInput).toBeDisabled();
-    await expect(accountIdInput).toHaveValue("");
-    await expect(getBrokerageConnectionAccountIdUndoButton(page)).toBeVisible();
+    await getBrokerageConnectionExpectedAccountIdsClearButton(page).click();
+    await expect(expectedAccountIdsTextarea).toBeDisabled();
+    await expect(expectedAccountIdsTextarea).toHaveValue("");
+    await expect(
+      getBrokerageConnectionExpectedAccountIdsUndoButton(page),
+    ).toBeVisible();
     await expect(saveButton).toBeEnabled();
 
     await getBrokerageConnectionLabelUndoButton(page).click();
-    await getBrokerageConnectionAccountIdUndoButton(page).click();
+    await getBrokerageConnectionExpectedAccountIdsUndoButton(page).click();
     await expect(labelInput).toBeEnabled();
     await expect(labelInput).toHaveValue(
       E2E_SMOKE_FIXTURES.brokerageConnection.label,
     );
-    await expect(accountIdInput).toBeEnabled();
-    await expect(accountIdInput).toHaveValue(
-      E2E_SMOKE_FIXTURES.brokerageConnection.accountId,
+    await expect(expectedAccountIdsTextarea).toBeEnabled();
+    await expect(expectedAccountIdsTextarea).toHaveValue(
+      E2E_SMOKE_FIXTURES.brokerageConnection.expectedAccountIds.join(", "),
+    );
+    await expect(expectedAccountIdsTextarea).toHaveJSProperty(
+      "tagName",
+      "TEXTAREA",
+    );
+    await expectedAccountIdsTextarea.fill(
+      E2E_SMOKE_FIXTURES.brokerageConnection.expectedAccountIds.join("\n"),
+    );
+    await expect(saveButton).toBeEnabled();
+    await expect(expectedAccountIdsTextarea).toHaveValue(
+      E2E_SMOKE_FIXTURES.brokerageConnection.expectedAccountIds.join("\n"),
+    );
+    await getBrokerageConnectionConfigureButton(page).click();
+    await expect(getBrokerageConnectionForm(page)).toBeHidden();
+    await getBrokerageConnectionConfigureButton(page).click();
+    await expect(getBrokerageConnectionForm(page)).toBeVisible();
+    await expect(
+      getBrokerageConnectionExpectedAccountIdsTextarea(page),
+    ).toHaveValue(
+      E2E_SMOKE_FIXTURES.brokerageConnection.expectedAccountIds.join(", "),
     );
   });
 
-  test("first-time IBKR setup allows Account ID and Label to remain unset", async ({
+  test("first-time IBKR setup allows Expected account IDs and Label to remain unset", async ({
     page,
   }) => {
     const configuredBaseUrl = getConfiguredBaseUrl();
@@ -201,10 +224,12 @@ test.describe("operational surfaces regression", () => {
       await waitForAuthenticatedApp(page, APP_PAGE_TITLES.imports);
 
       await expect(getBrokerageConnectionLabelInput(page)).toHaveValue("");
-      await expect(getBrokerageConnectionAccountIdInput(page)).toHaveValue("");
+      await expect(
+        getBrokerageConnectionExpectedAccountIdsTextarea(page),
+      ).toHaveValue("");
       await expect(getBrokerageConnectionLabelClearButton(page)).toHaveCount(0);
       await expect(
-        getBrokerageConnectionAccountIdClearButton(page),
+        getBrokerageConnectionExpectedAccountIdsClearButton(page),
       ).toHaveCount(0);
       await expect(getBrokerageConnectionTokenExpiryInput(page)).toHaveValue(
         "",

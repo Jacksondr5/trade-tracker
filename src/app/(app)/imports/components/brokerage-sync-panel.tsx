@@ -23,14 +23,32 @@ import {
 import { api } from "~/convex/_generated/api";
 import { formatDate } from "~/lib/format";
 import { cn } from "~/lib/utils";
-import { MAX_IBKR_FLEX_TOKEN_LENGTH } from "../../../../../shared/brokerage/constants";
+import {
+  MAX_IBKR_ACCOUNT_ID_LENGTH,
+  MAX_IBKR_EXPECTED_ACCOUNT_IDS,
+  MAX_IBKR_FLEX_TOKEN_LENGTH,
+} from "../../../../../shared/brokerage/constants";
 import { IMPORTS_INDEX_TEST_IDS } from "../../../../../shared/e2e/testIds";
+import {
+  parseExpectedAccountIds,
+  toOptionalStringArrayPatch,
+} from "./brokerage-sync-panel-helpers";
 
 const connectionSchema = z.object({
-  accountId: z
+  expectedAccountIds: z
     .string()
-    .trim()
-    .max(40, "Account ID must be 40 characters or less"),
+    .refine(
+      (value) =>
+        parseExpectedAccountIds(value).length <= MAX_IBKR_EXPECTED_ACCOUNT_IDS,
+      `Enter ${MAX_IBKR_EXPECTED_ACCOUNT_IDS} expected account IDs or fewer`,
+    )
+    .refine(
+      (value) =>
+        parseExpectedAccountIds(value).every(
+          (accountId) => accountId.length <= MAX_IBKR_ACCOUNT_ID_LENGTH,
+        ),
+      `Each account ID must be ${MAX_IBKR_ACCOUNT_ID_LENGTH} characters or less`,
+    ),
   label: z.string().trim().max(80, "Label must be 80 characters or less"),
   queryId: z
     .string()
@@ -82,6 +100,10 @@ function toEndOfUtcDay(date: string): number {
   return Date.parse(`${date}T23:59:59.999Z`);
 }
 
+function expectedAccountIdsInputValue(accountIds?: string[]): string {
+  return accountIds?.join(", ") ?? "";
+}
+
 function toOptionalStringPatch(args: {
   cleared: boolean;
   fieldName: string;
@@ -102,8 +124,11 @@ function toOptionalStringPatch(args: {
 }
 
 function validateOptionalMetadataFields(args: {
-  cleared: { accountId: boolean; label: boolean };
-  persisted: { accountId: string | undefined; label: string | undefined };
+  cleared: { expectedAccountIds: boolean; label: boolean };
+  persisted: {
+    expectedAccountIds: string[] | undefined;
+    label: string | undefined;
+  };
   value: ConnectionFormValues;
 }) {
   const result = connectionSchema.safeParse(args.value);
@@ -111,12 +136,12 @@ function validateOptionalMetadataFields(args: {
     ? {}
     : { ...result.error.flatten().fieldErrors };
   if (
-    args.persisted.accountId !== undefined &&
-    !args.cleared.accountId &&
-    !args.value.accountId.trim()
+    args.persisted.expectedAccountIds !== undefined &&
+    !args.cleared.expectedAccountIds &&
+    parseExpectedAccountIds(args.value.expectedAccountIds).length === 0
   ) {
-    fieldErrors.accountId = [
-      "Account ID cannot be empty; use Clear to remove it",
+    fieldErrors.expectedAccountIds = [
+      "Expected account IDs cannot be empty; use Clear to remove them",
     ];
   }
   if (
@@ -149,24 +174,26 @@ export function BrokerageSyncPanel({
   } | null>(null);
   const [isChangingStatus, setIsChangingStatus] = useState(false);
   const [clearedMetadata, setClearedMetadata] = useState({
-    accountId: false,
+    expectedAccountIds: false,
     label: false,
   });
-  const connectionAccountId = connection?.accountId ?? "";
+  const connectionExpectedAccountIds = expectedAccountIdsInputValue(
+    connection?.expectedAccountIds,
+  );
   const connectionLabel = connection?.label ?? "";
   const connectionQueryId = connection?.queryId ?? "";
   const connectionStatus = connection?.status;
   const connectionTokenExpiresOn = toDateInputValue(connection?.tokenExpiresAt);
   const connectionFormValues = useMemo(
     () => ({
-      accountId: connectionAccountId,
+      expectedAccountIds: connectionExpectedAccountIds,
       label: connectionLabel,
       queryId: connectionQueryId,
       token: "",
       tokenExpiresOn: connectionTokenExpiresOn,
     }),
     [
-      connectionAccountId,
+      connectionExpectedAccountIds,
       connectionLabel,
       connectionQueryId,
       connectionTokenExpiresOn,
@@ -190,7 +217,7 @@ export function BrokerageSyncPanel({
         validateOptionalMetadataFields({
           cleared: clearedMetadata,
           persisted: {
-            accountId: connection?.accountId,
+            expectedAccountIds: connection?.expectedAccountIds,
             label: connection?.label,
           },
           value,
@@ -201,11 +228,11 @@ export function BrokerageSyncPanel({
       try {
         const parsed = connectionSchema.parse(value);
         const token = parsed.token.trim();
-        const accountId = toOptionalStringPatch({
-          cleared: clearedMetadata.accountId,
-          fieldName: "Account ID",
-          persistedValue: connection?.accountId,
-          value: parsed.accountId,
+        const expectedAccountIds = toOptionalStringArrayPatch({
+          cleared: clearedMetadata.expectedAccountIds,
+          fieldName: "Expected account IDs",
+          persistedValue: connection?.expectedAccountIds,
+          value: parsed.expectedAccountIds,
         });
         const label = toOptionalStringPatch({
           cleared: clearedMetadata.label,
@@ -228,7 +255,7 @@ export function BrokerageSyncPanel({
           await setConnectionToken({
             connectionId,
             metadata: {
-              accountId,
+              expectedAccountIds,
               label,
               queryId: parsed.queryId,
               tokenExpiresAt,
@@ -237,7 +264,7 @@ export function BrokerageSyncPanel({
           });
         } else {
           await upsertConnection({
-            accountId,
+            expectedAccountIds,
             label,
             queryId: parsed.queryId,
             status: connection?.status === "paused" ? "paused" : "active",
@@ -251,7 +278,7 @@ export function BrokerageSyncPanel({
           variant: "success",
         });
         form.reset({ ...parsed, token: "" });
-        setClearedMetadata({ accountId: false, label: false });
+        setClearedMetadata({ expectedAccountIds: false, label: false });
         setIsReplacingToken(false);
         setIsEditing(false);
       } catch (error) {
@@ -269,7 +296,7 @@ export function BrokerageSyncPanel({
 
   useEffect(() => {
     form.reset(connectionFormValues);
-    setClearedMetadata({ accountId: false, label: false });
+    setClearedMetadata({ expectedAccountIds: false, label: false });
   }, [connectionFormValues, form]);
 
   useEffect(() => {
@@ -281,13 +308,18 @@ export function BrokerageSyncPanel({
 
   const handleEditingToggle = () => {
     form.reset(connectionFormValues);
-    setClearedMetadata({ accountId: false, label: false });
+    setClearedMetadata({ expectedAccountIds: false, label: false });
     setIsReplacingToken(!connection?.tokenConfigured);
     setIsEditing((current) => !current);
   };
 
-  const handleMetadataClearToggle = (field: "accountId" | "label") => {
-    const persistedValue = connection?.[field];
+  const handleMetadataClearToggle = (field: "expectedAccountIds" | "label") => {
+    const persistedValue =
+      field === "expectedAccountIds"
+        ? connection?.expectedAccountIds
+          ? expectedAccountIdsInputValue(connection.expectedAccountIds)
+          : undefined
+        : connection?.label;
     if (persistedValue === undefined) return;
     if (!clearedMetadata[field]) {
       form.setFieldValue(field, persistedValue);
@@ -564,44 +596,57 @@ export function BrokerageSyncPanel({
                 ) : null}
               </div>
               <div>
-                <form.AppField name="accountId">
+                <form.AppField name="expectedAccountIds">
                   {(field) => (
-                    <field.FieldInput
+                    <field.FieldTextarea
                       dataTestId={
-                        IMPORTS_INDEX_TEST_IDS.brokerageConnectionAccountIdInput
+                        IMPORTS_INDEX_TEST_IDS.brokerageConnectionExpectedAccountIdsTextarea
                       }
-                      disabled={clearedMetadata.accountId}
-                      displayValue={clearedMetadata.accountId ? "" : undefined}
-                      label="Brokerage account ID"
+                      disabled={clearedMetadata.expectedAccountIds}
+                      displayValue={
+                        clearedMetadata.expectedAccountIds ? "" : undefined
+                      }
+                      label="Expected account IDs"
                       labelAction={
-                        connection?.accountId ? (
+                        connection?.expectedAccountIds?.length ? (
                           <Button
                             className="h-auto px-0 py-0"
                             dataTestId={
-                              clearedMetadata.accountId
-                                ? IMPORTS_INDEX_TEST_IDS.brokerageConnectionAccountIdUndoButton
-                                : IMPORTS_INDEX_TEST_IDS.brokerageConnectionAccountIdClearButton
+                              clearedMetadata.expectedAccountIds
+                                ? IMPORTS_INDEX_TEST_IDS.brokerageConnectionExpectedAccountIdsUndoButton
+                                : IMPORTS_INDEX_TEST_IDS.brokerageConnectionExpectedAccountIdsClearButton
                             }
                             onClick={() =>
-                              handleMetadataClearToggle("accountId")
+                              handleMetadataClearToggle("expectedAccountIds")
                             }
                             size="sm"
                             type="button"
                             variant="link"
                           >
-                            {clearedMetadata.accountId ? "Undo" : "Clear"}
+                            {clearedMetadata.expectedAccountIds
+                              ? "Undo"
+                              : "Clear"}
                           </Button>
                         ) : undefined
                       }
-                      placeholder="U1234567"
+                      placeholder={
+                        "U1234567, U7654321\nor one account per line"
+                      }
+                      resize="vertical"
+                      rows={2}
                     />
                   )}
                 </form.AppField>
-                {clearedMetadata.accountId ? (
+                {clearedMetadata.expectedAccountIds ? (
                   <p className="mt-1.5 text-xs text-olive-11">
-                    Account ID will be cleared when saved.
+                    Expected account IDs will be cleared when saved.
                   </p>
-                ) : null}
+                ) : (
+                  <p className="mt-1.5 text-xs text-olive-11">
+                    Separate with commas or new lines. A sync fails before
+                    ingestion if any are absent from the report.
+                  </p>
+                )}
               </div>
               <form.AppField name="queryId">
                 {(field) => (

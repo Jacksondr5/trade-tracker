@@ -547,23 +547,27 @@ export function getBrokerageConnectionForm(page: Page): Locator {
   return page.getByTestId(IMPORTS_INDEX_TEST_IDS.brokerageConnectionForm);
 }
 
-export function getBrokerageConnectionAccountIdClearButton(
+export function getBrokerageConnectionExpectedAccountIdsClearButton(
   page: Page,
 ): Locator {
   return page.getByTestId(
-    IMPORTS_INDEX_TEST_IDS.brokerageConnectionAccountIdClearButton,
+    IMPORTS_INDEX_TEST_IDS.brokerageConnectionExpectedAccountIdsClearButton,
   );
 }
 
-export function getBrokerageConnectionAccountIdInput(page: Page): Locator {
+export function getBrokerageConnectionExpectedAccountIdsTextarea(
+  page: Page,
+): Locator {
   return page.getByTestId(
-    IMPORTS_INDEX_TEST_IDS.brokerageConnectionAccountIdInput,
+    IMPORTS_INDEX_TEST_IDS.brokerageConnectionExpectedAccountIdsTextarea,
   );
 }
 
-export function getBrokerageConnectionAccountIdUndoButton(page: Page): Locator {
+export function getBrokerageConnectionExpectedAccountIdsUndoButton(
+  page: Page,
+): Locator {
   return page.getByTestId(
-    IMPORTS_INDEX_TEST_IDS.brokerageConnectionAccountIdUndoButton,
+    IMPORTS_INDEX_TEST_IDS.brokerageConnectionExpectedAccountIdsUndoButton,
   );
 }
 

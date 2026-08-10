@@ -548,7 +548,6 @@ export default defineSchema({
     .index("by_ownerId_and_status", ["ownerId", "status"]),
 
   brokerageConnections: defineTable({
-    accountId: v.optional(v.string()),
     connectionError: v.optional(v.string()),
     createdAt: v.number(),
     expectedAccountIds: v.optional(v.array(v.string())),
@@ -722,6 +721,11 @@ export default defineSchema({
       "ownerId",
       "status",
       "reportDate",
+    ])
+    .index("by_ownerId_and_connectionId_and_status", [
+      "ownerId",
+      "connectionId",
+      "status",
     ])
     .index("by_owner_connection_reportDate_issueType_status", [
       "ownerId",

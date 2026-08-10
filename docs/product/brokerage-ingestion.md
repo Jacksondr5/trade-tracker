@@ -132,19 +132,28 @@ For IBKR Flex Web Service, the implemented workflow is:
 1. The nightly Convex job selects active IBKR connections and starts one durable
    child workflow per connection for the expected report date.
 2. An internal mutation creates the keyed sync run, joins an existing
-   succeeded or in-flight run, or atomically requeues a `failed_retryable` or
-   `failed_terminal` run.
+   succeeded or in-flight run, or atomically requeues a terminal failed run. A
+   manual sync may explicitly force-requeue a succeeded run or start a new date
+   for an errored connection, but it never reclaims an in-flight run and
+   nightly syncs keep the normal join behavior.
 3. A Convex action decrypts that connection's token and calls `SendRequest`.
    The action returns the reference code, which a following internal mutation
    records on the run.
 4. The workflow durably waits and retries `GetStatement` with bounded
    exponential backoff until the report is ready, a terminal error occurs, or
    the polling cutoff is reached.
-5. When ready, an action parses the report. If parsing succeeds, it stores the
-   raw XML in Convex file storage, records its content hash, and submits
-   normalized results to an internal ingestion mutation. A parser failure is
-   terminal and does not retain the raw XML.
-6. The ingestion mutation stages new trades for review, writes position and
+5. When ready, an action parses the report and compares the accounts present in
+   its Flex statements with the connection's optional expected-account list.
+   If any expected account is absent, the action retains the raw XML and hash,
+   then fails terminally before any trade, snapshot, or reconciliation write.
+   The comparison trims both sources and ignores letter case while preserving
+   the configured and reported casing in operator-facing messages. An unset
+   expected-account list skips this guard.
+6. For a complete report, the action stores the raw XML in Convex file storage,
+   records its content hash, and submits normalized results to an internal
+   ingestion mutation. A parser failure is terminal and does not retain the raw
+   XML.
+7. The ingestion mutation stages new trades for review, writes position and
    cash snapshots, reconciles positions, and updates the sync run.
 
 Workflow arguments and step results must contain only the minimum durable
@@ -159,13 +168,25 @@ Use stable keys for dedupe:
 
 - sync run uniqueness for `(connectionId, reportType, reportDate, queryId)`;
   ownership is inherited from the connection and recorded on the run
-- one raw report attachment per sync run, with a content hash for audit and
-  duplicate identification
+- one current raw report attachment on the sync run, with a content hash for
+  audit and duplicate identification; a re-sync repoints the run to newly
+  returned content while retaining older reports as historical evidence
 - broker-native execution ID when importing trades
 - fallback composite keys only when IBKR does not provide a stable execution ID
 
 Convex ingestion mutations should accept repeated calls for the same report
 without duplicating inbox trades, snapshots, or reconciliation issues.
+An ordinary retry that receives byte-identical content reuses the existing raw
+report. A forced re-sync that receives identical content fails visibly because
+IBKR served the cached statement and the system learned nothing new.
+
+Requeue starts a fresh attempt on the same durable key. It resets completion,
+error, reference-code, current raw-report pointer, request/start timestamps,
+status, and the imported-trade, skipped-duplicate, position-snapshot, and
+reconciliation-issue counters. It deliberately preserves the run ID and key
+fields (`connectionId`, owner, source, report type/date, and query ID), while
+prior raw-report rows and already-ingested canonical records remain historical
+or idempotently replaceable evidence.
 
 ## Reconciliation
 
@@ -180,8 +201,13 @@ state:
   proven
 - new imported trades still waiting in the import inbox
 
-Reconciliation issues should be durable, reviewable, and tied to the sync run
-that produced them.
+Position reconciliation issues are persistent discrepancies, not a daily
+append-only log. Their identity is connection, issue type, brokerage account,
+asset type, symbol, and direction; report date is the latest supporting
+evidence, not part of identity. Reconciliation reuses a still-present issue,
+resolves one that disappeared or changed type, and leaves unrelated legitimate
+issues open. A corrected re-sync therefore converges instead of accumulating a
+contradictory old issue alongside the corrected snapshot.
 
 The first version should focus on position quantity mismatches. Cash
 reconciliation can follow after position sync behavior is stable.
@@ -226,13 +252,15 @@ plaintext local to that action. It must never become a workflow argument or a
 workflow step return value because `@convex-dev/workflow` durably journals both.
 Do not log or echo plaintext tokens.
 
-Raw brokerage reports are sensitive financial records. After a report parses
-successfully, retain only what is needed to audit or debug its ingestion. Store
-that raw Flex XML in Convex storage and keep the storage reference plus content
-hash in normal tables. Daily reports are expected to be small, but keeping the
-raw payload out of ordinary queryable documents preserves a cleaner security
-and client-query boundary. Parser failures happen before storage, so this raw
-report record is not available for diagnosing a parser mismatch.
+Raw brokerage reports are sensitive financial records. After a report parses,
+retain what is needed to audit or debug its ingestion. Store that raw Flex XML
+in Convex storage and keep the storage reference plus content hash in normal
+tables. An incomplete report is retained even though ingestion is blocked,
+because it is the evidence needed to diagnose an account-scope failure. Daily
+reports are expected to be small, but keeping the raw payload out of ordinary
+queryable documents preserves a cleaner security and client-query boundary.
+Parser failures happen before storage, so this raw report record is not
+available for diagnosing a parser mismatch.
 
 Keep raw report access internal.
 
@@ -252,9 +280,29 @@ Expected terminal or user-action failures include:
 - invalid query ID
 - report schema no longer matching the parser
 - missing required report sections
+- a report missing one or more configured expected accounts
+- a forced re-sync receiving the same cached report content
 
 Terminal failures should update Convex sync status and surface a clear
 operational issue. They should not block the rest of the product from loading.
+A manual force may recover the keyed terminal run even when that failure put the
+connection into `error`; the reclaim clears the old terminal state and
+reactivates the connection. Force cannot make IBKR regenerate a cached Flex
+statement. If the content hash is unchanged, the failure tells the operator to
+edit the Flex query or wait for the reporting period to roll over.
+
+Operator recovery should scope the force to the connection being repaired:
+
+```bash
+pnpm exec convex run ibkrFlexWorkflow:startManualSync '{"connectionId":"<connection-id>","force":true,"reportDate":"YYYY-MM-DD"}' --prod
+```
+
+Omitting `connectionId` deliberately preserves the date-wide operator command,
+which forces every eligible IBKR connection. A supplied ID is an operator scope
+and typo guard, not an authorization boundary: the internal mutation validates
+that it names a real IBKR connection, and the workflow fails visibly if that
+connection is not eligible for the requested sync. Nightly runs never force and
+remain unscoped.
 
 ## Operational Verification
 
@@ -265,9 +313,11 @@ day, then verify that one sync:
 
 - completes without exposing the write-only token
 - stores a raw report reference and content hash
+- rejects a report that omits a configured expected account before ingestion
 - stages new executions in the import inbox without duplicates
 - writes position and cash snapshots for every account in the report
-- creates or resolves reviewable reconciliation issues
+- creates, persists, and resolves reviewable reconciliation issues across
+  report dates without accumulating contradictions
 - exposes the resulting sync and freshness state in the product
 
 After the manual acceptance run, observe at least one unattended 1:00 a.m.
@@ -287,6 +337,8 @@ It should show:
 - pending imported trades
 - reconciliation issues
 - token or query setup guidance when needed
+- an optional list of expected account IDs used to fail closed on partial Flex
+  reports
 
 It should avoid becoming a large settings product. The primary user task is to
 know whether Trade Tracker is current enough to trust and what needs review.

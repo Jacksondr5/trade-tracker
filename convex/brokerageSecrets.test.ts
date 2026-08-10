@@ -148,7 +148,10 @@ describe("brokerage connection secrets", () => {
       {
         connectionId,
         metadata: {
-          accountId: { kind: "set", value: "U7654321" },
+          expectedAccountIds: {
+            kind: "set",
+            value: ["U7654321", "U8765432"],
+          },
           label: { kind: "set", value: "Primary IBKR" },
           queryId: "987654",
           tokenExpiresAt: 1_800_000_000_000,
@@ -174,7 +177,7 @@ describe("brokerage connection secrets", () => {
     expect(storedSecret.ciphertext).not.toContain(plaintext);
     expect(status.connections[0]).toMatchObject({
       _id: connectionId,
-      accountId: "U7654321",
+      expectedAccountIds: ["U7654321", "U8765432"],
       label: "Primary IBKR",
       queryId: "987654",
       status: "active",
@@ -238,7 +241,7 @@ describe("brokerage connection secrets", () => {
     await asUser().action(api.brokerageSecrets.setIbkrConnectionToken, {
       connectionId,
       metadata: {
-        accountId: { kind: "set", value: "U1234567" },
+        expectedAccountIds: { kind: "set", value: ["U1234567"] },
         label: { kind: "set", value: "Original label" },
         queryId: "123456",
         tokenExpiresAt: 1_800_000_000_000,
@@ -294,38 +297,12 @@ describe("brokerage connection secrets", () => {
     ).resolves.toBe("replacement-secret");
   });
 
-  it("replaces the canonical expected list through legacy token metadata", async () => {
-    const connectionId = await createConnection();
-    await t.run(async (ctx) => {
-      await ctx.db.patch(connectionId, {
-        accountId: "ULEGACY",
-        expectedAccountIds: ["UCANONICAL", "USECONDARY"],
-      });
-    });
-
-    await asUser().action(api.brokerageSecrets.setIbkrConnectionToken, {
-      connectionId,
-      metadata: {
-        accountId: { kind: "set", value: " UREPLACEMENT " },
-        queryId: "123456",
-        tokenExpiresAt: 1_800_000_000_000,
-      },
-      token: "replacement-secret",
-    });
-
-    const connection = await t.run(async (ctx) => ctx.db.get(connectionId));
-    expect(connection).toMatchObject({
-      expectedAccountIds: ["UREPLACEMENT"],
-    });
-    expect(connection).not.toHaveProperty("accountId");
-  });
-
   it("applies explicit metadata clears atomically with a token replacement", async () => {
     const connectionId = await createConnection();
     await asUser().action(api.brokerageSecrets.setIbkrConnectionToken, {
       connectionId,
       metadata: {
-        accountId: { kind: "set", value: "U1234567" },
+        expectedAccountIds: { kind: "set", value: ["U1234567"] },
         label: { kind: "set", value: "Primary" },
         queryId: "123456",
         tokenExpiresAt: 1_800_000_000_000,
@@ -336,7 +313,7 @@ describe("brokerage connection secrets", () => {
     await asUser().action(api.brokerageSecrets.setIbkrConnectionToken, {
       connectionId,
       metadata: {
-        accountId: { kind: "clear" },
+        expectedAccountIds: { kind: "clear" },
         label: { kind: "clear" },
         queryId: "654321",
         tokenExpiresAt: 1_900_000_000_000,
@@ -369,6 +346,17 @@ describe("brokerage connection secrets", () => {
         token: "new-secret",
       }),
     ).rejects.toThrow("Label cannot be empty");
+    await expect(
+      asUser().action(api.brokerageSecrets.setIbkrConnectionToken, {
+        connectionId,
+        metadata: {
+          expectedAccountIds: { kind: "set", value: [] },
+          queryId: "123456",
+          tokenExpiresAt: 1_800_000_000_000,
+        },
+        token: "new-secret",
+      }),
+    ).rejects.toThrow("Expected account IDs cannot be empty");
   });
 
   it("rejects a non-finite token expiration timestamp", async () => {

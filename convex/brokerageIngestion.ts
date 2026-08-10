@@ -7,15 +7,20 @@ import {
 } from "./_generated/server";
 import { assertOwner, requireUser } from "./lib/auth";
 import {
+  optionalMetadataStringArrayPatchValidator,
   optionalMetadataStringPatchValidator,
-  resolveLegacyAccountIdBridgePatch,
+  resolveOptionalMetadataStringArrayPatch,
   resolveOptionalMetadataStringPatch,
   validateTokenExpiresAt,
 } from "./lib/brokerageConnectionMetadata";
 import type { Doc, Id } from "./_generated/dataModel";
-import type { MutationCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { stageInboxTradesForOwner } from "./imports";
 import type { StageInboxTradeInput } from "./imports";
+import {
+  MAX_IBKR_ACCOUNT_ID_LENGTH,
+  MAX_IBKR_EXPECTED_ACCOUNT_IDS,
+} from "../shared/brokerage/constants";
 
 const brokerageConnectionStatusValidator = v.union(
   v.literal("active"),
@@ -73,15 +78,6 @@ function toSyncRunSummary(run: Doc<"brokerageSyncRuns">) {
   };
 }
 
-function accountIdForLegacyClient(
-  connection: Pick<
-    Doc<"brokerageConnections">,
-    "accountId" | "expectedAccountIds"
-  >,
-): string | undefined {
-  return connection.expectedAccountIds?.[0] ?? connection.accountId;
-}
-
 const normalizedTradeValidator = v.object({
   assetType: v.literal("stock"),
   brokerageAccountId: v.string(),
@@ -127,6 +123,8 @@ type ReconciliationIssueType =
 
 type PositionReconciliationKey =
   `${string}:${"crypto" | "stock"}:${string}:${ReconciliationDirection}`;
+type PositionReconciliationIssueKey =
+  `${ReconciliationIssueType}|${PositionReconciliationKey}`;
 
 type ReconciledPosition = {
   assetType: "crypto" | "stock";
@@ -188,6 +186,13 @@ function reconciliationIssueKey(
   });
 }
 
+function positionReconciliationIssueKey(
+  issueType: ReconciliationIssueType,
+  positionKey: PositionReconciliationKey,
+): PositionReconciliationIssueKey {
+  return `${issueType}|${positionKey}`;
+}
+
 function getPositionMismatchMessage(args: {
   actualQuantity: number;
   brokerageAccountId: string;
@@ -211,7 +216,7 @@ function syncRunNotFound(): never {
 }
 
 async function getSyncRunWithConnection(
-  ctx: MutationCtx,
+  ctx: MutationCtx | QueryCtx,
   syncRunId: Id<"brokerageSyncRuns">,
 ) {
   const syncRun = await ctx.db.get(syncRunId);
@@ -367,22 +372,13 @@ async function upsertPositionReconciliationIssue(
     position: Omit<ReconciledPosition, "quantity">;
     reportDate: string;
     syncRunId: Id<"brokerageSyncRuns">;
+    existing: Doc<"brokerageReconciliationIssues"> | undefined;
   },
-): Promise<boolean> {
+): Promise<{
+  created: boolean;
+  issueId: Id<"brokerageReconciliationIssues">;
+}> {
   const now = Date.now();
-  const existingOpenIssues = await ctx.db
-    .query("brokerageReconciliationIssues")
-    .withIndex("by_ownerId_and_status", (q) =>
-      q.eq("ownerId", args.ownerId).eq("status", "open"),
-    )
-    .collect();
-  const key = positionReconciliationKey(args.position);
-  const existing = existingOpenIssues.find(
-    (issue) =>
-      issue.connectionId === args.connectionId &&
-      issue.issueType === args.issueType &&
-      reconciliationIssueKey(issue) === key,
-  );
   const message = getPositionMismatchMessage({
     actualQuantity: args.actualQuantity,
     brokerageAccountId: args.position.brokerageAccountId,
@@ -405,12 +401,12 @@ async function upsertPositionReconciliationIssue(
     updatedAt: now,
   };
 
-  if (existing) {
-    await ctx.db.patch(existing._id, fields);
-    return false;
+  if (args.existing) {
+    await ctx.db.patch(args.existing._id, fields);
+    return { created: false, issueId: args.existing._id };
   }
 
-  await ctx.db.insert("brokerageReconciliationIssues", {
+  const issueId = await ctx.db.insert("brokerageReconciliationIssues", {
     ...fields,
     connectionId: args.connectionId,
     createdAt: now,
@@ -419,7 +415,7 @@ async function upsertPositionReconciliationIssue(
     severity: "warning",
     status: "open",
   });
-  return true;
+  return { created: true, issueId };
 }
 
 async function reconcilePositionsForSyncRun(
@@ -437,7 +433,40 @@ async function reconcilePositionsForSyncRun(
     ctx,
     args.syncRunId,
   );
-  const discrepancyKeys = new Set<PositionReconciliationKey>();
+  const openIssues: Doc<"brokerageReconciliationIssues">[] = [];
+  for await (const issue of ctx.db
+    .query("brokerageReconciliationIssues")
+    .withIndex("by_ownerId_and_connectionId_and_status", (q) =>
+      q
+        .eq("ownerId", args.ownerId)
+        .eq("connectionId", args.connectionId)
+        .eq("status", "open"),
+    )) {
+    openIssues.push(issue);
+  }
+  const positionOpenIssues = openIssues.filter(
+    (
+      issue,
+    ): issue is Doc<"brokerageReconciliationIssues"> & {
+      issueType: ReconciliationIssueType;
+    } =>
+      issue.issueType === "position_mismatch" ||
+      issue.issueType === "missing_local_position" ||
+      issue.issueType === "missing_brokerage_position",
+  );
+  const existingIssueByKey = new Map<
+    PositionReconciliationIssueKey,
+    Doc<"brokerageReconciliationIssues">
+  >();
+  for (const issue of positionOpenIssues) {
+    const key = reconciliationIssueKey(issue);
+    if (key === null) continue;
+    const issueKey = positionReconciliationIssueKey(issue.issueType, key);
+    if (!existingIssueByKey.has(issueKey)) {
+      existingIssueByKey.set(issueKey, issue);
+    }
+  }
+  const activeIssueIds = new Set<Id<"brokerageReconciliationIssues">>();
   let openIssueCount = 0;
 
   const allKeys = new Set<PositionReconciliationKey>([
@@ -465,10 +494,11 @@ async function reconcilePositionsForSyncRun(
           ? "missing_brokerage_position"
           : "position_mismatch";
 
-    discrepancyKeys.add(key);
-    const created = await upsertPositionReconciliationIssue(ctx, {
+    const issueKey = positionReconciliationIssueKey(issueType, key);
+    const upserted = await upsertPositionReconciliationIssue(ctx, {
       actualQuantity,
       connectionId: args.connectionId,
+      existing: existingIssueByKey.get(issueKey),
       expectedQuantity,
       issueType,
       ownerId: args.ownerId,
@@ -476,27 +506,13 @@ async function reconcilePositionsForSyncRun(
       reportDate: args.reportDate,
       syncRunId: args.syncRunId,
     });
-    if (created) openIssueCount += 1;
+    activeIssueIds.add(upserted.issueId);
+    if (upserted.created) openIssueCount += 1;
   }
 
   const now = Date.now();
-  const openIssues = await ctx.db
-    .query("brokerageReconciliationIssues")
-    .withIndex("by_ownerId_and_status", (q) =>
-      q.eq("ownerId", args.ownerId).eq("status", "open"),
-    )
-    .collect();
-  for (const issue of openIssues) {
-    if (issue.connectionId !== args.connectionId) continue;
-    if (
-      issue.issueType !== "position_mismatch" &&
-      issue.issueType !== "missing_local_position" &&
-      issue.issueType !== "missing_brokerage_position"
-    ) {
-      continue;
-    }
-    const issueKey = reconciliationIssueKey(issue);
-    if (issueKey !== null && !discrepancyKeys.has(issueKey)) {
+  for (const issue of positionOpenIssues) {
+    if (!activeIssueIds.has(issue._id)) {
       await ctx.db.patch(issue._id, {
         resolvedAt: now,
         status: "resolved",
@@ -511,7 +527,7 @@ async function reconcilePositionsForSyncRun(
 
 export const upsertIbkrConnection = mutation({
   args: {
-    accountId: v.optional(optionalMetadataStringPatchValidator),
+    expectedAccountIds: v.optional(optionalMetadataStringArrayPatchValidator),
     label: v.optional(optionalMetadataStringPatchValidator),
     queryId: v.optional(v.string()),
     status: v.optional(brokerageConnectionStatusValidator),
@@ -536,9 +552,17 @@ export const upsertIbkrConnection = mutation({
       const nextQueryId = args.queryId ?? existing.queryId;
       const status = args.status ?? (nextQueryId ? "active" : "needs_setup");
       await ctx.db.patch(existing._id, {
-        ...(args.accountId === undefined
+        ...(args.expectedAccountIds === undefined
           ? {}
-          : resolveLegacyAccountIdBridgePatch(args.accountId)),
+          : {
+              expectedAccountIds: resolveOptionalMetadataStringArrayPatch({
+                fieldName: "Expected account IDs",
+                itemName: "account ID",
+                maxItemLength: MAX_IBKR_ACCOUNT_ID_LENGTH,
+                maxItems: MAX_IBKR_EXPECTED_ACCOUNT_IDS,
+                patch: args.expectedAccountIds,
+              }),
+            }),
         connectionError: undefined,
         ...(args.label === undefined
           ? {}
@@ -559,9 +583,16 @@ export const upsertIbkrConnection = mutation({
 
     const status = args.status ?? (args.queryId ? "active" : "needs_setup");
     return await ctx.db.insert("brokerageConnections", {
-      ...(args.accountId === undefined
-        ? {}
-        : resolveLegacyAccountIdBridgePatch(args.accountId)),
+      expectedAccountIds:
+        args.expectedAccountIds === undefined
+          ? undefined
+          : resolveOptionalMetadataStringArrayPatch({
+              fieldName: "Expected account IDs",
+              itemName: "account ID",
+              maxItemLength: MAX_IBKR_ACCOUNT_ID_LENGTH,
+              maxItems: MAX_IBKR_EXPECTED_ACCOUNT_IDS,
+              patch: args.expectedAccountIds,
+            }),
       createdAt: now,
       label:
         args.label === undefined
@@ -605,8 +636,8 @@ export const getBrokerageIngestionStatus = query({
     connections: v.array(
       v.object({
         _id: v.id("brokerageConnections"),
-        accountId: v.optional(v.string()),
         connectionError: v.optional(v.string()),
+        expectedAccountIds: v.optional(v.array(v.string())),
         label: v.optional(v.string()),
         lastFailedSyncAt: v.optional(v.number()),
         lastSuccessfulSyncAt: v.optional(v.number()),
@@ -723,8 +754,8 @@ export const getBrokerageIngestionStatus = query({
     return {
       connections: connections.map((connection) => ({
         _id: connection._id,
-        accountId: accountIdForLegacyClient(connection),
         connectionError: connection.connectionError,
+        expectedAccountIds: connection.expectedAccountIds,
         label: connection.label,
         lastFailedSyncAt: connection.lastFailedSyncAt,
         lastSuccessfulSyncAt: connection.lastSuccessfulSyncAt,
@@ -761,7 +792,7 @@ export const getBrokerageIngestionStatus = query({
 });
 
 export const listDueConnections = internalQuery({
-  args: {},
+  args: { includeError: v.optional(v.boolean()) },
   returns: v.array(
     v.object({
       _id: v.id("brokerageConnections"),
@@ -770,13 +801,22 @@ export const listDueConnections = internalQuery({
       source: v.literal("ibkr"),
     }),
   ),
-  handler: async (ctx) => {
-    const connections = await ctx.db
+  handler: async (ctx, args) => {
+    const activeConnections = await ctx.db
       .query("brokerageConnections")
       .withIndex("by_source_and_status", (q) =>
         q.eq("source", "ibkr").eq("status", "active"),
       )
       .take(100);
+    const errorConnections = args.includeError
+      ? await ctx.db
+          .query("brokerageConnections")
+          .withIndex("by_source_and_status", (q) =>
+            q.eq("source", "ibkr").eq("status", "error"),
+          )
+          .take(100)
+      : [];
+    const connections = [...activeConnections, ...errorConnections];
     return connections.flatMap((connection) =>
       connection.queryId
         ? [
@@ -795,6 +835,7 @@ export const listDueConnections = internalQuery({
 export const beginSyncRunForConnection = internalMutation({
   args: {
     connectionId: v.id("brokerageConnections"),
+    force: v.optional(v.boolean()),
     queryId: v.optional(v.string()),
     reportDate: v.string(),
     reportType: brokerageSyncReportTypeValidator,
@@ -802,15 +843,13 @@ export const beginSyncRunForConnection = internalMutation({
   returns: v.object({
     created: v.boolean(),
     ownerId: v.string(),
+    previousRawReportId: v.optional(v.id("brokerageRawReports")),
     queryId: v.string(),
     syncRunId: v.id("brokerageSyncRuns"),
   }),
   handler: async (ctx, args) => {
     const connection = await ctx.db.get(args.connectionId);
     if (!connection) throw new ConvexError("Brokerage connection not found");
-    if (connection.status !== "active") {
-      throw new ConvexError("Brokerage connection is not active");
-    }
     const queryId = args.queryId ?? connection.queryId;
     if (!queryId) throw new ConvexError("IBKR query ID is required");
 
@@ -829,30 +868,56 @@ export const beginSyncRunForConnection = internalMutation({
     // A terminal workflow has released ownership of this keyed run, so it can
     // be requeued atomically. Non-terminal runs remain join-only: reclaiming
     // one without canceling its workflow could issue a duplicate Flex request.
-    if (
+    const canRequeueTerminalRun =
       existing?.status === "failed_retryable" ||
-      existing?.status === "failed_terminal"
+      existing?.status === "failed_terminal" ||
+      (args.force === true && existing?.status === "succeeded");
+    const canRecoverConnectionError =
+      args.force === true &&
+      connection.status === "error" &&
+      (canRequeueTerminalRun || existing === null);
+    if (
+      canRequeueTerminalRun &&
+      (connection.status === "active" || canRecoverConnectionError)
     ) {
       const now = Date.now();
+      const previousRawReportId = existing.rawReportId;
       await ctx.db.patch(existing._id, {
         completedAt: undefined,
         errorMessage: undefined,
+        importedTrades: 0,
+        positionSnapshotCount: 0,
+        rawReportId: undefined,
+        reconciliationIssueCount: 0,
         referenceCode: undefined,
         requestedAt: now,
+        skippedDuplicateTrades: 0,
         startedAt: now,
         status: "queued",
         updatedAt: now,
       });
       await ctx.db.patch(connection._id, {
         connectionError: undefined,
+        ...(canRecoverConnectionError ? { status: "active" as const } : {}),
         updatedAt: now,
       });
       return {
         created: true,
         ownerId: connection.ownerId,
+        previousRawReportId,
         queryId,
         syncRunId: existing._id,
       };
+    }
+    if (canRecoverConnectionError) {
+      const now = Date.now();
+      await ctx.db.patch(connection._id, {
+        connectionError: undefined,
+        status: "active",
+        updatedAt: now,
+      });
+    } else if (connection.status !== "active") {
+      throw new ConvexError("Brokerage connection is not active");
     }
     if (existing) {
       return {
@@ -955,27 +1020,65 @@ export const storeRawReportReference = internalMutation({
   },
 });
 
+export const getRawReportForSyncRun = internalQuery({
+  args: {
+    rawReportId: v.id("brokerageRawReports"),
+    syncRunId: v.id("brokerageSyncRuns"),
+  },
+  returns: v.union(v.null(), v.object({ contentHash: v.string() })),
+  handler: async (ctx, args) => {
+    const { syncRun } = await getSyncRunWithConnection(ctx, args.syncRunId);
+    const rawReport = await ctx.db.get(args.rawReportId);
+    if (!rawReport || rawReport.syncRunId !== syncRun._id) return null;
+    return { contentHash: rawReport.contentHash };
+  },
+});
+
+export const reuseRawReportReference = internalMutation({
+  args: {
+    rawReportId: v.id("brokerageRawReports"),
+    syncRunId: v.id("brokerageSyncRuns"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { syncRun } = await getSyncRunWithConnection(ctx, args.syncRunId);
+    if (syncRun.rawReportId && syncRun.rawReportId !== args.rawReportId) {
+      throw new ConvexError("Brokerage raw report changed during reuse");
+    }
+    const rawReport = await ctx.db.get(args.rawReportId);
+    if (!rawReport || rawReport.syncRunId !== syncRun._id) {
+      throw new ConvexError("Brokerage raw report not found");
+    }
+    await ctx.db.patch(syncRun._id, {
+      rawReportId: rawReport._id,
+      status: "processing",
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
 export const rollbackRawReportReference = internalMutation({
   args: {
     rawReportId: v.id("brokerageRawReports"),
     storageId: v.id("_storage"),
     syncRunId: v.id("brokerageSyncRuns"),
   },
-  returns: v.null(),
+  returns: v.boolean(),
   handler: async (ctx, args) => {
     const { syncRun } = await getSyncRunWithConnection(ctx, args.syncRunId);
-    if (syncRun.rawReportId !== args.rawReportId) return null;
+    if (syncRun.rawReportId !== args.rawReportId) return false;
 
     const rawReport = await ctx.db.get(args.rawReportId);
-    if (!rawReport || rawReport.syncRunId !== syncRun._id) return null;
-    if (rawReport.storageId !== args.storageId) return null;
+    if (!rawReport || rawReport.syncRunId !== syncRun._id) return false;
+    if (rawReport.storageId !== args.storageId) return false;
 
     await ctx.db.delete(rawReport._id);
     await ctx.db.patch(syncRun._id, {
       rawReportId: undefined,
       updatedAt: Date.now(),
     });
-    return null;
+    return true;
   },
 });
 

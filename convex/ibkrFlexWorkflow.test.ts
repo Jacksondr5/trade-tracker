@@ -9,7 +9,11 @@ import { parseIbkrFlexActivityXml } from "../shared/brokerage/ibkr-flex/parser";
 import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { encryptBrokerageToken } from "./brokerageSecrets";
-import { storeAndIngestReadyStatement } from "./ibkrFlexWorkflow";
+import {
+  reportCompletenessError,
+  retainIncompleteReport,
+  storeAndIngestReadyStatement,
+} from "./ibkrFlexWorkflow";
 import schema from "./schema";
 
 interface ImportMetaWithGlob extends ImportMeta {
@@ -71,9 +75,58 @@ const readyXml = `
   </FlexQueryResponse>
 `;
 
+const multiAccountReadyXml = `
+  <FlexQueryResponse>
+    <FlexStatements count="2">
+      <FlexStatement accountId="U1111111" toDate="20260514">
+        <Trades></Trades>
+        <OpenPositions></OpenPositions>
+        <CashReport>
+          <CashReportCurrency accountId="U1111111" currency="BASE_SUMMARY" endingCash="75.00" />
+        </CashReport>
+      </FlexStatement>
+      <FlexStatement accountId="U2222222" toDate="20260514">
+        <Trades>
+          <AssetSummary accountId="U2222222" assetCategory="STK" symbol="" quantity="0" tradePrice="" currency="USD" />
+          <Trade accountId="U2222222" assetCategory="STK" symbol="MSFT" dateTime="20260514;103012" buySell="SELL" openCloseIndicator="C" quantity="-2" tradePrice="420.00" ibExecID="exec-2" currency="USD" />
+        </Trades>
+        <OpenPositions>
+          <OpenPosition accountId="U2222222" assetCategory="STK" symbol="MSFT" position="3" positionValue="1260.00" currency="USD" />
+        </OpenPositions>
+        <CashReport>
+          <CashReportCurrency accountId="U2222222" currency="BASE_SUMMARY" endingCash="725.00" />
+        </CashReport>
+      </FlexStatement>
+    </FlexStatements>
+  </FlexQueryResponse>
+`;
+
 const requestedXml =
   "<FlexStatementResponse><Status>Success</Status><ReferenceCode>12345</ReferenceCode></FlexStatementResponse>";
+const changedReadyXml = readyXml.replace(
+  "<FlexStatements>",
+  '<FlexStatements count="1">',
+);
 const encryptionKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+
+function tokenAwareFlexFetch(
+  reportForToken: (token: string) => string,
+): ReturnType<typeof vi.fn> {
+  return vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input));
+    const token = url.searchParams.get("t");
+    if (!token) throw new Error("Missing test Flex token");
+    if (url.pathname.endsWith("/SendRequest")) {
+      return new Response(
+        `<FlexStatementResponse><Status>Success</Status><ReferenceCode>${token}</ReferenceCode></FlexStatementResponse>`,
+      );
+    }
+    if (url.pathname.endsWith("/GetStatement")) {
+      return new Response(reportForToken(token));
+    }
+    throw new Error(`Unexpected Flex URL: ${url}`);
+  });
+}
 
 describe("IBKR Flex Convex workflow", () => {
   let t: ReturnType<typeof convexTest>;
@@ -102,11 +155,12 @@ describe("IBKR Flex Convex workflow", () => {
   async function createConnection(
     ownerId = "owner-a",
     token: string | null = `${ownerId}-secret-token`,
+    expectedAccountIds?: string[],
   ): Promise<Id<"brokerageConnections">> {
     const connectionId = await t.run(async (ctx) => {
       return await ctx.db.insert("brokerageConnections", {
-        accountId: "U1234567",
         createdAt: Date.now(),
+        expectedAccountIds,
         label: "IBKR Main",
         ownerId,
         queryId: "67890",
@@ -132,9 +186,15 @@ describe("IBKR Flex Convex workflow", () => {
     return connectionId;
   }
 
-  async function startWorkflow(maxPollAttempts = 1) {
+  async function startWorkflow(
+    maxPollAttempts = 1,
+    force?: boolean,
+    connectionId?: Id<"brokerageConnections">,
+  ) {
     return await t.mutation(internal.ibkrFlexWorkflow.dailySync, {
       args: {
+        ...(connectionId === undefined ? {} : { connectionId }),
+        ...(force === undefined ? {} : { force }),
         initialPollIntervalMs: 1_000,
         maxPollAttempts,
         maxPollIntervalMs: 1_000,
@@ -149,7 +209,7 @@ describe("IBKR Flex Convex workflow", () => {
   }
 
   it("durably requests, retrieves, stores, ingests, and completes a report", async () => {
-    await createConnection();
+    await createConnection("owner-a", "owner-a-secret-token", ["U1234567"]);
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(new Response(requestedXml))
@@ -192,6 +252,185 @@ describe("IBKR Flex Convex workflow", () => {
     expect(state.cashSnapshots[0]).toMatchObject({ rowKind: "currency" });
     expect(state.rawReports).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("skips completeness validation when expected accounts are unset", async () => {
+    await createConnection();
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(requestedXml))
+        .mockResolvedValueOnce(new Response(readyXml)),
+    );
+
+    const workflowId = await startWorkflow();
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, { workflowId }),
+    ).resolves.toMatchObject({
+      result: { runsFailed: 0, runsSucceeded: 1, status: "succeeded" },
+      type: "completed",
+    });
+  });
+
+  it("compares expected and reported account IDs case-insensitively", () => {
+    expect(
+      reportCompletenessError({
+        expectedAccountIds: [" u1234567 "],
+        reportAccountIds: ["U1234567"],
+      }),
+    ).toBeUndefined();
+    expect(
+      reportCompletenessError({
+        expectedAccountIds: ["u7654321"],
+        reportAccountIds: ["U1234567"],
+      }),
+    ).toBe(
+      "Report is missing expected account(s): u7654321. Report contained: U1234567.",
+    );
+  });
+
+  it("retains the raw report but skips ingestion and reconciliation when an expected account is missing", async () => {
+    const connectionId = await createConnection(
+      "owner-a",
+      "owner-a-secret-token",
+      ["U1234567", "U7654321"],
+    );
+    await t.run(async (ctx) => {
+      await ctx.db.insert("trades", {
+        assetType: "stock",
+        brokerageAccountId: "U7654321",
+        date: Date.UTC(2026, 4, 14, 16),
+        direction: "long",
+        ownerId: "owner-a",
+        price: 100,
+        quantity: 19,
+        side: "buy",
+        source: "ibkr",
+        ticker: "MSFT",
+      });
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(requestedXml))
+        .mockResolvedValueOnce(new Response(readyXml)),
+    );
+
+    const workflowId = await startWorkflow();
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, { workflowId }),
+    ).resolves.toMatchObject({
+      result: { runsFailed: 1, runsSucceeded: 0, status: "failed" },
+      type: "completed",
+    });
+    const state = await t.run(async (ctx) => ({
+      cashSnapshots: await ctx.db.query("brokerageCashSnapshots").collect(),
+      connection: await ctx.db.get(connectionId),
+      inboxTrades: await ctx.db.query("inboxTrades").collect(),
+      positionSnapshots: await ctx.db
+        .query("brokeragePositionSnapshots")
+        .collect(),
+      rawReports: await ctx.db.query("brokerageRawReports").collect(),
+      reconciliationIssues: await ctx.db
+        .query("brokerageReconciliationIssues")
+        .collect(),
+      syncRuns: await ctx.db.query("brokerageSyncRuns").collect(),
+    }));
+    expect(state.syncRuns).toHaveLength(1);
+    expect(state.syncRuns[0]).toMatchObject({
+      errorMessage:
+        "Report is missing expected account(s): U7654321. Report contained: U1234567.",
+      importedTrades: 0,
+      positionSnapshotCount: 0,
+      reconciliationIssueCount: 0,
+      status: "failed_terminal",
+    });
+    expect(state.connection).toMatchObject({ status: "error" });
+    expect(state.inboxTrades).toEqual([]);
+    expect(state.positionSnapshots).toEqual([]);
+    expect(state.cashSnapshots).toEqual([]);
+    expect(state.reconciliationIssues).toEqual([]);
+    expect(state.rawReports).toHaveLength(1);
+    expect(state.rawReports[0]).toMatchObject({
+      byteLength: new TextEncoder().encode(readyXml).byteLength,
+      syncRunId: state.syncRuns[0]?._id,
+    });
+    expect(state.rawReports[0]?.contentHash).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it("keeps completeness failures terminal when raw-report storage also fails", async () => {
+    const connectionId = await createConnection();
+    const { syncRunId } = await t.mutation(
+      internal.brokerageIngestion.beginSyncRunForConnection,
+      {
+        connectionId,
+        reportDate: "2026-05-14",
+        reportType: "activity",
+      },
+    );
+
+    const result = await t.action(async (ctx) =>
+      retainIncompleteReport(
+        ctx,
+        {
+          completenessError:
+            "Report is missing expected account(s): U7654321. Report contained: U1234567.",
+          rawXml: readyXml,
+          reusedPreviousRawReport: false,
+          syncRunId,
+          token: "redacted-token",
+        },
+        async () => {
+          throw new Error("storage unavailable");
+        },
+      ),
+    );
+
+    expect(result).toEqual({
+      errorMessage:
+        "Report is missing expected account(s): U7654321. Report contained: U1234567. Raw report storage failed: storage unavailable",
+      status: "terminal_error",
+    });
+  });
+
+  it("accepts a multi-account report when every expected account is present", async () => {
+    await createConnection("owner-a", "owner-a-secret-token", [
+      "U1111111",
+      "U2222222",
+    ]);
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(requestedXml))
+        .mockResolvedValueOnce(new Response(multiAccountReadyXml)),
+    );
+
+    const workflowId = await startWorkflow();
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, { workflowId }),
+    ).resolves.toMatchObject({
+      result: { runsFailed: 0, runsSucceeded: 1, status: "succeeded" },
+      type: "completed",
+    });
+    const state = await t.run(async (ctx) => ({
+      cashSnapshots: await ctx.db.query("brokerageCashSnapshots").collect(),
+      inboxTrades: await ctx.db.query("inboxTrades").collect(),
+      positionSnapshots: await ctx.db
+        .query("brokeragePositionSnapshots")
+        .collect(),
+    }));
+    expect(state.inboxTrades).toHaveLength(1);
+    expect(state.positionSnapshots).toHaveLength(1);
+    expect(state.cashSnapshots).toHaveLength(2);
   });
 
   it("never persists the plaintext token in workflow arguments or step results", async () => {
@@ -348,6 +587,468 @@ describe("IBKR Flex Convex workflow", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("reuses an identical raw report on a non-forced retryable requeue", async () => {
+    await createConnection("owner-a", "owner-a-secret-token", ["U1234567"]);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(requestedXml))
+      .mockResolvedValueOnce(new Response(readyXml));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await startWorkflow();
+    await finishWorkflow();
+    const [firstRun] = await t.run(async (ctx) =>
+      ctx.db.query("brokerageSyncRuns").collect(),
+    );
+    await t.run(async (ctx) => {
+      await ctx.db.patch(firstRun!._id, {
+        completedAt: Date.now(),
+        errorMessage: "Retry after a downstream interruption",
+        status: "failed_retryable",
+      });
+    });
+
+    fetchMock
+      .mockResolvedValueOnce(new Response(requestedXml))
+      .mockResolvedValueOnce(new Response(readyXml));
+    const retryWorkflowId = await startWorkflow();
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, {
+        workflowId: retryWorkflowId,
+      }),
+    ).resolves.toMatchObject({
+      result: { runsFailed: 0, runsSucceeded: 1, status: "succeeded" },
+      type: "completed",
+    });
+    const state = await t.run(async (ctx) => ({
+      cashSnapshots: await ctx.db.query("brokerageCashSnapshots").collect(),
+      inboxTrades: await ctx.db.query("inboxTrades").collect(),
+      positionSnapshots: await ctx.db
+        .query("brokeragePositionSnapshots")
+        .collect(),
+      rawReports: await ctx.db.query("brokerageRawReports").collect(),
+      syncRuns: await ctx.db.query("brokerageSyncRuns").collect(),
+    }));
+    expect(state.syncRuns).toHaveLength(1);
+    expect(state.syncRuns[0]).toMatchObject({
+      importedTrades: 0,
+      positionSnapshotCount: 0,
+      skippedDuplicateTrades: 1,
+      status: "succeeded",
+    });
+    expect(state.syncRuns[0]?.rawReportId).toBe(state.rawReports[0]?._id);
+    expect(state.rawReports).toHaveLength(1);
+    expect(state.inboxTrades).toHaveLength(1);
+    expect(state.positionSnapshots).toHaveLength(1);
+    expect(state.cashSnapshots).toHaveLength(1);
+  });
+
+  it("force-reruns a succeeded date and repoints the audit artifact without duplicating state", async () => {
+    const connectionId = await createConnection(
+      "owner-a",
+      "owner-a-secret-token",
+      ["U1234567"],
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(requestedXml))
+      .mockResolvedValueOnce(new Response(readyXml));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await startWorkflow();
+    await finishWorkflow();
+    const firstState = await t.run(async (ctx) => ({
+      issueIds: (
+        await ctx.db.query("brokerageReconciliationIssues").collect()
+      ).map((issue) => issue._id),
+      rawReports: await ctx.db.query("brokerageRawReports").collect(),
+    }));
+    await t.run(async (ctx) => {
+      await ctx.db.patch(connectionId, {
+        connectionError: "Earlier completeness failure",
+        status: "error",
+      });
+    });
+
+    fetchMock
+      .mockResolvedValueOnce(new Response(requestedXml))
+      .mockResolvedValueOnce(new Response(changedReadyXml));
+    const forcedWorkflowId = await startWorkflow(1, true);
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, {
+        workflowId: forcedWorkflowId,
+      }),
+    ).resolves.toMatchObject({
+      result: { runsFailed: 0, runsSucceeded: 1, status: "succeeded" },
+      type: "completed",
+    });
+    const state = await t.run(async (ctx) => ({
+      cashSnapshots: await ctx.db.query("brokerageCashSnapshots").collect(),
+      inboxTrades: await ctx.db.query("inboxTrades").collect(),
+      positionSnapshots: await ctx.db
+        .query("brokeragePositionSnapshots")
+        .collect(),
+      rawReports: await ctx.db.query("brokerageRawReports").collect(),
+      reconciliationIssues: await ctx.db
+        .query("brokerageReconciliationIssues")
+        .collect(),
+      syncRuns: await ctx.db.query("brokerageSyncRuns").collect(),
+      connection: await ctx.db.get(connectionId),
+    }));
+    expect(state.syncRuns).toHaveLength(1);
+    expect(state.syncRuns[0]).toMatchObject({
+      importedTrades: 0,
+      positionSnapshotCount: 0,
+      skippedDuplicateTrades: 1,
+      status: "succeeded",
+    });
+    expect(state.connection).toMatchObject({ status: "active" });
+    expect(state.inboxTrades).toHaveLength(1);
+    expect(state.positionSnapshots).toHaveLength(1);
+    expect(state.cashSnapshots).toHaveLength(1);
+    expect(state.rawReports).toHaveLength(2);
+    const currentRawReport = state.rawReports.find(
+      (rawReport) => rawReport._id === state.syncRuns[0]?.rawReportId,
+    );
+    expect(currentRawReport).toMatchObject({
+      byteLength: new TextEncoder().encode(changedReadyXml).byteLength,
+    });
+    expect(currentRawReport?.contentHash).not.toBe(
+      firstState.rawReports[0]?.contentHash,
+    );
+    expect(state.reconciliationIssues.map((issue) => issue._id)).toEqual(
+      firstState.issueIds,
+    );
+    expect(state.reconciliationIssues).toHaveLength(firstState.issueIds.length);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("clears prior outcome counters when a forced requeue fails completeness", async () => {
+    const connectionId = await createConnection(
+      "owner-a",
+      "owner-a-secret-token",
+      ["U1234567"],
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(requestedXml))
+      .mockResolvedValueOnce(new Response(readyXml));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await startWorkflow();
+    await finishWorkflow();
+    await t.run(async (ctx) => {
+      await ctx.db.patch(connectionId, {
+        expectedAccountIds: ["U1234567", "U7654321"],
+      });
+    });
+    fetchMock
+      .mockResolvedValueOnce(new Response(requestedXml))
+      .mockResolvedValueOnce(new Response(changedReadyXml));
+
+    const workflowId = await startWorkflow(1, true, connectionId);
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, { workflowId }),
+    ).resolves.toMatchObject({
+      result: { runsFailed: 1, runsSucceeded: 0, status: "failed" },
+      type: "completed",
+    });
+    const [syncRun] = await t.run(async (ctx) =>
+      ctx.db.query("brokerageSyncRuns").collect(),
+    );
+    expect(syncRun).toMatchObject({
+      errorMessage:
+        "Report is missing expected account(s): U7654321. Report contained: U1234567.",
+      importedTrades: 0,
+      positionSnapshotCount: 0,
+      reconciliationIssueCount: 0,
+      skippedDuplicateTrades: 0,
+      status: "failed_terminal",
+    });
+  });
+
+  it("scopes force recovery to one connection and preserves sibling state", async () => {
+    const targetConnectionId = await createConnection(
+      "owner-a",
+      "target-token",
+      ["U1234567"],
+    );
+    const siblingConnectionId = await createConnection(
+      "owner-a",
+      "sibling-token",
+      ["U1234567"],
+    );
+    let changedTargetReport = false;
+    const fetchMock = tokenAwareFlexFetch((token) =>
+      token === "target-token" && changedTargetReport
+        ? changedReadyXml
+        : readyXml,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await startWorkflow();
+    await finishWorkflow();
+    const before = await t.run(async (ctx) => {
+      const siblingRun = (
+        await ctx.db.query("brokerageSyncRuns").collect()
+      ).find((run) => run.connectionId === siblingConnectionId);
+      return { siblingRun };
+    });
+    expect(before.siblingRun).toMatchObject({ status: "succeeded" });
+
+    const unrelatedErrorConnectionId = await createConnection(
+      "owner-a",
+      "unrelated-error-token",
+    );
+    await t.run(async (ctx) => {
+      await ctx.db.patch(targetConnectionId, {
+        connectionError: "Target needs recovery",
+        status: "error",
+      });
+      await ctx.db.patch(unrelatedErrorConnectionId, {
+        connectionError: "Unrelated failure",
+        status: "error",
+      });
+    });
+    changedTargetReport = true;
+    fetchMock.mockClear();
+
+    const workflowId = await startWorkflow(1, true, targetConnectionId);
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, { workflowId }),
+    ).resolves.toMatchObject({
+      result: {
+        connectionsPlanned: 1,
+        runsFailed: 0,
+        runsSucceeded: 1,
+        status: "succeeded",
+      },
+      type: "completed",
+    });
+    const after = await t.run(async (ctx) => {
+      const syncRuns = await ctx.db.query("brokerageSyncRuns").collect();
+      return {
+        siblingConnection: await ctx.db.get(siblingConnectionId),
+        siblingRun: syncRuns.find(
+          (run) => run.connectionId === siblingConnectionId,
+        ),
+        targetConnection: await ctx.db.get(targetConnectionId),
+        unrelatedErrorConnection: await ctx.db.get(unrelatedErrorConnectionId),
+      };
+    });
+    expect(after.siblingRun).toEqual(before.siblingRun);
+    expect(after.siblingConnection).toMatchObject({ status: "active" });
+    expect(after.targetConnection).toMatchObject({ status: "active" });
+    expect(after.unrelatedErrorConnection).toMatchObject({
+      connectionError: "Unrelated failure",
+      status: "error",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(
+      fetchMock.mock.calls.every(([input]) =>
+        String(input).includes("t=target-token"),
+      ),
+    ).toBe(true);
+  });
+
+  it("preserves date-wide force behavior when connection scope is omitted", async () => {
+    const firstConnectionId = await createConnection("owner-a", "first-token", [
+      "U1234567",
+    ]);
+    const secondConnectionId = await createConnection(
+      "owner-a",
+      "second-token",
+      ["U1234567"],
+    );
+    let changedReports = false;
+    const fetchMock = tokenAwareFlexFetch(() =>
+      changedReports ? changedReadyXml : readyXml,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await startWorkflow();
+    await finishWorkflow();
+    const beforeRawReportIds = await t.run(async (ctx) =>
+      Object.fromEntries(
+        (await ctx.db.query("brokerageSyncRuns").collect()).map((run) => [
+          run.connectionId,
+          run.rawReportId,
+        ]),
+      ),
+    );
+    changedReports = true;
+    fetchMock.mockClear();
+
+    const workflowId = await startWorkflow(1, true);
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, { workflowId }),
+    ).resolves.toMatchObject({
+      result: {
+        connectionsPlanned: 2,
+        runsFailed: 0,
+        runsSucceeded: 2,
+        status: "succeeded",
+      },
+      type: "completed",
+    });
+    const runs = await t.run(async (ctx) =>
+      ctx.db.query("brokerageSyncRuns").collect(),
+    );
+    expect(runs).toHaveLength(2);
+    for (const connectionId of [firstConnectionId, secondConnectionId]) {
+      const run = runs.find(
+        (candidate) => candidate.connectionId === connectionId,
+      );
+      expect(run).toMatchObject({ status: "succeeded" });
+      expect(run?.rawReportId).not.toBe(beforeRawReportIds[connectionId]);
+    }
+    const forcedTokens = fetchMock.mock.calls.map(([input]) =>
+      new URL(String(input)).searchParams.get("t"),
+    );
+    expect(new Set(forcedTokens)).toEqual(
+      new Set(["first-token", "second-token"]),
+    );
+  });
+
+  it("fails visibly when a scoped connection is not eligible", async () => {
+    const connectionId = await createConnection();
+    await t.run(async (ctx) => {
+      await ctx.db.patch(connectionId, { status: "paused" });
+    });
+
+    const workflowId = await startWorkflow(1, true, connectionId);
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, { workflowId }),
+    ).resolves.toMatchObject({
+      error: expect.stringContaining(
+        `No eligible IBKR connection matched ${connectionId}`,
+      ),
+      type: "failed",
+    });
+  });
+
+  it("rejects an operator-scoped connection ID that does not resolve", async () => {
+    const connectionId = await createConnection();
+    await t.run(async (ctx) => {
+      await ctx.db.delete(connectionId);
+    });
+
+    await expect(
+      t.mutation(internal.ibkrFlexWorkflow.startManualSync, {
+        connectionId,
+        force: true,
+        reportDate: "2026-05-14",
+      }),
+    ).rejects.toThrow(`IBKR connection ${connectionId} was not found.`);
+  });
+
+  it("keeps scheduled sync skip-if-succeeded behavior unchanged", async () => {
+    const connectionId = await createConnection("owner-a", "scheduled-token", [
+      "U1234567",
+    ]);
+    const { syncRunId } = await t.mutation(
+      internal.brokerageIngestion.beginSyncRunForConnection,
+      {
+        connectionId,
+        reportDate: "2026-05-14",
+        reportType: "activity",
+      },
+    );
+    await t.run(async (ctx) => {
+      await ctx.db.patch(syncRunId, {
+        completedAt: Date.now(),
+        status: "succeeded",
+      });
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      t.mutation(internal.ibkrFlexWorkflow.dispatchNightlySync, {}),
+    ).resolves.toEqual({ delayMs: 0, reportDate: "2026-05-14" });
+    await finishWorkflow();
+
+    const state = await t.run(async (ctx) => ({
+      connection: await ctx.db.get(connectionId),
+      syncRuns: await ctx.db.query("brokerageSyncRuns").collect(),
+    }));
+    expect(state.syncRuns).toHaveLength(1);
+    expect(state.syncRuns[0]).toMatchObject({
+      _id: syncRunId,
+      status: "succeeded",
+    });
+    expect(state.connection).toMatchObject({ status: "active" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("surfaces an identical cached report instead of succeeding a forced re-sync", async () => {
+    await createConnection("owner-a", "owner-a-secret-token", ["U1234567"]);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(requestedXml))
+      .mockResolvedValueOnce(new Response(readyXml));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await startWorkflow();
+    await finishWorkflow();
+
+    fetchMock
+      .mockResolvedValueOnce(new Response(requestedXml))
+      .mockResolvedValueOnce(new Response(readyXml));
+    const forcedWorkflowId = await startWorkflow(1, true);
+    await finishWorkflow();
+
+    await expect(
+      t.query(internal.ibkrFlexWorkflow.getWorkflowStatus, {
+        workflowId: forcedWorkflowId,
+      }),
+    ).resolves.toMatchObject({
+      result: { runsFailed: 1, runsSucceeded: 0, status: "failed" },
+      type: "completed",
+    });
+    const state = await t.run(async (ctx) => ({
+      cashSnapshots: await ctx.db.query("brokerageCashSnapshots").collect(),
+      inboxTrades: await ctx.db.query("inboxTrades").collect(),
+      positionSnapshots: await ctx.db
+        .query("brokeragePositionSnapshots")
+        .collect(),
+      rawReports: await ctx.db.query("brokerageRawReports").collect(),
+      reconciliationIssues: await ctx.db
+        .query("brokerageReconciliationIssues")
+        .collect(),
+      syncRuns: await ctx.db.query("brokerageSyncRuns").collect(),
+    }));
+    expect(state.syncRuns).toHaveLength(1);
+    expect(state.syncRuns[0]).toMatchObject({
+      errorMessage:
+        "Forced re-sync returned an identical report (IBKR served a cached statement). Regenerate it by editing the Flex query, or wait for the reporting period to roll over.",
+      importedTrades: 0,
+      positionSnapshotCount: 0,
+      reconciliationIssueCount: 0,
+      skippedDuplicateTrades: 0,
+      status: "failed_terminal",
+    });
+    expect(state.inboxTrades).toHaveLength(1);
+    expect(state.positionSnapshots).toHaveLength(1);
+    expect(state.cashSnapshots).toHaveLength(1);
+    expect(state.rawReports).toHaveLength(1);
+    expect(state.syncRuns[0]?.rawReportId).toBe(state.rawReports[0]?._id);
+    expect(state.reconciliationIssues).toHaveLength(2);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
   it("removes the raw report reference and blob when ingestion fails", async () => {
     const connectionId = await createConnection();
     const { syncRunId } = await t.mutation(
@@ -390,6 +1091,62 @@ describe("IBKR Flex Convex workflow", () => {
     await expect(
       t.action(async (ctx) => await ctx.storage.get(storedStorageId!)),
     ).resolves.toBeNull();
+  });
+
+  it("retains the raw-report blob when reference rollback fails", async () => {
+    const connectionId = await createConnection();
+    const { syncRunId } = await t.mutation(
+      internal.brokerageIngestion.beginSyncRunForConnection,
+      {
+        connectionId,
+        queryId: "67890",
+        reportDate: "2026-05-14",
+        reportType: "activity",
+      },
+    );
+    const parseResult = parseIbkrFlexActivityXml(readyXml);
+    let storedStorageId: Id<"_storage"> | undefined;
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    await expect(
+      t.action(async (ctx) => {
+        return await storeAndIngestReadyStatement(
+          ctx,
+          {
+            parseResult,
+            rawXml: readyXml,
+            syncRunId,
+            token: "deployment-secret-token",
+          },
+          async (_ctx, _args, storedRawReport) => {
+            storedStorageId = storedRawReport.storageId;
+            throw new Error("forced ingestion failure");
+          },
+          async () => {
+            throw new Error("forced rollback failure");
+          },
+        );
+      }),
+    ).rejects.toThrow("forced ingestion failure");
+
+    const state = await t.run(async (ctx) => ({
+      rawReports: await ctx.db.query("brokerageRawReports").collect(),
+      syncRun: await ctx.db.get(syncRunId),
+    }));
+    expect(state.rawReports).toHaveLength(1);
+    expect(state.syncRun?.rawReportId).toBe(state.rawReports[0]?._id);
+    expect(storedStorageId).toBeDefined();
+    await expect(
+      t.action(
+        async (ctx) => (await ctx.storage.get(storedStorageId!)) !== null,
+      ),
+    ).resolves.toBe(true);
+    expect(consoleError).toHaveBeenCalledWith(
+      "IBKR Flex raw report rollback failed",
+      "forced rollback failure",
+    );
   });
 
   it("marks the run retryable when the report misses its polling cutoff", async () => {
