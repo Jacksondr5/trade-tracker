@@ -40,6 +40,18 @@ describe("expected account ID form helpers", () => {
     ).toBe(false);
     expect(
       hasCurrentSyncFailure({
+        lastFailedSyncAt: 1,
+        lastSuccessfulSyncAt: undefined,
+      }),
+    ).toBe(true);
+    expect(
+      hasCurrentSyncFailure({
+        lastFailedSyncAt: 1,
+        lastSuccessfulSyncAt: 1,
+      }),
+    ).toBe(false);
+    expect(
+      hasCurrentSyncFailure({
         lastFailedSyncAt: undefined,
         lastSuccessfulSyncAt: undefined,
       }),
