@@ -12,6 +12,9 @@ import {
 } from "../helpers/env";
 
 setup("authenticate test user @auth-setup", async ({ page }) => {
+  // The setup project never loads stored state. Removing any prior state makes
+  // missing, corrupt, expired, and origin-mismatched sessions self-healing.
+  fs.rmSync(PLAYWRIGHT_AUTH_FILE, { force: true });
   const credentials = getPlaywrightCredentials();
   const bypassHeaders = getBypassHeaders();
   const bypassBootstrapUrl = getBypassBootstrapUrl();
@@ -45,4 +48,5 @@ setup("authenticate test user @auth-setup", async ({ page }) => {
   await page.waitForURL(/\/campaigns(?:\/.*)?$/);
   await waitForAuthenticatedApp(page, APP_PAGE_TITLES.campaigns);
   await page.context().storageState({ path: PLAYWRIGHT_AUTH_FILE });
+  console.log(`Playwright auth state refreshed: ${PLAYWRIGHT_AUTH_FILE}`);
 });

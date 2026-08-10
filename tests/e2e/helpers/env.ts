@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,12 +20,6 @@ const ROOT_DIR = findProjectRoot(path.dirname(fileURLToPath(import.meta.url)));
 const LOCAL_PLAYWRIGHT_HOSTS = new Set(["127.0.0.1", "localhost"]);
 const DOTENV_LOCAL_PATH = path.join(ROOT_DIR, ".env.local");
 
-export const PLAYWRIGHT_AUTH_FILE = path.join(
-  ROOT_DIR,
-  "output",
-  "playwright",
-  "auth.json",
-);
 export const PLAYWRIGHT_ENV_FILE = DOTENV_LOCAL_PATH;
 
 function loadDotenvLocal(): Record<string, string> {
@@ -88,6 +83,28 @@ export function getBaseUrl(): string {
 
   return configuredBaseUrl;
 }
+
+export function getAuthFileForBaseUrl(baseUrl: string): string {
+  const parsed = new URL(baseUrl);
+  const readableOrigin =
+    `${parsed.protocol.slice(0, -1)}-${parsed.hostname}-${parsed.port || "default"}`
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-");
+  const originHash = createHash("sha256")
+    .update(parsed.origin)
+    .digest("hex")
+    .slice(0, 8);
+
+  return path.join(
+    ROOT_DIR,
+    "output",
+    "playwright",
+    "auth",
+    `${readableOrigin}-${originHash}.json`,
+  );
+}
+
+export const PLAYWRIGHT_AUTH_FILE = getAuthFileForBaseUrl(getBaseUrl());
 
 function shouldUseBypassHeaders(baseUrl: string): boolean {
   try {

@@ -24,7 +24,8 @@ When an agent starts work on a Linear ticket in this repo:
 ## Commands
 
 ```bash
-pnpm dev          # Start Next.js dev server (Convex dev server should run separately: npx convex dev)
+pnpm agent:up     # Provision and start this worktree's isolated local environment
+pnpm dev          # Start Next.js only (normally use agent:up instead)
 pnpm build        # Production build
 pnpm lint         # ESLint
 pnpm test         # Vitest
@@ -36,21 +37,15 @@ This repo uses Vitest for unit-style tests and Playwright for end-to-end tests. 
 
 ## Worktree Bootstrap
 
-New Git worktrees in this repo may be missing `.env.local` and `node_modules/` when they are first created. Before running the app, Playwright, or project scripts, agents must verify that both exist and bootstrap the worktree if needed.
-
-Bootstrap rules:
-
-- If `.env.local` is missing, copy it from the primary checkout. Find that path with `git worktree list` and copy the file from the main checkout.
-- If `node_modules/` is missing, run `pnpm install` from the worktree root.
-- Do not overwrite an existing `.env.local` unless the user explicitly asks for that.
-
-Suggested commands:
+New Git worktrees may be missing `.env.local`, `node_modules/`, and a Convex deployment. Bootstrap and start all three with one command:
 
 ```bash
-git worktree list
-cp [path/to/main/checkout] .env.local
-pnpm install
+pnpm agent:up
 ```
+
+`agent:up` installs dependencies when needed, bootstraps local secrets without retaining another checkout's Convex binding, assigns deterministic ports from the worktree path, selects a worktree-local Convex backend, and waits for both services to be ready. It then prints the exact app origin, Convex URL, and origin-keyed Playwright auth-state path. It is idempotent: rerunning it while this worktree's environment is already healthy prints the same values and exits.
+
+Do not copy `.env.local` manually or run reset/seed commands against a deployment inherited from another checkout. Local Playwright setup refuses to reset data unless `.env.local` and `.convex/local/default` identify the same worktree-local backend.
 
 ## Playwright Testing
 
@@ -58,17 +53,12 @@ When the harness provides `js_repl`, use `playwright-interactive` first for UI w
 
 Shared rules:
 
-- Start Next.js with `pnpm dev` and Convex with `npx convex dev`; run them in separate terminals
-- If the agent starts Next.js itself, read the `pnpm dev` output and capture the actual local URL/port that Next assigned
-- If the server is already running, verify the active local URL/port before opening Playwright; do not assume `3000`
-- Reuse the exact host and port recorded in the saved auth state when possible; `localhost` and `127.0.0.1` are different origins for Clerk state
-- If the running app uses a different origin from the saved auth state, refresh authentication on that origin and save the new state rather than switching hosts and expecting the old state to remain valid
-- Set `PLAYWRIGHT_BASE_URL` (preferred) or `APP_URL` to that exact origin before running `pnpm test:e2e:setup` or another Playwright command; the test helpers intentionally fail when neither is configured
+- Start the complete local environment with `pnpm agent:up`; use the exact app origin, Convex URL, and auth-state path it prints
+- `agent:up` also writes `APP_URL`, `PLAYWRIGHT_BASE_URL`, and `PLAYWRIGHT_AUTH_FILE` to this worktree's `.env.local`; do not substitute another host or port
 - Playwright credentials live in `.env.local` as `PLAYWRIGHT_USERNAME` and `PLAYWRIGHT_PASSWORD`
-- Standard shared auth state file: `output/playwright/auth.json`
-- Preferred auth refresh command: `pnpm test:e2e:setup`
+- Playwright auth state is keyed by the complete app origin under `output/playwright/auth/`
+- Preferred auth refresh command: `pnpm test:e2e:setup`; setup discards and regenerates missing, corrupt, expired, or origin-mismatched state before authenticated tests run
 - The Playwright auth setup uses Clerk's `@clerk/testing` helpers and requires `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, and `NEXT_PUBLIC_CLERK_FRONTEND_API_URL` alongside the Playwright credentials
-- Try loading saved auth state first, but if the app is not running on the same origin the saved auth may not restore cleanly
 
 ### Selector And Testing Contract
 
@@ -90,18 +80,19 @@ Use this first for UI tasks, especially when the agent expects to make code edit
 - Start each new interactive workflow from a clean `js_repl` state so stale `browser`, `context`, or `page` handles do not leak across tasks
 - After resetting `js_repl`, rerun the Playwright bootstrap/setup cells before interacting with the app
 - Reuse the same live `browser`, `context`, and `page` handles across checks instead of reopening the browser repeatedly
-- Set the interactive target URL from the actual running Next.js port before calling `page.goto(...)`
-- Load `output/playwright/auth.json` into the browser context before rerunning `pnpm test:e2e:setup` or falling back to manual Clerk login
-- Save refreshed auth state back to `output/playwright/auth.json` after a manual login succeeds
+- Set the interactive target URL and auth-state path to the exact values printed by `pnpm agent:up`
+- Run `pnpm test:e2e:setup` before loading state when the printed auth-state file is missing or invalid
+- Save refreshed auth state back to the printed origin-keyed path after a manual login succeeds
 
 ```js
-var TARGET_URL = "http://127.0.0.1:3000"; // Current saved-auth origin; change only when using auth refreshed for another detected origin.
+var TARGET_URL = "<App origin printed by pnpm agent:up>";
+var AUTH_STATE_FILE = "<Playwright auth state path printed by pnpm agent:up>";
 
-await context.storageState({ path: "output/playwright/auth.json" });
+await context.storageState({ path: AUTH_STATE_FILE });
 
 context = await browser.newContext({
   viewport: { width: 1600, height: 900 },
-  storageState: "output/playwright/auth.json",
+  storageState: AUTH_STATE_FILE,
 });
 page = await context.newPage();
 await page.goto(TARGET_URL, { waitUntil: "domcontentloaded" });
@@ -113,21 +104,19 @@ Use this directly on harnesses without `js_repl`. On harnesses with `js_repl`, u
 
 - Invoke the shared skill wrapper directly: `"$HOME/.agents/skills/playwright/scripts/playwright_cli.sh"`
 - The wrapper must be executable; if direct execution fails, fix the file permissions before continuing
-- Use the actual detected local URL in every CLI command; do not hardcode `3000` if Next started on another port
+- Use the app origin printed by `pnpm agent:up` in every CLI command
 - Prefer headed mode for local debugging
 - Always take a fresh `snapshot` before using element refs like `e47`
 - Save screenshots with `--filename`; do not pass the output path as the positional argument:
   `"$PWCLI" -s=default screenshot --filename output/playwright/example.png`
-- Load `output/playwright/auth.json` before doing a manual login if the file exists
+- Load `$PLAYWRIGHT_AUTH_FILE` before doing a manual login if the file exists
 
 ```bash
 export PWCLI="$HOME/.agents/skills/playwright/scripts/playwright_cli.sh"
-export PLAYWRIGHT_BASE_URL="http://127.0.0.1:3000" # Current saved-auth origin; replace if auth is refreshed elsewhere.
-export APP_URL="$PLAYWRIGHT_BASE_URL"
 source .env.local
 
 "$PWCLI" open "$APP_URL" --headed
-"$PWCLI" state-load output/playwright/auth.json
+"$PWCLI" state-load "$PLAYWRIGHT_AUTH_FILE"
 "$PWCLI" goto "$APP_URL"
 "$PWCLI" snapshot
 ```
@@ -140,9 +129,9 @@ pnpm test:e2e:setup
 
 Notes:
 
-- `playwright` CLI and `playwright-interactive` can share the same `output/playwright/auth.json` file
+- `playwright` CLI and `playwright-interactive` can share the origin-keyed file printed by `pnpm agent:up`
 - The saved auth state is sensitive; keep it local and do not commit it
-- If auth restoration behaves unexpectedly, confirm the agent is using the correct detected origin because cookies are origin-specific
+- If auth restoration behaves unexpectedly, rerun `pnpm test:e2e:setup`; it refreshes state for the configured origin
 
 <!-- convex-ai-start -->
 
