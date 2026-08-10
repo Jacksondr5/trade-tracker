@@ -131,16 +131,12 @@ describe("agent runtime classification", () => {
     ).toBe("active");
   });
 
-  test("requires explicit opt-in to reap a live missing-worktree lease", () => {
-    const liveMissing = { supervisorAlive: true, worktreePresent: false };
-    const liveUnknown = { supervisorAlive: true, worktreePresent: null };
-
-    expect(shouldReapAgentRuntime(liveMissing)).toBe(false);
+  test("reaps only a definitively dead supervisor", () => {
     expect(
-      shouldReapAgentRuntime(liveMissing, { includeMissingWorktree: true }),
-    ).toBe(true);
-    expect(
-      shouldReapAgentRuntime(liveUnknown, { includeMissingWorktree: true }),
+      shouldReapAgentRuntime({
+        supervisorAlive: true,
+        worktreePresent: false,
+      }),
     ).toBe(false);
     expect(
       shouldReapAgentRuntime({
@@ -200,4 +196,25 @@ test("readLocalConvexConfig rejects malformed and incomplete files", () => {
   expect(() => readLocalConvexConfig(configFile)).toThrow(
     "Local Convex config is incomplete.",
   );
+});
+
+test("agent CLI rejects unknown flags before lifecycle dispatch", () => {
+  for (const args of [
+    ["--reap", "--missing-worktree"],
+    ["--reap", "--stale"],
+    ["--ls", "--lss"],
+    ["--down", "--force"],
+  ]) {
+    const result = spawnSync(
+      process.execPath,
+      [path.join(import.meta.dirname, "agent-up.mjs"), ...args],
+      { encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      `Unknown agent environment option ${args[1]}`,
+    );
+    expect(result.stdout).toBe("");
+  }
 });
