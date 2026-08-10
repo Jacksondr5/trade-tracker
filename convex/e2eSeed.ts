@@ -32,6 +32,48 @@ function getPlaywrightOwnerId(): string {
   return ownerId;
 }
 
+async function upsertResolvedMarketDataInstrument(
+  ctx: MutationCtx,
+  args: {
+    assetType: "crypto" | "stock";
+    ownerId: string;
+    symbol: string;
+  },
+) {
+  const symbol = args.symbol.trim().toUpperCase();
+  const existing = await ctx.db
+    .query("marketDataInstruments")
+    .withIndex("by_ownerId_and_assetType_and_symbol", (q) =>
+      q
+        .eq("ownerId", args.ownerId)
+        .eq("assetType", args.assetType)
+        .eq("symbol", symbol),
+    )
+    .unique();
+  const now = Date.now();
+  const resolution = {
+    lastError: undefined,
+    lastResolvedAt: now,
+    providerSymbol: symbol,
+    resolutionStatus: "resolved" as const,
+    updatedAt: now,
+  };
+
+  if (existing) {
+    await ctx.db.patch(existing._id, resolution);
+    return;
+  }
+
+  await ctx.db.insert("marketDataInstruments", {
+    assetType: args.assetType,
+    createdAt: now,
+    ownerId: args.ownerId,
+    provider: "twelve_data",
+    symbol,
+    ...resolution,
+  });
+}
+
 async function upsertPortfolio(ctx: MutationCtx, ownerId: string) {
   const existingPortfolio = (
     await ctx.db
@@ -429,6 +471,7 @@ export const resetPlaywrightData = internalMutation({
     brokerageConnectionsDeleted: v.number(),
     campaignsDeleted: v.number(),
     inboxTradesDeleted: v.number(),
+    marketDataInstrumentsDeleted: v.number(),
     retrospectivesDeleted: v.number(),
     notesDeleted: v.number(),
     portfoliosDeleted: v.number(),
@@ -467,6 +510,12 @@ export const resetPlaywrightData = internalMutation({
       .query("inboxTrades")
       .withIndex("by_owner_status", (q) =>
         q.eq("ownerId", ownerId).eq("status", "pending_review"),
+      )
+      .collect();
+    const marketDataInstruments = await ctx.db
+      .query("marketDataInstruments")
+      .withIndex("by_ownerId_and_resolutionStatus", (q) =>
+        q.eq("ownerId", ownerId),
       )
       .collect();
     const retrospectives = await ctx.db
@@ -513,6 +562,9 @@ export const resetPlaywrightData = internalMutation({
     for (const doc of inboxTrades) {
       await ctx.db.delete(doc._id);
     }
+    for (const doc of marketDataInstruments) {
+      await ctx.db.delete(doc._id);
+    }
     for (const doc of retrospectives) {
       await ctx.db.delete(doc._id);
     }
@@ -541,6 +593,7 @@ export const resetPlaywrightData = internalMutation({
       brokerageConnectionsDeleted: brokerageConnections.length,
       campaignsDeleted: campaigns.length,
       inboxTradesDeleted: inboxTrades.length,
+      marketDataInstrumentsDeleted: marketDataInstruments.length,
       notesDeleted: notes.length,
       portfoliosDeleted: portfolios.length,
       retrospectivesDeleted: retrospectives.length,
@@ -609,9 +662,22 @@ export const seedTradePlanInboxScenarios = internalMutation({
 
     const linkedSuggestedExternalId = `${args.scope}-${E2E_SMOKE_FIXTURES.inboxTrades.linkedSuggested.fixtureKey}`;
     const standaloneAssignedExternalId = `${args.scope}-${E2E_SMOKE_FIXTURES.inboxTrades.standaloneAssigned.fixtureKey}`;
+    const linkedAssetType = "stock" as const;
+    const standaloneAssetType = "crypto" as const;
+
+    await upsertResolvedMarketDataInstrument(ctx, {
+      assetType: linkedAssetType,
+      ownerId,
+      symbol: linkedTradePlan.instrumentSymbol,
+    });
+    await upsertResolvedMarketDataInstrument(ctx, {
+      assetType: standaloneAssetType,
+      ownerId,
+      symbol: standaloneTradePlan.instrumentSymbol,
+    });
 
     await upsertInboxTrade(ctx, {
-      assetType: "stock",
+      assetType: linkedAssetType,
       brokerageAccountId: "playwright-linked-account",
       date: E2E_SMOKE_FIXTURES.inboxTrades.linkedSuggested.date,
       direction: "long",
@@ -625,7 +691,7 @@ export const seedTradePlanInboxScenarios = internalMutation({
     });
 
     await upsertInboxTrade(ctx, {
-      assetType: "crypto",
+      assetType: standaloneAssetType,
       brokerageAccountId: "playwright-standalone-account",
       date: E2E_SMOKE_FIXTURES.inboxTrades.standaloneAssigned.date,
       direction: "short",

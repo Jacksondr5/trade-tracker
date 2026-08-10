@@ -5,13 +5,17 @@ import { clerk } from "@clerk/testing/playwright";
 import { waitForAuthenticatedApp } from "../helpers/app";
 import { APP_PAGE_TITLES } from "../helpers/selectors";
 import {
-  PLAYWRIGHT_AUTH_FILE,
   getBypassBootstrapUrl,
   getBypassHeaders,
+  getPlaywrightAuthFile,
   getPlaywrightCredentials,
 } from "../helpers/env";
 
 setup("authenticate test user @auth-setup", async ({ page }) => {
+  const playwrightAuthFile = getPlaywrightAuthFile();
+  // The setup project never loads stored state. Removing any prior state makes
+  // missing, corrupt, expired, and origin-mismatched sessions self-healing.
+  fs.rmSync(playwrightAuthFile, { force: true });
   const credentials = getPlaywrightCredentials();
   const bypassHeaders = getBypassHeaders();
   const bypassBootstrapUrl = getBypassBootstrapUrl();
@@ -41,8 +45,9 @@ setup("authenticate test user @auth-setup", async ({ page }) => {
   });
   await page.goto("/campaigns");
 
-  fs.mkdirSync(path.dirname(PLAYWRIGHT_AUTH_FILE), { recursive: true });
+  fs.mkdirSync(path.dirname(playwrightAuthFile), { recursive: true });
   await page.waitForURL(/\/campaigns(?:\/.*)?$/);
   await waitForAuthenticatedApp(page, APP_PAGE_TITLES.campaigns);
-  await page.context().storageState({ path: PLAYWRIGHT_AUTH_FILE });
+  await page.context().storageState({ path: playwrightAuthFile });
+  console.log(`Playwright auth state refreshed: ${playwrightAuthFile}`);
 });
