@@ -47,6 +47,8 @@ pnpm agent:up   # Second invocation prints the exact endpoints and exits.
 
 The first `agent:up` invocation supervises Convex and Next.js in the foreground, so launch it as a backgrounded or long-running terminal process and leave that process running. It installs dependencies when needed, bootstraps local secrets without retaining another checkout's Convex binding, assigns deterministic ports from the worktree path, selects a worktree-local Convex backend, and waits for both services to be ready. A second foreground invocation is the authoritative way to print the exact app origin, Convex URL, and origin-keyed Playwright auth-state path; it exits immediately when the supervised environment is healthy.
 
+On a cold worktree, the second invocation can remain in the foreground while the first invocation installs and provisions. This is expected: leave the first supervisor running and wait for the second invocation to print the endpoints. Do not run `agent:down` merely because the second invocation is still waiting during provisioning.
+
 Stop the recorded environment with `pnpm agent:down`. `agent:up` automatically recovers a stale `output/agent/runtime.json` lease when it can prove ownership of the recorded child process. If a different process owns one of the deterministic ports, it refuses to start and prints the conflicting ports instead of treating that process as healthy.
 
 Do not copy `.env.local` manually or run reset/seed commands against a deployment inherited from another checkout. Local Playwright setup refuses to reset data unless `.env.local` and `.convex/local/default` identify the same worktree-local backend.

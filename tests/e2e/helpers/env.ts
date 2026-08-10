@@ -68,13 +68,22 @@ export function getAuthFileForBaseUrl(baseUrl: string): string {
 
 export function getPlaywrightAuthFile(): string {
   const dotenvLocal = loadDotenvLocal();
+  const baseUrl = getBaseUrl();
+  const expected = getAuthFileForBaseUrl(baseUrl);
   const configured =
     process.env.PLAYWRIGHT_AUTH_FILE?.trim() ||
     dotenvLocal.PLAYWRIGHT_AUTH_FILE?.trim();
 
-  return configured
-    ? path.resolve(ROOT_DIR, configured)
-    : getAuthFileForBaseUrl(getBaseUrl());
+  if (configured) {
+    const resolved = path.resolve(ROOT_DIR, configured);
+    if (resolved !== expected) {
+      throw new Error(
+        `PLAYWRIGHT_AUTH_FILE must match the configured app origin. Expected ${expected} for ${baseUrl}, got ${resolved}. Rerun pnpm agent:up to repair .env.local.`,
+      );
+    }
+  }
+
+  return expected;
 }
 
 function shouldUseBypassHeaders(baseUrl: string): boolean {

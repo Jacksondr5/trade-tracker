@@ -21,7 +21,10 @@ const LOCAL_CONFIG_PATH = path.join(
 );
 const RUNTIME_PATH = path.join(PROJECT_ROOT, "output", "agent", "runtime.json");
 const SUPPORTED_CONVEX_CLI_VERSION = "1.43.0";
+const FUNCTION_SPEC_RETRY_MS = 2_000;
 const environment = deriveAgentEnvironment();
+let convexFunctionsReady = false;
+let lastFunctionSpecCheckAt = 0;
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -37,8 +40,7 @@ function run(command, args, options = {}) {
 }
 
 function ensureDependencies() {
-  if (fs.existsSync(path.join(PROJECT_ROOT, "node_modules", "convex"))) {
-  } else {
+  if (!fs.existsSync(path.join(PROJECT_ROOT, "node_modules", "convex"))) {
     console.log("Installing worktree dependencies...");
     run("pnpm", ["install"]);
   }
@@ -244,6 +246,14 @@ async function endpointsAreReady() {
 }
 
 function convexFunctionsAreReady() {
+  if (convexFunctionsReady) {
+    return true;
+  }
+  if (Date.now() - lastFunctionSpecCheckAt < FUNCTION_SPEC_RETRY_MS) {
+    return false;
+  }
+  lastFunctionSpecCheckAt = Date.now();
+
   try {
     const localConfig = readLocalConvexConfig(LOCAL_CONFIG_PATH);
     if (
@@ -270,10 +280,14 @@ function convexFunctionsAreReady() {
         timeout: 5_000,
       },
     );
-    return (
-      result.status === 0 &&
-      result.stdout.includes('"e2eSeed.js:resetPlaywrightData"')
-    );
+    if (result.status !== 0) {
+      return false;
+    }
+    const functionSpec = JSON.parse(result.stdout);
+    convexFunctionsReady =
+      Array.isArray(functionSpec.functions) &&
+      functionSpec.functions.length > 0;
+    return convexFunctionsReady;
   } catch {
     return false;
   }
@@ -292,18 +306,7 @@ function readRuntime() {
 }
 
 function runtimeChildren(runtime) {
-  if (Array.isArray(runtime?.children)) {
-    return runtime.children;
-  }
-  return runtime?.childPid
-    ? [
-        {
-          label: "agent environment",
-          pid: runtime.childPid,
-          startIdentity: runtime.childStartIdentity,
-        },
-      ]
-    : [];
+  return Array.isArray(runtime?.children) ? runtime.children : [];
 }
 
 function printEnvironment() {
@@ -314,26 +317,47 @@ function printEnvironment() {
 }
 
 async function waitForExistingRuntime(runtime) {
-  const deadline = Date.now() + 180_000;
-  while (
-    Date.now() < deadline &&
-    processMatches(runtime.pid, runtime.supervisorStartIdentity)
-  ) {
+  let childrenDeadline = null;
+  let announcedProvisioning = false;
+  while (processMatches(runtime.pid, runtime.supervisorStartIdentity)) {
     const currentRuntime = readRuntime();
+    const children = runtimeChildren(currentRuntime);
+    if (children.length === 0) {
+      if (!announcedProvisioning) {
+        console.log(
+          "Existing agent environment is still provisioning; waiting for its exact supervisor to finish...",
+        );
+        announcedProvisioning = true;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      continue;
+    }
+
+    childrenDeadline ??= Date.now() + 60_000;
     if (
       currentRuntime &&
-      runtimeChildren(currentRuntime).length === 2 &&
-      runtimeChildren(currentRuntime).every((child) =>
+      children.length === 2 &&
+      children.every((child) =>
         processMatches(child.pid, child.startIdentity),
       ) &&
       (await environmentIsReady())
     ) {
       printEnvironment();
-      return true;
+      return "ready";
+    }
+    if (Date.now() >= childrenDeadline) {
+      return "children-timeout";
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  return false;
+  return "supervisor-exited";
+}
+
+function portConflictGuidance(ports) {
+  const inspection = ports
+    .map((port) => `lsof -nP -iTCP:${port} -sTCP:LISTEN`)
+    .join("; ");
+  return `Deterministic port(s) still occupied: ${ports.join(", ")}. Run pnpm agent:down if this worktree owns them. Identify the listeners with: ${inspection}`;
 }
 
 function writeRuntime() {
@@ -444,6 +468,13 @@ async function stopRecordedRuntime(runtime) {
     );
   }
 
+  const occupiedPorts = await occupiedAgentPorts();
+  if (occupiedPorts.length > 0) {
+    throw new Error(
+      `${portConflictGuidance(occupiedPorts)} Preserving lease ${RUNTIME_PATH} so cleanup can be retried.`,
+    );
+  }
+
   fs.rmSync(RUNTIME_PATH, { force: true });
 }
 
@@ -457,16 +488,26 @@ async function recoverStaleRuntime(runtime) {
   return true;
 }
 
-function removeOwnedRuntime() {
+async function removeOwnedRuntime() {
   const runtime = readRuntime();
+  if (runtime?.pid !== process.pid) {
+    return;
+  }
   if (
-    runtime?.pid === process.pid &&
-    !runtimeChildren(runtime).some((child) =>
+    runtimeChildren(runtime).some((child) =>
       processMatches(child.pid, child.startIdentity),
     )
   ) {
-    fs.rmSync(RUNTIME_PATH, { force: true });
+    return;
   }
+  const occupiedPorts = await occupiedAgentPorts();
+  if (occupiedPorts.length > 0) {
+    console.error(
+      `${portConflictGuidance(occupiedPorts)} Preserving lease ${RUNTIME_PATH} so cleanup can be retried.`,
+    );
+    return;
+  }
+  fs.rmSync(RUNTIME_PATH, { force: true });
 }
 
 async function main() {
@@ -488,21 +529,28 @@ async function main() {
     existingRuntime?.identityHash === environment.identityHash &&
     processMatches(existingRuntime.pid, existingRuntime.supervisorStartIdentity)
   ) {
-    if (await waitForExistingRuntime(existingRuntime)) {
+    const waitResult = await waitForExistingRuntime(existingRuntime);
+    if (waitResult === "ready") {
       return;
     }
-    throw new Error(
-      `This worktree's agent environment process is running but did not become ready. Run pnpm agent:down, then rerun pnpm agent:up. Lease: ${RUNTIME_PATH}`,
-    );
-  }
-  if (existingRuntime) {
+    if (waitResult === "supervisor-exited") {
+      const staleRuntime = readRuntime();
+      if (staleRuntime) {
+        await recoverStaleRuntime(staleRuntime);
+      }
+    } else {
+      throw new Error(
+        `This worktree's agent environment children are running but did not become ready. Run pnpm agent:down, then rerun pnpm agent:up. Lease: ${RUNTIME_PATH}`,
+      );
+    }
+  } else if (existingRuntime) {
     await recoverStaleRuntime(existingRuntime);
   }
 
   const occupiedPorts = await occupiedAgentPorts();
   if (occupiedPorts.length > 0) {
     throw new Error(
-      `Refusing to start: another process owns this worktree's deterministic port(s): ${occupiedPorts.join(", ")}. If this worktree was interrupted, run pnpm agent:down; otherwise stop the conflicting worktree or process and rerun pnpm agent:up.`,
+      `Refusing to start. ${portConflictGuidance(occupiedPorts)} Stop the conflicting worktree or process, then rerun pnpm agent:up.`,
     );
   }
 
@@ -514,7 +562,7 @@ async function main() {
       if (
         runtime &&
         processMatches(runtime.pid, runtime.supervisorStartIdentity) &&
-        (await waitForExistingRuntime(runtime))
+        (await waitForExistingRuntime(runtime)) === "ready"
       ) {
         return;
       }
@@ -614,13 +662,14 @@ async function main() {
     for (const { child } of children) {
       signalChildProcessGroup(child.pid, signal);
     }
-    setTimeout(() => {
+    const forcedKillTimer = setTimeout(() => {
       for (const { child } of children) {
         if (processGroupExists(child.pid)) {
           signalChildProcessGroup(child.pid, "SIGKILL");
         }
       }
     }, 5_000);
+    forcedKillTimer.unref();
   };
   process.on("SIGINT", () => {
     externallyStopped = true;
@@ -660,12 +709,12 @@ async function main() {
   const firstExit = await Promise.race(exitPromises);
   stop("SIGTERM");
   await Promise.all(exitPromises);
-  removeOwnedRuntime();
+  await removeOwnedRuntime();
   process.exitCode = externallyStopped ? 0 : firstExit.code || 1;
 }
 
-main().catch((error) => {
-  removeOwnedRuntime();
+main().catch(async (error) => {
+  await removeOwnedRuntime();
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;
 });
