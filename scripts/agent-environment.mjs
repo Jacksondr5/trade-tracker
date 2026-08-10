@@ -52,6 +52,54 @@ export function authFileForOrigin(origin, projectRoot = PROJECT_ROOT) {
   );
 }
 
+export function classifyAgentRuntime(
+  runtime,
+  { now = Date.now(), supervisorAlive, worktreePresent },
+) {
+  const startedAt = Date.parse(runtime?.startedAt ?? "");
+  const ageMs = Number.isFinite(startedAt)
+    ? Math.max(0, now - startedAt)
+    : null;
+
+  return {
+    ageMs,
+    classification:
+      !supervisorAlive || worktreePresent === false ? "orphan" : "active",
+  };
+}
+
+export function getWorktreePresence(worktreePath, statSync = fs.statSync) {
+  if (typeof worktreePath !== "string" || worktreePath.length === 0) {
+    return null;
+  }
+  try {
+    statSync(worktreePath);
+    return true;
+  } catch (error) {
+    return error?.code === "ENOENT" ? false : null;
+  }
+}
+
+export function shouldReapAgentRuntime(
+  { supervisorAlive, worktreePresent },
+  { includeMissingWorktree = false } = {},
+) {
+  return (
+    supervisorAlive === false ||
+    (includeMissingWorktree && worktreePresent === false)
+  );
+}
+
+export function formatAgentAge(ageMs) {
+  if (ageMs === null) return "unknown";
+  if (ageMs < 60_000) return `${Math.floor(ageMs / 1_000)}s`;
+  if (ageMs < 60 * 60_000) return `${Math.floor(ageMs / 60_000)}m`;
+  if (ageMs < 24 * 60 * 60_000) {
+    return `${Math.floor(ageMs / (60 * 60_000))}h`;
+  }
+  return `${Math.floor(ageMs / (24 * 60 * 60_000))}d`;
+}
+
 export function parseDotenv(contents) {
   return Object.fromEntries(
     contents

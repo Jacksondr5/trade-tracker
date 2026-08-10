@@ -4,6 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import {
+  classifyAgentRuntime,
+  formatAgentAge,
+  getWorktreePresence,
+  shouldReapAgentRuntime,
   authFileForOrigin,
   deriveAgentEnvironment,
   parseDotenv,
@@ -67,6 +71,93 @@ test("authFileForOrigin keys state by the complete origin", () => {
   expect(first).not.toBe(second);
   expect(first).not.toBe(third);
   expect(first).toContain(path.join("output", "playwright", "auth"));
+});
+
+describe("agent runtime classification", () => {
+  const runtime = { startedAt: "2026-08-09T12:00:00.000Z" };
+  const now = Date.parse("2026-08-09T17:00:00.000Z");
+
+  test("reports dead-supervisor and strict-missing-worktree leases as orphaned", () => {
+    expect(
+      classifyAgentRuntime(runtime, {
+        now,
+        supervisorAlive: true,
+        worktreePresent: true,
+      }).classification,
+    ).toBe("active");
+    expect(
+      classifyAgentRuntime(runtime, {
+        now,
+        supervisorAlive: true,
+        worktreePresent: false,
+      }).classification,
+    ).toBe("orphan");
+    expect(
+      classifyAgentRuntime(runtime, {
+        now,
+        supervisorAlive: false,
+        worktreePresent: true,
+      }).classification,
+    ).toBe("orphan");
+  });
+
+  test("reports lease age from its start time", () => {
+    expect(
+      classifyAgentRuntime(runtime, {
+        now,
+        supervisorAlive: true,
+        worktreePresent: true,
+      }),
+    ).toEqual({ ageMs: 5 * 60 * 60_000, classification: "active" });
+  });
+
+  test("distinguishes only ENOENT from unknown worktree stat failures", () => {
+    expect(getWorktreePresence("/worktree", () => ({}))).toBe(true);
+    expect(
+      getWorktreePresence("/worktree", () => {
+        throw Object.assign(new Error("missing"), { code: "ENOENT" });
+      }),
+    ).toBe(false);
+    const unknownPresence = getWorktreePresence("/worktree", () => {
+      throw Object.assign(new Error("denied"), { code: "EACCES" });
+    });
+    expect(unknownPresence).toBeNull();
+    expect(
+      classifyAgentRuntime(runtime, {
+        now,
+        supervisorAlive: true,
+        worktreePresent: unknownPresence,
+      }).classification,
+    ).toBe("active");
+  });
+
+  test("requires explicit opt-in to reap a live missing-worktree lease", () => {
+    const liveMissing = { supervisorAlive: true, worktreePresent: false };
+    const liveUnknown = { supervisorAlive: true, worktreePresent: null };
+
+    expect(shouldReapAgentRuntime(liveMissing)).toBe(false);
+    expect(
+      shouldReapAgentRuntime(liveMissing, { includeMissingWorktree: true }),
+    ).toBe(true);
+    expect(
+      shouldReapAgentRuntime(liveUnknown, { includeMissingWorktree: true }),
+    ).toBe(false);
+    expect(
+      shouldReapAgentRuntime({
+        supervisorAlive: false,
+        worktreePresent: null,
+      }),
+    ).toBe(true);
+    expect(shouldReapAgentRuntime({})).toBe(false);
+  });
+
+  test("formats age for lifecycle output", () => {
+    expect(formatAgentAge(null)).toBe("unknown");
+    expect(formatAgentAge(45_000)).toBe("45s");
+    expect(formatAgentAge(12 * 60_000)).toBe("12m");
+    expect(formatAgentAge(5 * 60 * 60_000)).toBe("5h");
+    expect(formatAgentAge(2 * 24 * 60 * 60_000)).toBe("2d");
+  });
 });
 
 test("updateDotenvFile preserves unrelated values and updates scoped values", () => {

@@ -24,14 +24,17 @@ When an agent starts work on a Linear ticket in this repo:
 ## Commands
 
 ```bash
-pnpm agent:down   # Stop this worktree's recorded local environment
-pnpm agent:up     # Provision and start this worktree's isolated local environment
-pnpm dev          # Start Next.js only (normally use agent:up instead)
-pnpm build        # Production build
-pnpm lint         # ESLint
-pnpm test         # Vitest
-pnpm test:e2e     # Playwright end-to-end tests
-pnpm typecheck    # TypeScript type checking (tsc --noEmit)
+pnpm agent:down       # Stop this worktree's recorded local environment
+pnpm agent:ls         # List every recorded environment and its lifecycle state
+pnpm agent:reap       # Stop environments whose exact supervisor is dead
+pnpm agent:reap --missing-worktree # Also stop strict-ENOENT worktree leases
+pnpm agent:up         # Provision and supervise this worktree's isolated environment
+pnpm dev              # Start Next.js only (normally use agent:up instead)
+pnpm build            # Production build
+pnpm lint             # ESLint
+pnpm test             # Vitest
+pnpm test:e2e         # Playwright end-to-end tests
+pnpm typecheck        # TypeScript type checking (tsc --noEmit)
 ```
 
 This repo uses Vitest for unit-style tests and Playwright for end-to-end tests. CI runs lint, typecheck, test, and build.
@@ -45,17 +48,24 @@ pnpm agent:up & # First invocation is long-running; keep this shell/session aliv
 pnpm agent:up   # Second invocation prints the exact endpoints and exits.
 ```
 
-The first `agent:up` invocation supervises Convex and Next.js in the foreground, so launch it as a backgrounded or long-running terminal process and leave that process running. It installs dependencies when needed, bootstraps local secrets without retaining another checkout's Convex binding, assigns deterministic ports from the worktree path, selects a worktree-local Convex backend, and waits for both services to be ready. A second foreground invocation is the authoritative way to print the exact app origin, Convex URL, and origin-keyed Playwright auth-state path; it exits immediately when the supervised environment is healthy.
+`pnpm agent:up` is **long-running**. Its first invocation supervises Convex and Next.js and does not return while the environment is running, so launch it as a backgrounded or long-running terminal process and keep that process alive. Running it in a foreground command that the harness later times out will also stop the environment. It installs dependencies when needed, bootstraps local secrets without retaining another checkout's Convex binding, assigns deterministic ports from the worktree path, selects a worktree-local Convex backend, and waits for both services to be ready. A second foreground invocation is the authoritative way to print the exact app origin, Convex URL, and origin-keyed Playwright auth-state path; it exits immediately when the supervised environment is healthy.
 
 On a cold worktree, the second invocation can remain in the foreground while the first invocation installs and provisions. This is expected: leave the first supervisor running and wait for the second invocation to print the endpoints. Do not run `agent:down` merely because the second invocation is still waiting during provisioning.
 
-Stop the recorded environment with `pnpm agent:down`. `agent:up` automatically recovers a stale `output/agent/runtime.json` lease when it can prove ownership of the recorded child process. If a different process owns one of the deterministic ports, it refuses to start and prints the conflicting ports instead of treating that process as healthy.
+Run `pnpm agent:down` when the task is finished. It cleanly stops this worktree's Next.js and local Convex processes, releases the lease, and is safe to run when nothing is active.
+
+Lifecycle leases are stored in the repository's shared Git directory so they remain discoverable after a worktree is deleted. Every `agent:up` automatically reaps environments whose exact supervisor process is no longer alive. It never auto-reaps an environment whose supervisor is still alive, even if its worktree cannot be found. `pnpm agent:ls` reports every lease, origin, port, PID, liveness, worktree presence, age, classification, and how it can be reaped. `pnpm agent:reap` applies the same conservative dead-supervisor rule on demand. After reviewing `agent:ls`, `pnpm agent:reap --missing-worktree` additionally reaps live environments only when a worktree stat definitively returns `ENOENT`; permission errors, unavailable mounts, and all other unknown worktree states are refused. If a different process owns a deterministic port, lifecycle commands preserve the lease and print exact `lsof` guidance instead of treating that process as healthy.
 
 Do not copy `.env.local` manually or run reset/seed commands against a deployment inherited from another checkout. Local Playwright setup refuses to reset data unless `.env.local` and `.convex/local/default` identify the same worktree-local backend.
 
 ## Playwright Testing
 
-When the harness provides `js_repl`, use `playwright-interactive` first for UI work in this repo. It is the Codex default because it keeps a persistent browser session alive, which is better for iterative frontend development and repeated post-edit verification. Harnesses without `js_repl` should use the `playwright` CLI skill directly; that is expected behavior, not a fallback failure. When `js_repl` is available, fall back to the CLI only if the interactive workflow fails, the session becomes unhealthy, or the task is intentionally a one-off CLI-style check. If an available interactive workflow fails, flag that failure to the user.
+Use the browser path the harness can actually execute:
+
+- **Codex:** use `node_repl` with the packaged `playwright` library. Keep the browser, context, and page in the persistent REPL session, use Playwright's full wait APIs, and make screenshots perceptible inline with `codex.emitImage`. The configured `browser@openai-bundled` and `chrome@openai-bundled` plugins are not callable inside Traycer-hosted agents; do not plan around them.
+- **Claude:** use the shared `playwright` CLI wrapper. Its named sessions persist across separate Bash calls, and parallel agents must use distinct `-s=<name>` values. Write screenshots to PNG files and open them with `Read` so they are perceptible.
+
+Do not add a browser MCP. It would duplicate the working harness-specific paths while loading another tool surface into every agent turn.
 
 Shared rules:
 
@@ -79,53 +89,68 @@ Shared rules:
 - The default local data model is deterministic suite-level reset and seed for the dedicated Playwright user before authenticated specs run. Tests that create or mutate data should use dedicated helpers or clean up their own side effects.
 - `tests/e2e/setup/global.setup.ts` is responsible for local reset/seed before specs execute.
 
-### `playwright-interactive` Default
+### Codex: `node_repl` + Playwright
 
-Use this first for UI tasks, especially when the agent expects to make code edits and re-check the UI multiple times in the same task.
+Use this for Codex UI tasks, especially when making edits and re-checking the UI repeatedly.
 
-- Start each new interactive workflow from a clean `js_repl` state so stale `browser`, `context`, or `page` handles do not leak across tasks
-- After resetting `js_repl`, rerun the Playwright bootstrap/setup cells before interacting with the app
+- Start each workflow from a clean `node_repl` state so stale `browser`, `context`, or `page` handles do not leak across tasks
+- Import the repository's packaged `playwright` library and rerun the bootstrap cells after resetting the REPL
 - Reuse the same live `browser`, `context`, and `page` handles across checks instead of reopening the browser repeatedly
-- Set the interactive target URL and auth-state path to the exact values printed by `pnpm agent:up`
+- Set the target URL and auth-state path to the exact values printed by `pnpm agent:up`
 - Run `pnpm test:e2e:setup` before loading state when the printed auth-state file is missing or invalid
 - Save refreshed auth state back to the printed origin-keyed path after a manual login succeeds
+- Use normal Playwright waits such as `waitForURL`, locator waits, or `waitForFunction`; use `codex.emitImage` with screenshot bytes for inline visual inspection
 
 ```js
 var TARGET_URL = "<App origin printed by pnpm agent:up>";
 var AUTH_STATE_FILE = "<Playwright auth state path printed by pnpm agent:up>";
 
+var { chromium } = await import("playwright");
+var browser = await chromium.launch({ headless: true });
 context = await browser.newContext({
   viewport: { width: 1600, height: 900 },
   storageState: AUTH_STATE_FILE,
 });
 page = await context.newPage();
 await page.goto(TARGET_URL, { waitUntil: "domcontentloaded" });
+await codex.emitImage({
+  bytes: await page.screenshot({ type: "png" }),
+  mimeType: "image/png",
+});
 
 // Run this only after a manual login succeeds in this live context.
 // await context.storageState({ path: AUTH_STATE_FILE });
 ```
 
-### `playwright` CLI Workflow
+### Claude: `playwright` CLI
 
-Use this directly on harnesses without `js_repl`. On harnesses with `js_repl`, use it if `playwright-interactive` fails, the interactive browser state becomes unhealthy, or the task is intentionally a one-off CLI-style check.
+Use this for Claude browser work.
 
 - Invoke the shared skill wrapper directly: `"$HOME/.agents/skills/playwright/scripts/playwright_cli.sh"`
 - The wrapper must be executable; if direct execution fails, fix the file permissions before continuing
+- Choose a unique session name per agent and pass `-s=<name>` on every command; the session persists across separate Bash processes
 - Use the app origin printed by `pnpm agent:up` in every CLI command
 - Prefer headed mode for local debugging
-- Always take a fresh `snapshot` before using element refs like `e47`
+- Element refs such as `e47` are mandatory for interaction; click-by-text does not work
+- Refs go stale after navigation or any meaningful page change, so take a fresh `snapshot` before each interaction sequence
+- `snapshot` returns a file path rather than readable snapshot contents; use `find <text>` to locate content and refs
+- There is no working arbitrary-condition wait on this installed path: the CLI has no `wait` subcommand and its `run-code` command is broken. Use command-specific waits where available and bounded retry/polling from Bash when necessary
 - Save screenshots with `--filename`; do not pass the output path as the positional argument:
   `"$PWCLI" -s=default screenshot --filename output/playwright/example.png`
+- Use absolute output paths when commands run from separate Bash calls because `cd` state does not persist
+- Open the saved PNG with `Read`; creating the file alone does not make the screenshot perceptible
 - Load `$PLAYWRIGHT_AUTH_FILE` before doing a manual login if the file exists
 
 ```bash
 export PWCLI="$HOME/.agents/skills/playwright/scripts/playwright_cli.sh"
+export PW_SESSION="<unique-agent-session>"
 source .env.local
 
-"$PWCLI" open "$APP_URL" --headed
-"$PWCLI" state-load "$PLAYWRIGHT_AUTH_FILE"
-"$PWCLI" goto "$APP_URL"
-"$PWCLI" snapshot
+"$PWCLI" -s="$PW_SESSION" open "$APP_URL" --headed
+"$PWCLI" -s="$PW_SESSION" state-load "$PLAYWRIGHT_AUTH_FILE"
+"$PWCLI" -s="$PW_SESSION" goto "$APP_URL"
+"$PWCLI" -s="$PW_SESSION" snapshot
+"$PWCLI" -s="$PW_SESSION" find "<text>"
 ```
 
 If the saved auth file is missing or no longer valid, prefer refreshing it with:
@@ -136,7 +161,7 @@ pnpm test:e2e:setup
 
 Notes:
 
-- `playwright` CLI and `playwright-interactive` can share the origin-keyed file printed by `pnpm agent:up`
+- Codex's packaged Playwright and Claude's Playwright CLI can share the origin-keyed file printed by `pnpm agent:up`
 - The saved auth state is sensitive; keep it local and do not commit it
 - If auth restoration behaves unexpectedly, rerun `pnpm test:e2e:setup`; it refreshes state for the configured origin
 

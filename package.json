@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "agent:down": "node scripts/agent-up.mjs --down",
+    "agent:ls": "node scripts/agent-up.mjs --ls",
+    "agent:reap": "node scripts/agent-up.mjs --reap",
     "agent:up": "node scripts/agent-up.mjs",
     "build": "next build",
     "dev": "next dev",
