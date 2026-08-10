@@ -9,6 +9,16 @@ export function parseExpectedAccountIds(value: string): string[] {
   );
 }
 
+export function hasCurrentSyncFailure(args: {
+  lastFailedSyncAt: number | undefined;
+  lastSuccessfulSyncAt: number | undefined;
+}): boolean {
+  return (
+    args.lastFailedSyncAt !== undefined &&
+    args.lastFailedSyncAt > (args.lastSuccessfulSyncAt ?? 0)
+  );
+}
+
 export function toOptionalStringArrayPatch(args: {
   cleared: boolean;
   fieldName: string;

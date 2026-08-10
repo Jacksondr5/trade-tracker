@@ -256,6 +256,14 @@ describe("brokerage ingestion", () => {
     ).rejects.toThrow("Expected account IDs cannot be empty");
   });
 
+  it("does not allow clients to set a scheduler-excluded error status", async () => {
+    await expect(
+      asUser().mutation(api.brokerageIngestion.upsertIbkrConnection, {
+        status: "error",
+      } as never),
+    ).rejects.toThrow();
+  });
+
   it("returns the operational details needed to review brokerage ingestion", async () => {
     const connectionId = await createConnection();
     const tokenExpiresAt = Date.UTC(2026, 11, 31, 23, 59, 59, 999);
@@ -1264,6 +1272,31 @@ describe("brokerage ingestion", () => {
       status: "active",
     });
     expect(connection?.lastSuccessfulSyncAt).toEqual(expect.any(Number));
+  });
+
+  it("keeps an in-flight connection paused when its sync succeeds", async () => {
+    const connectionId = await createConnection();
+    const syncRunId = await beginActivitySyncRun(connectionId);
+    await asUser().mutation(api.brokerageIngestion.pauseBrokerageConnection, {
+      connectionId,
+    });
+
+    await t.mutation(internal.brokerageIngestion.markSyncRunSucceeded, {
+      syncRunId,
+    });
+
+    const [connection, syncRun, dueConnections] = await Promise.all([
+      t.run(async (ctx) => await ctx.db.get(connectionId)),
+      t.run(async (ctx) => await ctx.db.get(syncRunId)),
+      t.query(internal.brokerageIngestion.listDueConnections, {}),
+    ]);
+
+    expect(syncRun).toMatchObject({ status: "succeeded" });
+    expect(connection).toMatchObject({ status: "paused" });
+    expect(connection?.lastSuccessfulSyncAt).toEqual(expect.any(Number));
+    expect(dueConnections).not.toContainEqual(
+      expect.objectContaining({ _id: connectionId }),
+    );
   });
 
   it("reuses existing raw report reference without creating extra metadata rows", async () => {

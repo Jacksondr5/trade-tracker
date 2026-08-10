@@ -30,6 +30,7 @@ import {
 } from "../../../../../shared/brokerage/constants";
 import { IMPORTS_INDEX_TEST_IDS } from "../../../../../shared/e2e/testIds";
 import {
+  hasCurrentSyncFailure,
   parseExpectedAccountIds,
   toOptionalStringArrayPatch,
 } from "./brokerage-sync-panel-helpers";
@@ -365,6 +366,10 @@ export function BrokerageSyncPanel({
     connection?.status ?? "needs_setup",
   );
   const latestFailure = status.latestFailedSync;
+  const currentSyncFailure = hasCurrentSyncFailure({
+    lastFailedSyncAt: connection?.lastFailedSyncAt,
+    lastSuccessfulSyncAt: connection?.lastSuccessfulSyncAt,
+  });
 
   return (
     <Card
@@ -380,6 +385,9 @@ export function BrokerageSyncPanel({
             <Badge variant={statusPresentation.variant}>
               {statusPresentation.label}
             </Badge>
+            {currentSyncFailure ? (
+              <Badge variant="danger">Last sync failed</Badge>
+            ) : null}
             {connection?.label ? (
               <span className="text-xs text-olive-11">{connection.label}</span>
             ) : null}
@@ -451,6 +459,12 @@ export function BrokerageSyncPanel({
                 `Failed for ${latestFailure.reportDate}`)
               : "No failures recorded"}
           </p>
+          {latestFailure ? (
+            <p className="mt-1 text-xs text-olive-11">
+              {latestFailure.reportDate} ·{" "}
+              {formatDate(latestFailure.completedAt ?? latestFailure.updatedAt)}
+            </p>
+          ) : null}
         </div>
         <div
           className="px-4 py-3"
