@@ -1294,7 +1294,6 @@ export const markSyncRunFailed = internalMutation({
     await ctx.db.patch(connection._id, {
       connectionError: args.errorMessage,
       lastFailedSyncAt: now,
-      status: args.failureType === "terminal" ? "error" : connection.status,
       updatedAt: now,
     });
     return null;

@@ -682,6 +682,105 @@ describe("brokerage ingestion", () => {
     ).rejects.toThrowError("Brokerage connection is not active");
   });
 
+  it("keeps terminal failures schedulable while recording their operational state", async () => {
+    const connectionId = await createConnection();
+    const syncRunId = await beginActivitySyncRun(connectionId);
+
+    await t.mutation(internal.brokerageIngestion.markSyncRunFailed, {
+      errorMessage: "IBKR returned a cached report",
+      failureType: "terminal",
+      syncRunId,
+    });
+
+    const [connection, syncRun, dueConnections] = await Promise.all([
+      t.run(async (ctx) => await ctx.db.get(connectionId)),
+      t.run(async (ctx) => await ctx.db.get(syncRunId)),
+      t.query(internal.brokerageIngestion.listDueConnections, {}),
+    ]);
+
+    expect(connection).toMatchObject({
+      connectionError: "IBKR returned a cached report",
+      status: "active",
+    });
+    expect(connection?.lastFailedSyncAt).toEqual(expect.any(Number));
+    expect(syncRun).toMatchObject({
+      errorMessage: "IBKR returned a cached report",
+      status: "failed_terminal",
+    });
+    expect(dueConnections).toContainEqual(
+      expect.objectContaining({ _id: connectionId }),
+    );
+  });
+
+  it("keeps retryable failures schedulable without weakening failure visibility", async () => {
+    const connectionId = await createConnection();
+    const firstSyncRunId = await beginActivitySyncRun(connectionId);
+
+    await t.mutation(internal.brokerageIngestion.markSyncRunFailed, {
+      errorMessage: "IBKR temporarily unavailable",
+      failureType: "retryable",
+      syncRunId: firstSyncRunId,
+    });
+    const secondSyncRunId = await beginActivitySyncRun(
+      connectionId,
+      "2026-05-15",
+    );
+    await t.mutation(internal.brokerageIngestion.markSyncRunFailed, {
+      errorMessage: "IBKR timed out again",
+      failureType: "retryable",
+      syncRunId: secondSyncRunId,
+    });
+
+    const [connection, firstSyncRun, secondSyncRun, dueConnections] =
+      await Promise.all([
+        t.run(async (ctx) => await ctx.db.get(connectionId)),
+        t.run(async (ctx) => await ctx.db.get(firstSyncRunId)),
+        t.run(async (ctx) => await ctx.db.get(secondSyncRunId)),
+        t.query(internal.brokerageIngestion.listDueConnections, {}),
+      ]);
+
+    expect(connection).toMatchObject({
+      connectionError: "IBKR timed out again",
+      status: "active",
+    });
+    expect(connection?.lastFailedSyncAt).toEqual(expect.any(Number));
+    expect(firstSyncRun).toMatchObject({ status: "failed_retryable" });
+    expect(secondSyncRun).toMatchObject({
+      errorMessage: "IBKR timed out again",
+      status: "failed_retryable",
+    });
+    expect(dueConnections).toContainEqual(
+      expect.objectContaining({ _id: connectionId }),
+    );
+  });
+
+  it("continues excluding paused connections after a failed in-flight run", async () => {
+    const connectionId = await createConnection();
+    const syncRunId = await beginActivitySyncRun(connectionId);
+    await asUser().mutation(api.brokerageIngestion.pauseBrokerageConnection, {
+      connectionId,
+    });
+
+    await t.mutation(internal.brokerageIngestion.markSyncRunFailed, {
+      errorMessage: "IBKR rejected the Flex token",
+      failureType: "terminal",
+      syncRunId,
+    });
+
+    const [connection, dueConnections] = await Promise.all([
+      t.run(async (ctx) => await ctx.db.get(connectionId)),
+      t.query(internal.brokerageIngestion.listDueConnections, {}),
+    ]);
+
+    expect(connection).toMatchObject({
+      connectionError: "IBKR rejected the Flex token",
+      status: "paused",
+    });
+    expect(dueConnections).not.toContainEqual(
+      expect.objectContaining({ _id: connectionId }),
+    );
+  });
+
   it("ingests parsed Flex reports idempotently into inbox trades and snapshots", async () => {
     const connectionId = await createConnection();
     const { syncRunId } = await t.mutation(
