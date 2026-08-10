@@ -7,7 +7,6 @@ export default defineConfig({
       "src/**/*.test.ts",
       "shared/**/*.test.ts",
       "convex/**/*.test.ts",
-      "workers/**/*.test.ts",
       "scripts/**/*.test.mjs",
     ],
     exclude: [

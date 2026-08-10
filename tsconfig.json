@@ -53,7 +53,6 @@
     "next-env.d.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
-    ".next/dev/types/**/*.ts",
-    "workers/**/*.ts"
+    ".next/dev/types/**/*.ts"
   ]
 }
