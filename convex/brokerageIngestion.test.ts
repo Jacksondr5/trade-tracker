@@ -173,7 +173,7 @@ describe("brokerage ingestion", () => {
       {
         expectedAccountIds: {
           kind: "set",
-          value: [" U1234567 ", "U7654321", "U1234567"],
+          value: [" u1234567 ", "U7654321", "U1234567"],
         },
         label: { kind: "set", value: "IBKR Updated" },
         queryId: "654321",

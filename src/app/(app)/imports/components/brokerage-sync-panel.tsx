@@ -29,6 +29,10 @@ import {
   MAX_IBKR_FLEX_TOKEN_LENGTH,
 } from "../../../../../shared/brokerage/constants";
 import { IMPORTS_INDEX_TEST_IDS } from "../../../../../shared/e2e/testIds";
+import {
+  parseExpectedAccountIds,
+  toOptionalStringArrayPatch,
+} from "./brokerage-sync-panel-helpers";
 
 const connectionSchema = z.object({
   expectedAccountIds: z
@@ -96,17 +100,6 @@ function toEndOfUtcDay(date: string): number {
   return Date.parse(`${date}T23:59:59.999Z`);
 }
 
-function parseExpectedAccountIds(value: string): string[] {
-  return Array.from(
-    new Set(
-      value
-        .split(/[\n,]/)
-        .map((accountId) => accountId.trim())
-        .filter(Boolean),
-    ),
-  );
-}
-
 function expectedAccountIdsInputValue(accountIds?: string[]): string {
   return accountIds?.join(", ") ?? "";
 }
@@ -126,25 +119,6 @@ function toOptionalStringPatch(args: {
     );
   }
   return value === args.persistedValue
-    ? undefined
-    : { kind: "set" as const, value };
-}
-
-function toOptionalStringArrayPatch(args: {
-  cleared: boolean;
-  fieldName: string;
-  persistedValue: string[] | undefined;
-  value: string;
-}) {
-  if (args.cleared) return { kind: "clear" as const };
-  const value = parseExpectedAccountIds(args.value);
-  if (value.length === 0) {
-    if (args.persistedValue === undefined) return undefined;
-    throw new Error(
-      `${args.fieldName} cannot be empty; use Clear to remove it`,
-    );
-  }
-  return JSON.stringify(value) === JSON.stringify(args.persistedValue)
     ? undefined
     : { kind: "set" as const, value };
 }

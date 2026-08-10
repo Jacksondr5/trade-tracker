@@ -47,7 +47,9 @@ export function resolveOptionalMetadataStringArrayPatch(args: {
 }): string[] | undefined {
   if (args.patch.kind === "clear") return undefined;
   const values = Array.from(
-    new Set(args.patch.value.map((value) => value.trim()).filter(Boolean)),
+    new Set(
+      args.patch.value.map((value) => value.trim().toUpperCase()).filter(Boolean),
+    ),
   );
   if (values.length === 0) {
     throw new ConvexError(
