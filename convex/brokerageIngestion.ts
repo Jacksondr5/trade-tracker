@@ -29,6 +29,12 @@ const brokerageConnectionStatusValidator = v.union(
   v.literal("error"),
 );
 
+const publicBrokerageConnectionStatusValidator = v.union(
+  v.literal("active"),
+  v.literal("paused"),
+  v.literal("needs_setup"),
+);
+
 const brokerageSyncReportTypeValidator = v.union(
   v.literal("activity"),
   v.literal("trade_confirmation"),
@@ -530,7 +536,7 @@ export const upsertIbkrConnection = mutation({
     expectedAccountIds: v.optional(optionalMetadataStringArrayPatchValidator),
     label: v.optional(optionalMetadataStringPatchValidator),
     queryId: v.optional(v.string()),
-    status: v.optional(brokerageConnectionStatusValidator),
+    status: v.optional(publicBrokerageConnectionStatusValidator),
     tokenExpiresAt: v.optional(v.number()),
   },
   returns: v.id("brokerageConnections"),
@@ -1262,7 +1268,6 @@ export const markSyncRunSucceeded = internalMutation({
     await ctx.db.patch(connection._id, {
       connectionError: undefined,
       lastSuccessfulSyncAt: now,
-      status: "active",
       updatedAt: now,
     });
     return null;
@@ -1294,7 +1299,6 @@ export const markSyncRunFailed = internalMutation({
     await ctx.db.patch(connection._id, {
       connectionError: args.errorMessage,
       lastFailedSyncAt: now,
-      status: args.failureType === "terminal" ? "error" : connection.status,
       updatedAt: now,
     });
     return null;

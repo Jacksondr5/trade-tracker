@@ -351,7 +351,7 @@ describe("IBKR Flex Convex workflow", () => {
       reconciliationIssueCount: 0,
       status: "failed_terminal",
     });
-    expect(state.connection).toMatchObject({ status: "error" });
+    expect(state.connection).toMatchObject({ status: "active" });
     expect(state.inboxTrades).toEqual([]);
     expect(state.positionSnapshots).toEqual([]);
     expect(state.cashSnapshots).toEqual([]);
@@ -1205,7 +1205,7 @@ describe("IBKR Flex Convex workflow", () => {
     });
     expect(state.connection).toMatchObject({
       connectionError: "No IBKR credential is configured for this connection.",
-      status: "error",
+      status: "active",
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -1237,7 +1237,7 @@ describe("IBKR Flex Convex workflow", () => {
     expect(state.connection).toMatchObject({
       connectionError:
         "Brokerage token encryption key version 1 is not configured",
-      status: "error",
+      status: "active",
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });

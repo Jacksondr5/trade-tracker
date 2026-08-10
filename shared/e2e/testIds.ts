@@ -178,6 +178,7 @@ export const IMPORTS_INDEX_TEST_IDS = {
   brokerageConnectionTokenExpiryInput:
     "brokerage-connection-token-expiry-input",
   brokerageConnectionTokenStatus: "brokerage-connection-token-status",
+  brokerageCurrentFailureBadge: "brokerage-current-failure-badge",
   brokerageLatestFailure: "brokerage-sync-latest-failure",
   brokerageLatestSuccess: "brokerage-sync-latest-success",
   brokeragePendingImports: "brokerage-pending-imports",
