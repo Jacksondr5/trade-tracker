@@ -27,14 +27,15 @@ issues.
 
 ## 2026-08-06 — Brokerage ingestion uses Convex-native durable workflows
 
-Jackson chose Convex-native durable workflows for IBKR Flex orchestration. The
-planned external worker was thin and never deployed: its responsibilities were
+Jackson deliberately retired the planned self-hosted Temporal worker in favor
+of Convex-native durable workflows for IBKR Flex orchestration. The Temporal
+worker was thin and was never deployed: its responsibilities would have been
 scheduling, Flex requests, polling, parsing, and retries, while Convex already
 owned the sync state, dedupe, ingestion, and reconciliation model.
-`@convex-dev/workflow` provides the durable delays and retry journal inside the
-existing backend, so the pipeline does not require an always-on worker or a
-separate orchestration cluster. Flex Web Service remains the brokerage source;
-only the orchestration boundary changed.
+`@convex-dev/workflow` now provides the durable delays and retry journal inside
+the existing backend, so the current pipeline requires neither an always-on
+worker nor a separate orchestration cluster. Flex Web Service remains the
+brokerage source; only the orchestration boundary changed.
 
 ## 2026-08-04 — Diagnosis: the app failed on deposits versus withdrawals, not capture speed
 
