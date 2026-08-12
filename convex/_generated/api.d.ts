@@ -17,7 +17,6 @@ import type * as brokerageSecrets from "../brokerageSecrets.js";
 import type * as campaigns from "../campaigns.js";
 import type * as crons from "../crons.js";
 import type * as e2eSeed from "../e2eSeed.js";
-import type * as http from "../http.js";
 import type * as ibkrFlexWorkflow from "../ibkrFlexWorkflow.js";
 import type * as importTasks from "../importTasks.js";
 import type * as imports from "../imports.js";
@@ -59,7 +58,6 @@ declare const fullApi: ApiFromModules<{
   campaigns: typeof campaigns;
   crons: typeof crons;
   e2eSeed: typeof e2eSeed;
-  http: typeof http;
   ibkrFlexWorkflow: typeof ibkrFlexWorkflow;
   importTasks: typeof importTasks;
   imports: typeof imports;
