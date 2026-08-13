@@ -49,6 +49,20 @@ describe("parseIBKRCSV", () => {
     ]);
   });
 
+  it("rejects a date-only value without the IBKR date-time separator", () => {
+    const csv = [
+      "ClientAccountID,Symbol,Buy/Sell,Open/CloseIndicator,TradePrice,Quantity,DateTime,Taxes,OrderType,TransactionType",
+      "U1,KRE,BUY,O,50,1,20260810,0,MKT,",
+    ].join("\n");
+
+    const result = parseIBKRCSV(csv);
+
+    expect(result.trades).toEqual([]);
+    expect(result.errors).toEqual([
+      'Failed to parse IBKR row for KRE: Invalid IBKR DateTime format: "20260810"',
+    ]);
+  });
+
   it("applies direction inference matrix from Open/CloseIndicator + Buy/Sell", () => {
     const csv = [
       "ClientAccountID,Symbol,Buy/Sell,Open/CloseIndicator,TradePrice,Quantity,DateTime,Taxes,OrderType,TransactionType",

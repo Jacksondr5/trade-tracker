@@ -18,6 +18,9 @@ interface IBKRRow {
 }
 
 function parseIBKRDateTime(dt: string): number {
+  if (!dt.includes(";")) {
+    throw new Error(`Invalid IBKR DateTime format: "${dt}"`);
+  }
   const timestamp = parseIbkrEasternTimestamp(dt);
   if (timestamp === undefined) {
     throw new Error(`Invalid IBKR DateTime format: "${dt}"`);

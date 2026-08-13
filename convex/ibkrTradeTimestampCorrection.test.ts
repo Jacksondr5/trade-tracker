@@ -83,14 +83,19 @@ describe("IBKR trade timestamp correction", () => {
       },
     );
     expect(dryRun).toMatchObject({
-      acceptedTradesCorrected: 1,
+      acceptedExecutionIdsExcludedByMaximumCreationTime: [],
+      acceptedTradesMatched: 1,
+      acceptedTradesWritten: 0,
+      dryRun: true,
       earliestCorrectedTimestamp: Date.UTC(2026, 0, 15, 14, 35, 18),
       earliestStoredTimestamp: Date.UTC(2026, 0, 15, 9, 35, 18),
       latestCorrectedTimestamp: Date.UTC(2026, 7, 10, 13, 35, 18),
       latestStoredTimestamp: Date.UTC(2026, 7, 10, 9, 35, 18),
       maximumCreationTime: Number.MAX_SAFE_INTEGER,
       minimumCreationTime: 0,
-      pendingInboxTradesCorrected: 1,
+      pendingExecutionIdsExcludedByMaximumCreationTime: [],
+      pendingInboxTradesMatched: 1,
+      pendingInboxTradesWritten: 0,
       requestedExecutions: 2,
       safeToExecute: true,
     });
@@ -162,7 +167,7 @@ describe("IBKR trade timestamp correction", () => {
       ),
     ).rejects.toThrow("expectedAuditToken does not match");
 
-    await t.mutation(
+    const executionResult = await t.mutation(
       internal.ibkrTradeTimestampCorrection.correctIbkrTradeTimestamps,
       {
         dryRun: false,
@@ -172,6 +177,13 @@ describe("IBKR trade timestamp correction", () => {
         minimumCreationTime: 0,
       },
     );
+    expect(executionResult).toMatchObject({
+      acceptedTradesMatched: 1,
+      acceptedTradesWritten: 1,
+      dryRun: false,
+      pendingInboxTradesMatched: 1,
+      pendingInboxTradesWritten: 1,
+    });
 
     const rows = await t.run(async (ctx) => ({
       acceptedCsv: await ctx.db.get(ids.acceptedCsv),
@@ -304,7 +316,9 @@ describe("IBKR trade timestamp correction", () => {
           minimumCreationTime: 0,
         },
       ),
-    ).rejects.toThrow("did not match stored records one-to-one");
+    ).rejects.toThrow(
+      "maximumCreationTime excluded 1 accepted and 0 pending execution ids",
+    );
   });
 
   it("refuses an execution id with no matching stored record", async () => {

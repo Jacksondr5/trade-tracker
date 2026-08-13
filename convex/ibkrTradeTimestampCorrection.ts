@@ -21,15 +21,20 @@ const correctionRowValidator = v.object({
 });
 
 const correctionSummaryValidator = v.object({
-  acceptedTradesCorrected: v.number(),
+  acceptedExecutionIdsExcludedByMaximumCreationTime: v.array(v.string()),
+  acceptedTradesMatched: v.number(),
+  acceptedTradesWritten: v.number(),
   auditToken: v.string(),
+  dryRun: v.boolean(),
   earliestCorrectedTimestamp: v.union(v.number(), v.null()),
   earliestStoredTimestamp: v.union(v.number(), v.null()),
   latestCorrectedTimestamp: v.union(v.number(), v.null()),
   latestStoredTimestamp: v.union(v.number(), v.null()),
   maximumCreationTime: v.number(),
   minimumCreationTime: v.number(),
-  pendingInboxTradesCorrected: v.number(),
+  pendingExecutionIdsExcludedByMaximumCreationTime: v.array(v.string()),
+  pendingInboxTradesMatched: v.number(),
+  pendingInboxTradesWritten: v.number(),
   requestedExecutions: v.number(),
   rows: v.array(correctionRowValidator),
   safeToExecute: v.boolean(),
@@ -57,10 +62,13 @@ type Candidate =
 function auditHash(
   candidates: Candidate[],
   creationTimeBounds: { maximum: number; minimum: number },
+  cutoffExclusions: { accepted: string[]; pending: string[] },
 ): string {
   let hash = 2_166_136_261;
   const input = [
     `creation-time-bounds:${creationTimeBounds.minimum}:${creationTimeBounds.maximum}`,
+    `accepted-cutoff-exclusions:${cutoffExclusions.accepted.join(",")}`,
+    `pending-cutoff-exclusions:${cutoffExclusions.pending.join(",")}`,
     ...candidates
       .map((candidate) =>
         [
@@ -141,7 +149,12 @@ export const correctIbkrTradeTimestamps = internalMutation({
       );
     }
 
-    const [acceptedMatches, pendingMatches] = await Promise.all([
+    const [
+      acceptedMatches,
+      pendingMatches,
+      acceptedPostCutoffMatches,
+      pendingPostCutoffMatches,
+    ] = await Promise.all([
       Promise.all(
         args.executions.map(({ executionId }) =>
           ctx.db
@@ -168,9 +181,43 @@ export const correctIbkrTradeTimestamps = internalMutation({
             .take(2),
         ),
       ),
+      Promise.all(
+        args.executions.map(({ executionId }) =>
+          ctx.db
+            .query("trades")
+            .withIndex("by_source_externalId", (query) =>
+              query
+                .eq("source", "ibkr")
+                .eq("externalId", executionId)
+                .gte("_creationTime", args.maximumCreationTime),
+            )
+            .take(1),
+        ),
+      ),
+      Promise.all(
+        args.executions.map(({ executionId }) =>
+          ctx.db
+            .query("inboxTrades")
+            .withIndex("by_source_externalId", (query) =>
+              query
+                .eq("source", "ibkr")
+                .eq("externalId", executionId)
+                .gte("_creationTime", args.maximumCreationTime),
+            )
+            .take(1),
+        ),
+      ),
     ]);
     const acceptedRows = acceptedMatches.flat();
     const pendingRows = pendingMatches.flat();
+    const acceptedCutoffExclusions = args.executions
+      .filter((_, index) => acceptedPostCutoffMatches[index]!.length > 0)
+      .map(({ executionId }) => executionId)
+      .sort();
+    const pendingCutoffExclusions = args.executions
+      .filter((_, index) => pendingPostCutoffMatches[index]!.length > 0)
+      .map(({ executionId }) => executionId)
+      .sort();
 
     const candidates: Candidate[] = [];
     for (const trade of acceptedRows) {
@@ -227,18 +274,30 @@ export const correctIbkrTradeTimestamps = internalMutation({
       matchedIds.size !== candidates.length ||
       matchedIds.size !== executionMap.size
     ) {
+      const cutoffContext =
+        acceptedCutoffExclusions.length > 0 ||
+        pendingCutoffExclusions.length > 0
+          ? `; maximumCreationTime excluded ${acceptedCutoffExclusions.length} accepted and ${pendingCutoffExclusions.length} pending execution ids`
+          : "";
       throw new ConvexError(
-        "IBKR timestamp correction refused: supplied executions did not match stored records one-to-one",
+        `IBKR timestamp correction refused: supplied executions did not match stored records one-to-one${cutoffContext}`,
       );
     }
 
     const safeToExecute = candidates.every(
       (candidate) => candidate.currentDate === candidate.expectedStoredDate,
     );
-    const auditToken = auditHash(candidates, {
-      maximum: args.maximumCreationTime,
-      minimum: args.minimumCreationTime,
-    });
+    const auditToken = auditHash(
+      candidates,
+      {
+        maximum: args.maximumCreationTime,
+        minimum: args.minimumCreationTime,
+      },
+      {
+        accepted: acceptedCutoffExclusions,
+        pending: pendingCutoffExclusions,
+      },
+    );
     if (!args.dryRun && !safeToExecute) {
       throw new ConvexError(
         "IBKR timestamp correction refused: a stored timestamp does not match the raw report's expected UTC misparse",
@@ -252,11 +311,7 @@ export const correctIbkrTradeTimestamps = internalMutation({
 
     if (!args.dryRun) {
       for (const candidate of candidates) {
-        if (candidate.table === "trades") {
-          await ctx.db.patch(candidate.id, { date: candidate.correctedDate });
-        } else {
-          await ctx.db.patch(candidate.id, { date: candidate.correctedDate });
-        }
+        await ctx.db.patch(candidate.id, { date: candidate.correctedDate });
       }
     }
 
@@ -267,19 +322,30 @@ export const correctIbkrTradeTimestamps = internalMutation({
       candidates.map((candidate) => candidate.correctedDate),
     );
     return {
-      acceptedTradesCorrected: candidates.filter(
+      acceptedExecutionIdsExcludedByMaximumCreationTime:
+        acceptedCutoffExclusions,
+      acceptedTradesMatched: candidates.filter(
         (candidate) => candidate.table === "trades",
       ).length,
+      acceptedTradesWritten: args.dryRun
+        ? 0
+        : candidates.filter((candidate) => candidate.table === "trades").length,
       auditToken,
+      dryRun: args.dryRun,
       earliestCorrectedTimestamp: correctedRange.earliest,
       earliestStoredTimestamp: storedRange.earliest,
       latestCorrectedTimestamp: correctedRange.latest,
       latestStoredTimestamp: storedRange.latest,
       maximumCreationTime: args.maximumCreationTime,
       minimumCreationTime: args.minimumCreationTime,
-      pendingInboxTradesCorrected: candidates.filter(
+      pendingExecutionIdsExcludedByMaximumCreationTime: pendingCutoffExclusions,
+      pendingInboxTradesMatched: candidates.filter(
         (candidate) => candidate.table === "inboxTrades",
       ).length,
+      pendingInboxTradesWritten: args.dryRun
+        ? 0
+        : candidates.filter((candidate) => candidate.table === "inboxTrades")
+            .length,
       requestedExecutions: executionMap.size,
       rows: candidates
         .map((candidate) => ({
