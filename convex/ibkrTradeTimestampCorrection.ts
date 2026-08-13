@@ -6,7 +6,6 @@ import {
 import type { Id } from "./_generated/dataModel";
 import { internalMutation } from "./_generated/server";
 
-const MAX_RECORDS_PER_TABLE = 1_000;
 const MAX_EXECUTIONS = 500;
 
 const correctionRowValidator = v.object({
@@ -142,18 +141,36 @@ export const correctIbkrTradeTimestamps = internalMutation({
       );
     }
 
-    const [acceptedRows, pendingRows] = await Promise.all([
-      ctx.db.query("trades").take(MAX_RECORDS_PER_TABLE + 1),
-      ctx.db.query("inboxTrades").take(MAX_RECORDS_PER_TABLE + 1),
+    const [acceptedMatches, pendingMatches] = await Promise.all([
+      Promise.all(
+        args.executions.map(({ executionId }) =>
+          ctx.db
+            .query("trades")
+            .withIndex("by_source_externalId", (query) =>
+              query
+                .eq("source", "ibkr")
+                .eq("externalId", executionId)
+                .lt("_creationTime", args.maximumCreationTime),
+            )
+            .take(2),
+        ),
+      ),
+      Promise.all(
+        args.executions.map(({ executionId }) =>
+          ctx.db
+            .query("inboxTrades")
+            .withIndex("by_source_externalId", (query) =>
+              query
+                .eq("source", "ibkr")
+                .eq("externalId", executionId)
+                .lt("_creationTime", args.maximumCreationTime),
+            )
+            .take(2),
+        ),
+      ),
     ]);
-    if (
-      acceptedRows.length > MAX_RECORDS_PER_TABLE ||
-      pendingRows.length > MAX_RECORDS_PER_TABLE
-    ) {
-      throw new ConvexError(
-        `IBKR timestamp correction refused: a table exceeds the ${MAX_RECORDS_PER_TABLE}-record audit bound`,
-      );
-    }
+    const acceptedRows = acceptedMatches.flat();
+    const pendingRows = pendingMatches.flat();
 
     const candidates: Candidate[] = [];
     for (const trade of acceptedRows) {

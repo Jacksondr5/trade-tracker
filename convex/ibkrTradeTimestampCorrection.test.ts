@@ -306,4 +306,52 @@ describe("IBKR trade timestamp correction", () => {
       ),
     ).rejects.toThrow("did not match stored records one-to-one");
   });
+
+  it("refuses an execution id with no matching stored record", async () => {
+    const t = convexTest(schema, modules);
+
+    await expect(
+      t.mutation(
+        internal.ibkrTradeTimestampCorrection.correctIbkrTradeTimestamps,
+        {
+          dryRun: true,
+          executions: [executions[0]!],
+          maximumCreationTime: Number.MAX_SAFE_INTEGER,
+          minimumCreationTime: 0,
+        },
+      ),
+    ).rejects.toThrow("did not match stored records one-to-one");
+  });
+
+  it("refuses duplicate stored records for one execution id", async () => {
+    const t = convexTest(schema, modules);
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 2; index++) {
+        await ctx.db.insert("trades", {
+          assetType: "stock",
+          date: Date.UTC(2026, 7, 10, 9, 35, 18),
+          direction: "long",
+          externalId: "exec-summer",
+          ownerId: "owner-a",
+          price: 50,
+          quantity: 1,
+          side: "buy",
+          source: "ibkr",
+          ticker: "KRE",
+        });
+      }
+    });
+
+    await expect(
+      t.mutation(
+        internal.ibkrTradeTimestampCorrection.correctIbkrTradeTimestamps,
+        {
+          dryRun: true,
+          executions: [executions[0]!],
+          maximumCreationTime: Number.MAX_SAFE_INTEGER,
+          minimumCreationTime: 0,
+        },
+      ),
+    ).rejects.toThrow("did not match stored records one-to-one");
+  });
 });

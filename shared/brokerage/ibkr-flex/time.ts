@@ -117,15 +117,15 @@ function easternWallClockToTimestamp(parts: DateTimeParts): number | undefined {
   return undefined;
 }
 
-export function parseIbkrEasternTimestamp(
+function ibkrTimestampParts(
   value: string | undefined,
-): number | undefined {
+): DateTimeParts | undefined {
   if (!value) return undefined;
   const [datePart, timePart = "000000"] = value.split(";");
   if (!datePart || datePart.length !== 8 || timePart.length < 6) {
     return undefined;
   }
-  const parts = {
+  return {
     day: Number(datePart.slice(6, 8)),
     hour: Number(timePart.slice(0, 2)),
     minute: Number(timePart.slice(2, 4)),
@@ -133,23 +133,18 @@ export function parseIbkrEasternTimestamp(
     second: Number(timePart.slice(4, 6)),
     year: Number(datePart.slice(0, 4)),
   };
-  return easternWallClockToTimestamp(parts);
+}
+
+export function parseIbkrEasternTimestamp(
+  value: string | undefined,
+): number | undefined {
+  const parts = ibkrTimestampParts(value);
+  return parts ? easternWallClockToTimestamp(parts) : undefined;
 }
 
 export function parseIbkrTimestampAsUtcWallClock(
   value: string | undefined,
 ): number | undefined {
-  if (!value) return undefined;
-  const [datePart, timePart = "000000"] = value.split(";");
-  if (!datePart || datePart.length !== 8 || timePart.length < 6) {
-    return undefined;
-  }
-  return utcFromParts({
-    day: Number(datePart.slice(6, 8)),
-    hour: Number(timePart.slice(0, 2)),
-    minute: Number(timePart.slice(2, 4)),
-    month: Number(datePart.slice(4, 6)),
-    second: Number(timePart.slice(4, 6)),
-    year: Number(datePart.slice(0, 4)),
-  });
+  const parts = ibkrTimestampParts(value);
+  return parts ? utcFromParts(parts) : undefined;
 }

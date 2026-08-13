@@ -792,6 +792,7 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_date", ["ownerId", "date"])
+    .index("by_source_externalId", ["source", "externalId"])
     .index("by_owner_portfolioId", ["ownerId", "portfolioId"])
     .index("by_owner_portfolioId_date", ["ownerId", "portfolioId", "date"])
     .index("by_owner_tradePlanId", ["ownerId", "tradePlanId"]),
@@ -824,6 +825,7 @@ export default defineSchema({
     .index("by_owner_status", ["ownerId", "status"])
     .index("by_owner_source_status", ["ownerId", "source", "status"])
     .index("by_owner_source_externalId", ["ownerId", "source", "externalId"])
+    .index("by_source_externalId", ["source", "externalId"])
     .index("by_owner_portfolioId", ["ownerId", "portfolioId"])
     .index("by_owner_date", ["ownerId", "date"])
     .index("by_owner_status_tradePlanId", ["ownerId", "status", "tradePlanId"])
