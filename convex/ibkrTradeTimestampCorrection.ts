@@ -155,6 +155,9 @@ export const correctIbkrTradeTimestamps = internalMutation({
       acceptedPostCutoffMatches,
       pendingPostCutoffMatches,
     ] = await Promise.all([
+      // Do not add the minimum bound here: matching pre-floor rows must be
+      // fetched so the checks below fail loudly. The maximum is intentionally
+      // excluded and made diagnosable by the post-cutoff queries and one-to-one guard.
       Promise.all(
         args.executions.map(({ executionId }) =>
           ctx.db
