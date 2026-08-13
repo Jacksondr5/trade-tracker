@@ -157,11 +157,8 @@ function easternWallClockToTimestamp(parts: DateTimeParts): number | undefined {
 function ibkrTimestampParts(
   value: string | undefined,
 ): DateTimeParts | undefined {
-  if (!value) return undefined;
+  if (!value || !/^\d{8}(?:;\d{6})?$/.test(value)) return undefined;
   const [datePart, timePart = "000000"] = value.split(";");
-  if (!datePart || datePart.length !== 8 || timePart.length < 6) {
-    return undefined;
-  }
   return {
     day: Number(datePart.slice(6, 8)),
     hour: Number(timePart.slice(0, 2)),

@@ -1,5 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import {
+  assertIbkrEasternTimezoneAvailable,
   parseIbkrEasternTimestamp,
   parseIbkrTimestampAsUtcWallClock,
 } from "../shared/brokerage/ibkr-flex/time";
@@ -127,6 +128,8 @@ export const correctIbkrTradeTimestamps = internalMutation({
   },
   returns: correctionSummaryValidator,
   handler: async (ctx, args) => {
+    assertIbkrEasternTimezoneAvailable();
+
     const executionMap = new Map(
       args.executions.map((entry) => [entry.executionId, entry.rawDateTime]),
     );
