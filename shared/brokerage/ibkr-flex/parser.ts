@@ -5,7 +5,10 @@ import type {
   IbkrFlexPositionSnapshot,
   IbkrFlexTrade,
 } from "./types";
-import { parseIbkrEasternTimestamp } from "./time";
+import {
+  assertIbkrEasternTimezoneAvailable,
+  parseIbkrEasternTimestamp,
+} from "./time";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -282,6 +285,8 @@ function parseCash(
 }
 
 export function parseIbkrFlexActivityXml(xml: string): IbkrFlexParseResult {
+  assertIbkrEasternTimezoneAvailable();
+
   const result: IbkrFlexParseResult = {
     cashSnapshots: [],
     errors: [],

@@ -20,6 +20,14 @@ const easternFormatter = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
 });
 
+const TIMEZONE_UNAVAILABLE_MESSAGE =
+  "IBKR ingestion failed: timezone data unavailable in this runtime — America/New_York resolved to UTC";
+
+let timezoneAvailability:
+  | { error: Error; verified: false }
+  | { verified: true }
+  | undefined;
+
 function easternParts(timestamp: number): DateTimeParts | undefined {
   const values = new Map(
     easternFormatter
@@ -37,6 +45,35 @@ function easternParts(timestamp: number): DateTimeParts | undefined {
   };
   if (Object.values(parts).some((part) => part === undefined)) return undefined;
   return parts as DateTimeParts;
+}
+
+export function assertIbkrEasternTimezoneAvailable(): void {
+  if (timezoneAvailability?.verified) return;
+  if (timezoneAvailability && !timezoneAvailability.verified) {
+    throw timezoneAvailability.error;
+  }
+
+  const summer = easternParts(Date.UTC(2026, 7, 10, 12));
+  const winter = easternParts(Date.UTC(2026, 0, 15, 12));
+  const verified =
+    summer?.year === 2026 &&
+    summer.month === 8 &&
+    summer.day === 10 &&
+    summer.hour === 8 &&
+    summer.minute === 0 &&
+    summer.second === 0 &&
+    winter?.year === 2026 &&
+    winter.month === 1 &&
+    winter.day === 15 &&
+    winter.hour === 7 &&
+    winter.minute === 0 &&
+    winter.second === 0;
+  if (!verified) {
+    const error = new Error(TIMEZONE_UNAVAILABLE_MESSAGE);
+    timezoneAvailability = { error, verified: false };
+    throw error;
+  }
+  timezoneAvailability = { verified: true };
 }
 
 function utcFromParts(parts: DateTimeParts): number | undefined {
