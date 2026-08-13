@@ -28,6 +28,8 @@ const correctionSummaryValidator = v.object({
   earliestStoredTimestamp: v.union(v.number(), v.null()),
   latestCorrectedTimestamp: v.union(v.number(), v.null()),
   latestStoredTimestamp: v.union(v.number(), v.null()),
+  maximumCreationTime: v.number(),
+  minimumCreationTime: v.number(),
   pendingInboxTradesCorrected: v.number(),
   requestedExecutions: v.number(),
   rows: v.array(correctionRowValidator),
@@ -53,20 +55,25 @@ type Candidate =
       table: "trades";
     });
 
-function auditHash(candidates: Candidate[]): string {
+function auditHash(
+  candidates: Candidate[],
+  creationTimeBounds: { maximum: number; minimum: number },
+): string {
   let hash = 2_166_136_261;
-  const input = candidates
-    .map((candidate) =>
-      [
-        candidate.table,
-        candidate.id,
-        candidate.currentDate,
-        candidate.executionId,
-        candidate.rawDateTime,
-      ].join(":"),
-    )
-    .sort()
-    .join("|");
+  const input = [
+    `creation-time-bounds:${creationTimeBounds.minimum}:${creationTimeBounds.maximum}`,
+    ...candidates
+      .map((candidate) =>
+        [
+          candidate.table,
+          candidate.id,
+          candidate.currentDate,
+          candidate.executionId,
+          candidate.rawDateTime,
+        ].join(":"),
+      )
+      .sort(),
+  ].join("|");
   for (let index = 0; index < input.length; index++) {
     hash ^= input.charCodeAt(index);
     hash = Math.imul(hash, 16_777_619);
@@ -108,6 +115,7 @@ export const correctIbkrTradeTimestamps = internalMutation({
       v.object({ executionId: v.string(), rawDateTime: v.string() }),
     ),
     expectedAuditToken: v.optional(v.string()),
+    maximumCreationTime: v.number(),
     minimumCreationTime: v.number(),
   },
   returns: correctionSummaryValidator,
@@ -122,6 +130,15 @@ export const correctIbkrTradeTimestamps = internalMutation({
     ) {
       throw new ConvexError(
         `IBKR timestamp correction refused: executions must contain 1-${MAX_EXECUTIONS} unique execution ids`,
+      );
+    }
+    if (
+      !Number.isFinite(args.minimumCreationTime) ||
+      !Number.isFinite(args.maximumCreationTime) ||
+      args.minimumCreationTime >= args.maximumCreationTime
+    ) {
+      throw new ConvexError(
+        "IBKR timestamp correction refused: creation-time bounds must be finite and increasing",
       );
     }
 
@@ -143,6 +160,7 @@ export const correctIbkrTradeTimestamps = internalMutation({
       if (trade.source !== "ibkr" || trade.externalId === undefined) continue;
       const rawDateTime = executionMap.get(trade.externalId);
       if (rawDateTime === undefined) continue;
+      if (trade._creationTime >= args.maximumCreationTime) continue;
       if (trade._creationTime < args.minimumCreationTime) {
         throw new ConvexError(
           `IBKR timestamp correction refused: accepted trade ${trade._id} predates the first successful Flex sync`,
@@ -163,6 +181,7 @@ export const correctIbkrTradeTimestamps = internalMutation({
       if (trade.source !== "ibkr" || trade.externalId === undefined) continue;
       const rawDateTime = executionMap.get(trade.externalId);
       if (rawDateTime === undefined) continue;
+      if (trade._creationTime >= args.maximumCreationTime) continue;
       if (trade._creationTime < args.minimumCreationTime) {
         throw new ConvexError(
           `IBKR timestamp correction refused: inbox trade ${trade._id} predates the first successful Flex sync`,
@@ -199,7 +218,10 @@ export const correctIbkrTradeTimestamps = internalMutation({
     const safeToExecute = candidates.every(
       (candidate) => candidate.currentDate === candidate.expectedStoredDate,
     );
-    const auditToken = auditHash(candidates);
+    const auditToken = auditHash(candidates, {
+      maximum: args.maximumCreationTime,
+      minimum: args.minimumCreationTime,
+    });
     if (!args.dryRun && !safeToExecute) {
       throw new ConvexError(
         "IBKR timestamp correction refused: a stored timestamp does not match the raw report's expected UTC misparse",
@@ -236,6 +258,8 @@ export const correctIbkrTradeTimestamps = internalMutation({
       earliestStoredTimestamp: storedRange.earliest,
       latestCorrectedTimestamp: correctedRange.latest,
       latestStoredTimestamp: storedRange.latest,
+      maximumCreationTime: args.maximumCreationTime,
+      minimumCreationTime: args.minimumCreationTime,
       pendingInboxTradesCorrected: candidates.filter(
         (candidate) => candidate.table === "inboxTrades",
       ).length,

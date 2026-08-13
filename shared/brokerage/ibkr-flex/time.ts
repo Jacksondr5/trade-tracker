@@ -91,6 +91,7 @@ function easternWallClockToTimestamp(parts: DateTimeParts): number | undefined {
   if (desiredWallClock === undefined) return undefined;
 
   let candidate = desiredWallClock;
+  const attemptedCandidates = new Map<number, number>();
   for (let attempt = 0; attempt < 4; attempt++) {
     const actualParts = easternParts(candidate);
     if (!actualParts) return undefined;
@@ -98,7 +99,20 @@ function easternWallClockToTimestamp(parts: DateTimeParts): number | undefined {
     if (actualWallClock === undefined) return undefined;
     const adjustment = desiredWallClock - actualWallClock;
     if (adjustment === 0) return candidate;
-    candidate += adjustment;
+    attemptedCandidates.set(candidate, actualWallClock);
+    const nextCandidate = candidate + adjustment;
+    if (attemptedCandidates.has(nextCandidate)) {
+      // Spring-forward gaps oscillate between the wall clocks on either side
+      // of the transition. Match Temporal's compatible disambiguation by
+      // moving the nonexistent local time forward by the gap.
+      return [...attemptedCandidates]
+        .filter(([, wallClock]) => wallClock > desiredWallClock)
+        .sort(
+          ([candidateA, wallClockA], [candidateB, wallClockB]) =>
+            wallClockA - wallClockB || candidateA - candidateB,
+        )[0]?.[0];
+    }
+    candidate = nextCandidate;
   }
   return undefined;
 }

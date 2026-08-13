@@ -52,7 +52,7 @@ describe("IBKR trade timestamp correction", () => {
         assetType: "stock",
         date: Date.UTC(2026, 7, 10, 9, 35, 18),
         direction: "long",
-        externalId: "exec-manual",
+        externalId: "exec-summer",
         ownerId: "owner-a",
         price: 50,
         quantity: 1,
@@ -75,7 +75,12 @@ describe("IBKR trade timestamp correction", () => {
 
     const dryRun = await t.mutation(
       internal.ibkrTradeTimestampCorrection.correctIbkrTradeTimestamps,
-      { dryRun: true, executions, minimumCreationTime: 0 },
+      {
+        dryRun: true,
+        executions,
+        maximumCreationTime: Number.MAX_SAFE_INTEGER,
+        minimumCreationTime: 0,
+      },
     );
     expect(dryRun).toMatchObject({
       acceptedTradesCorrected: 1,
@@ -83,6 +88,8 @@ describe("IBKR trade timestamp correction", () => {
       earliestStoredTimestamp: Date.UTC(2026, 0, 15, 9, 35, 18),
       latestCorrectedTimestamp: Date.UTC(2026, 7, 10, 13, 35, 18),
       latestStoredTimestamp: Date.UTC(2026, 7, 10, 9, 35, 18),
+      maximumCreationTime: Number.MAX_SAFE_INTEGER,
+      minimumCreationTime: 0,
       pendingInboxTradesCorrected: 1,
       requestedExecutions: 2,
       safeToExecute: true,
@@ -112,6 +119,36 @@ describe("IBKR trade timestamp correction", () => {
       },
     ]);
 
+    const rowsAfterDryRun = await t.run(async (ctx) => ({
+      acceptedCsv: await ctx.db.get(ids.acceptedCsv),
+      acceptedFlex: await ctx.db.get(ids.acceptedFlex),
+      acceptedManual: await ctx.db.get(ids.acceptedManual),
+      pendingFlex: await ctx.db.get(ids.pendingFlex),
+    }));
+    expect(rowsAfterDryRun.acceptedFlex?.date).toBe(
+      Date.UTC(2026, 7, 10, 9, 35, 18),
+    );
+    expect(rowsAfterDryRun.pendingFlex?.date).toBe(
+      Date.UTC(2026, 0, 15, 9, 35, 18),
+    );
+    expect(rowsAfterDryRun.acceptedCsv?.date).toBe(
+      Date.UTC(2026, 7, 10, 13, 35, 18),
+    );
+    expect(rowsAfterDryRun.acceptedManual?.date).toBe(
+      Date.UTC(2026, 7, 10, 9, 35, 18),
+    );
+
+    const changedBoundsDryRun = await t.mutation(
+      internal.ibkrTradeTimestampCorrection.correctIbkrTradeTimestamps,
+      {
+        dryRun: true,
+        executions,
+        maximumCreationTime: Number.MAX_SAFE_INTEGER - 1,
+        minimumCreationTime: 0,
+      },
+    );
+    expect(changedBoundsDryRun.auditToken).not.toBe(dryRun.auditToken);
+
     await expect(
       t.mutation(
         internal.ibkrTradeTimestampCorrection.correctIbkrTradeTimestamps,
@@ -119,6 +156,7 @@ describe("IBKR trade timestamp correction", () => {
           dryRun: false,
           executions,
           expectedAuditToken: "stale",
+          maximumCreationTime: Number.MAX_SAFE_INTEGER,
           minimumCreationTime: 0,
         },
       ),
@@ -130,6 +168,7 @@ describe("IBKR trade timestamp correction", () => {
         dryRun: false,
         executions,
         expectedAuditToken: dryRun.auditToken,
+        maximumCreationTime: Number.MAX_SAFE_INTEGER,
         minimumCreationTime: 0,
       },
     );
@@ -152,6 +191,7 @@ describe("IBKR trade timestamp correction", () => {
           dryRun: false,
           executions,
           expectedAuditToken: dryRun.auditToken,
+          maximumCreationTime: Number.MAX_SAFE_INTEGER,
           minimumCreationTime: 0,
         },
       ),
@@ -180,6 +220,7 @@ describe("IBKR trade timestamp correction", () => {
       {
         dryRun: true,
         executions: [executions[0]!],
+        maximumCreationTime: Number.MAX_SAFE_INTEGER,
         minimumCreationTime: 0,
       },
     );
@@ -197,6 +238,7 @@ describe("IBKR trade timestamp correction", () => {
           dryRun: false,
           executions: [executions[0]!],
           expectedAuditToken: dryRun.auditToken,
+          maximumCreationTime: Number.MAX_SAFE_INTEGER,
           minimumCreationTime: 0,
         },
       ),
@@ -227,9 +269,41 @@ describe("IBKR trade timestamp correction", () => {
         {
           dryRun: true,
           executions: [executions[0]!],
+          maximumCreationTime: Number.MAX_SAFE_INTEGER,
           minimumCreationTime: creationTime + 1,
         },
       ),
     ).rejects.toThrow("predates the first successful Flex sync");
+  });
+
+  it("excludes records created at or after the parser deployment cutoff", async () => {
+    const t = convexTest(schema, modules);
+    const creationTime = await t.run(async (ctx) => {
+      const id = await ctx.db.insert("trades", {
+        assetType: "stock",
+        date: Date.UTC(2026, 7, 10, 13, 35, 18),
+        direction: "long",
+        externalId: "exec-summer",
+        ownerId: "owner-a",
+        price: 50,
+        quantity: 1,
+        side: "buy",
+        source: "ibkr",
+        ticker: "KRE",
+      });
+      return (await ctx.db.get(id))!._creationTime;
+    });
+
+    await expect(
+      t.mutation(
+        internal.ibkrTradeTimestampCorrection.correctIbkrTradeTimestamps,
+        {
+          dryRun: true,
+          executions: [executions[0]!],
+          maximumCreationTime: creationTime,
+          minimumCreationTime: 0,
+        },
+      ),
+    ).rejects.toThrow("did not match stored records one-to-one");
   });
 });
