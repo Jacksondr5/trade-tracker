@@ -18,6 +18,7 @@ import type * as campaigns from "../campaigns.js";
 import type * as crons from "../crons.js";
 import type * as e2eSeed from "../e2eSeed.js";
 import type * as ibkrFlexWorkflow from "../ibkrFlexWorkflow.js";
+import type * as ibkrTradeTimestampCorrection from "../ibkrTradeTimestampCorrection.js";
 import type * as importTasks from "../importTasks.js";
 import type * as imports from "../imports.js";
 import type * as lib_auth from "../lib/auth.js";
@@ -59,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   e2eSeed: typeof e2eSeed;
   ibkrFlexWorkflow: typeof ibkrFlexWorkflow;
+  ibkrTradeTimestampCorrection: typeof ibkrTradeTimestampCorrection;
   importTasks: typeof importTasks;
   imports: typeof imports;
   "lib/auth": typeof lib_auth;
