@@ -5,6 +5,7 @@ import type {
   IbkrFlexPositionSnapshot,
   IbkrFlexTrade,
 } from "./types";
+import { parseIbkrEasternTimestamp } from "./time";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -74,51 +75,6 @@ function requiredNumber(
 
 function normalizeTicker(value: string | undefined): string | undefined {
   return value?.trim().toUpperCase() || undefined;
-}
-
-function parseIbkrTimestamp(value: string | undefined): number | undefined {
-  if (!value) return undefined;
-  const [datePart, timePart = "000000"] = value.split(";");
-  if (!datePart || datePart.length < 8 || timePart.length < 6) {
-    return undefined;
-  }
-
-  const year = Number(datePart.slice(0, 4));
-  const month = Number(datePart.slice(4, 6));
-  const day = Number(datePart.slice(6, 8));
-  const hour = Number(timePart.slice(0, 2));
-  const minute = Number(timePart.slice(2, 4));
-  const second = Number(timePart.slice(4, 6));
-  const parts = [year, month, day, hour, minute, second];
-  if (parts.some((part) => !Number.isInteger(part))) return undefined;
-  if (
-    month < 1 ||
-    month > 12 ||
-    day < 1 ||
-    day > 31 ||
-    hour < 0 ||
-    hour > 23 ||
-    minute < 0 ||
-    minute > 59 ||
-    second < 0 ||
-    second > 59
-  ) {
-    return undefined;
-  }
-  const timestamp = Date.UTC(year, month - 1, day, hour, minute, second);
-  if (!Number.isFinite(timestamp)) return undefined;
-  const check = new Date(timestamp);
-  if (
-    check.getUTCFullYear() !== year ||
-    check.getUTCMonth() + 1 !== month ||
-    check.getUTCDate() !== day ||
-    check.getUTCHours() !== hour ||
-    check.getUTCMinutes() !== minute ||
-    check.getUTCSeconds() !== second
-  ) {
-    return undefined;
-  }
-  return timestamp;
 }
 
 function reportDateFromStatement(statement: UnknownRecord): string | undefined {
@@ -225,7 +181,7 @@ function parseTrade(
   const quantity = Math.abs(
     requiredNumber(row, ["quantity", "qty"], "quantity"),
   );
-  const date = parseIbkrTimestamp(dateTime);
+  const date = parseIbkrEasternTimestamp(dateTime);
   if (date === undefined) throw new Error("dateTime is required");
 
   const direction = inferDirection({ openClose, side });

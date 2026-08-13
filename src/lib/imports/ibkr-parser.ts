@@ -2,6 +2,7 @@ import Papa from "papaparse";
 import type { ParseResult } from "./types";
 import { withParserValidation } from "./validation";
 import type { InboxTradeCandidate } from "../../../shared/imports/types";
+import { parseIbkrEasternTimestamp } from "../../../shared/brokerage/ibkr-flex/time";
 
 interface IBKRRow {
   "Buy/Sell": string;
@@ -17,22 +18,9 @@ interface IBKRRow {
 }
 
 function parseIBKRDateTime(dt: string): number {
-  if (!dt || !dt.includes(";")) {
+  const timestamp = parseIbkrEasternTimestamp(dt);
+  if (timestamp === undefined) {
     throw new Error(`Invalid IBKR DateTime format: "${dt}"`);
-  }
-  const [datePart, timePart] = dt.split(";");
-  if (!datePart || datePart.length < 8 || !timePart || timePart.length < 6) {
-    throw new Error(`Invalid IBKR DateTime format: "${dt}"`);
-  }
-  const year = parseInt(datePart.slice(0, 4));
-  const month = parseInt(datePart.slice(4, 6)) - 1;
-  const day = parseInt(datePart.slice(6, 8));
-  const hour = parseInt(timePart.slice(0, 2));
-  const minute = parseInt(timePart.slice(2, 4));
-  const second = parseInt(timePart.slice(4, 6));
-  const timestamp = new Date(year, month, day, hour, minute, second).getTime();
-  if (!Number.isFinite(timestamp)) {
-    throw new Error(`Invalid IBKR DateTime values: "${dt}"`);
   }
   return timestamp;
 }

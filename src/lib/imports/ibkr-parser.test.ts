@@ -30,7 +30,23 @@ describe("parseIBKRCSV", () => {
     expect(trade.validationErrors).toEqual([]);
     expect(trade.validationWarnings).toEqual([]);
 
-    expect(trade.date).toBe(new Date(2026, 1, 20, 9, 30, 0).getTime());
+    expect(trade.date).toBe(Date.UTC(2026, 1, 20, 14, 30, 0));
+  });
+
+  it("uses the Eastern DST offset for each CSV trade date", () => {
+    const csv = [
+      "ClientAccountID,Symbol,Buy/Sell,Open/CloseIndicator,TradePrice,Quantity,DateTime,Taxes,OrderType,TransactionType",
+      "U1,KRE,BUY,O,50,1,20260810;093518,0,MKT,",
+      "U1,KRE,SELL,C,51,1,20260115;093518,0,MKT,",
+    ].join("\n");
+
+    const result = parseIBKRCSV(csv);
+
+    expect(result.errors).toEqual([]);
+    expect(result.trades.map((trade) => trade.date)).toEqual([
+      Date.UTC(2026, 7, 10, 13, 35, 18),
+      Date.UTC(2026, 0, 15, 14, 35, 18),
+    ]);
   });
 
   it("applies direction inference matrix from Open/CloseIndicator + Buy/Sell", () => {
@@ -100,7 +116,9 @@ describe("parseIBKRCSV", () => {
     expect(result.trades[0].side).toBeUndefined();
     expect(result.trades[0].direction).toBeUndefined();
     expect(result.trades[0].validationErrors).toContain("Side is required");
-    expect(result.trades[0].validationErrors).toContain("Direction is required");
+    expect(result.trades[0].validationErrors).toContain(
+      "Direction is required",
+    );
   });
 
   it("surfaces Papa Parse CSV errors", () => {

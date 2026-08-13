@@ -30,7 +30,7 @@ describe("parseIbkrFlexActivityXml", () => {
       taxes: 0,
       ticker: "AAPL",
     });
-    expect(result.trades[0].date).toBe(Date.UTC(2026, 7, 5, 9, 30, 5));
+    expect(result.trades[0].date).toBe(Date.UTC(2026, 7, 5, 13, 30, 5));
 
     expect(result.positionSnapshots).toEqual([
       {
@@ -109,6 +109,27 @@ describe("parseIbkrFlexActivityXml", () => {
         currencyRows.map((snapshot) => [snapshot.currency, snapshot.cash]),
       ),
     ).toEqual({ JPY: -0.01, USD: 75 });
+  });
+
+  it("interprets offset-free trade timestamps in America/New_York across DST", () => {
+    const result = parseIbkrFlexActivityXml(`
+      <FlexQueryResponse>
+        <FlexStatements>
+          <FlexStatement accountId="U1" toDate="20260810">
+            <Trades>
+              <Trade accountId="U1" symbol="KRE" dateTime="20260810;093518" buySell="BUY" openCloseIndicator="O" quantity="1" tradePrice="50" ibExecID="summer" />
+              <Trade accountId="U1" symbol="KRE" dateTime="20260115;093518" buySell="SELL" openCloseIndicator="C" quantity="1" tradePrice="51" ibExecID="winter" />
+            </Trades>
+          </FlexStatement>
+        </FlexStatements>
+      </FlexQueryResponse>
+    `);
+
+    expect(result.errors).toEqual([]);
+    expect(result.trades.map((trade) => trade.date)).toEqual([
+      Date.UTC(2026, 7, 10, 13, 35, 18),
+      Date.UTC(2026, 0, 15, 14, 35, 18),
+    ]);
   });
 
   it("uses a stable fallback external id when an execution id is missing", () => {
