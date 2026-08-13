@@ -3,6 +3,8 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import { auditHash } from "./ibkrTradeTimestampCorrection";
 import schema from "./schema";
 
 interface ImportMetaWithGlob extends ImportMeta {
@@ -21,6 +23,42 @@ const executions = [
 ];
 
 describe("IBKR trade timestamp correction", () => {
+  it("binds both derived timestamp values into the audit token", () => {
+    const candidate = {
+      correctedDate: Date.UTC(2026, 7, 10, 13, 35, 18),
+      currentDate: Date.UTC(2026, 7, 10, 9, 35, 18),
+      executionId: "exec-summer",
+      expectedStoredDate: Date.UTC(2026, 7, 10, 9, 35, 18),
+      id: "candidate-id" as Id<"trades">,
+      rawDateTime: "20260810;093518",
+      table: "trades" as const,
+      ticker: "KRE",
+    };
+    const bounds = { maximum: 2, minimum: 1 };
+    const exclusions = { accepted: [], pending: [] };
+    const token = auditHash([candidate], bounds, exclusions);
+
+    expect(
+      auditHash(
+        [{ ...candidate, correctedDate: candidate.correctedDate + 1 }],
+        bounds,
+        exclusions,
+      ),
+    ).not.toBe(token);
+    expect(
+      auditHash(
+        [
+          {
+            ...candidate,
+            expectedStoredDate: candidate.expectedStoredDate + 1,
+          },
+        ],
+        bounds,
+        exclusions,
+      ),
+    ).not.toBe(token);
+  });
+
   it("derives exact Flex corrections from raw timestamps and leaves CSV history untouched", async () => {
     const t = convexTest(schema, modules);
     const ids = await t.run(async (ctx) => {

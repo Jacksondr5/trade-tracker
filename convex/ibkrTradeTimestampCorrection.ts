@@ -60,7 +60,7 @@ type Candidate =
       table: "trades";
     });
 
-function auditHash(
+export function auditHash(
   candidates: Candidate[],
   creationTimeBounds: { maximum: number; minimum: number },
   cutoffExclusions: { accepted: string[]; pending: string[] },
@@ -75,8 +75,10 @@ function auditHash(
         [
           candidate.table,
           candidate.id,
+          candidate.correctedDate,
           candidate.currentDate,
           candidate.executionId,
+          candidate.expectedStoredDate,
           candidate.rawDateTime,
         ].join(":"),
       )
