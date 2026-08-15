@@ -42,6 +42,12 @@ describe("counterpart service surface", () => {
 
   async function seedRecentFills() {
     return await t.run(async (ctx) => {
+      const tradePlanId = await ctx.db.insert("tradePlans", {
+        instrumentSymbol: "AAPL",
+        name: "Condemned AAPL plan",
+        ownerId,
+        status: "watching",
+      });
       const accepted = await ctx.db.insert("trades", {
         assetType: "stock",
         date: Date.UTC(2026, 4, 14, 15, 0, 0),
@@ -52,6 +58,7 @@ describe("counterpart service surface", () => {
         side: "buy",
         source: "ibkr",
         ticker: "AAPL",
+        tradePlanId,
       });
       const pending = await ctx.db.insert("inboxTrades", {
         assetType: "stock",
@@ -82,7 +89,7 @@ describe("counterpart service surface", () => {
     });
   }
 
-  it("resurfaces unanswered fills and excludes them only after a response", async () => {
+  it("resurfaces unanswered fills, treats planned positions as bare during the probe, and excludes only answered fills", async () => {
     const { accepted, pending } = await seedRecentFills();
     const noteId = await t.mutation(internal.counterpart.addNote, {
       content: "  AAPL entry was a starter position.  ",

@@ -14,6 +14,11 @@ const MAX_POSITION_TRADES = 5_000;
 const MAX_CHECK_INS_IN_RECENT_WINDOW = 100;
 const MAX_NOTES_PER_TICKER = 3;
 
+// The probe treats every open position as bare because condemned plans retain
+// stale tradePlanId links. Remove this override after clean-slate cleanup clears
+// those links and the plan-link inference is trustworthy again.
+const PROBE_TREAT_ALL_OPEN_POSITIONS_AS_BARE = true;
+
 const checkInWindowValidator = v.union(
   v.literal("late_morning"),
   v.literal("afternoon"),
@@ -141,7 +146,7 @@ function fillFromInboxTrade(trade: Doc<"inboxTrades">) {
 function buildOpenPositions(trades: Doc<"trades">[]) {
   return deriveOpenPositions(trades).map(({ hasTradePlan, ...position }) => ({
     ...position,
-    bare: !hasTradePlan,
+    bare: PROBE_TREAT_ALL_OPEN_POSITIONS_AS_BARE || !hasTradePlan,
   }));
 }
 
