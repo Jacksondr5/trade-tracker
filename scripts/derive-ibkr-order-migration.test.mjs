@@ -44,4 +44,10 @@ describe("derive IBKR order migration payload", () => {
       "Order order-1 is only partially selected; omitted executions: exec-2",
     );
   });
+
+  it("refuses malformed execution input before deriving the mapping", () => {
+    expect(() => deriveIbkrOrderMigration(xml, [undefined])).toThrow(
+      "Execution id at index 0 must be a string",
+    );
+  });
 });

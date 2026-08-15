@@ -40,9 +40,12 @@ function optionalNumber(row, field, label) {
 }
 
 export function deriveIbkrOrderMigration(xml, requestedExecutionIds) {
-  const executionIds = requestedExecutionIds.map((value) =>
-    String(value).trim(),
-  );
+  const executionIds = requestedExecutionIds.map((value, index) => {
+    if (typeof value !== "string") {
+      throw new Error(`Execution id at index ${index} must be a string`);
+    }
+    return value.trim();
+  });
   if (
     executionIds.length === 0 ||
     executionIds.some((value) => !value) ||

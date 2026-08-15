@@ -310,6 +310,44 @@ describe("IBKR execution-to-order migration", () => {
     ).rejects.toThrow("do not reconcile with the supplied order rows");
   });
 
+  it("refuses a matching execution created before the minimum creation time", async () => {
+    const t = convexTest(schema, modules);
+    const ids = await seedMigrationRows(t);
+    const creationTime = await t.run(async (ctx) =>
+      (await ctx.db.get(ids.accepted))!._creationTime,
+    );
+
+    await expect(
+      t.mutation(internal.ibkrOrderMigration.migrateIbkrExecutionsToOrders, {
+        dryRun: true,
+        maximumCreationTime: creationTime + 2,
+        minimumCreationTime: creationTime + 1,
+        orders: [orders[0]!],
+      }),
+    ).rejects.toThrow(
+      "accepted-exec predates the first successful Flex sync",
+    );
+  });
+
+  it("refuses and reports a matching execution at the maximum creation-time cutoff", async () => {
+    const t = convexTest(schema, modules);
+    const ids = await seedMigrationRows(t);
+    const creationTime = await t.run(async (ctx) =>
+      (await ctx.db.get(ids.accepted))!._creationTime,
+    );
+
+    await expect(
+      t.mutation(internal.ibkrOrderMigration.migrateIbkrExecutionsToOrders, {
+        dryRun: true,
+        maximumCreationTime: creationTime,
+        minimumCreationTime: 0,
+        orders: [orders[0]!],
+      }),
+    ).rejects.toThrow(
+      "supplied executions did not match stored records one-to-one; maximumCreationTime excluded 1 execution ids",
+    );
+  });
+
   it("refuses an accepted multi-fill group and a pre-existing target order id", async () => {
     const t = convexTest(schema, modules);
     await seedMigrationRows(t);

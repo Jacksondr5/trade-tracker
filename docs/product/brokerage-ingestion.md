@@ -173,7 +173,8 @@ Use stable keys for dedupe:
   returned content while retaining older reports as historical evidence
 - broker-native order ID (`ibOrderID`) when importing IBKR trades; execution
   IDs remain in the Flex query only as the migration bridge for older records
-- fallback composite keys only when IBKR does not provide a stable execution ID
+- fallback composite keys only for CSV-era imports; Flex ingestion rejects
+  order rows without `ibOrderID`
 
 Convex ingestion mutations should accept repeated calls for the same report
 without duplicating inbox trades, snapshots, or reconciliation issues.
