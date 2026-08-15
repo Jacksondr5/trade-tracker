@@ -14,6 +14,8 @@
       <Trades>
         <Trade accountId="U2222222" assetCategory="STK" symbol="aapl" dateTime="20260805;093005" buySell="BUY" openCloseIndicator="O" quantity="10" tradePrice="190.00" ibCommission="-1.25" taxes="0" orderType="LMT" ibExecID="0000e1.12345.01" currency="USD" />
         <Trade accountId="U2222222" assetCategory="STK" symbol="MSFT" dateTime="20260805;103012" buySell="SELL" openCloseIndicator="C" quantity="-2" tradePrice="420.00" ibCommission="-0.75" taxes="0.03" orderType="MKT" ibExecID="0000e1.12345.02" currency="USD" />
+        <Order accountId="U2222222" assetCategory="STK" symbol="aapl" dateTime="20260805;093005" buySell="BUY" openCloseIndicator="O" quantity="10" tradePrice="190.00" ibCommission="-1.25" taxes="0" orderType="LMT" ibOrderID="order-1" currency="USD" />
+        <Order accountId="U2222222" assetCategory="STK" symbol="MSFT" dateTime="20260805;103012" buySell="SELL" openCloseIndicator="C" quantity="-2" tradePrice="420.00" ibCommission="-0.75" taxes="0.03" orderType="MKT" ibOrderID="order-2" currency="USD" />
         <AssetSummary accountId="U2222222" assetCategory="STK" symbol="" quantity="0" tradePrice="" currency="USD" />
       </Trades>
       <OpenPositions>

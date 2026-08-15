@@ -20,8 +20,7 @@ describe("parseIbkrFlexActivityXml", () => {
       brokerageAccountId: "U2222222",
       currency: "USD",
       direction: "long",
-      executionId: "0000e1.12345.01",
-      externalId: "0000e1.12345.01",
+      externalId: "order-1",
       fees: -1.25,
       orderType: "LMT",
       price: 190,
@@ -86,7 +85,7 @@ describe("parseIbkrFlexActivityXml", () => {
       },
     ]);
     expect(result.warnings).toEqual([
-      "No Trades section found",
+      "No Orders section found",
       "No OpenPositions section found",
     ]);
     const emptyAccountCash = result.cashSnapshots.filter(
@@ -117,8 +116,8 @@ describe("parseIbkrFlexActivityXml", () => {
         <FlexStatements>
           <FlexStatement accountId="U1" toDate="20260810">
             <Trades>
-              <Trade accountId="U1" symbol="KRE" dateTime="20260810;093518" buySell="BUY" openCloseIndicator="O" quantity="1" tradePrice="50" ibExecID="summer" />
-              <Trade accountId="U1" symbol="KRE" dateTime="20260115;093518" buySell="SELL" openCloseIndicator="C" quantity="1" tradePrice="51" ibExecID="winter" />
+              <Order accountId="U1" assetCategory="STK" currency="USD" symbol="KRE" dateTime="20260810;093518" buySell="BUY" openCloseIndicator="O" quantity="1" tradePrice="50" ibOrderID="summer" />
+              <Order accountId="U1" assetCategory="STK" currency="USD" symbol="KRE" dateTime="20260115;093518" buySell="SELL" openCloseIndicator="C" quantity="1" tradePrice="51" ibOrderID="winter" />
             </Trades>
           </FlexStatement>
         </FlexStatements>
@@ -132,26 +131,21 @@ describe("parseIbkrFlexActivityXml", () => {
     ]);
   });
 
-  it("uses a stable fallback external id when an execution id is missing", () => {
+  it("requires ibOrderID for supported orders", () => {
     const result = parseIbkrFlexActivityXml(`
       <FlexQueryResponse>
         <FlexStatements>
           <FlexStatement accountId="U1" toDate="20260805">
             <Trades>
-              <Trade accountId="U1" symbol="MSFT" dateTime="20260805;103012" buySell="SELL" openCloseIndicator="C" quantity="-2" tradePrice="420" />
+              <Order accountId="U1" assetCategory="STK" currency="USD" symbol="MSFT" dateTime="20260805;103012" buySell="SELL" openCloseIndicator="C" quantity="-2" tradePrice="420" />
             </Trades>
           </FlexStatement>
         </FlexStatements>
       </FlexQueryResponse>
     `);
 
-    expect(result.trades[0]).toMatchObject({
-      externalId: "ibkr-flex|U1|MSFT|20260805;103012|sell|420|2",
-      ticker: "MSFT",
-    });
-    expect(result.warnings).toContain(
-      "Missing execution id for MSFT; used fallback external id",
-    );
+    expect(result.trades).toEqual([]);
+    expect(result.errors).toContain("Order row 1: ibOrderID is required");
   });
 
   it("ignores the AssetSummary row nested inside Trades", () => {
@@ -169,7 +163,7 @@ describe("parseIbkrFlexActivityXml", () => {
         <FlexStatements>
           <FlexStatement accountId="U1" toDate="20260514">
             <Trades>
-              <Trade accountId="U1" symbol="SPY" dateTime="20260514;120000" buySell="BUY" quantity="1" tradePrice="500" ibExecID="exec-1" />
+              <Order accountId="U1" assetCategory="STK" currency="USD" symbol="SPY" dateTime="20260514;120000" buySell="BUY" quantity="1" tradePrice="500" ibOrderID="order-1" />
             </Trades>
           </FlexStatement>
         </FlexStatements>
@@ -192,8 +186,8 @@ describe("parseIbkrFlexActivityXml", () => {
         <FlexStatements>
           <FlexStatement accountId="U1" toDate="20260514">
             <Trades>
-              <Trade accountId="U1" symbol="AAPL" dateTime="20260514;120000" buySell="BUY" quantity="1" tradePrice="500" ibExecID="exec-1" />
-              <Trade accountId="U1" dateTime="20260514;120100" buySell="SELL" quantity="1" tradePrice="501" ibExecID="exec-2" />
+              <Order accountId="U1" assetCategory="STK" currency="USD" symbol="AAPL" dateTime="20260514;120000" buySell="BUY" quantity="1" tradePrice="500" ibOrderID="order-1" />
+              <Order accountId="U1" assetCategory="STK" currency="USD" dateTime="20260514;120100" buySell="SELL" quantity="1" tradePrice="501" ibOrderID="order-2" />
             </Trades>
           </FlexStatement>
         </FlexStatements>
@@ -201,7 +195,7 @@ describe("parseIbkrFlexActivityXml", () => {
     `);
 
     expect(result.trades).toHaveLength(1);
-    expect(result.errors).toEqual(["Trade row 2: symbol is required"]);
+    expect(result.errors).toEqual(["Order row 2: symbol is required"]);
   });
 
   it("rejects invalid overflow dates in IBKR timestamps", () => {
@@ -210,7 +204,7 @@ describe("parseIbkrFlexActivityXml", () => {
         <FlexStatements>
           <FlexStatement accountId="U1" toDate="20260514">
             <Trades>
-              <Trade accountId="U1" symbol="SPY" dateTime="20261301;120000" buySell="BUY" quantity="1" tradePrice="500" ibExecID="exec-1" />
+              <Order accountId="U1" assetCategory="STK" currency="USD" symbol="SPY" dateTime="20261301;120000" buySell="BUY" quantity="1" tradePrice="500" ibOrderID="order-1" />
             </Trades>
           </FlexStatement>
         </FlexStatements>
@@ -218,6 +212,51 @@ describe("parseIbkrFlexActivityXml", () => {
     `);
 
     expect(result.trades).toEqual([]);
-    expect(result.errors).toContain("Trade row 1: dateTime is required");
+    expect(result.errors).toContain("Order row 1: dateTime is required");
+  });
+
+  it("skips unsupported asset categories and non-USD stock orders with explicit warnings", () => {
+    const result = parseIbkrFlexActivityXml(`
+      <FlexQueryResponse>
+        <FlexStatements>
+          <FlexStatement accountId="U1" toDate="20260810">
+            <Trades>
+              <Order accountId="U1" assetCategory="CRYPTO" currency="USD" symbol="BTC.USD" ibOrderID="crypto-1" />
+              <Order accountId="U1" assetCategory="CASH" currency="JPY" symbol="USD.JPY" ibOrderID="cash-1" />
+              <Order accountId="U1" assetCategory="STK" currency="JPY" symbol="6988" ibOrderID="japan-1" />
+            </Trades>
+          </FlexStatement>
+        </FlexStatements>
+      </FlexQueryResponse>
+    `);
+
+    expect(result.errors).toEqual([]);
+    expect(result.trades).toEqual([]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        "Skipped IBKR Order crypto-1 (BTC.USD): asset category CRYPTO is unsupported; only USD stock orders are supported",
+        "Skipped IBKR Order cash-1 (USD.JPY): asset category CASH is unsupported; only USD stock orders are supported",
+        "Skipped IBKR Order japan-1 (6988): currency JPY is unsupported; only USD stock orders are supported",
+      ]),
+    );
+  });
+
+  it("fails visibly when execution rows are present without Order rows", () => {
+    const result = parseIbkrFlexActivityXml(`
+      <FlexQueryResponse>
+        <FlexStatements>
+          <FlexStatement accountId="U1" toDate="20260810">
+            <Trades>
+              <Trade accountId="U1" assetCategory="STK" currency="USD" symbol="KRE" dateTime="20260810;093518" buySell="BUY" quantity="1" tradePrice="50" ibExecID="exec-1" />
+            </Trades>
+          </FlexStatement>
+        </FlexStatements>
+      </FlexQueryResponse>
+    `);
+
+    expect(result.trades).toEqual([]);
+    expect(result.errors).toContain(
+      "Trades section contains Trade rows but no Order rows; order-level ingestion requires Orders",
+    );
   });
 });

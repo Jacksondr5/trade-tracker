@@ -90,7 +90,6 @@ const normalizedTradeValidator = v.object({
   currency: v.optional(v.string()),
   date: v.number(),
   direction: v.optional(v.union(v.literal("long"), v.literal("short"))),
-  executionId: v.optional(v.string()),
   externalId: v.string(),
   fees: v.optional(v.number()),
   orderType: v.optional(v.string()),

@@ -171,8 +171,10 @@ Use stable keys for dedupe:
 - one current raw report attachment on the sync run, with a content hash for
   audit and duplicate identification; a re-sync repoints the run to newly
   returned content while retaining older reports as historical evidence
-- broker-native execution ID when importing trades
-- fallback composite keys only when IBKR does not provide a stable execution ID
+- broker-native order ID (`ibOrderID`) when importing IBKR trades; execution
+  IDs remain in the Flex query only as the migration bridge for older records
+- fallback composite keys only for CSV-era imports; Flex ingestion rejects
+  order rows without `ibOrderID`
 
 Convex ingestion mutations should accept repeated calls for the same report
 without duplicating inbox trades, snapshots, or reconciliation issues.
@@ -187,6 +189,17 @@ reconciliation-issue counters. It deliberately preserves the run ID and key
 fields (`connectionId`, owner, source, report type/date, and query ID), while
 prior raw-report rows and already-ingested canonical records remain historical
 or idempotently replaceable evidence.
+
+IBKR order ingestion reads `<Order>` rows rather than execution-level `<Trade>`
+rows. This preserves IBKR's aggregated quantity, weighted-average price, and
+commission when an order fills in pieces. A report containing Trade rows but no
+Order rows fails visibly instead of silently falling back to split fills.
+
+The supported IBKR trade scope is USD-denominated stock orders. Other asset
+categories and non-USD orders are skipped with an explicit warning naming the
+order, instrument, and reason. In particular, a `STK` asset category does not
+override the currency guard: JPY-denominated stocks are not imported as though
+their prices were USD. Crypto and cash/currency operations remain deferred.
 
 ## Reconciliation
 
