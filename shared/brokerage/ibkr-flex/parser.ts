@@ -125,25 +125,6 @@ function inferDirection(args: {
   return undefined;
 }
 
-function fallbackExternalId(args: {
-  accountId: string;
-  dateTime: string | undefined;
-  price: number;
-  quantity: number;
-  side: "buy" | "sell";
-  ticker: string;
-}): string {
-  return [
-    "ibkr-flex",
-    args.accountId,
-    args.ticker,
-    args.dateTime ?? "unknown-date",
-    args.side,
-    args.price,
-    args.quantity,
-  ].join("|");
-}
-
 function findFlexStatements(root: UnknownRecord): UnknownRecord[] {
   const response = asRecord(root.FlexQueryResponse) ?? root;
   const statementsWrapper = asRecord(response.FlexStatements);
@@ -159,15 +140,33 @@ function childRows(
   return asArray(wrapper?.[rowKey]);
 }
 
-function parseTrade(
+function parseOrder(
   row: UnknownRecord,
   statement: UnknownRecord,
 ): { trade?: IbkrFlexTrade; warnings: string[] } {
   const warnings: string[] = [];
+  const orderId = firstText(row, ["ibOrderID", "ibOrderId", "orderID"]);
+  const assetCategory = firstText(row, ["assetCategory"]);
+  const currency = firstText(row, ["currency"]);
   const accountId = firstText(row, ["accountId", "acctId", "ibAccountId"]);
   const ticker = normalizeTicker(
     firstText(row, ["symbol", "underlyingSymbol", "description"]),
   );
+  const orderLabel = orderId ?? "without ibOrderID";
+  const tickerLabel = ticker ? ` (${ticker})` : "";
+  if (assetCategory?.trim().toUpperCase() !== "STK") {
+    warnings.push(
+      `Skipped IBKR Order ${orderLabel}${tickerLabel}: asset category ${assetCategory ?? "missing"} is unsupported; only USD stock orders are supported`,
+    );
+    return { warnings };
+  }
+  if (currency?.trim().toUpperCase() !== "USD") {
+    warnings.push(
+      `Skipped IBKR Order ${orderLabel}${tickerLabel}: currency ${currency ?? "missing"} is unsupported; only USD stock orders are supported`,
+    );
+    return { warnings };
+  }
+
   const dateTime = firstText(row, ["dateTime", "tradeDateTime", "tradeDate"]);
   const side = inferSide(firstText(row, ["buySell", "side"]));
   const openClose = firstText(row, [
@@ -177,6 +176,7 @@ function parseTrade(
   ]);
 
   if (!accountId) throw new Error("accountId is required");
+  if (!orderId) throw new Error("ibOrderID is required");
   if (!ticker) throw new Error("symbol is required");
   if (!side) throw new Error("buySell is required");
 
@@ -194,37 +194,14 @@ function parseTrade(
     );
   }
 
-  const executionId = firstText(row, [
-    "ibExecID",
-    "ibExecId",
-    "execID",
-    "executionId",
-  ]);
-  const externalId =
-    executionId ??
-    fallbackExternalId({
-      accountId,
-      dateTime,
-      price,
-      quantity,
-      side,
-      ticker,
-    });
-  if (!executionId) {
-    warnings.push(
-      `Missing execution id for ${ticker}; used fallback external id`,
-    );
-  }
-
   return {
     trade: {
       assetType: "stock",
       brokerageAccountId: accountId,
-      currency: firstText(row, ["currency"]),
+      currency,
       date,
       direction,
-      executionId,
-      externalId,
+      externalId: orderId,
       fees: numberFrom(row, ["ibCommission", "commission", "fees"]),
       orderType: firstText(row, ["orderType"]),
       price,
@@ -327,25 +304,34 @@ export function parseIbkrFlexActivityXml(xml: string): IbkrFlexParseResult {
       continue;
     }
 
-    const tradeRows = childRows(statement, "Trades", "Trade");
+    const orderRows = childRows(statement, "Trades", "Order");
+    const executionRows = childRows(statement, "Trades", "Trade");
     const positionRows = childRows(statement, "OpenPositions", "OpenPosition");
     const cashRows = childRows(statement, "CashReport", "CashReportCurrency");
 
-    if (tradeRows.length === 0) result.warnings.push("No Trades section found");
+    if (orderRows.length === 0) {
+      if (executionRows.length > 0) {
+        result.errors.push(
+          "Trades section contains Trade rows but no Order rows; order-level ingestion requires Orders",
+        );
+      } else {
+        result.warnings.push("No Orders section found");
+      }
+    }
     if (positionRows.length === 0) {
       result.warnings.push("No OpenPositions section found");
     }
     if (cashRows.length === 0)
       result.warnings.push("No CashReport section found");
 
-    for (const [index, row] of tradeRows.entries()) {
+    for (const [index, row] of orderRows.entries()) {
       try {
-        const parsed = parseTrade(row, statement);
+        const parsed = parseOrder(row, statement);
         if (parsed.trade) result.trades.push(parsed.trade);
         result.warnings.push(...parsed.warnings);
       } catch (error) {
         result.errors.push(
-          `Trade row ${index + 1}: ${error instanceof Error ? error.message : String(error)}`,
+          `Order row ${index + 1}: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }

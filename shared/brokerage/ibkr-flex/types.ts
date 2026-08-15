@@ -4,7 +4,6 @@ export type IbkrFlexTrade = {
   currency?: string;
   date: number;
   direction?: "long" | "short";
-  executionId?: string;
   externalId: string;
   fees?: number;
   orderType?: string;

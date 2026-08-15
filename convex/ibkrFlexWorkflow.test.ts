@@ -63,6 +63,7 @@ const readyXml = `
       <FlexStatement accountId="U1234567" toDate="20260514">
         <Trades>
           <Trade accountId="U1234567" assetCategory="STK" symbol="AAPL" dateTime="20260514;093005" buySell="BUY" openCloseIndicator="O" quantity="10" tradePrice="189.50" ibExecID="exec-1" currency="USD" />
+          <Order accountId="U1234567" assetCategory="STK" symbol="AAPL" dateTime="20260514;093005" buySell="BUY" openCloseIndicator="O" quantity="10" tradePrice="189.50" ibOrderID="order-1" currency="USD" />
         </Trades>
         <OpenPositions>
           <OpenPosition accountId="U1234567" assetCategory="STK" symbol="AAPL" position="10" positionValue="1895.00" currency="USD" />
@@ -89,6 +90,7 @@ const multiAccountReadyXml = `
         <Trades>
           <AssetSummary accountId="U2222222" assetCategory="STK" symbol="" quantity="0" tradePrice="" currency="USD" />
           <Trade accountId="U2222222" assetCategory="STK" symbol="MSFT" dateTime="20260514;103012" buySell="SELL" openCloseIndicator="C" quantity="-2" tradePrice="420.00" ibExecID="exec-2" currency="USD" />
+          <Order accountId="U2222222" assetCategory="STK" symbol="MSFT" dateTime="20260514;103012" buySell="SELL" openCloseIndicator="C" quantity="-2" tradePrice="420.00" ibOrderID="order-2" currency="USD" />
         </Trades>
         <OpenPositions>
           <OpenPosition accountId="U2222222" assetCategory="STK" symbol="MSFT" position="3" positionValue="1260.00" currency="USD" />
