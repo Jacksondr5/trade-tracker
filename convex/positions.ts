@@ -1,6 +1,7 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireUser } from "./lib/auth";
+import { deriveOpenPositions } from "./lib/openPositions";
 
 // Validator for position returned from getPositions query
 const positionValidator = v.object({
@@ -25,88 +26,16 @@ export const getPositions = query({
   returns: v.array(positionValidator),
   handler: async (ctx) => {
     const ownerId = await requireUser(ctx);
-    const trades = (
-      await ctx.db
-        .query("trades")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-        .collect()
-    );
+    const trades = await ctx.db
+      .query("trades")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
 
-    // Group trades by ticker and direction
-    // Key format: "ticker:direction"
-    const positionMap = new Map<
-      string,
-      {
-        direction: "long" | "short";
-        netQuantity: number;
-        ticker: string;
-        totalEntryCost: number;
-        totalEntryQuantity: number;
-      }
-    >();
-
-    for (const trade of trades) {
-      const key = `${trade.ticker}:${trade.direction}`;
-
-      if (!positionMap.has(key)) {
-        positionMap.set(key, {
-          direction: trade.direction,
-          netQuantity: 0,
-          ticker: trade.ticker,
-          totalEntryCost: 0,
-          totalEntryQuantity: 0,
-        });
-      }
-
-      const position = positionMap.get(key)!;
-
-      // Determine if this trade opens or closes the position
-      // Long: buy opens, sell closes
-      // Short: sell opens, buy closes
-      const isOpening =
-        (trade.direction === "long" && trade.side === "buy") ||
-        (trade.direction === "short" && trade.side === "sell");
-
-      if (isOpening) {
-        // Opening trade - add to position and track for average cost
-        position.netQuantity += trade.quantity;
-        position.totalEntryCost += trade.price * trade.quantity;
-        position.totalEntryQuantity += trade.quantity;
-      } else {
-        // Closing trade - reduce position
-        position.netQuantity -= trade.quantity;
-      }
-    }
-
-    // Convert to array and filter out zero-quantity positions
-    const positions: Array<{
-      averageCost: number;
-      direction: "long" | "short";
-      quantity: number;
-      ticker: string;
-    }> = [];
-
-    for (const position of positionMap.values()) {
-      // Only include positions with non-zero quantity
-      if (position.netQuantity > 0) {
-        // Calculate weighted average cost from entry trades
-        const averageCost =
-          position.totalEntryQuantity > 0
-            ? position.totalEntryCost / position.totalEntryQuantity
-            : 0;
-
-        positions.push({
-          averageCost,
-          direction: position.direction,
-          quantity: position.netQuantity,
-          ticker: position.ticker,
-        });
-      }
-    }
-
-    // Sort by ticker for consistent ordering
-    positions.sort((a, b) => a.ticker.localeCompare(b.ticker));
-
-    return positions;
+    return deriveOpenPositions(trades).map((position) => ({
+      averageCost: position.averageCost,
+      direction: position.direction,
+      quantity: position.quantity,
+      ticker: position.ticker,
+    }));
   },
 });

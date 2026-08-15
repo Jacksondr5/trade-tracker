@@ -5,6 +5,7 @@ import {
   getEasternDateString,
   getRecentBusinessDateRange,
 } from "./lib/ibkrSchedule";
+import { deriveOpenPositions } from "./lib/openPositions";
 import { parseIbkrEasternTimestamp } from "../shared/brokerage/ibkr-flex/time";
 
 const RECENT_BUSINESS_DAYS = 5;
@@ -92,6 +93,12 @@ function nextCalendarDate(date: string): string {
   return cursor.toISOString().slice(0, 10);
 }
 
+function previousCalendarDate(date: string): string {
+  const cursor = new Date(`${date}T12:00:00.000Z`);
+  cursor.setUTCDate(cursor.getUTCDate() - 1);
+  return cursor.toISOString().slice(0, 10);
+}
+
 function trimRequiredContent(content: string): string {
   const trimmed = content.trim();
   if (!trimmed) throw new Error("Note content is required");
@@ -132,55 +139,10 @@ function fillFromInboxTrade(trade: Doc<"inboxTrades">) {
 }
 
 function buildOpenPositions(trades: Doc<"trades">[]) {
-  const positions = new Map<
-    string,
-    {
-      direction: "long" | "short";
-      hasTradePlan: boolean;
-      netQuantity: number;
-      ticker: string;
-      totalEntryCost: number;
-      totalEntryQuantity: number;
-    }
-  >();
-
-  for (const trade of trades) {
-    const key = `${trade.ticker}:${trade.direction}`;
-    const position = positions.get(key) ?? {
-      direction: trade.direction,
-      hasTradePlan: false,
-      netQuantity: 0,
-      ticker: trade.ticker,
-      totalEntryCost: 0,
-      totalEntryQuantity: 0,
-    };
-    const isOpening =
-      (trade.direction === "long" && trade.side === "buy") ||
-      (trade.direction === "short" && trade.side === "sell");
-    if (isOpening) {
-      position.netQuantity += trade.quantity;
-      position.totalEntryCost += trade.price * trade.quantity;
-      position.totalEntryQuantity += trade.quantity;
-      position.hasTradePlan ||= trade.tradePlanId !== undefined;
-    } else {
-      position.netQuantity -= trade.quantity;
-    }
-    positions.set(key, position);
-  }
-
-  return [...positions.values()]
-    .filter((position) => position.netQuantity > 0)
-    .map((position) => ({
-      averageCost:
-        position.totalEntryQuantity > 0
-          ? position.totalEntryCost / position.totalEntryQuantity
-          : 0,
-      bare: !position.hasTradePlan,
-      direction: position.direction,
-      quantity: position.netQuantity,
-      ticker: position.ticker,
-    }))
-    .sort((a, b) => a.ticker.localeCompare(b.ticker));
+  return deriveOpenPositions(trades).map(({ hasTradePlan, ...position }) => ({
+    ...position,
+    bare: !hasTradePlan,
+  }));
 }
 
 export const getDailyContext = internalQuery({
@@ -339,6 +301,16 @@ export const addNote = internalMutation({
   },
 });
 
+export const areNoteIdsValid = internalQuery({
+  args: { noteIds: v.array(v.string()) },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    return args.noteIds.every(
+      (noteId) => ctx.db.normalizeId("notes", noteId) !== null,
+    );
+  },
+});
+
 export const logCheckIn = internalMutation({
   args: {
     kind: checkInKindValidator,
@@ -357,9 +329,21 @@ export const logCheckIn = internalMutation({
         q.eq("ownerId", args.ownerId).eq("date", date),
       )
       .take(3);
-    const existing = sameDayCheckIns.find(
+    let existing = sameDayCheckIns.find(
       (checkIn) => checkIn.window === args.window,
     );
+    if (!existing && args.respondedAt !== undefined) {
+      const priorDayCheckIns = await ctx.db
+        .query("checkIns")
+        .withIndex("by_owner_date", (q) =>
+          q.eq("ownerId", args.ownerId).eq("date", previousCalendarDate(date)),
+        )
+        .take(3);
+      existing = priorDayCheckIns.find(
+        (checkIn) =>
+          checkIn.respondedAt === undefined && checkIn.window === args.window,
+      );
+    }
     if (!existing) {
       return await ctx.db.insert("checkIns", {
         date,

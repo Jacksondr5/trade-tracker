@@ -5,7 +5,20 @@ import { httpAction } from "./_generated/server";
 
 type JsonObject = Record<string, unknown>;
 
-class JsonValidationError extends Error {}
+class HttpRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
+class JsonValidationError extends HttpRequestError {
+  constructor(message: string) {
+    super(message, 400);
+  }
+}
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -18,6 +31,17 @@ export function isCounterpartRequestAuthorized(req: Request): boolean {
   const expectedToken = process.env.COUNTERPART_TOKEN;
   if (!expectedToken) return false;
   return req.headers.get("authorization") === `Bearer ${expectedToken}`;
+}
+
+export function isCounterpartOwnerAuthorized(ownerId: string): boolean {
+  const configuredOwnerId = process.env.COUNTERPART_OWNER_ID?.trim();
+  return Boolean(configuredOwnerId && ownerId === configuredOwnerId);
+}
+
+function requireCounterpartOwner(ownerId: string): void {
+  if (!isCounterpartOwnerAuthorized(ownerId)) {
+    throw new HttpRequestError("Forbidden", 403);
+  }
 }
 
 async function readJson(req: Request): Promise<JsonObject> {
@@ -38,7 +62,7 @@ function requireString(body: JsonObject, key: string, label = key): string {
   if (typeof value !== "string" || value.trim() === "") {
     throw new JsonValidationError(`${label} is required`);
   }
-  return value;
+  return value.trim();
 }
 
 function optionalString(
@@ -149,8 +173,8 @@ async function authorizedJson(
   try {
     return await handler(await readJson(req));
   } catch (error) {
-    if (!(error instanceof JsonValidationError)) throw error;
-    return jsonResponse({ error: error.message }, 400);
+    if (!(error instanceof HttpRequestError)) throw error;
+    return jsonResponse({ error: error.message }, error.status);
   }
 }
 
@@ -159,9 +183,11 @@ const http = httpRouter();
 http.route({
   handler: httpAction(async (ctx, req) => {
     return await authorizedJson(req, async (body) => {
+      const args = validateDailyContextBody(body);
+      requireCounterpartOwner(args.ownerId);
       const result = await ctx.runQuery(
         internal.counterpart.getDailyContext,
-        validateDailyContextBody(body),
+        args,
       );
       return jsonResponse(result);
     });
@@ -173,10 +199,9 @@ http.route({
 http.route({
   handler: httpAction(async (ctx, req) => {
     return await authorizedJson(req, async (body) => {
-      const noteId = await ctx.runMutation(
-        internal.counterpart.addNote,
-        validateAddNoteBody(body),
-      );
+      const args = validateAddNoteBody(body);
+      requireCounterpartOwner(args.ownerId);
+      const noteId = await ctx.runMutation(internal.counterpart.addNote, args);
       return jsonResponse({ noteId });
     });
   }),
@@ -187,9 +212,19 @@ http.route({
 http.route({
   handler: httpAction(async (ctx, req) => {
     return await authorizedJson(req, async (body) => {
+      const args = validateLogCheckInBody(body);
+      requireCounterpartOwner(args.ownerId);
+      if (
+        args.noteIds &&
+        !(await ctx.runQuery(internal.counterpart.areNoteIdsValid, {
+          noteIds: args.noteIds,
+        }))
+      ) {
+        throw new JsonValidationError("noteIds must contain valid note IDs");
+      }
       const checkInId = await ctx.runMutation(
         internal.counterpart.logCheckIn,
-        validateLogCheckInBody(body),
+        args,
       );
       return jsonResponse({ checkInId });
     });

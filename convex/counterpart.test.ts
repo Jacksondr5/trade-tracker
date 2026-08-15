@@ -4,8 +4,10 @@ import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { internal } from "./_generated/api";
 import {
+  isCounterpartOwnerAuthorized,
   isCounterpartRequestAuthorized,
   validateAddNoteBody,
+  validateDailyContextBody,
   validateLogCheckInBody,
 } from "./http";
 import schema from "./schema";
@@ -35,6 +37,7 @@ describe("counterpart service surface", () => {
   afterEach(() => {
     vi.useRealTimers();
     delete process.env.COUNTERPART_TOKEN;
+    delete process.env.COUNTERPART_OWNER_ID;
   });
 
   async function seedRecentFills() {
@@ -108,6 +111,16 @@ describe("counterpart service surface", () => {
         ticker: "AAPL",
       }),
     ]);
+    expect(
+      await t.query(internal.counterpart.areNoteIdsValid, {
+        noteIds: [noteId],
+      }),
+    ).toBe(true);
+    expect(
+      await t.query(internal.counterpart.areNoteIdsValid, {
+        noteIds: ["not-a-note-id"],
+      }),
+    ).toBe(false);
 
     const checkInId = await t.mutation(internal.counterpart.logCheckIn, {
       kind: "mirror",
@@ -151,6 +164,7 @@ describe("counterpart service surface", () => {
 
   it("enforces the dedicated token and validates external payloads", () => {
     process.env.COUNTERPART_TOKEN = "counterpart-only";
+    process.env.COUNTERPART_OWNER_ID = ownerId;
     expect(
       isCounterpartRequestAuthorized(
         new Request("https://example.test", {
@@ -165,6 +179,11 @@ describe("counterpart service surface", () => {
         }),
       ),
     ).toBe(false);
+    expect(isCounterpartOwnerAuthorized(ownerId)).toBe(true);
+    expect(isCounterpartOwnerAuthorized("another-owner")).toBe(false);
+    expect(validateDailyContextBody({ ownerId: ` ${ownerId} ` })).toEqual({
+      ownerId,
+    });
     expect(() => validateAddNoteBody({ content: " ", ownerId })).toThrow(
       "content is required",
     );
@@ -179,7 +198,7 @@ describe("counterpart service surface", () => {
 
   it("fails closed instead of returning partial positions above the trade limit", async () => {
     await t.run(async (ctx) => {
-      for (let index = 0; index <= 5_000; index += 1) {
+      for (let index = 0; index < 5_000; index += 1) {
         await ctx.db.insert("trades", {
           assetType: "stock",
           date: Date.UTC(2026, 4, 14, 15, 0, 0),
@@ -189,9 +208,33 @@ describe("counterpart service surface", () => {
           quantity: 1,
           side: "buy",
           source: "ibkr",
-          ticker: `LIMIT-${index}`,
+          ticker: "LIMIT",
         });
       }
+    });
+
+    await expect(
+      t.query(internal.counterpart.getDailyContext, { ownerId }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        openPositions: [
+          expect.objectContaining({ quantity: 5_000, ticker: "LIMIT" }),
+        ],
+      }),
+    );
+
+    await t.run(async (ctx) => {
+      await ctx.db.insert("trades", {
+        assetType: "stock",
+        date: Date.UTC(2026, 4, 14, 15, 0, 0),
+        direction: "long",
+        ownerId,
+        price: 100,
+        quantity: 1,
+        side: "buy",
+        source: "ibkr",
+        ticker: "LIMIT",
+      });
     });
 
     await expect(
@@ -199,5 +242,41 @@ describe("counterpart service surface", () => {
     ).rejects.toThrow(
       "Counterpart position calculation exceeds the 5000-trade limit",
     );
+  });
+
+  it("updates an end-of-day check-in answered after Eastern midnight", async () => {
+    const sentAt = Date.UTC(2026, 4, 15, 3, 30, 0); // Thu 23:30 Eastern
+    const respondedAt = Date.UTC(2026, 4, 15, 4, 10, 0); // Fri 00:10 Eastern
+    vi.setSystemTime(sentAt);
+
+    const checkInId = await t.mutation(internal.counterpart.logCheckIn, {
+      kind: "mirror",
+      ownerId,
+      window: "end_of_day",
+    });
+
+    vi.setSystemTime(respondedAt);
+    const updatedCheckInId = await t.mutation(internal.counterpart.logCheckIn, {
+      kind: "mirror",
+      ownerId,
+      respondedAt,
+      window: "end_of_day",
+    });
+    expect(updatedCheckInId).toBe(checkInId);
+
+    vi.setSystemTime(sentAt);
+    const sentDayContext = await t.query(internal.counterpart.getDailyContext, {
+      ownerId,
+    });
+    expect(sentDayContext.todayCheckIns).toEqual([
+      expect.objectContaining({ respondedAt, window: "end_of_day" }),
+    ]);
+
+    vi.setSystemTime(respondedAt);
+    const responseDayContext = await t.query(
+      internal.counterpart.getDailyContext,
+      { ownerId },
+    );
+    expect(responseDayContext.todayCheckIns).toEqual([]);
   });
 });
