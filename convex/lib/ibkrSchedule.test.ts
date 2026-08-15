@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  getEasternDateString,
   getIbkrPollDelayMs,
   getNightlyKickoffDelayMs,
   getPriorBusinessDate,
+  getRecentBusinessDateRange,
   ONE_HOUR_MS,
 } from "./ibkrSchedule";
 
@@ -28,6 +30,15 @@ describe("IBKR nightly Eastern schedule", () => {
     expect(getPriorBusinessDate(Date.UTC(2026, 4, 19, 5, 0, 0))).toBe(
       "2026-05-18",
     );
+  });
+
+  it("uses an Eastern weekday window for recent counterpart fills", () => {
+    const fridayNoonEastern = Date.UTC(2026, 4, 15, 16, 0, 0);
+    expect(getEasternDateString(fridayNoonEastern)).toBe("2026-05-15");
+    expect(getRecentBusinessDateRange(fridayNoonEastern, 5)).toEqual({
+      endDate: "2026-05-15",
+      startDate: "2026-05-11",
+    });
   });
 
   it("exponentially backs off polling and caps the delay", () => {

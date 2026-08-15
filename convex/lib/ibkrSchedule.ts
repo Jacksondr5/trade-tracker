@@ -30,6 +30,39 @@ function easternDateTime(now: number): EasternDateTime {
   };
 }
 
+export function getEasternDateString(now: number): string {
+  const eastern = easternDateTime(now);
+  return `${eastern.year}-${String(eastern.month).padStart(2, "0")}-${String(
+    eastern.day,
+  ).padStart(2, "0")}`;
+}
+
+/** Returns a calendar range containing the most recent N Eastern weekdays. */
+export function getRecentBusinessDateRange(
+  now: number,
+  count: number,
+): { endDate: string; startDate: string } {
+  if (!Number.isInteger(count) || count < 1) {
+    throw new Error("count must be a positive integer");
+  }
+
+  const eastern = easternDateTime(now);
+  const cursor = new Date(
+    Date.UTC(eastern.year, eastern.month - 1, eastern.day),
+  );
+  let included = 0;
+  while (included < count) {
+    const day = cursor.getUTCDay();
+    if (day !== 0 && day !== 6) included += 1;
+    if (included < count) cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+
+  return {
+    endDate: getEasternDateString(now),
+    startDate: cursor.toISOString().slice(0, 10),
+  };
+}
+
 export function getPriorBusinessDate(now: number): string {
   const eastern = easternDateTime(now);
   const prior = new Date(
