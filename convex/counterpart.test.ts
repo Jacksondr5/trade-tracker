@@ -264,6 +264,15 @@ describe("counterpart service surface", () => {
     });
     expect(updatedCheckInId).toBe(checkInId);
 
+    vi.setSystemTime(respondedAt + 60_000);
+    const retriedCheckInId = await t.mutation(internal.counterpart.logCheckIn, {
+      kind: "mirror",
+      ownerId,
+      respondedAt,
+      window: "end_of_day",
+    });
+    expect(retriedCheckInId).toBe(checkInId);
+
     vi.setSystemTime(sentAt);
     const sentDayContext = await t.query(internal.counterpart.getDailyContext, {
       ownerId,

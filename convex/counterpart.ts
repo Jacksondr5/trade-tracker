@@ -339,10 +339,13 @@ export const logCheckIn = internalMutation({
           q.eq("ownerId", args.ownerId).eq("date", previousCalendarDate(date)),
         )
         .take(3);
-      existing = priorDayCheckIns.find(
-        (checkIn) =>
-          checkIn.respondedAt === undefined && checkIn.window === args.window,
+      const priorWindowCheckIns = priorDayCheckIns.filter(
+        (checkIn) => checkIn.window === args.window,
       );
+      existing =
+        priorWindowCheckIns.find(
+          (checkIn) => checkIn.respondedAt === undefined,
+        ) ?? priorWindowCheckIns[0];
     }
     if (!existing) {
       return await ctx.db.insert("checkIns", {
