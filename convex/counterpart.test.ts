@@ -176,4 +176,28 @@ describe("counterpart service surface", () => {
       }),
     ).toThrow("window must be one of");
   });
+
+  it("fails closed instead of returning partial positions above the trade limit", async () => {
+    await t.run(async (ctx) => {
+      for (let index = 0; index <= 5_000; index += 1) {
+        await ctx.db.insert("trades", {
+          assetType: "stock",
+          date: Date.UTC(2026, 4, 14, 15, 0, 0),
+          direction: "long",
+          ownerId,
+          price: 100,
+          quantity: 1,
+          side: "buy",
+          source: "ibkr",
+          ticker: `LIMIT-${index}`,
+        });
+      }
+    });
+
+    await expect(
+      t.query(internal.counterpart.getDailyContext, { ownerId }),
+    ).rejects.toThrow(
+      "Counterpart position calculation exceeds the 5000-trade limit",
+    );
+  });
 });

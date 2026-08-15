@@ -349,6 +349,8 @@ export default defineSchema({
     ownerId: v.string(),
     respondedAt: v.optional(v.number()),
     sentAt: v.number(),
+    // A mirror can surface accepted trades and pending inbox trades, so this
+    // stores their serialized IDs rather than a single table-scoped Id type.
     surfacedTradeIds: v.optional(v.array(v.string())),
     window: v.union(
       v.literal("late_morning"),

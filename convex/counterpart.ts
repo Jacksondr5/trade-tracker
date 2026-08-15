@@ -233,7 +233,7 @@ export const getDailyContext = internalQuery({
       ctx.db
         .query("trades")
         .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
-        .take(MAX_POSITION_TRADES),
+        .take(MAX_POSITION_TRADES + 1),
       ctx.db
         .query("checkIns")
         .withIndex("by_owner_date", (q) =>
@@ -254,6 +254,12 @@ export const getDailyContext = internalQuery({
         .order("desc")
         .take(25),
     ]);
+
+    if (positionTrades.length > MAX_POSITION_TRADES) {
+      throw new Error(
+        `Counterpart position calculation exceeds the ${MAX_POSITION_TRADES}-trade limit`,
+      );
+    }
 
     const answeredFillIds = new Set(
       recentCheckIns
