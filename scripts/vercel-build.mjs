@@ -4,6 +4,8 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const CONVEX_URL_ENV_VAR_NAME = "NEXT_PUBLIC_CONVEX_URL";
+const ALLOWED_USER_IDS_ENV_VAR_NAME = "ALLOWED_USER_IDS";
+const PLAYWRIGHT_OWNER_ID_ENV_VAR_NAME = "PLAYWRIGHT_OWNER_ID";
 const PREVIEW_SEED_FUNCTION = "e2eSeed:setupPreviewData";
 const WORKER_URL_ENV_VAR_NAME = "BRAVOS_WORKER_URL";
 const WORKER_ROUTE_PATH = "/api/internal/bravos/run";
@@ -67,6 +69,18 @@ function configureConvexPreviewEnvironment() {
   requireEnv("CONVEX_DEPLOY_KEY");
 
   const previewName = requireEnv("VERCEL_GIT_COMMIT_REF");
+  const playwrightOwnerId = requireEnv(PLAYWRIGHT_OWNER_ID_ENV_VAR_NAME);
+  const allowedUserIds = Array.from(
+    new Set(
+      [
+        ...(process.env[ALLOWED_USER_IDS_ENV_VAR_NAME] ?? "")
+          .split(",")
+          .map((userId) => userId.trim())
+          .filter(Boolean),
+        playwrightOwnerId,
+      ],
+    ),
+  ).join(",");
   const workerUrl = `https://${deploymentHostFromVercelEnv()}${WORKER_ROUTE_PATH}`;
 
   console.log(
@@ -81,6 +95,28 @@ function configureConvexPreviewEnvironment() {
     previewName,
     WORKER_URL_ENV_VAR_NAME,
     workerUrl,
+    "--force",
+  ]);
+  run("pnpm", [
+    "exec",
+    "convex",
+    "env",
+    "set",
+    "--preview-name",
+    previewName,
+    PLAYWRIGHT_OWNER_ID_ENV_VAR_NAME,
+    playwrightOwnerId,
+    "--force",
+  ]);
+  run("pnpm", [
+    "exec",
+    "convex",
+    "env",
+    "set",
+    "--preview-name",
+    previewName,
+    ALLOWED_USER_IDS_ENV_VAR_NAME,
+    allowedUserIds,
     "--force",
   ]);
 }

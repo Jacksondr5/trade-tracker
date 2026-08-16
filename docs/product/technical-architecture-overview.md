@@ -115,8 +115,10 @@ Contributors should use the product docs for product-wide guidance instead of in
 
 ### Authentication wiring
 
-- Route protection is enforced in `src/middleware.ts` (public auth entrypoints remain `/sign-in` and `/sign-up`).
+- Route protection is enforced in `src/proxy.ts` (public auth entrypoints remain `/sign-in` and `/sign-up`).
 - Convex auth configuration is defined in `convex/auth.config.ts`.
+- Trade Tracker is a private single-user instance. `ALLOWED_USER_IDS` is a comma-separated Convex deployment environment variable of full Clerk `tokenIdentifier`s. `convex/lib/auth.ts` enforces it at `requireUser`, so an unset or empty value denies every identity. `src/proxy.ts` uses the same configured list only to redirect an unlisted signed-in Clerk user to `/private-instance`; Convex remains the authorization boundary.
+- Every shared or preview deployment must configure its intended owner identities explicitly. `pnpm agent:up` adds `PLAYWRIGHT_OWNER_ID` to the worktree-local list so the isolated Playwright fixture remains usable.
 - Changes to auth behavior should be updated in these files first, then reflected in product docs if user-facing behavior changes.
 
 ### Forms

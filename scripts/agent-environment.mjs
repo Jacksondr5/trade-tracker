@@ -130,6 +130,23 @@ export function quoteDotenvValue(value) {
   return `'${value}'`;
 }
 
+export function mergeAllowedUserIds(
+  allowedUserIds = "",
+  requiredUserId,
+) {
+  return Array.from(
+    new Set(
+      [
+        ...allowedUserIds
+          .split(",")
+          .map((userId) => userId.trim())
+          .filter(Boolean),
+        requiredUserId,
+      ],
+    ),
+  ).join(",");
+}
+
 export function readLocalConvexConfig(filePath) {
   const config = JSON.parse(fs.readFileSync(filePath, "utf8"));
   if (

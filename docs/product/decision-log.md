@@ -6,6 +6,23 @@ This document records settled product decisions: what was decided, when, and why
 
 Add an entry when a decision is genuinely settled. Do not record open questions or proposals here.
 
+## 2026-08-16 — Trade Tracker is single-user by application policy
+
+Jackson uses one Clerk instance across several apps, so disabling signups in
+Clerk would be too broad. An authorization audit confirmed user-facing Convex
+functions already scope records through `requireUser`, but another identity
+from that shared Clerk instance could still authenticate into an empty Trade
+Tracker account. Jackson chose to make the product personal by policy rather
+than merely by convention.
+
+The Convex deployment therefore carries an explicit `ALLOWED_USER_IDS`
+allowlist of full Clerk token identifiers, enforced at `requireUser`. Missing
+or empty configuration denies everyone: a deployment mistake locks the app
+instead of reopening it. The route proxy provides an explanatory private
+instance page for unlisted signed-in users, but it is deliberately not the
+security boundary. Per-owner record scoping remains in place as the second,
+independent protection.
+
 ## 2026-08-09 — Partial brokerage reports fail closed and re-syncs must converge
 
 Jackson's first production Flex proof returned only one of two intended IBKR

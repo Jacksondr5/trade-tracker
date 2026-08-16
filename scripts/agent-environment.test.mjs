@@ -7,6 +7,7 @@ import {
   classifyAgentRuntime,
   formatAgentAge,
   getWorktreePresence,
+  mergeAllowedUserIds,
   shouldReapAgentRuntime,
   authFileForOrigin,
   deriveAgentEnvironment,
@@ -71,6 +72,17 @@ test("authFileForOrigin keys state by the complete origin", () => {
   expect(first).not.toBe(second);
   expect(first).not.toBe(third);
   expect(first).toContain(path.join("output", "playwright", "auth"));
+});
+
+test("mergeAllowedUserIds retains configured identities and adds the Playwright fixture once", () => {
+  expect(
+    mergeAllowedUserIds(
+      "https://clerk.example|user_owner, https://clerk.example|user_playwright",
+      "https://clerk.example|user_playwright",
+    ),
+  ).toBe(
+    "https://clerk.example|user_owner,https://clerk.example|user_playwright",
+  );
 });
 
 describe("agent runtime classification", () => {
