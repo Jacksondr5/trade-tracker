@@ -117,8 +117,8 @@ Contributors should use the product docs for product-wide guidance instead of in
 
 - Route protection is enforced in `src/proxy.ts` (public auth entrypoints remain `/sign-in` and `/sign-up`).
 - Convex auth configuration is defined in `convex/auth.config.ts`.
-- Trade Tracker is a private single-user instance. `ALLOWED_USER_IDS` is a comma-separated Convex deployment environment variable of full Clerk `tokenIdentifier`s. `convex/lib/auth.ts` enforces it at `requireUser`, so an unset or empty value denies every identity. `src/proxy.ts` uses the same configured list only to redirect an unlisted signed-in Clerk user to `/private-instance`; Convex remains the authorization boundary.
-- Every shared or preview deployment must configure its intended owner identities explicitly. `pnpm agent:up` adds `PLAYWRIGHT_OWNER_ID` to the worktree-local list so the isolated Playwright fixture remains usable.
+- Trade Tracker is a private single-user instance. `ALLOWED_USER_IDS` is a comma-separated Convex deployment environment variable of full Clerk `tokenIdentifier`s. It **must** be configured on each Convex deployment before deploying this code: `convex/lib/auth.ts` enforces it at `requireUser`, so an unset or empty value denies every identity.
+- Set the same `ALLOWED_USER_IDS` value in the Next.js/Vercel environment to enable `src/proxy.ts`'s explanatory redirect for an unlisted signed-in user. The proxy is only a courtesy layer, not a security boundary: if its variable is absent or empty, it defers to Convex rather than locking out an identity that Convex permits. `pnpm agent:up` adds `PLAYWRIGHT_OWNER_ID` to the worktree-local list so the isolated Playwright fixture remains usable.
 - Changes to auth behavior should be updated in these files first, then reflected in product docs if user-facing behavior changes.
 
 ### Forms

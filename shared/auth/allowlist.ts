@@ -7,6 +7,10 @@ function parseAllowedUserIds(value: string | undefined): Set<string> {
   );
 }
 
+export function hasAllowedUserIds(allowedUserIds: string | undefined): boolean {
+  return parseAllowedUserIds(allowedUserIds).size > 0;
+}
+
 export function isAllowedTokenIdentifier(
   tokenIdentifier: string,
   allowedUserIds: string | undefined,

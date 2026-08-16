@@ -23,6 +23,11 @@ instance page for unlisted signed-in users, but it is deliberately not the
 security boundary. Per-owner record scoping remains in place as the second,
 independent protection.
 
+`ALLOWED_USER_IDS` is not a global kill switch: worker-secret operations and
+the Counterpart HTTP actions use their own fail-closed secrets rather than a
+Clerk identity, so removing an allowlisted identity does not revoke those
+machine-to-machine paths.
+
 ## 2026-08-09 — Partial brokerage reports fail closed and re-syncs must converge
 
 Jackson's first production Flex proof returned only one of two intended IBKR

@@ -137,12 +137,15 @@ export function mergeAllowedUserIds(
   return Array.from(
     new Set(
       [
-        ...allowedUserIds
+        ...(typeof allowedUserIds === "string" ? allowedUserIds : "")
           .split(",")
           .map((userId) => userId.trim())
           .filter(Boolean),
         requiredUserId,
-      ],
+      ]
+        .filter((userId) => typeof userId === "string")
+        .map((userId) => userId.trim())
+        .filter(Boolean),
     ),
   ).join(",");
 }

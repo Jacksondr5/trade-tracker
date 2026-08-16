@@ -85,6 +85,11 @@ test("mergeAllowedUserIds retains configured identities and adds the Playwright 
   );
 });
 
+test("mergeAllowedUserIds omits missing and blank required identities", () => {
+  expect(mergeAllowedUserIds(" owner-a ", undefined)).toBe("owner-a");
+  expect(mergeAllowedUserIds("owner-a", "  ")).toBe("owner-a");
+});
+
 describe("agent runtime classification", () => {
   const runtime = { startedAt: "2026-08-09T12:00:00.000Z" };
   const now = Date.parse("2026-08-09T17:00:00.000Z");

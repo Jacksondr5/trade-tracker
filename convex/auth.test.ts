@@ -66,6 +66,17 @@ describe.sequential("identity allowlist", () => {
     ).rejects.toThrow("Unauthorized");
   });
 
+  it("rejects identifiers that are near-misses of a listed entry", async () => {
+    process.env[ALLOWED_USER_IDS] = allowedOwner;
+
+    await expect(
+      asUser(allowedOwner.slice(0, -1)).query(api.positions.getPositions, {}),
+    ).rejects.toThrow("Unauthorized");
+    await expect(
+      asUser(`${allowedOwner}x`).query(api.positions.getPositions, {}),
+    ).rejects.toThrow("Unauthorized");
+  });
+
   it("allows an explicitly listed identity with whitespace after a comma", async () => {
     process.env[ALLOWED_USER_IDS] = `https://clerk.example.test|user_other, ${allowedOwner}`;
 

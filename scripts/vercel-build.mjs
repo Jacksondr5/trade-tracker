@@ -2,6 +2,7 @@
 
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { mergeAllowedUserIds } from "./agent-environment.mjs";
 
 const CONVEX_URL_ENV_VAR_NAME = "NEXT_PUBLIC_CONVEX_URL";
 const ALLOWED_USER_IDS_ENV_VAR_NAME = "ALLOWED_USER_IDS";
@@ -70,17 +71,11 @@ function configureConvexPreviewEnvironment() {
 
   const previewName = requireEnv("VERCEL_GIT_COMMIT_REF");
   const playwrightOwnerId = requireEnv(PLAYWRIGHT_OWNER_ID_ENV_VAR_NAME);
-  const allowedUserIds = Array.from(
-    new Set(
-      [
-        ...(process.env[ALLOWED_USER_IDS_ENV_VAR_NAME] ?? "")
-          .split(",")
-          .map((userId) => userId.trim())
-          .filter(Boolean),
-        playwrightOwnerId,
-      ],
-    ),
-  ).join(",");
+  const allowedUserIds = mergeAllowedUserIds(
+    process.env[ALLOWED_USER_IDS_ENV_VAR_NAME],
+    playwrightOwnerId,
+  );
+  process.env[ALLOWED_USER_IDS_ENV_VAR_NAME] = allowedUserIds;
   const workerUrl = `https://${deploymentHostFromVercelEnv()}${WORKER_ROUTE_PATH}`;
 
   console.log(

@@ -16,6 +16,9 @@ export async function requireUser(ctx: AuthCtx): Promise<string> {
       process.env.ALLOWED_USER_IDS,
     )
   ) {
+    // This intentionally logs only an authenticated identity rejected by the
+    // allowlist. The unauthenticated branch stays silent so a missing warning
+    // distinguishes it from an allowlist mismatch without changing the client error.
     console.warn("Denied identity not in ALLOWED_USER_IDS", {
       tokenIdentifier: identity.tokenIdentifier,
     });
