@@ -16,6 +16,9 @@ export async function requireUser(ctx: AuthCtx): Promise<string> {
       process.env.ALLOWED_USER_IDS,
     )
   ) {
+    console.warn("Denied identity not in ALLOWED_USER_IDS", {
+      tokenIdentifier: identity.tokenIdentifier,
+    });
     throw new ConvexError("Unauthorized");
   }
 

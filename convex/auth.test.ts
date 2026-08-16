@@ -66,8 +66,8 @@ describe.sequential("identity allowlist", () => {
     ).rejects.toThrow("Unauthorized");
   });
 
-  it("allows an explicitly listed identity", async () => {
-    process.env[ALLOWED_USER_IDS] = allowedOwner;
+  it("allows an explicitly listed identity with whitespace after a comma", async () => {
+    process.env[ALLOWED_USER_IDS] = `https://clerk.example.test|user_other, ${allowedOwner}`;
 
     await expect(
       asUser(allowedOwner).query(api.positions.getPositions, {}),
