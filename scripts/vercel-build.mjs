@@ -111,7 +111,7 @@ function configureConvexPreviewEnvironment() {
     ]);
   } else {
     console.log(
-      "PLAYWRIGHT_OWNER_ID is not configured; skipping fixture provisioning. Preview E2E will fail, and if ALLOWED_USER_IDS is also unset this preview will authorize no one.",
+      "PLAYWRIGHT_OWNER_ID is not configured; skipping Convex preview fixture provisioning. Preview E2E will fail, and if ALLOWED_USER_IDS is also unset this preview will authorize no one.",
     );
   }
   run("pnpm", [
@@ -150,7 +150,7 @@ function runConvexDeploy() {
       args.push("--preview-run", PREVIEW_SEED_FUNCTION);
     } else {
       console.log(
-        "PLAYWRIGHT_OWNER_ID is not configured; skipping fixture provisioning. Preview E2E will fail, and if ALLOWED_USER_IDS is also unset this preview will authorize no one.",
+        "PLAYWRIGHT_OWNER_ID is not configured; skipping preview fixture seeding. Preview E2E will fail, and if ALLOWED_USER_IDS is also unset this preview will authorize no one.",
       );
     }
   }

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@clerk/nextjs/server", () => ({
   clerkMiddleware: <T>(handler: T) => handler,
@@ -9,9 +9,15 @@ vi.mock("next/server", () => ({
   NextResponse: { redirect: vi.fn() },
 }));
 
-import proxy, { shouldRedirectUnlistedUser } from "./proxy";
+let proxy: (typeof import("./proxy"))["default"];
+let shouldRedirectUnlistedUser: typeof import("./proxy").shouldRedirectUnlistedUser;
 
 describe("proxy allowlist courtesy redirect", () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ default: proxy, shouldRedirectUnlistedUser } = await import("./proxy"));
+  });
+
   it.each([undefined, "", "   ", "\t\n"]) (
     "defers to Convex when ALLOWED_USER_IDS is %j",
     (allowedUserIds) => {
@@ -37,19 +43,21 @@ describe("proxy allowlist courtesy redirect", () => {
       { protect: vi.fn() },
     );
 
-    await proxy(auth, { nextUrl: { pathname: "/dashboard" } });
-    await proxy(auth, { nextUrl: { pathname: "/dashboard" } });
+    try {
+      await proxy(auth, { nextUrl: { pathname: "/dashboard" } });
+      await proxy(auth, { nextUrl: { pathname: "/dashboard" } });
 
-    expect(warning).toHaveBeenCalledTimes(1);
-    expect(warning).toHaveBeenCalledWith(
-      "ALLOWED_USER_IDS is not configured in Next.js; proxy is deferring authorization to Convex.",
-    );
-
-    warning.mockRestore();
-    if (originalAllowedUserIds === undefined) {
-      delete process.env.ALLOWED_USER_IDS;
-    } else {
-      process.env.ALLOWED_USER_IDS = originalAllowedUserIds;
+      expect(warning).toHaveBeenCalledTimes(1);
+      expect(warning).toHaveBeenCalledWith(
+        "ALLOWED_USER_IDS is not configured in Next.js; proxy is deferring authorization to Convex.",
+      );
+    } finally {
+      warning.mockRestore();
+      if (originalAllowedUserIds === undefined) {
+        delete process.env.ALLOWED_USER_IDS;
+      } else {
+        process.env.ALLOWED_USER_IDS = originalAllowedUserIds;
+      }
     }
   });
 });
