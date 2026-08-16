@@ -40,6 +40,12 @@ describe("allowlist identity matching", () => {
         `https://other.example.test|user_other, ${tokenIdentifier}`,
       ),
     ).toBe(true);
+    expect(
+      isAllowedClerkUserId(
+        "user_allowed",
+        "https://another-clerk.example.test|user_allowed",
+      ),
+    ).toBe(true);
     expect(isAllowedClerkUserId("user_other", tokenIdentifier)).toBe(false);
   });
 });

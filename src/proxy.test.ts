@@ -9,7 +9,7 @@ vi.mock("next/server", () => ({
   NextResponse: { redirect: vi.fn() },
 }));
 
-import { shouldRedirectUnlistedUser } from "./proxy";
+import proxy, { shouldRedirectUnlistedUser } from "./proxy";
 
 describe("proxy allowlist courtesy redirect", () => {
   it.each([undefined, "", "   ", "\t\n"]) (
@@ -26,5 +26,31 @@ describe("proxy allowlist courtesy redirect", () => {
 
     expect(shouldRedirectUnlistedUser("user_unlisted", allowlist)).toBe(true);
     expect(shouldRedirectUnlistedUser("user_allowed", allowlist)).toBe(false);
+  });
+
+  it("warns an authenticated user when the proxy defers to Convex", async () => {
+    const originalAllowedUserIds = process.env.ALLOWED_USER_IDS;
+    delete process.env.ALLOWED_USER_IDS;
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const auth = Object.assign(
+      async () => ({ userId: "user_unlisted" }),
+      { protect: vi.fn() },
+    );
+
+    await proxy(
+      auth,
+      { nextUrl: { pathname: "/dashboard" } },
+    );
+
+    expect(warning).toHaveBeenCalledWith(
+      "ALLOWED_USER_IDS is not configured in Next.js; proxy is deferring authorization to Convex.",
+    );
+
+    warning.mockRestore();
+    if (originalAllowedUserIds === undefined) {
+      delete process.env.ALLOWED_USER_IDS;
+    } else {
+      process.env.ALLOWED_USER_IDS = originalAllowedUserIds;
+    }
   });
 });

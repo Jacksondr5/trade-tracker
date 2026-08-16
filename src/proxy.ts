@@ -27,11 +27,20 @@ export function shouldRedirectUnlistedUser(
 export default clerkMiddleware(async (auth, request) => {
   const { userId } = await auth();
   const allowedUserIds = process.env.ALLOWED_USER_IDS;
+  const hasConfiguredAllowlist = hasAllowedUserIds(allowedUserIds);
 
   // Convex requireUser is the fail-closed authorization boundary. This proxy
   // only provides a courtesy redirect, so failing closed here adds no security
   // while a missing Next.js variable can lock out a Convex-authorized owner.
   // An empty value therefore denies everyone in Convex but defers here.
+  // Production does not receive the preview bootstrap write-back, so its only
+  // source is the Next.js environment; do not change this defer to fail-closed.
+  if (userId && !hasConfiguredAllowlist) {
+    console.warn(
+      "ALLOWED_USER_IDS is not configured in Next.js; proxy is deferring authorization to Convex.",
+    );
+  }
+
   if (
     shouldRedirectUnlistedUser(userId, allowedUserIds) &&
     request.nextUrl.pathname !== "/private-instance"

@@ -49,6 +49,11 @@ function requireEnv(name) {
   return value;
 }
 
+function optionalEnv(name) {
+  const value = process.env[name]?.trim();
+  return value || undefined;
+}
+
 function deploymentHostFromVercelEnv() {
   const host = process.env.VERCEL_BRANCH_URL ?? process.env.VERCEL_URL;
 
@@ -70,7 +75,7 @@ function configureConvexPreviewEnvironment() {
   requireEnv("CONVEX_DEPLOY_KEY");
 
   const previewName = requireEnv("VERCEL_GIT_COMMIT_REF");
-  const playwrightOwnerId = requireEnv(PLAYWRIGHT_OWNER_ID_ENV_VAR_NAME);
+  const playwrightOwnerId = optionalEnv(PLAYWRIGHT_OWNER_ID_ENV_VAR_NAME);
   const allowedUserIds = mergeAllowedUserIds(
     process.env[ALLOWED_USER_IDS_ENV_VAR_NAME],
     playwrightOwnerId,
@@ -92,17 +97,23 @@ function configureConvexPreviewEnvironment() {
     workerUrl,
     "--force",
   ]);
-  run("pnpm", [
-    "exec",
-    "convex",
-    "env",
-    "set",
-    "--preview-name",
-    previewName,
-    PLAYWRIGHT_OWNER_ID_ENV_VAR_NAME,
-    playwrightOwnerId,
-    "--force",
-  ]);
+  if (playwrightOwnerId) {
+    run("pnpm", [
+      "exec",
+      "convex",
+      "env",
+      "set",
+      "--preview-name",
+      previewName,
+      PLAYWRIGHT_OWNER_ID_ENV_VAR_NAME,
+      playwrightOwnerId,
+      "--force",
+    ]);
+  } else {
+    console.log(
+      "PLAYWRIGHT_OWNER_ID is not configured; skipping preview fixture provisioning and preview E2E will fail.",
+    );
+  }
   run("pnpm", [
     "exec",
     "convex",
@@ -133,12 +144,15 @@ function runConvexDeploy() {
   ];
 
   if (isVercelPreviewBuild()) {
-    args.push(
-      "--preview-create",
-      requireEnv("VERCEL_GIT_COMMIT_REF"),
-      "--preview-run",
-      PREVIEW_SEED_FUNCTION,
-    );
+    args.push("--preview-create", requireEnv("VERCEL_GIT_COMMIT_REF"));
+
+    if (optionalEnv(PLAYWRIGHT_OWNER_ID_ENV_VAR_NAME)) {
+      args.push("--preview-run", PREVIEW_SEED_FUNCTION);
+    } else {
+      console.log(
+        "PLAYWRIGHT_OWNER_ID is not configured; preview fixture seeding is skipped and preview E2E will fail.",
+      );
+    }
   }
 
   run("pnpm", args);
