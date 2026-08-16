@@ -40,6 +40,7 @@ const noteValidator = v.object({
   evidence: v.optional(v.array(noteEvidenceValidator)),
   noteDate: v.number(),
   ownerId: v.string(),
+  origin: v.optional(v.literal("retrospective")),
   tradePlanId: v.optional(v.id("tradePlans")),
 });
 
@@ -238,6 +239,7 @@ async function serializeNotes(ctx: NotesCtx, notes: Doc<"notes">[]) {
           evidence,
           noteDate: note.noteDate,
           ownerId: note.ownerId,
+          origin: note.origin,
           tradePlanId: note.tradePlanId,
         };
       }
@@ -256,6 +258,7 @@ async function serializeNotes(ctx: NotesCtx, notes: Doc<"notes">[]) {
           evidence,
           noteDate: note.noteDate,
           ownerId: note.ownerId,
+          origin: note.origin,
           tradePlanId: note.tradePlanId,
         };
       }
@@ -272,6 +275,7 @@ async function serializeNotes(ctx: NotesCtx, notes: Doc<"notes">[]) {
         evidence,
         noteDate: note.noteDate,
         ownerId: note.ownerId,
+        origin: note.origin,
         tradePlanId: note.tradePlanId,
       };
     }),
