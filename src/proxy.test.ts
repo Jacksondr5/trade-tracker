@@ -37,11 +37,10 @@ describe("proxy allowlist courtesy redirect", () => {
       { protect: vi.fn() },
     );
 
-    await proxy(
-      auth,
-      { nextUrl: { pathname: "/dashboard" } },
-    );
+    await proxy(auth, { nextUrl: { pathname: "/dashboard" } });
+    await proxy(auth, { nextUrl: { pathname: "/dashboard" } });
 
+    expect(warning).toHaveBeenCalledTimes(1);
     expect(warning).toHaveBeenCalledWith(
       "ALLOWED_USER_IDS is not configured in Next.js; proxy is deferring authorization to Convex.",
     );

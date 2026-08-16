@@ -119,6 +119,7 @@ Contributors should use the product docs for product-wide guidance instead of in
 - Convex auth configuration is defined in `convex/auth.config.ts`.
 - Trade Tracker is a private single-user instance. `ALLOWED_USER_IDS` is a comma-separated Convex deployment environment variable of full Clerk `tokenIdentifier`s. It **must** be configured on each Convex deployment before deploying this code: `convex/lib/auth.ts` enforces it at `requireUser`, so an unset or empty value denies every identity.
 - Set the same `ALLOWED_USER_IDS` value in the Next.js/Vercel environment to enable `src/proxy.ts`'s explanatory redirect for an unlisted signed-in user. The proxy is only a courtesy layer, not a security boundary: if its variable is absent or empty, it defers to Convex rather than locking out an identity that Convex permits. `pnpm agent:up` adds `PLAYWRIGHT_OWNER_ID` to the worktree-local list so the isolated Playwright fixture remains usable.
+- Preview fixture provisioning runs during the build. After changing a Vercel environment variable, trigger a fresh preview deployment; re-running preview E2E alone cannot provision or seed an existing Convex preview.
 - Changes to auth behavior should be updated in these files first, then reflected in product docs if user-facing behavior changes.
 
 ### Forms

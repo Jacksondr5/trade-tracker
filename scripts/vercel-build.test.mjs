@@ -52,7 +52,7 @@ test("deploys a preview without a Playwright fixture and skips its seed hook", (
 
   expect(result.status).toBe(0);
   expect(result.stdout).toContain(
-    "preview fixture seeding is skipped and preview E2E will fail",
+    "skipping fixture provisioning. Preview E2E will fail, and if ALLOWED_USER_IDS is also unset this preview will authorize no one",
   );
   expect(result.invocations).toContain("--preview-create fixture-optional");
   expect(result.invocations).not.toContain("--preview-run");
@@ -69,7 +69,7 @@ test("preserves the configured allowlist when the Playwright fixture is absent",
 
   expect(result.status).toBe(0);
   expect(result.stdout).toContain(
-    "skipping preview fixture provisioning and preview E2E will fail",
+    "skipping fixture provisioning. Preview E2E will fail, and if ALLOWED_USER_IDS is also unset this preview will authorize no one",
   );
   expect(result.invocations).toContain(
     "ALLOWED_USER_IDS https://clerk.example.test|user_owner --force",

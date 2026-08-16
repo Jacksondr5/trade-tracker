@@ -12,6 +12,7 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
 ]);
+let hasWarnedAboutUnconfiguredAllowlist = false;
 
 export function shouldRedirectUnlistedUser(
   userId: string | null,
@@ -35,7 +36,14 @@ export default clerkMiddleware(async (auth, request) => {
   // An empty value therefore denies everyone in Convex but defers here.
   // Production does not receive the preview bootstrap write-back, so its only
   // source is the Next.js environment; do not change this defer to fail-closed.
-  if (userId && !hasConfiguredAllowlist) {
+  // This informational warning is sampled once per isolate. Its absence is not
+  // proof of configuration; Vercel settings remain the authoritative source.
+  if (
+    userId &&
+    !hasConfiguredAllowlist &&
+    !hasWarnedAboutUnconfiguredAllowlist
+  ) {
+    hasWarnedAboutUnconfiguredAllowlist = true;
     console.warn(
       "ALLOWED_USER_IDS is not configured in Next.js; proxy is deferring authorization to Convex.",
     );
