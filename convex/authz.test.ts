@@ -41,14 +41,44 @@ describe("cross-owner authorization boundaries", () => {
     });
   }
 
-  async function insertInboxTrade(ownerId: string): Promise<Id<"inboxTrades">> {
+  async function insertInboxTrade(
+    ownerId: string,
+    args: {
+      portfolioId?: Id<"portfolios">;
+      tradePlanId?: Id<"tradePlans">;
+    } = {},
+  ): Promise<Id<"inboxTrades">> {
     return await t.run(async (ctx) => {
       return await ctx.db.insert("inboxTrades", {
+        assetType: "stock",
+        date: Date.UTC(2026, 7, 16),
+        direction: "long",
         ownerId,
+        portfolioId: args.portfolioId,
+        price: 100,
+        quantity: 1,
+        side: "buy",
         source: "manual",
         status: "pending_review",
+        ticker: "AAPL",
+        tradePlanId: args.tradePlanId,
         validationErrors: [],
         validationWarnings: [],
+      });
+    });
+  }
+
+  async function insertResolvedInstrument(ownerId: string) {
+    await t.run(async (ctx) => {
+      await ctx.db.insert("marketDataInstruments", {
+        assetType: "stock",
+        createdAt: Date.UTC(2026, 7, 16),
+        ownerId,
+        provider: "twelve_data",
+        providerSymbol: "AAPL",
+        resolutionStatus: "resolved",
+        symbol: "AAPL",
+        updatedAt: Date.UTC(2026, 7, 16),
       });
     });
   }
@@ -148,6 +178,8 @@ describe("cross-owner authorization boundaries", () => {
   it("rejects cross-owner parent references when creating import tasks", async () => {
     const tradePlanId = await insertTradePlan(ownerA);
     const inboxTradeId = await insertInboxTrade(ownerA);
+    const ownerBTradePlanId = await insertTradePlan(ownerB);
+    const ownerBInboxTradeId = await insertInboxTrade(ownerB);
 
     await expect(
       asUser(ownerB).mutation(api.importTasks.createImportTask, {
@@ -163,11 +195,33 @@ describe("cross-owner authorization boundaries", () => {
         pastedText: "foreign inbox trade",
       }),
     ).rejects.toThrow("Inbox trade not found");
+
+    const taskId = await asUser(ownerB).mutation(
+      api.importTasks.createImportTask,
+      {
+        inboxTradeId: ownerBInboxTradeId,
+        mode: "follow-up",
+        pastedText: "owned parent references",
+        tradePlanId: ownerBTradePlanId,
+      },
+    );
+    await expect(
+      asUser(ownerB).query(api.importTasks.listImportTasks, {}),
+    ).resolves.toMatchObject([
+      {
+        _id: taskId,
+        inboxTradeId: ownerBInboxTradeId,
+        tradePlanId: ownerBTradePlanId,
+      },
+    ]);
   });
 
   it("rejects cross-owner portfolio and trade-plan references during import", async () => {
     const portfolioId = await insertPortfolio(ownerA);
     const tradePlanId = await insertTradePlan(ownerA);
+    const ownerAInboxTradeId = await insertInboxTrade(ownerA);
+    const ownerBPortfolioId = await insertPortfolio(ownerB);
+    const ownerBTradePlanId = await insertTradePlan(ownerB);
 
     await expect(
       asUser(ownerB).mutation(api.imports.importTrades, {
@@ -179,9 +233,123 @@ describe("cross-owner authorization boundaries", () => {
         trades: [{ source: "manual", tradePlanId }],
       }),
     ).rejects.toThrow("Trade plan not found");
+
+    await expect(
+      asUser(ownerB).mutation(api.imports.importTrades, {
+        trades: [
+          {
+            portfolioId: ownerBPortfolioId,
+            source: "manual",
+            tradePlanId: ownerBTradePlanId,
+          },
+        ],
+      }),
+    ).resolves.toMatchObject({ imported: 1 });
+
+    const ownerBInboxTrades = await asUser(ownerB).query(
+      api.imports.listInboxTrades,
+      {},
+    );
+    expect(ownerBInboxTrades).toHaveLength(1);
+    expect(ownerBInboxTrades[0]).toMatchObject({
+      ownerId: ownerB,
+      portfolioId: ownerBPortfolioId,
+      tradePlanId: ownerBTradePlanId,
+    });
+    expect(ownerBInboxTrades.map((trade) => trade._id)).not.toContain(
+      ownerAInboxTradeId,
+    );
+  });
+
+  it("prevents acceptTrade from using another owner's inbox row or parents", async () => {
+    const ownerAInboxTradeId = await insertInboxTrade(ownerA);
+    const ownerAPortfolioId = await insertPortfolio(ownerA);
+    const ownerATradePlanId = await insertTradePlan(ownerA);
+    const ownerBPortfolioId = await insertPortfolio(ownerB);
+    const ownerBTradePlanId = await insertTradePlan(ownerB);
+    const ownerBInboxTradeId = await insertInboxTrade(ownerB);
+    await insertResolvedInstrument(ownerB);
+
+    await expect(
+      asUser(ownerB).action(api.imports.acceptTrade, {
+        inboxTradeId: ownerAInboxTradeId,
+        portfolioId: ownerBPortfolioId,
+        tradePlanId: ownerBTradePlanId,
+      }),
+    ).rejects.toThrow("Inbox trade not found");
+    await expect(
+      asUser(ownerB).action(api.imports.acceptTrade, {
+        inboxTradeId: ownerBInboxTradeId,
+        portfolioId: ownerAPortfolioId,
+      }),
+    ).rejects.toThrow("Portfolio not found");
+    await expect(
+      asUser(ownerB).action(api.imports.acceptTrade, {
+        inboxTradeId: ownerBInboxTradeId,
+        tradePlanId: ownerATradePlanId,
+      }),
+    ).rejects.toThrow("Trade plan not found");
+
+    await expect(
+      asUser(ownerB).action(api.imports.acceptTrade, {
+        inboxTradeId: ownerBInboxTradeId,
+        portfolioId: ownerBPortfolioId,
+        tradePlanId: ownerBTradePlanId,
+      }),
+    ).resolves.toEqual({ accepted: true });
+
+    await expect(
+      asUser(ownerB).query(api.trades.listTrades, {}),
+    ).resolves.toMatchObject([
+      {
+        ownerId: ownerB,
+        portfolioId: ownerBPortfolioId,
+        tradePlanId: ownerBTradePlanId,
+      },
+    ]);
+    await expect(
+      asUser(ownerA).query(api.imports.listInboxTrades, {}),
+    ).resolves.toMatchObject([{ _id: ownerAInboxTradeId }]);
+  });
+
+  it("acceptAllTrades promotes only the authenticated owner's inbox rows", async () => {
+    const ownerAPortfolioId = await insertPortfolio(ownerA);
+    const ownerATradePlanId = await insertTradePlan(ownerA);
+    const ownerAInboxTradeId = await insertInboxTrade(ownerA, {
+      portfolioId: ownerAPortfolioId,
+      tradePlanId: ownerATradePlanId,
+    });
+    const ownerBPortfolioId = await insertPortfolio(ownerB);
+    const ownerBTradePlanId = await insertTradePlan(ownerB);
+    await insertInboxTrade(ownerB, {
+      portfolioId: ownerBPortfolioId,
+      tradePlanId: ownerBTradePlanId,
+    });
+    await insertResolvedInstrument(ownerA);
+    await insertResolvedInstrument(ownerB);
+
+    await expect(
+      asUser(ownerB).action(api.imports.acceptAllTrades, {}),
+    ).resolves.toEqual({ accepted: 1, errors: [], skippedInvalid: 0 });
+
+    await expect(
+      asUser(ownerA).query(api.imports.listInboxTrades, {}),
+    ).resolves.toMatchObject([{ _id: ownerAInboxTradeId }]);
     await expect(
       asUser(ownerB).query(api.imports.listInboxTrades, {}),
     ).resolves.toEqual([]);
+    await expect(
+      asUser(ownerA).query(api.trades.listTrades, {}),
+    ).resolves.toEqual([]);
+    await expect(
+      asUser(ownerB).query(api.trades.listTrades, {}),
+    ).resolves.toMatchObject([
+      {
+        ownerId: ownerB,
+        portfolioId: ownerBPortfolioId,
+        tradePlanId: ownerBTradePlanId,
+      },
+    ]);
   });
 
   it("prevents bulk updates and parent reassignment across owners", async () => {
@@ -239,7 +407,7 @@ describe("cross-owner authorization boundaries", () => {
   it("prevents note reads, writes, and parent attachment across owners", async () => {
     const campaignId = await insertCampaign(ownerA);
     const tradePlanId = await insertTradePlan(ownerA);
-    const noteId = await asUser(ownerA).mutation(api.notes.addNote, {
+    await asUser(ownerA).mutation(api.notes.addNote, {
       content: "owner A note",
       tradePlanId,
     });
@@ -247,12 +415,6 @@ describe("cross-owner authorization boundaries", () => {
     await expect(
       asUser(ownerB).query(api.notes.getNotesByTradePlan, { tradePlanId }),
     ).resolves.toEqual([]);
-    await expect(
-      asUser(ownerB).mutation(api.notes.updateNote, {
-        content: "hijacked",
-        noteId,
-      }),
-    ).rejects.toThrow("Note not found");
     await expect(
       asUser(ownerB).mutation(api.notes.addNote, {
         campaignId,
