@@ -17,7 +17,11 @@ const KNOWN_BRAVOS_ORPHAN_SOURCE_URL =
   "https://bravosresearch.com/news-feed/initiating-long-on-deere-company-de-potential-breakout/";
 const PRESERVED_NOTE_CONTENT = "Charts supporting rationale, entry, and target";
 
-const scannedReferenceFields = {
+// This is an explicit operational-reference audit contract, not schema
+// reflection. Any new campaign, trade-plan, or note reference in schema.ts
+// must be added to the relevant list and scanned below; schema-derived
+// enumeration is follow-up work.
+const scannedOperationalReferenceFields = {
   bravosReviewItemAppliedNote: {
     field: "appliedNoteId",
     label: "bravosReviewItems.appliedNoteId",
@@ -60,8 +64,46 @@ const scannedReferenceFields = {
   watchlistTradePlan: { field: "tradePlanId", label: "watchlist.tradePlanId" },
 } as const;
 
-const scannedReferenceFieldLabels = [
-  ...Object.values(scannedReferenceFields).map(({ label }) => label),
+const scannedArchivalReferenceFields = {
+  bravosDetachedNote: {
+    field: "detachedNoteId",
+    label: "bravosDanglingReferenceArchives.detachedNoteId",
+  },
+  bravosGeneratedNote: {
+    field: "deletedGeneratedNoteId",
+    label: "bravosDanglingReferenceArchives.deletedGeneratedNoteId",
+  },
+  bravosGeneratedPlan: {
+    field: "generatedNotePlanId",
+    label: "bravosDanglingReferenceArchives.generatedNotePlanId",
+  },
+  bravosPreservedPlan: {
+    field: "preservedNotePlanId",
+    label: "bravosDanglingReferenceArchives.preservedNotePlanId",
+  },
+  planLayerDeletedPlan: {
+    field: "deletedTradePlanIds",
+    label: "planLayerArchives.deletedTradePlanIds[]",
+  },
+  planLayerGeneratedNote: {
+    field: "generatedNoteIds",
+    label: "planLayerArchives.generatedNoteIds[]",
+  },
+  planLayerSalvagedNote: {
+    field: "salvagedNoteIds",
+    label: "planLayerArchives.salvagedNoteIds[]",
+  },
+  planLayerSalvagedTicker: {
+    field: "salvagedNoteTickerExpectations.noteId",
+    label: "planLayerArchives.salvagedNoteTickerExpectations[].noteId",
+  },
+} as const;
+
+const scannedOperationalReferenceFieldLabels = [
+  ...Object.values(scannedOperationalReferenceFields).map(({ label }) => label),
+];
+const scannedArchivalReferenceFieldLabels = [
+  ...Object.values(scannedArchivalReferenceFields).map(({ label }) => label),
 ];
 
 type SnapshotCtx = QueryCtx | MutationCtx;
@@ -91,13 +133,21 @@ type GeneratedNoteReference = {
   table: "bravosReviewItems" | "checkIns";
 };
 
+type GeneratedNoteArchiveReference = {
+  archiveId: string;
+  field: string;
+  table: "bravosDanglingReferenceArchives" | "planLayerArchives";
+};
+
 type Snapshot = {
   archivalReferences: {
     archiveId: string;
+    field: string;
     table: "bravosDanglingReferenceArchives" | "planLayerArchives";
     targetId: string;
   }[];
   danglingReferences: OperationalReference[];
+  generatedNoteArchiveReferences: GeneratedNoteArchiveReference[];
   generatedNoteReferences: GeneratedNoteReference[];
   documents: {
     generatedNote: Doc<"notes">;
@@ -105,7 +155,8 @@ type Snapshot = {
     preservedNote: Doc<"notes">;
   } | null;
   scannedCounts: Record<string, number>;
-  scannedReferenceFields: string[];
+  scannedArchivalReferenceFields: string[];
+  scannedOperationalReferenceFields: string[];
 };
 
 type SnapshotMaterial = Snapshot & {
@@ -167,10 +218,20 @@ const generatedNoteReferenceValidator = v.object({
   table: v.union(v.literal("bravosReviewItems"), v.literal("checkIns")),
 });
 
+const generatedNoteArchiveReferenceValidator = v.object({
+  archiveId: v.string(),
+  field: v.string(),
+  table: v.union(
+    v.literal("bravosDanglingReferenceArchives"),
+    v.literal("planLayerArchives"),
+  ),
+});
+
 const dryRunValidator = v.object({
   archivalReferences: v.array(
     v.object({
       archiveId: v.string(),
+      field: v.string(),
       table: v.union(
         v.literal("bravosDanglingReferenceArchives"),
         v.literal("planLayerArchives"),
@@ -187,9 +248,11 @@ const dryRunValidator = v.object({
     detachedNotes: v.number(),
   }),
   generatedNoteReferences: v.array(generatedNoteReferenceValidator),
+  generatedNoteArchiveReferences: v.array(generatedNoteArchiveReferenceValidator),
   safeToExecute: v.boolean(),
   scannedCounts: v.record(v.string(), v.number()),
-  scannedReferenceFields: v.array(v.string()),
+  scannedArchivalReferenceFields: v.array(v.string()),
+  scannedOperationalReferenceFields: v.array(v.string()),
 });
 
 const executionValidator = v.object({
@@ -210,8 +273,8 @@ const postCheckValidator = v.object({
   archiveReadable: v.boolean(),
   archivalReferencesPreserved: v.number(),
   auditToken: v.string(),
+  campaignOrPlanReferencesRemaining: v.number(),
   clearedImportTaskReferences: v.number(),
-  danglingReferencesRemaining: v.number(),
   deletedGeneratedNotesRemaining: v.number(),
   detachedNotesVerified: v.number(),
   generatedNoteReferencesRemaining: v.number(),
@@ -236,7 +299,7 @@ function canonicalize(value: unknown): unknown {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
         .filter(([, child]) => child !== undefined)
-        .sort(([left], [right]) => left.localeCompare(right))
+        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
         .map(([key, child]) => [key, canonicalize(child)]),
     );
   }
@@ -330,7 +393,7 @@ async function readSnapshot(
     addReference(
       "tradePlans",
       plan,
-      scannedReferenceFields.tradePlanCampaign,
+      scannedOperationalReferenceFields.tradePlanCampaign,
       "campaign",
       plan.campaignId,
     );
@@ -339,7 +402,7 @@ async function readSnapshot(
     addReference(
       "notes",
       note,
-      scannedReferenceFields.noteCampaign,
+      scannedOperationalReferenceFields.noteCampaign,
       "campaign",
       note.campaignId,
       preview(note.content),
@@ -347,7 +410,7 @@ async function readSnapshot(
     addReference(
       "notes",
       note,
-      scannedReferenceFields.noteTradePlan,
+      scannedOperationalReferenceFields.noteTradePlan,
       "tradePlan",
       note.tradePlanId,
       preview(note.content),
@@ -357,14 +420,14 @@ async function readSnapshot(
     addReference(
       "watchlist",
       item,
-      scannedReferenceFields.watchlistCampaign,
+      scannedOperationalReferenceFields.watchlistCampaign,
       "campaign",
       item.campaignId,
     );
     addReference(
       "watchlist",
       item,
-      scannedReferenceFields.watchlistTradePlan,
+      scannedOperationalReferenceFields.watchlistTradePlan,
       "tradePlan",
       item.tradePlanId,
     );
@@ -373,7 +436,7 @@ async function readSnapshot(
     addReference(
       "importTasks",
       task,
-      scannedReferenceFields.importTaskTradePlan,
+      scannedOperationalReferenceFields.importTaskTradePlan,
       "tradePlan",
       task.tradePlanId,
       preview(task.pastedText),
@@ -381,7 +444,7 @@ async function readSnapshot(
     addReference(
       "importTasks",
       task,
-      scannedReferenceFields.importTaskCreatedTradePlan,
+      scannedOperationalReferenceFields.importTaskCreatedTradePlan,
       "tradePlan",
       task.createdTradePlanId,
       preview(task.pastedText),
@@ -391,7 +454,7 @@ async function readSnapshot(
     addReference(
       "trades",
       trade,
-      scannedReferenceFields.tradeTradePlan,
+      scannedOperationalReferenceFields.tradeTradePlan,
       "tradePlan",
       trade.tradePlanId,
     );
@@ -400,7 +463,7 @@ async function readSnapshot(
     addReference(
       "inboxTrades",
       trade,
-      scannedReferenceFields.inboxTradeTradePlan,
+      scannedOperationalReferenceFields.inboxTradeTradePlan,
       "tradePlan",
       trade.tradePlanId,
     );
@@ -409,7 +472,7 @@ async function readSnapshot(
     addReference(
       "retrospectives",
       retrospective,
-      scannedReferenceFields.retrospectiveParent,
+      scannedOperationalReferenceFields.retrospectiveParent,
       retrospective.parentKind,
       retrospective.parentId,
       preview(retrospective.content),
@@ -419,7 +482,7 @@ async function readSnapshot(
     if (item.appliedNoteId === spec.generatedNoteId) {
       generatedNoteReferences.push({
         documentId: String(item._id),
-        field: scannedReferenceFields.bravosReviewItemAppliedNote.field,
+        field: scannedOperationalReferenceFields.bravosReviewItemAppliedNote.field,
         ownerId: item.ownerId,
         table: "bravosReviewItems",
       });
@@ -427,21 +490,21 @@ async function readSnapshot(
     addReference(
       "bravosReviewItems",
       item,
-      scannedReferenceFields.bravosReviewItemAppliedTradePlan,
+      scannedOperationalReferenceFields.bravosReviewItemAppliedTradePlan,
       "tradePlan",
       item.appliedTradePlanId,
     );
     addReference(
       "bravosReviewItems",
       item,
-      scannedReferenceFields.bravosReviewItemSuggestedTradePlan,
+      scannedOperationalReferenceFields.bravosReviewItemSuggestedTradePlan,
       "tradePlan",
       item.suggestedTradePlanId,
     );
     addReference(
       "bravosReviewItems",
       item,
-      scannedReferenceFields.bravosReviewItemProposedActionTarget,
+      scannedOperationalReferenceFields.bravosReviewItemProposedActionTarget,
       "tradePlan",
       item.proposedAction?.kind === "apply_follow_up" ||
         item.proposedAction?.kind === "note_only"
@@ -451,7 +514,7 @@ async function readSnapshot(
     addReference(
       "bravosReviewItems",
       item,
-      scannedReferenceFields.bravosReviewItemApprovedActionTarget,
+      scannedOperationalReferenceFields.bravosReviewItemApprovedActionTarget,
       "tradePlan",
       item.approvedAction?.kind === "apply_follow_up" ||
         item.approvedAction?.kind === "note_only"
@@ -463,7 +526,7 @@ async function readSnapshot(
     if (checkIn.noteIds?.some((noteId) => noteId === spec.generatedNoteId)) {
       generatedNoteReferences.push({
         documentId: String(checkIn._id),
-        field: scannedReferenceFields.checkInNoteIds.field,
+        field: scannedOperationalReferenceFields.checkInNoteIds.field,
         ownerId: checkIn.ownerId,
         table: "checkIns",
       });
@@ -479,6 +542,51 @@ async function readSnapshot(
   const preservedNote = scanned.notes.find(
     (note) => note._id === spec.preservedNoteId,
   );
+  const generatedNoteArchiveReferences: GeneratedNoteArchiveReference[] = [
+    ...scanned.planLayerArchives.flatMap((archive) => {
+      const noteIdFields = [
+        {
+          field: scannedArchivalReferenceFields.planLayerGeneratedNote.field,
+          noteIds: archive.generatedNoteIds,
+        },
+        {
+          field: scannedArchivalReferenceFields.planLayerSalvagedNote.field,
+          noteIds: archive.salvagedNoteIds,
+        },
+        {
+          field: scannedArchivalReferenceFields.planLayerSalvagedTicker.field,
+          noteIds: archive.salvagedNoteTickerExpectations.map(
+            ({ noteId }) => noteId,
+          ),
+        },
+      ];
+      return noteIdFields
+        .filter(({ noteIds }) => noteIds.includes(spec.generatedNoteId))
+        .map(({ field }) => ({
+          archiveId: String(archive._id),
+          field,
+          table: "planLayerArchives" as const,
+        }));
+    }),
+    ...scanned.bravosDanglingReferenceArchives.flatMap((archive) =>
+      [
+        {
+          field: scannedArchivalReferenceFields.bravosGeneratedNote.field,
+          noteId: archive.deletedGeneratedNoteId,
+        },
+        {
+          field: scannedArchivalReferenceFields.bravosDetachedNote.field,
+          noteId: archive.detachedNoteId,
+        },
+      ]
+        .filter(({ noteId }) => noteId === spec.generatedNoteId)
+        .map(({ field }) => ({
+          archiveId: String(archive._id),
+          field,
+          table: "bravosDanglingReferenceArchives" as const,
+        })),
+    ),
+  ];
   return {
     archivalReferences: [
       ...scanned.planLayerArchives.flatMap((archive) =>
@@ -486,21 +594,33 @@ async function readSnapshot(
           .filter((id) => !tradePlanIds.has(String(id)))
           .map((targetId) => ({
             archiveId: String(archive._id),
+            field: scannedArchivalReferenceFields.planLayerDeletedPlan.field,
             table: "planLayerArchives" as const,
             targetId: String(targetId),
           })),
       ),
       ...scanned.bravosDanglingReferenceArchives.flatMap((archive) =>
-        [archive.generatedNotePlanId, archive.preservedNotePlanId]
-          .filter((id) => !tradePlanIds.has(String(id)))
-          .map((targetId) => ({
+        [
+          {
+            field: scannedArchivalReferenceFields.bravosGeneratedPlan.field,
+            targetId: archive.generatedNotePlanId,
+          },
+          {
+            field: scannedArchivalReferenceFields.bravosPreservedPlan.field,
+            targetId: archive.preservedNotePlanId,
+          },
+        ]
+          .filter(({ targetId }) => !tradePlanIds.has(String(targetId)))
+          .map(({ field, targetId }) => ({
             archiveId: String(archive._id),
+            field,
             table: "bravosDanglingReferenceArchives" as const,
             targetId: String(targetId),
           })),
       ),
     ],
     danglingReferences,
+    generatedNoteArchiveReferences,
     generatedNoteReferences,
     documents:
       generatedNote && importTask && preservedNote
@@ -509,15 +629,22 @@ async function readSnapshot(
     scannedCounts: Object.fromEntries(
       Object.entries(scanned).map(([table, rows]) => [table, rows.length]),
     ),
-    scannedReferenceFields: scannedReferenceFieldLabels,
+    scannedArchivalReferenceFields: scannedArchivalReferenceFieldLabels,
+    scannedOperationalReferenceFields: scannedOperationalReferenceFieldLabels,
   };
 }
 
 function approvedShape(snapshot: Snapshot, spec: RepairSpec) {
-  const { documents, danglingReferences, generatedNoteReferences } = snapshot;
+  const {
+    documents,
+    danglingReferences,
+    generatedNoteArchiveReferences,
+    generatedNoteReferences,
+  } = snapshot;
   if (
     !documents ||
     danglingReferences.length !== 3 ||
+    generatedNoteArchiveReferences.length !== 0 ||
     generatedNoteReferences.length !== 0
   ) {
     return false;
@@ -562,10 +689,13 @@ async function snapshotMaterial(
       archivalReferences: snapshot.archivalReferences,
       danglingReferences: snapshot.danglingReferences,
       documents: snapshot.documents,
+      generatedNoteArchiveReferences: snapshot.generatedNoteArchiveReferences,
       repairSpec: spec,
       scannedCounts: snapshot.scannedCounts,
       generatedNoteReferences: snapshot.generatedNoteReferences,
-      scannedReferenceFields: snapshot.scannedReferenceFields,
+      scannedArchivalReferenceFields: snapshot.scannedArchivalReferenceFields,
+      scannedOperationalReferenceFields:
+        snapshot.scannedOperationalReferenceFields,
     }),
   );
   const byteLength = new TextEncoder().encode(archiveJson).byteLength;
@@ -595,8 +725,11 @@ function dryRun(material: SnapshotMaterial, spec: RepairSpec) {
       deletedGeneratedNotes: 1,
       detachedNotes: 1,
     },
+    generatedNoteArchiveReferences: material.generatedNoteArchiveReferences,
     generatedNoteReferences: material.generatedNoteReferences,
-    scannedReferenceFields: material.scannedReferenceFields,
+    scannedArchivalReferenceFields: material.scannedArchivalReferenceFields,
+    scannedOperationalReferenceFields:
+      material.scannedOperationalReferenceFields,
     safeToExecute: approvedShape(material, spec),
     scannedCounts: material.scannedCounts,
   };
@@ -776,8 +909,8 @@ export const getPostCheckState = internalQuery({
     archiveContentHash: v.string(),
     archiveStorageId: v.id("_storage"),
     archivalReferencesPreserved: v.number(),
+    campaignOrPlanReferencesRemaining: v.number(),
     clearedImportTaskReferences: v.number(),
-    danglingReferencesRemaining: v.number(),
     deletedGeneratedNotesRemaining: v.number(),
     deletedGeneratedNoteId: v.id("notes"),
     detachedNoteId: v.id("notes"),
@@ -811,11 +944,9 @@ export const getPostCheckState = internalQuery({
       archiveContentHash: archive.contentHash,
       archiveStorageId: archive.storageId,
       archivalReferencesPreserved: snapshot.archivalReferences.length,
+      campaignOrPlanReferencesRemaining: snapshot.danglingReferences.length,
       clearedImportTaskReferences:
         importTask?.createdTradePlanId === undefined ? 1 : 0,
-      danglingReferencesRemaining:
-        snapshot.danglingReferences.length +
-        snapshot.generatedNoteReferences.length,
       deletedGeneratedNotesRemaining: generatedNote === null ? 0 : 1,
       deletedGeneratedNoteId: archive.deletedGeneratedNoteId,
       detachedNoteId: archive.detachedNoteId,
@@ -836,8 +967,8 @@ export const postCheck = internalAction({
       archiveContentHash: string;
       archiveStorageId: Id<"_storage">;
       archivalReferencesPreserved: number;
+      campaignOrPlanReferencesRemaining: number;
       clearedImportTaskReferences: number;
-      danglingReferencesRemaining: number;
       deletedGeneratedNotesRemaining: number;
       deletedGeneratedNoteId: Id<"notes">;
       detachedNoteId: Id<"notes">;
@@ -860,8 +991,9 @@ export const postCheck = internalAction({
       archiveReadable: blob !== null,
       archivalReferencesPreserved: state.archivalReferencesPreserved,
       auditToken: args.auditToken,
+      campaignOrPlanReferencesRemaining:
+        state.campaignOrPlanReferencesRemaining,
       clearedImportTaskReferences: state.clearedImportTaskReferences,
-      danglingReferencesRemaining: state.danglingReferencesRemaining,
       deletedGeneratedNotesRemaining: state.deletedGeneratedNotesRemaining,
       detachedNotesVerified: state.detachedNotesVerified,
       generatedNoteReferencesRemaining: state.generatedNoteReferencesRemaining,

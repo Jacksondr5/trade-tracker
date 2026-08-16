@@ -122,6 +122,31 @@ describe("audited Bravos dangling-reference repair", () => {
     return { payload, storageId };
   }
 
+  async function insertPlanLayerArchiveSalvaging(
+    noteId: Id<"notes">,
+  ): Promise<Id<"planLayerArchives">> {
+    const storageId = await t.run((ctx) =>
+      ctx.storage.store(new Blob(["plan-layer archive"])),
+    );
+    return await t.run((ctx) =>
+      ctx.db.insert("planLayerArchives", {
+        archiveFormat: "plan_layer_clean_slate_v1",
+        auditToken: "prior-plan-layer-audit",
+        baselineTradeCount: 0,
+        contentHash: "prior-plan-layer-content",
+        createdAt: 1,
+        deletedTradePlanIds: [],
+        generatedNoteIds: [],
+        ownerId,
+        productionSnapshotReference: "prior snapshot",
+        retrospectivesConverted: 0,
+        salvagedNoteIds: [noteId],
+        salvagedNoteTickerExpectations: [{ noteId, ticker: "DE" }],
+        storageId,
+      }),
+    );
+  }
+
   it("reports exact per-document effects in dry-run mode without changing records", async () => {
     const spec = await insertAuditedOrphans();
 
@@ -129,8 +154,9 @@ describe("audited Bravos dangling-reference repair", () => {
 
     expect(result.safeToExecute).toBe(true);
     expect(result.archivalReferences).toEqual([]);
+    expect(result.generatedNoteArchiveReferences).toEqual([]);
     expect(result.generatedNoteReferences).toEqual([]);
-    expect(result.scannedReferenceFields).toEqual(
+    expect(result.scannedOperationalReferenceFields).toEqual(
       expect.arrayContaining([
         "notes.tradePlanId",
         "notes.campaignId",
@@ -150,7 +176,20 @@ describe("audited Bravos dangling-reference repair", () => {
         "checkIns.noteIds[]",
       ]),
     );
-    expect(result.scannedReferenceFields).toHaveLength(16);
+    expect(result.scannedOperationalReferenceFields).toHaveLength(16);
+    expect(result.scannedArchivalReferenceFields).toEqual(
+      expect.arrayContaining([
+        "planLayerArchives.deletedTradePlanIds[]",
+        "planLayerArchives.generatedNoteIds[]",
+        "planLayerArchives.salvagedNoteIds[]",
+        "planLayerArchives.salvagedNoteTickerExpectations[].noteId",
+        "bravosDanglingReferenceArchives.generatedNotePlanId",
+        "bravosDanglingReferenceArchives.preservedNotePlanId",
+        "bravosDanglingReferenceArchives.deletedGeneratedNoteId",
+        "bravosDanglingReferenceArchives.detachedNoteId",
+      ]),
+    );
+    expect(result.scannedArchivalReferenceFields).toHaveLength(8);
     expect(result.expectedEffects).toEqual({
       clearedCreatedImportTaskPlanIds: 1,
       deletedGeneratedNotes: 1,
@@ -229,8 +268,8 @@ describe("audited Bravos dangling-reference repair", () => {
       archiveReadable: true,
       archivalReferencesPreserved: 2,
       auditToken: dryRun.auditToken,
+      campaignOrPlanReferencesRemaining: 0,
       clearedImportTaskReferences: 1,
-      danglingReferencesRemaining: 0,
       deletedGeneratedNotesRemaining: 0,
       detachedNotesVerified: 1,
       generatedNoteReferencesRemaining: 0,
@@ -241,11 +280,18 @@ describe("audited Bravos dangling-reference repair", () => {
       return blob ? await blob.text() : null;
     });
     const archive = JSON.parse(archiveText ?? "{}") as {
-      documents?: { generatedNote?: { _id?: string; content?: string } };
+      documents?: {
+        generatedNote?: { _id?: string; content?: string };
+        preservedNote?: { _id?: string; content?: string };
+      };
     };
     expect(archive.documents?.generatedNote).toMatchObject({
       _id: String(spec.generatedNoteId),
       content: `Imported from service post: ${sourceUrl}`,
+    });
+    expect(archive.documents?.preservedNote).toMatchObject({
+      _id: String(spec.preservedNoteId),
+      content: preservedNoteContent,
     });
   });
 
@@ -328,7 +374,39 @@ describe("audited Bravos dangling-reference repair", () => {
     ).not.toBeNull();
   });
 
-  it("refuses a substituted dangling reference even when exactly three remain", async () => {
+  it("refuses deletion when a plan-layer archive preserves the generated note", async () => {
+    const spec = await insertAuditedOrphans();
+    const archiveId = await insertPlanLayerArchiveSalvaging(spec.generatedNoteId);
+
+    const dryRun = await t.query(internal.bravosOrphanCleanup.inspect, spec);
+
+    expect(dryRun.safeToExecute).toBe(false);
+    expect(dryRun.generatedNoteArchiveReferences).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          archiveId: String(archiveId),
+          field: "salvagedNoteIds",
+          table: "planLayerArchives",
+        }),
+        expect.objectContaining({
+          archiveId: String(archiveId),
+          field: "salvagedNoteTickerExpectations.noteId",
+          table: "planLayerArchives",
+        }),
+      ]),
+    );
+    await expect(
+      t.action(internal.bravosOrphanCleanup.execute, {
+        expectedAuditToken: dryRun.auditToken,
+        repairSpec: spec,
+      }),
+    ).rejects.toThrow("no longer match the approved three-document repair");
+    expect(
+      await t.run((ctx) => ctx.db.get(spec.generatedNoteId)),
+    ).not.toBeNull();
+  });
+
+  it("pins every approved reference triple when exactly three dangling references remain", async () => {
     const spec = await insertAuditedOrphans();
     await t.run(async (ctx) => {
       const replacementPlanId = await ctx.db.insert("tradePlans", {
@@ -347,6 +425,12 @@ describe("audited Bravos dangling-reference repair", () => {
 
     expect(dryRun.danglingReferences).toHaveLength(3);
     expect(dryRun.safeToExecute).toBe(false);
+    await expect(
+      t.action(internal.bravosOrphanCleanup.execute, {
+        expectedAuditToken: dryRun.auditToken,
+        repairSpec: spec,
+      }),
+    ).rejects.toThrow("no longer match the approved three-document repair");
   });
 
   it.each([
