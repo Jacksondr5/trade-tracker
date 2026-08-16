@@ -351,7 +351,7 @@ describe("plan-layer clean slate", () => {
     expect(state.annotatedImportNote).toMatchObject({ ticker: "GLDM" });
     expect(state.annotatedImportNote).not.toHaveProperty("tradePlanId");
     expect(state.campaignNote).not.toHaveProperty("campaignId");
-    expect(state.campaignNote).not.toHaveProperty("ticker");
+    expect(state.campaignNote).toMatchObject({ ticker: "STALE" });
     expect(
       state.notes.filter((note) => note.origin === "retrospective"),
     ).toEqual(

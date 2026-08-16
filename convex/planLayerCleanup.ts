@@ -408,6 +408,37 @@ function writeCount(counts: ReturnType<typeof plannedCounts>) {
   );
 }
 
+async function readBoundedTradesForPlans(
+  ctx: SnapshotCtx,
+  ownerId: string,
+  tradePlanIds: Id<"tradePlans">[],
+  label: string,
+) {
+  const trades: Doc<"trades">[] = [];
+  for (const tradePlanId of tradePlanIds) {
+    const remainingBeforeRefusal = MAX_TRADES + 1 - trades.length;
+    if (remainingBeforeRefusal <= 0) {
+      throw new ConvexError(
+        `Plan-layer cleanup refused: ${label} exceeds its bounded safety limit of ${MAX_TRADES}`,
+      );
+    }
+    const rows = await ctx.db
+      .query("trades")
+      .withIndex("by_owner_tradePlanId", (q) =>
+        q.eq("ownerId", ownerId).eq("tradePlanId", tradePlanId),
+      )
+      .take(Math.min(MAX_LINKED_TRADES_PER_PLAN + 1, remainingBeforeRefusal));
+    assertBounded(
+      rows,
+      "trades linked to one trade plan",
+      MAX_LINKED_TRADES_PER_PLAN,
+    );
+    trades.push(...rows);
+    assertBounded(trades, label, MAX_TRADES);
+  }
+  return trades;
+}
+
 async function readSnapshot(
   ctx: SnapshotCtx,
   ownerId: string,
@@ -475,25 +506,12 @@ async function readSnapshot(
     campaigns.map((campaign) => String(campaign._id)),
   );
   const tradePlanIds = new Set(tradePlans.map((plan) => String(plan._id)));
-  const tradeGroups = await Promise.all(
-    tradePlans.map((plan) =>
-      ctx.db
-        .query("trades")
-        .withIndex("by_owner_tradePlanId", (q) =>
-          q.eq("ownerId", ownerId).eq("tradePlanId", plan._id),
-        )
-        .take(MAX_LINKED_TRADES_PER_PLAN + 1),
-    ),
+  const trades = await readBoundedTradesForPlans(
+    ctx,
+    ownerId,
+    tradePlans.map((plan) => plan._id),
+    "linked trade set",
   );
-  for (const group of tradeGroups) {
-    assertBounded(
-      group,
-      "trades linked to one trade plan",
-      MAX_LINKED_TRADES_PER_PLAN,
-    );
-  }
-  const trades = tradeGroups.flat();
-  assertBounded(trades, "linked trade set", MAX_TRADES);
   const bravosAppliedNoteIds = new Set(
     allReviewItems
       .filter((item) => isBravosSourceUrl(item.sourceUrl))
@@ -847,23 +865,12 @@ export const getPostCheckState = internalQuery({
     assertBounded(checkIns, "post-check check-in set", MAX_CHECK_INS);
 
     const generatedNoteIds = new Set(archive.generatedNoteIds.map(String));
-    const linkedTradeGroups = await Promise.all(
-      archive.deletedTradePlanIds.map((tradePlanId) =>
-        ctx.db
-          .query("trades")
-          .withIndex("by_owner_tradePlanId", (q) =>
-            q.eq("ownerId", args.ownerId).eq("tradePlanId", tradePlanId),
-          )
-          .take(MAX_LINKED_TRADES_PER_PLAN + 1),
-      ),
+    const linkedTrades = await readBoundedTradesForPlans(
+      ctx,
+      args.ownerId,
+      archive.deletedTradePlanIds,
+      "post-check linked trade set",
     );
-    for (const group of linkedTradeGroups) {
-      assertBounded(
-        group,
-        "post-check trades linked to one deleted trade plan",
-        MAX_LINKED_TRADES_PER_PLAN,
-      );
-    }
     const counts: PostCleanupStateCounts = {
       attachedNotesRemaining: notes.filter(
         (note) =>
@@ -903,7 +910,7 @@ export const getPostCheckState = internalQuery({
           note.campaignId === undefined &&
           note.tradePlanId === undefined,
       ).length,
-      tradePlanReferencesRemaining: linkedTradeGroups.flat().length,
+      tradePlanReferencesRemaining: linkedTrades.length,
       tradePlansRemaining: tradePlans.length,
       tradesBefore: archive.baselineTradeCount,
       watchlistPlanReferencesRemaining: watchlistItems.filter(
@@ -1068,8 +1075,9 @@ export const commit = internalMutation({
     for (const note of material.notesToSalvage) {
       const ticker =
         note.tradePlanId === undefined
-          ? undefined
-          : planById.get(String(note.tradePlanId))?.instrumentSymbol;
+          ? note.ticker
+          : (planById.get(String(note.tradePlanId))?.instrumentSymbol ??
+            note.ticker);
       await ctx.db.patch(note._id, {
         campaignId: undefined,
         ticker,
