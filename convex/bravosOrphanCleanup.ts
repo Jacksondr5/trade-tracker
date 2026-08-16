@@ -16,6 +16,53 @@ const KNOWN_BRAVOS_ORPHAN_SOURCE_URL =
   "https://bravosresearch.com/news-feed/initiating-long-on-deere-company-de-potential-breakout/";
 const PRESERVED_NOTE_CONTENT = "Charts supporting rationale, entry, and target";
 
+const scannedReferenceFields = {
+  bravosReviewItemAppliedNote: {
+    field: "appliedNoteId",
+    label: "bravosReviewItems.appliedNoteId",
+  },
+  bravosReviewItemAppliedTradePlan: {
+    field: "appliedTradePlanId",
+    label: "bravosReviewItems.appliedTradePlanId",
+  },
+  bravosReviewItemApprovedActionTarget: {
+    field: "approvedAction.targetTradePlanId",
+    label: "bravosReviewItems.approvedAction.targetTradePlanId",
+  },
+  bravosReviewItemProposedActionTarget: {
+    field: "proposedAction.targetTradePlanId",
+    label: "bravosReviewItems.proposedAction.targetTradePlanId",
+  },
+  bravosReviewItemSuggestedTradePlan: {
+    field: "suggestedTradePlanId",
+    label: "bravosReviewItems.suggestedTradePlanId",
+  },
+  checkInNoteIds: { field: "noteIds", label: "checkIns.noteIds[]" },
+  importTaskCreatedTradePlan: {
+    field: "createdTradePlanId",
+    label: "importTasks.createdTradePlanId",
+  },
+  importTaskTradePlan: {
+    field: "tradePlanId",
+    label: "importTasks.tradePlanId",
+  },
+  inboxTradeTradePlan: {
+    field: "tradePlanId",
+    label: "inboxTrades.tradePlanId",
+  },
+  noteCampaign: { field: "campaignId", label: "notes.campaignId" },
+  noteTradePlan: { field: "tradePlanId", label: "notes.tradePlanId" },
+  retrospectiveParent: { field: "parentId", label: "retrospectives.parentId" },
+  tradePlanCampaign: { field: "campaignId", label: "tradePlans.campaignId" },
+  tradeTradePlan: { field: "tradePlanId", label: "trades.tradePlanId" },
+  watchlistCampaign: { field: "campaignId", label: "watchlist.campaignId" },
+  watchlistTradePlan: { field: "tradePlanId", label: "watchlist.tradePlanId" },
+} as const;
+
+const scannedReferenceFieldLabels = [
+  ...Object.values(scannedReferenceFields).map(({ label }) => label),
+];
+
 type SnapshotCtx = QueryCtx | MutationCtx;
 
 type OperationalReference = {
@@ -36,6 +83,13 @@ type OperationalReference = {
   contentPreview?: string;
 };
 
+type GeneratedNoteReference = {
+  documentId: string;
+  field: "appliedNoteId" | "noteIds";
+  ownerId: string;
+  table: "bravosReviewItems" | "checkIns";
+};
+
 type Snapshot = {
   archivalReferences: {
     archiveId: string;
@@ -43,12 +97,14 @@ type Snapshot = {
     targetId: string;
   }[];
   danglingReferences: OperationalReference[];
+  generatedNoteReferences: GeneratedNoteReference[];
   documents: {
     generatedNote: Doc<"notes">;
     importTask: Doc<"importTasks">;
     preservedNote: Doc<"notes">;
   } | null;
   scannedCounts: Record<string, number>;
+  scannedReferenceFields: string[];
 };
 
 type SnapshotMaterial = Snapshot & {
@@ -103,6 +159,13 @@ const referenceValidator = v.object({
   targetKind: v.union(v.literal("campaign"), v.literal("tradePlan")),
 });
 
+const generatedNoteReferenceValidator = v.object({
+  documentId: v.string(),
+  field: v.union(v.literal("appliedNoteId"), v.literal("noteIds")),
+  ownerId: v.string(),
+  table: v.union(v.literal("bravosReviewItems"), v.literal("checkIns")),
+});
+
 const dryRunValidator = v.object({
   archivalReferences: v.array(
     v.object({
@@ -122,8 +185,10 @@ const dryRunValidator = v.object({
     deletedGeneratedNotes: v.number(),
     detachedNotes: v.number(),
   }),
+  generatedNoteReferences: v.array(generatedNoteReferenceValidator),
   safeToExecute: v.boolean(),
   scannedCounts: v.record(v.string(), v.number()),
+  scannedReferenceFields: v.array(v.string()),
 });
 
 const executionValidator = v.object({
@@ -138,6 +203,7 @@ const executionValidator = v.object({
 });
 
 const postCheckValidator = v.object({
+  archiveContentHashMatches: v.boolean(),
   archiveContainsDeletedGeneratedNote: v.boolean(),
   archiveContainsDetachedNote: v.boolean(),
   archiveReadable: v.boolean(),
@@ -147,6 +213,7 @@ const postCheckValidator = v.object({
   danglingReferencesRemaining: v.number(),
   deletedGeneratedNotesRemaining: v.number(),
   detachedNotesVerified: v.number(),
+  generatedNoteReferencesRemaining: v.number(),
 });
 
 function assertBounded<T>(rows: T[], table: string): T[] {
@@ -185,6 +252,14 @@ async function sha256Hex(value: string) {
   ).join("");
 }
 
+async function sha256Base64(value: string) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value),
+  );
+  return btoa(String.fromCharCode(...new Uint8Array(digest)));
+}
+
 async function readSnapshot(
   ctx: SnapshotCtx,
   spec: RepairSpec,
@@ -199,6 +274,7 @@ async function readSnapshot(
     inboxTrades,
     retrospectives,
     reviewItems,
+    checkIns,
     planLayerArchives,
     bravosArchives,
   ] = await Promise.all([
@@ -211,6 +287,7 @@ async function readSnapshot(
     ctx.db.query("inboxTrades").take(MAX_ROWS_PER_TABLE + 1),
     ctx.db.query("retrospectives").take(MAX_ROWS_PER_TABLE + 1),
     ctx.db.query("bravosReviewItems").take(MAX_ROWS_PER_TABLE + 1),
+    ctx.db.query("checkIns").take(MAX_ROWS_PER_TABLE + 1),
     ctx.db.query("planLayerArchives").take(MAX_ROWS_PER_TABLE + 1),
     ctx.db
       .query("bravosDanglingReferenceArchives")
@@ -218,6 +295,7 @@ async function readSnapshot(
   ]);
   const scanned = {
     bravosReviewItems: assertBounded(reviewItems, "bravosReviewItems"),
+    checkIns: assertBounded(checkIns, "checkIns"),
     campaigns: assertBounded(campaigns, "campaigns"),
     importTasks: assertBounded(importTasks, "importTasks"),
     inboxTrades: assertBounded(inboxTrades, "inboxTrades"),
@@ -237,10 +315,11 @@ async function readSnapshot(
     scanned.tradePlans.map((row) => String(row._id)),
   );
   const danglingReferences: OperationalReference[] = [];
+  const generatedNoteReferences: GeneratedNoteReference[] = [];
   const addReference = (
     table: OperationalReference["table"],
     row: { _id: unknown; ownerId: string },
-    field: string,
+    field: { field: string },
     targetKind: OperationalReference["targetKind"],
     targetId: unknown,
     contentPreview?: string,
@@ -251,7 +330,7 @@ async function readSnapshot(
       danglingReferences.push({
         contentPreview,
         documentId: String(row._id),
-        field,
+        field: field.field,
         ownerId: row.ownerId,
         table,
         targetId: String(targetId),
@@ -261,13 +340,19 @@ async function readSnapshot(
   };
 
   for (const plan of scanned.tradePlans) {
-    addReference("tradePlans", plan, "campaignId", "campaign", plan.campaignId);
+    addReference(
+      "tradePlans",
+      plan,
+      scannedReferenceFields.tradePlanCampaign,
+      "campaign",
+      plan.campaignId,
+    );
   }
   for (const note of scanned.notes) {
     addReference(
       "notes",
       note,
-      "campaignId",
+      scannedReferenceFields.noteCampaign,
       "campaign",
       note.campaignId,
       preview(note.content),
@@ -275,18 +360,24 @@ async function readSnapshot(
     addReference(
       "notes",
       note,
-      "tradePlanId",
+      scannedReferenceFields.noteTradePlan,
       "tradePlan",
       note.tradePlanId,
       preview(note.content),
     );
   }
   for (const item of scanned.watchlist) {
-    addReference("watchlist", item, "campaignId", "campaign", item.campaignId);
     addReference(
       "watchlist",
       item,
-      "tradePlanId",
+      scannedReferenceFields.watchlistCampaign,
+      "campaign",
+      item.campaignId,
+    );
+    addReference(
+      "watchlist",
+      item,
+      scannedReferenceFields.watchlistTradePlan,
       "tradePlan",
       item.tradePlanId,
     );
@@ -295,7 +386,7 @@ async function readSnapshot(
     addReference(
       "importTasks",
       task,
-      "tradePlanId",
+      scannedReferenceFields.importTaskTradePlan,
       "tradePlan",
       task.tradePlanId,
       preview(task.pastedText),
@@ -303,7 +394,7 @@ async function readSnapshot(
     addReference(
       "importTasks",
       task,
-      "createdTradePlanId",
+      scannedReferenceFields.importTaskCreatedTradePlan,
       "tradePlan",
       task.createdTradePlanId,
       preview(task.pastedText),
@@ -313,7 +404,7 @@ async function readSnapshot(
     addReference(
       "trades",
       trade,
-      "tradePlanId",
+      scannedReferenceFields.tradeTradePlan,
       "tradePlan",
       trade.tradePlanId,
     );
@@ -322,7 +413,7 @@ async function readSnapshot(
     addReference(
       "inboxTrades",
       trade,
-      "tradePlanId",
+      scannedReferenceFields.inboxTradeTradePlan,
       "tradePlan",
       trade.tradePlanId,
     );
@@ -331,31 +422,39 @@ async function readSnapshot(
     addReference(
       "retrospectives",
       retrospective,
-      "parentId",
+      scannedReferenceFields.retrospectiveParent,
       retrospective.parentKind,
       retrospective.parentId,
       preview(retrospective.content),
     );
   }
   for (const item of scanned.bravosReviewItems) {
+    if (item.appliedNoteId === spec.generatedNoteId) {
+      generatedNoteReferences.push({
+        documentId: String(item._id),
+        field: scannedReferenceFields.bravosReviewItemAppliedNote.field,
+        ownerId: item.ownerId,
+        table: "bravosReviewItems",
+      });
+    }
     addReference(
       "bravosReviewItems",
       item,
-      "appliedTradePlanId",
+      scannedReferenceFields.bravosReviewItemAppliedTradePlan,
       "tradePlan",
       item.appliedTradePlanId,
     );
     addReference(
       "bravosReviewItems",
       item,
-      "suggestedTradePlanId",
+      scannedReferenceFields.bravosReviewItemSuggestedTradePlan,
       "tradePlan",
       item.suggestedTradePlanId,
     );
     addReference(
       "bravosReviewItems",
       item,
-      "proposedAction.targetTradePlanId",
+      scannedReferenceFields.bravosReviewItemProposedActionTarget,
       "tradePlan",
       item.proposedAction?.kind === "apply_follow_up" ||
         item.proposedAction?.kind === "note_only"
@@ -365,13 +464,23 @@ async function readSnapshot(
     addReference(
       "bravosReviewItems",
       item,
-      "approvedAction.targetTradePlanId",
+      scannedReferenceFields.bravosReviewItemApprovedActionTarget,
       "tradePlan",
       item.approvedAction?.kind === "apply_follow_up" ||
         item.approvedAction?.kind === "note_only"
         ? item.approvedAction.targetTradePlanId
         : undefined,
     );
+  }
+  for (const checkIn of scanned.checkIns) {
+    if (checkIn.noteIds?.some((noteId) => noteId === spec.generatedNoteId)) {
+      generatedNoteReferences.push({
+        documentId: String(checkIn._id),
+        field: scannedReferenceFields.checkInNoteIds.field,
+        ownerId: checkIn.ownerId,
+        table: "checkIns",
+      });
+    }
   }
 
   const generatedNote = scanned.notes.find(
@@ -405,6 +514,7 @@ async function readSnapshot(
       ),
     ],
     danglingReferences,
+    generatedNoteReferences,
     documents:
       generatedNote && importTask && preservedNote
         ? { generatedNote, importTask, preservedNote }
@@ -412,12 +522,17 @@ async function readSnapshot(
     scannedCounts: Object.fromEntries(
       Object.entries(scanned).map(([table, rows]) => [table, rows.length]),
     ),
+    scannedReferenceFields: scannedReferenceFieldLabels,
   };
 }
 
 function approvedShape(snapshot: Snapshot, spec: RepairSpec) {
-  const { documents, danglingReferences } = snapshot;
-  if (!documents || danglingReferences.length !== 3) {
+  const { documents, danglingReferences, generatedNoteReferences } = snapshot;
+  if (
+    !documents ||
+    danglingReferences.length !== 3 ||
+    generatedNoteReferences.length !== 0
+  ) {
     return false;
   }
   const { generatedNote, importTask, preservedNote } = documents;
@@ -462,6 +577,8 @@ async function snapshotMaterial(
       documents: snapshot.documents,
       repairSpec: spec,
       scannedCounts: snapshot.scannedCounts,
+      generatedNoteReferences: snapshot.generatedNoteReferences,
+      scannedReferenceFields: snapshot.scannedReferenceFields,
     }),
   );
   const byteLength = new TextEncoder().encode(archiveJson).byteLength;
@@ -491,6 +608,8 @@ function dryRun(material: SnapshotMaterial, spec: RepairSpec) {
       deletedGeneratedNotes: 1,
       detachedNotes: 1,
     },
+    generatedNoteReferences: material.generatedNoteReferences,
+    scannedReferenceFields: material.scannedReferenceFields,
     safeToExecute: approvedShape(material, spec),
     scannedCounts: material.scannedCounts,
   };
@@ -554,6 +673,18 @@ export const commit = internalMutation({
     if (material.contentHash !== args.archiveContentHash) {
       throw new ConvexError(
         "Bravos dangling-reference repair refused: stored archive does not match the approved audit content",
+      );
+    }
+    const storedArchive = await ctx.db.system.get(
+      "_storage",
+      args.archiveStorageId,
+    );
+    if (
+      !storedArchive ||
+      storedArchive.sha256 !== (await sha256Base64(material.archiveJson))
+    ) {
+      throw new ConvexError(
+        "Bravos dangling-reference repair refused: stored archive blob is missing or does not match the approved audit content",
       );
     }
     const documents = material.documents;
@@ -654,13 +785,16 @@ export const execute = internalAction({
 export const getPostCheckState = internalQuery({
   args: { auditToken: v.string() },
   returns: v.object({
+    archiveContentHash: v.string(),
     archiveStorageId: v.id("_storage"),
     archivalReferencesPreserved: v.number(),
     clearedImportTaskReferences: v.number(),
     danglingReferencesRemaining: v.number(),
     deletedGeneratedNotesRemaining: v.number(),
     deletedGeneratedNoteId: v.id("notes"),
+    detachedNoteId: v.id("notes"),
     detachedNotesVerified: v.number(),
+    generatedNoteReferencesRemaining: v.number(),
   }),
   handler: async (ctx, args) => {
     const archive = await ctx.db
@@ -686,17 +820,22 @@ export const getPostCheckState = internalQuery({
         ctx.db.get(archive.deletedGeneratedNoteId),
       ]);
     return {
+      archiveContentHash: archive.contentHash,
       archiveStorageId: archive.storageId,
       archivalReferencesPreserved: snapshot.archivalReferences.length,
       clearedImportTaskReferences:
         importTask?.createdTradePlanId === undefined ? 1 : 0,
-      danglingReferencesRemaining: snapshot.danglingReferences.length,
+      danglingReferencesRemaining:
+        snapshot.danglingReferences.length +
+        snapshot.generatedNoteReferences.length,
       deletedGeneratedNotesRemaining: generatedNote === null ? 0 : 1,
       deletedGeneratedNoteId: archive.deletedGeneratedNoteId,
+      detachedNoteId: archive.detachedNoteId,
       detachedNotesVerified:
         preservedNote !== null && preservedNote.tradePlanId === undefined
           ? 1
           : 0,
+      generatedNoteReferencesRemaining: snapshot.generatedNoteReferences.length,
     };
   },
 });
@@ -706,23 +845,30 @@ export const postCheck = internalAction({
   returns: postCheckValidator,
   handler: async (ctx, args) => {
     const state: {
+      archiveContentHash: string;
       archiveStorageId: Id<"_storage">;
       archivalReferencesPreserved: number;
       clearedImportTaskReferences: number;
       danglingReferencesRemaining: number;
       deletedGeneratedNotesRemaining: number;
       deletedGeneratedNoteId: Id<"notes">;
+      detachedNoteId: Id<"notes">;
       detachedNotesVerified: number;
+      generatedNoteReferencesRemaining: number;
     } = await ctx.runQuery(internal.bravosOrphanCleanup.getPostCheckState, {
       auditToken: args.auditToken,
     });
     const blob = await ctx.storage.get(state.archiveStorageId);
     const archiveText = blob ? await blob.text() : "";
     return {
+      archiveContentHashMatches:
+        blob !== null && (await sha256Hex(archiveText)) === state.archiveContentHash,
       archiveContainsDeletedGeneratedNote:
         archiveText.includes(String(state.deletedGeneratedNoteId)) &&
         archiveText.includes(KNOWN_BRAVOS_ORPHAN_SOURCE_URL),
-      archiveContainsDetachedNote: archiveText.includes(PRESERVED_NOTE_CONTENT),
+      archiveContainsDetachedNote:
+        archiveText.includes(String(state.detachedNoteId)) &&
+        archiveText.includes(PRESERVED_NOTE_CONTENT),
       archiveReadable: blob !== null,
       archivalReferencesPreserved: state.archivalReferencesPreserved,
       auditToken: args.auditToken,
@@ -730,6 +876,7 @@ export const postCheck = internalAction({
       danglingReferencesRemaining: state.danglingReferencesRemaining,
       deletedGeneratedNotesRemaining: state.deletedGeneratedNotesRemaining,
       detachedNotesVerified: state.detachedNotesVerified,
+      generatedNoteReferencesRemaining: state.generatedNoteReferencesRemaining,
     };
   },
 });
