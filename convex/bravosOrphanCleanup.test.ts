@@ -18,185 +18,308 @@ const modules = (import.meta as ImportMetaWithGlob).glob([
 const ownerId = "owner-a";
 const sourceUrl =
   "https://bravosresearch.com/news-feed/initiating-long-on-deere-company-de-potential-breakout/";
+const preservedNoteContent = "Charts supporting rationale, entry, and target";
 
-describe("known Bravos orphan repair", () => {
+describe("audited Bravos dangling-reference repair", () => {
   let t: ReturnType<typeof convexTest>;
 
   beforeEach(() => {
     t = convexTest(schema, modules);
   });
 
-  async function insertOrphan(args?: { keepTradePlan?: boolean }) {
+  async function insertAuditedOrphans() {
     return await t.run(async (ctx) => {
-      const tradePlanId = await ctx.db.insert("tradePlans", {
+      const generatedPlanId = await ctx.db.insert("tradePlans", {
         instrumentSymbol: "DE",
-        name: "Long DE",
+        name: "Deleted Bravos DE plan",
         ownerId,
-        rationale: "Imported Bravos plan",
         sourceUrl,
         status: "active",
       });
-      const noteId = await ctx.db.insert("notes", {
-        content: `Imported from service post: ${sourceUrl}`,
-        noteDate: Date.now(),
+      const preservedPlanId = await ctx.db.insert("tradePlans", {
+        instrumentSymbol: "DE",
+        name: "Deleted chart note plan",
         ownerId,
-        tradePlanId,
+        status: "active",
+      });
+      const generatedNoteId = await ctx.db.insert("notes", {
+        content: `Imported from service post: ${sourceUrl}`,
+        noteDate: 1,
+        ownerId,
+        tradePlanId: generatedPlanId,
+      });
+      const preservedNoteId = await ctx.db.insert("notes", {
+        content: preservedNoteContent,
+        noteDate: 2,
+        ownerId,
+        tradePlanId: preservedPlanId,
       });
       const importTaskId = await ctx.db.insert("importTasks", {
-        createdTradePlanId: tradePlanId,
+        createdTradePlanId: generatedPlanId,
         mode: "create",
         ownerId,
         pastedText: "Imported Deere recommendation",
         sourceUrl,
         status: "done",
       });
-      if (!args?.keepTradePlan) await ctx.db.delete(tradePlanId);
-      return { importTaskId, noteId, tradePlanId };
+      await ctx.db.delete(generatedPlanId);
+      await ctx.db.delete(preservedPlanId);
+      return {
+        generatedNoteId,
+        generatedNotePlanId: generatedPlanId,
+        importTaskId,
+        preservedNoteId,
+        preservedNotePlanId: preservedPlanId,
+      };
     });
   }
 
-  it("reports two effects in dry-run mode without changing either record", async () => {
-    const orphan = await insertOrphan();
+  it("reports exact per-document effects in dry-run mode without changing records", async () => {
+    const spec = await insertAuditedOrphans();
 
-    await expect(
-      t.mutation(internal.bravosOrphanCleanup.repairKnownBravosOrphan, {
-        dryRun: true,
-        importTaskId: orphan.importTaskId,
-        missingTradePlanId: orphan.tradePlanId,
-        noteId: orphan.noteId,
-      }),
-    ).resolves.toEqual({
+    const result = await t.query(internal.bravosOrphanCleanup.inspect, spec);
+
+    expect(result.safeToExecute).toBe(true);
+    expect(result.archivalReferences).toEqual([]);
+    expect(result.expectedEffects).toEqual({
       clearedCreatedImportTaskPlanIds: 1,
-      deletedNotes: 1,
-      patchedImportTasks: 1,
+      deletedGeneratedNotes: 1,
+      detachedNotes: 1,
     });
-
-    expect(await t.run((ctx) => ctx.db.get(orphan.noteId))).toMatchObject({
-      tradePlanId: orphan.tradePlanId,
-    });
-    expect(await t.run((ctx) => ctx.db.get(orphan.importTaskId))).toMatchObject(
-      { createdTradePlanId: orphan.tradePlanId },
-    );
-  });
-
-  it("deletes only the approved note and clears only the stale task reference", async () => {
-    const orphan = await insertOrphan();
-
-    const result = await t.mutation(
-      internal.bravosOrphanCleanup.repairKnownBravosOrphan,
-      {
-        dryRun: false,
-        importTaskId: orphan.importTaskId,
-        missingTradePlanId: orphan.tradePlanId,
-        noteId: orphan.noteId,
-      },
-    );
-
-    expect(result).toEqual({
-      clearedCreatedImportTaskPlanIds: 1,
-      deletedNotes: 1,
-      patchedImportTasks: 1,
-    });
-    expect(await t.run((ctx) => ctx.db.get(orphan.noteId))).toBeNull();
-    expect(await t.run((ctx) => ctx.db.get(orphan.importTaskId))).toMatchObject(
-      {
-        mode: "create",
-        sourceUrl,
-        status: "done",
-      },
+    expect(result.danglingReferences).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contentPreview: `Imported from service post: ${sourceUrl}`,
+          documentId: String(spec.generatedNoteId),
+          field: "tradePlanId",
+          targetId: String(spec.generatedNotePlanId),
+        }),
+        expect.objectContaining({
+          documentId: String(spec.importTaskId),
+          field: "createdTradePlanId",
+          targetId: String(spec.generatedNotePlanId),
+        }),
+        expect.objectContaining({
+          contentPreview: preservedNoteContent,
+          documentId: String(spec.preservedNoteId),
+          field: "tradePlanId",
+          targetId: String(spec.preservedNotePlanId),
+        }),
+      ]),
     );
     expect(
-      await t.run((ctx) => ctx.db.get(orphan.importTaskId)),
-    ).not.toHaveProperty("createdTradePlanId");
+      await t.run((ctx) => ctx.db.get(spec.generatedNoteId)),
+    ).not.toBeNull();
+    expect(
+      await t.run((ctx) => ctx.db.get(spec.preservedNoteId)),
+    ).toMatchObject({
+      tradePlanId: spec.preservedNotePlanId,
+    });
+    expect(await t.run((ctx) => ctx.db.get(spec.importTaskId))).toMatchObject({
+      createdTradePlanId: spec.generatedNotePlanId,
+    });
   });
 
-  it("fails closed when the referenced plan still exists", async () => {
-    const orphan = await insertOrphan({ keepTradePlan: true });
+  it("archives then atomically applies the three approved treatments and proves zero remaining references", async () => {
+    const spec = await insertAuditedOrphans();
+    const dryRun = await t.query(internal.bravosOrphanCleanup.inspect, spec);
+
+    const result = await t.action(internal.bravosOrphanCleanup.execute, {
+      expectedAuditToken: dryRun.auditToken,
+      repairSpec: spec,
+    });
+
+    expect(result.effects).toEqual({
+      clearedCreatedImportTaskPlanIds: 1,
+      deletedGeneratedNotes: 1,
+      detachedNotes: 1,
+    });
+    expect(await t.run((ctx) => ctx.db.get(spec.generatedNoteId))).toBeNull();
+    expect(
+      await t.run((ctx) => ctx.db.get(spec.importTaskId)),
+    ).not.toHaveProperty("createdTradePlanId");
+    expect(
+      await t.run((ctx) => ctx.db.get(spec.preservedNoteId)),
+    ).toMatchObject({
+      content: preservedNoteContent,
+      ownerId,
+    });
+    expect(
+      await t.run((ctx) => ctx.db.get(spec.preservedNoteId)),
+    ).not.toHaveProperty("tradePlanId");
 
     await expect(
-      t.mutation(internal.bravosOrphanCleanup.repairKnownBravosOrphan, {
-        dryRun: false,
-        importTaskId: orphan.importTaskId,
-        missingTradePlanId: orphan.tradePlanId,
-        noteId: orphan.noteId,
+      t.action(internal.bravosOrphanCleanup.postCheck, {
+        auditToken: dryRun.auditToken,
       }),
-    ).rejects.toThrow("referenced trade plan still exists");
-    expect(await t.run((ctx) => ctx.db.get(orphan.noteId))).not.toBeNull();
-    expect(await t.run((ctx) => ctx.db.get(orphan.importTaskId))).toMatchObject(
-      { createdTradePlanId: orphan.tradePlanId },
-    );
+    ).resolves.toMatchObject({
+      archiveContainsDeletedGeneratedNote: true,
+      archiveContainsDetachedNote: true,
+      archiveReadable: true,
+      auditToken: dryRun.auditToken,
+      clearedImportTaskReferences: 1,
+      danglingReferencesRemaining: 0,
+      deletedGeneratedNotesRemaining: 0,
+      detachedNotesVerified: 1,
+    });
   });
 
-  it("fails closed when the task no longer has the exact Bravos provenance", async () => {
-    const orphan = await insertOrphan();
+  it("refuses execution when data changes after the approved dry-run", async () => {
+    const spec = await insertAuditedOrphans();
+    const dryRun = await t.query(internal.bravosOrphanCleanup.inspect, spec);
     await t.run(async (ctx) => {
-      await ctx.db.patch(orphan.importTaskId, {
-        sourceUrl: "https://example.com/changed-source",
+      await ctx.db.patch(spec.preservedNoteId, {
+        content: "Changed after audit",
       });
     });
 
     await expect(
-      t.mutation(internal.bravosOrphanCleanup.repairKnownBravosOrphan, {
-        dryRun: false,
-        importTaskId: orphan.importTaskId,
-        missingTradePlanId: orphan.tradePlanId,
-        noteId: orphan.noteId,
+      t.action(internal.bravosOrphanCleanup.execute, {
+        expectedAuditToken: dryRun.auditToken,
+        repairSpec: spec,
       }),
-    ).rejects.toThrow("records no longer match the approved provenance");
-    expect(await t.run((ctx) => ctx.db.get(orphan.noteId))).not.toBeNull();
-    expect(await t.run((ctx) => ctx.db.get(orphan.importTaskId))).toMatchObject(
-      { createdTradePlanId: orphan.tradePlanId },
-    );
+    ).rejects.toThrow("live data no longer matches the approved audit token");
+    expect(
+      await t.run((ctx) => ctx.db.get(spec.generatedNoteId)),
+    ).not.toBeNull();
   });
 
-  it("fails closed when the approved note no longer exists", async () => {
-    const orphan = await insertOrphan();
+  it("fails closed when any additional operational dangling reference is present", async () => {
+    const spec = await insertAuditedOrphans();
     await t.run(async (ctx) => {
-      await ctx.db.delete(orphan.noteId);
+      const missingPlanId = await ctx.db.insert("tradePlans", {
+        instrumentSymbol: "MU",
+        name: "Another deleted plan",
+        ownerId,
+        status: "active",
+      });
+      await ctx.db.insert("notes", {
+        content: "Unapproved dangling note",
+        noteDate: 3,
+        ownerId,
+        tradePlanId: missingPlanId,
+      });
+      await ctx.db.delete(missingPlanId);
     });
 
+    const dryRun = await t.query(internal.bravosOrphanCleanup.inspect, spec);
+
+    expect(dryRun.safeToExecute).toBe(false);
+    expect(dryRun.danglingReferences).toHaveLength(4);
     await expect(
-      t.mutation(internal.bravosOrphanCleanup.repairKnownBravosOrphan, {
-        dryRun: false,
-        importTaskId: orphan.importTaskId,
-        missingTradePlanId: orphan.tradePlanId,
-        noteId: orphan.noteId,
+      t.action(internal.bravosOrphanCleanup.execute, {
+        expectedAuditToken: dryRun.auditToken,
+        repairSpec: spec,
       }),
-    ).rejects.toThrow("expected note or import task is missing");
-    expect(await t.run((ctx) => ctx.db.get(orphan.importTaskId))).toMatchObject(
-      { createdTradePlanId: orphan.tradePlanId },
-    );
+    ).rejects.toThrow("no longer match the approved three-document repair");
+    expect(
+      await t.run((ctx) => ctx.db.get(spec.generatedNoteId)),
+    ).not.toBeNull();
   });
 
-  it("fails closed when the note and task owners no longer match", async () => {
-    const orphan = await insertOrphan();
+  it("reports every direct and nested campaign or plan reference shape", async () => {
+    const spec = await insertAuditedOrphans();
     await t.run(async (ctx) => {
-      await ctx.db.patch(orphan.noteId, { ownerId: "owner-b" });
-    });
-
-    await expect(
-      t.mutation(internal.bravosOrphanCleanup.repairKnownBravosOrphan, {
-        dryRun: false,
-        importTaskId: orphan.importTaskId,
-        missingTradePlanId: orphan.tradePlanId,
-        noteId: orphan.noteId,
-      }),
-    ).rejects.toThrow("records no longer match the approved provenance");
-    expect(await t.run((ctx) => ctx.db.get(orphan.noteId))).toMatchObject({
-      ownerId: "owner-b",
-      tradePlanId: orphan.tradePlanId,
-    });
-    expect(await t.run((ctx) => ctx.db.get(orphan.importTaskId))).toMatchObject(
-      { createdTradePlanId: orphan.tradePlanId, ownerId },
-    );
-  });
-
-  it("fails closed when a review action targets the missing trade plan", async () => {
-    const orphan = await insertOrphan();
-    await t.run(async (ctx) => {
+      const missingCampaignId = await ctx.db.insert("campaigns", {
+        name: "Deleted campaign",
+        ownerId,
+        status: "active",
+        thesis: "No longer present",
+      });
+      await ctx.db.insert("tradePlans", {
+        campaignId: missingCampaignId,
+        instrumentSymbol: "MU",
+        name: "Plan with deleted campaign",
+        ownerId,
+        status: "active",
+      });
+      const missingPlanId = await ctx.db.insert("tradePlans", {
+        instrumentSymbol: "MU",
+        name: "Deleted plan",
+        ownerId,
+        status: "active",
+      });
+      await ctx.db.insert("notes", {
+        campaignId: missingCampaignId,
+        content: "Campaign reference",
+        noteDate: 10,
+        ownerId,
+      });
+      await ctx.db.insert("notes", {
+        content: "Plan reference",
+        noteDate: 11,
+        ownerId,
+        tradePlanId: missingPlanId,
+      });
+      await ctx.db.insert("watchlist", {
+        campaignId: missingCampaignId,
+        itemType: "campaign",
+        ownerId,
+        watchedAt: 12,
+      });
+      await ctx.db.insert("watchlist", {
+        itemType: "tradePlan",
+        ownerId,
+        tradePlanId: missingPlanId,
+        watchedAt: 13,
+      });
+      await ctx.db.insert("importTasks", {
+        mode: "follow-up",
+        ownerId,
+        pastedText: "Linked plan reference",
+        status: "done",
+        tradePlanId: missingPlanId,
+      });
+      await ctx.db.insert("importTasks", {
+        createdTradePlanId: missingPlanId,
+        mode: "create",
+        ownerId,
+        pastedText: "Created plan reference",
+        status: "done",
+      });
+      await ctx.db.insert("trades", {
+        assetType: "stock",
+        date: 14,
+        direction: "long",
+        ownerId,
+        price: 1,
+        quantity: 1,
+        side: "buy",
+        ticker: "MU",
+        tradePlanId: missingPlanId,
+      });
+      await ctx.db.insert("inboxTrades", {
+        ownerId,
+        source: "manual",
+        status: "pending_review",
+        ticker: "MU",
+        tradePlanId: missingPlanId,
+        validationErrors: [],
+        validationWarnings: [],
+      });
+      await ctx.db.insert("retrospectives", {
+        content: "Campaign retrospective",
+        ownerId,
+        parentId: missingCampaignId,
+        parentKind: "campaign",
+        updatedAt: 15,
+      });
+      await ctx.db.insert("retrospectives", {
+        content: "Plan retrospective",
+        ownerId,
+        parentId: missingPlanId,
+        parentKind: "tradePlan",
+        updatedAt: 16,
+      });
       const now = Date.now();
       await ctx.db.insert("bravosReviewItems", {
-        canonicalSourceIdentity: sourceUrl,
+        appliedTradePlanId: missingPlanId,
+        approvedAction: {
+          content: "Approved action",
+          kind: "note_only",
+          targetTradePlanId: missingPlanId,
+        },
+        canonicalSourceIdentity: "https://bravosresearch.com/test",
         classification: "follow_up",
         fetchSource: "direct_post_fetch",
         fetchedAt: now,
@@ -206,161 +329,52 @@ describe("known Bravos orphan repair", () => {
         proposedAction: {
           fieldUpdates: [],
           kind: "apply_follow_up",
-          targetTradePlanId: orphan.tradePlanId,
+          targetTradePlanId: missingPlanId,
         },
-        rawText: "Deere follow-up",
+        rawText: "Missing plan references",
         reviewState: "approved",
-        sourceUrl,
+        sourceUrl: "https://bravosresearch.com/test",
+        suggestedTradePlanId: missingPlanId,
       });
+      await ctx.db.delete(missingCampaignId);
+      await ctx.db.delete(missingPlanId);
     });
 
-    await expect(
-      t.mutation(internal.bravosOrphanCleanup.repairKnownBravosOrphan, {
-        dryRun: false,
-        importTaskId: orphan.importTaskId,
-        missingTradePlanId: orphan.tradePlanId,
-        noteId: orphan.noteId,
-      }),
-    ).rejects.toThrow("review item still references the orphan");
-    expect(await t.run((ctx) => ctx.db.get(orphan.noteId))).not.toBeNull();
-  });
+    const result = await t.query(internal.bravosOrphanCleanup.inspect, spec);
 
-  it("fails closed when a review item still references the orphan note", async () => {
-    const orphan = await insertOrphan();
-    await t.run(async (ctx) => {
-      const now = Date.now();
-      await ctx.db.insert("bravosReviewItems", {
-        appliedNoteId: orphan.noteId,
-        canonicalSourceIdentity: sourceUrl,
-        classification: "initiate",
-        fetchSource: "direct_post_fetch",
-        fetchedAt: now,
-        imageUrls: [],
-        lastFetchedAt: now,
-        ownerId,
-        proposedAction: {
-          instrumentSymbol: "DE",
-          kind: "create_trade_plan",
-          name: "Long DE",
-        },
-        rawText: "Deere setup",
-        reviewState: "approved",
-        sourceUrl,
-      });
-    });
-
-    await expect(
-      t.mutation(internal.bravosOrphanCleanup.repairKnownBravosOrphan, {
-        dryRun: false,
-        importTaskId: orphan.importTaskId,
-        missingTradePlanId: orphan.tradePlanId,
-        noteId: orphan.noteId,
-      }),
-    ).rejects.toThrow("review item still references the orphan");
-    expect(await t.run((ctx) => ctx.db.get(orphan.noteId))).not.toBeNull();
-    expect(await t.run((ctx) => ctx.db.get(orphan.importTaskId))).toMatchObject(
-      { createdTradePlanId: orphan.tradePlanId },
-    );
-  });
-
-  it.each(["watchlist", "retrospective"] as const)(
-    "fails closed when a %s still targets the missing trade plan",
-    async (referenceKind) => {
-      const orphan = await insertOrphan();
-      await t.run(async (ctx) => {
-        if (referenceKind === "watchlist") {
-          await ctx.db.insert("watchlist", {
-            itemType: "tradePlan",
-            ownerId,
-            tradePlanId: orphan.tradePlanId,
-            watchedAt: Date.now(),
-          });
-          return;
-        }
-        await ctx.db.insert("retrospectives", {
-          content: "Keep this retrospective",
-          ownerId,
-          parentId: orphan.tradePlanId,
-          parentKind: "tradePlan",
-          updatedAt: Date.now(),
-        });
-      });
-
-      await expect(
-        t.mutation(internal.bravosOrphanCleanup.repairKnownBravosOrphan, {
-          dryRun: false,
-          importTaskId: orphan.importTaskId,
-          missingTradePlanId: orphan.tradePlanId,
-          noteId: orphan.noteId,
+    expect(result.safeToExecute).toBe(false);
+    expect(result.danglingReferences).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ table: "tradePlans", field: "campaignId" }),
+        expect.objectContaining({ table: "notes", field: "campaignId" }),
+        expect.objectContaining({ table: "notes", field: "tradePlanId" }),
+        expect.objectContaining({ table: "watchlist", field: "campaignId" }),
+        expect.objectContaining({ table: "watchlist", field: "tradePlanId" }),
+        expect.objectContaining({ table: "importTasks", field: "tradePlanId" }),
+        expect.objectContaining({
+          table: "importTasks",
+          field: "createdTradePlanId",
         }),
-      ).rejects.toThrow("user-content reference still targets the orphan");
-      expect(await t.run((ctx) => ctx.db.get(orphan.noteId))).not.toBeNull();
-    },
-  );
-
-  it("allows exactly 500 reviews but refuses a larger review history", async () => {
-    const orphan = await insertOrphan();
-    await t.run(async (ctx) => {
-      const now = Date.now();
-      for (let index = 0; index < 500; index += 1) {
-        await ctx.db.insert("bravosReviewItems", {
-          canonicalSourceIdentity: `${sourceUrl}?review=${index}`,
-          classification: "initiate",
-          fetchSource: "direct_post_fetch",
-          fetchedAt: now,
-          imageUrls: [],
-          lastFetchedAt: now,
-          ownerId,
-          proposedAction: {
-            instrumentSymbol: "DE",
-            kind: "create_trade_plan",
-            name: "Long DE",
-          },
-          rawText: "Deere setup",
-          reviewState: "approved",
-          sourceUrl: `${sourceUrl}?review=${index}`,
-        });
-      }
-    });
-
-    await expect(
-      t.mutation(internal.bravosOrphanCleanup.repairKnownBravosOrphan, {
-        dryRun: true,
-        importTaskId: orphan.importTaskId,
-        missingTradePlanId: orphan.tradePlanId,
-        noteId: orphan.noteId,
-      }),
-    ).resolves.toMatchObject({ deletedNotes: 1 });
-
-    await t.run(async (ctx) => {
-      const now = Date.now();
-      await ctx.db.insert("bravosReviewItems", {
-        canonicalSourceIdentity: `${sourceUrl}?review=500`,
-        classification: "initiate",
-        fetchSource: "direct_post_fetch",
-        fetchedAt: now,
-        imageUrls: [],
-        lastFetchedAt: now,
-        ownerId,
-        proposedAction: {
-          instrumentSymbol: "DE",
-          kind: "create_trade_plan",
-          name: "Long DE",
-        },
-        rawText: "Deere setup",
-        reviewState: "approved",
-        sourceUrl: `${sourceUrl}?review=500`,
-      });
-    });
-
-    await expect(
-      t.mutation(internal.bravosOrphanCleanup.repairKnownBravosOrphan, {
-        dryRun: true,
-        importTaskId: orphan.importTaskId,
-        missingTradePlanId: orphan.tradePlanId,
-        noteId: orphan.noteId,
-      }),
-    ).rejects.toThrow("review history exceeds its bounded safety limit");
-    expect(await t.run((ctx) => ctx.db.get(orphan.noteId))).not.toBeNull();
+        expect.objectContaining({ table: "trades", field: "tradePlanId" }),
+        expect.objectContaining({ table: "inboxTrades", field: "tradePlanId" }),
+        expect.objectContaining({ table: "retrospectives", field: "parentId" }),
+        expect.objectContaining({
+          table: "bravosReviewItems",
+          field: "appliedTradePlanId",
+        }),
+        expect.objectContaining({
+          table: "bravosReviewItems",
+          field: "suggestedTradePlanId",
+        }),
+        expect.objectContaining({
+          table: "bravosReviewItems",
+          field: "proposedAction.targetTradePlanId",
+        }),
+        expect.objectContaining({
+          table: "bravosReviewItems",
+          field: "approvedAction.targetTradePlanId",
+        }),
+      ]),
+    );
   });
 });
