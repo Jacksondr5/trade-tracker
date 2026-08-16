@@ -259,6 +259,24 @@ describe("plan-layer clean slate", () => {
         }),
       ]),
     );
+    expect(result.generatedNotesByBravosAppliedNoteId).toBe(1);
+    expect(result.generatedNotesByImportMarker).toBe(1);
+    expect(result.deletedGeneratedNotePreviews).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contentPreview:
+            "Imported from service post: https://bravosresearch.com/mu",
+          ticker: "MU",
+        }),
+        expect.objectContaining({
+          contentPreview: "Imported from service post",
+          ticker: "META",
+        }),
+      ]),
+    );
+    expect(result.deletedGeneratedNotePreviews).toHaveLength(
+      result.counts.deletedGeneratedNotes,
+    );
     expect(result.importMarkerNotesWithAdditionalProseSalvaged).toBe(1);
     expect(result.classificationNotice).toContain("negative-signal");
     expect(result.retrospectivePreviews).toEqual(
@@ -273,6 +291,10 @@ describe("plan-layer clean slate", () => {
         expect.objectContaining({
           contentPreview: "GLDM entry conditions Jackson wrote.",
           ticker: "GLDM",
+        }),
+        expect.objectContaining({
+          contentPreview: "Campaign thesis in Jackson's own words.",
+          ticker: "STALE",
         }),
       ]),
     );
@@ -380,11 +402,15 @@ describe("plan-layer clean slate", () => {
         bravosReviewPlanReferencesRemaining: 0,
         campaignsRemaining: 0,
         checkInGeneratedNoteIdsRemaining: 0,
+        retrospectiveNotesExpected: 3,
         importTaskPlanReferencesRemaining: 0,
         inboxTradePlanReferencesRemaining: 0,
         retrospectiveNotesRemaining: 3,
         retrospectivesRemaining: 0,
+        salvagedNotesExpected: 3,
         salvagedNotesVerified: 3,
+        salvagedNotesWithExpectedTickers: 3,
+        salvagedNotesWithExpectedTickersExpected: 3,
         tradePlanReferencesRemaining: 0,
         tradePlansRemaining: 0,
         tradesAfter: 1,

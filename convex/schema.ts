@@ -374,6 +374,12 @@ export default defineSchema({
     productionSnapshotReference: v.string(),
     retrospectivesConverted: v.number(),
     salvagedNoteIds: v.array(v.id("notes")),
+    salvagedNoteTickerExpectations: v.array(
+      v.object({
+        noteId: v.id("notes"),
+        ticker: v.optional(v.string()),
+      }),
+    ),
     storageId: v.id("_storage"),
   })
     .index("by_owner_auditToken", ["ownerId", "auditToken"])

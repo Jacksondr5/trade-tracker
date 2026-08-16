@@ -88,11 +88,15 @@ type PostCleanupCounts = {
   bravosReviewPlanReferencesRemaining: number;
   campaignsRemaining: number;
   checkInGeneratedNoteIdsRemaining: number;
+  retrospectiveNotesExpected: number;
   importTaskPlanReferencesRemaining: number;
   inboxTradePlanReferencesRemaining: number;
   retrospectiveNotesRemaining: number;
   retrospectivesRemaining: number;
+  salvagedNotesExpected: number;
   salvagedNotesVerified: number;
+  salvagedNotesWithExpectedTickers: number;
+  salvagedNotesWithExpectedTickersExpected: number;
   tradePlanReferencesRemaining: number;
   tradePlansRemaining: number;
   tradesAfter: number;
@@ -146,6 +150,9 @@ const dryRunValidator = v.object({
   auditToken: v.string(),
   classificationNotice: v.string(),
   counts: cleanupCountsValidator,
+  deletedGeneratedNotePreviews: v.array(notePreviewValidator),
+  generatedNotesByBravosAppliedNoteId: v.number(),
+  generatedNotesByImportMarker: v.number(),
   generatedImportNoteCandidateCount: v.number(),
   generatedImportNoteCandidatePreviews: v.array(notePreviewValidator),
   importMarkerNotesWithAdditionalProseSalvaged: v.number(),
@@ -166,11 +173,15 @@ const postCleanupStateCountsValidator = v.object({
   bravosReviewPlanReferencesRemaining: v.number(),
   campaignsRemaining: v.number(),
   checkInGeneratedNoteIdsRemaining: v.number(),
+  retrospectiveNotesExpected: v.number(),
   importTaskPlanReferencesRemaining: v.number(),
   inboxTradePlanReferencesRemaining: v.number(),
   retrospectiveNotesRemaining: v.number(),
   retrospectivesRemaining: v.number(),
+  salvagedNotesExpected: v.number(),
   salvagedNotesVerified: v.number(),
+  salvagedNotesWithExpectedTickers: v.number(),
+  salvagedNotesWithExpectedTickersExpected: v.number(),
   tradePlanReferencesRemaining: v.number(),
   tradePlansRemaining: v.number(),
   tradesBefore: v.number(),
@@ -279,6 +290,15 @@ function isMarkerOnlyImportedServicePost(note: Doc<"notes">) {
   return new RegExp(`^${IMPORTED_SERVICE_POST_PREFIX}(?::\\s+\\S+)?$`).test(
     note.content.trim(),
   );
+}
+
+function salvagedNoteTicker(
+  note: Doc<"notes">,
+  planById: Map<string, Doc<"tradePlans">>,
+) {
+  return note.tradePlanId === undefined
+    ? note.ticker
+    : (planById.get(String(note.tradePlanId))?.instrumentSymbol ?? note.ticker);
 }
 
 function canonicalize(value: unknown): unknown {
@@ -650,14 +670,30 @@ function dryRunSummary(material: SnapshotMaterial) {
   const generatedImportNoteCandidates = material.generatedNotes.filter(
     isMarkerOnlyImportedServicePost,
   );
+  const bravosAppliedNoteIds = new Set(
+    material.bravosReviewItems
+      .map((item) => item.appliedNoteId)
+      .filter((noteId): noteId is Id<"notes"> => noteId !== undefined)
+      .map(String),
+  );
+  const generatedNotesByBravosAppliedNoteId = material.generatedNotes.filter(
+    (note) => bravosAppliedNoteIds.has(String(note._id)),
+  );
+  const generatedNotesByImportMarker = material.generatedNotes.filter(
+    (note) =>
+      !bravosAppliedNoteIds.has(String(note._id)) &&
+      isMarkerOnlyImportedServicePost(note),
+  );
   const notePreviewFor = (note: Doc<"notes">) => ({
     contentPreview: preview(note.content),
     id: note._id,
     noteDate: note.noteDate,
     ticker:
       note.tradePlanId === undefined
-        ? null
-        : (planById.get(String(note.tradePlanId))?.instrumentSymbol ?? null),
+        ? (note.ticker ?? null)
+        : (planById.get(String(note.tradePlanId))?.instrumentSymbol ??
+          note.ticker ??
+          null),
   });
   return {
     archiveByteLength: material.byteLength,
@@ -665,6 +701,12 @@ function dryRunSummary(material: SnapshotMaterial) {
     classificationNotice:
       "Notes without a generated-data signal are conservatively treated as Jackson-authored; this is a negative-signal classification, not proof. Marker-only ‘Imported from service post’ notes are machine provenance and archive-only; marker-prefixed notes with additional prose remain salvaged.",
     counts,
+    deletedGeneratedNotePreviews: [...material.generatedNotes]
+      .sort((left, right) => right.noteDate - left.noteDate)
+      .map(notePreviewFor),
+    generatedNotesByBravosAppliedNoteId:
+      generatedNotesByBravosAppliedNoteId.length,
+    generatedNotesByImportMarker: generatedNotesByImportMarker.length,
     generatedImportNoteCandidateCount: generatedImportNoteCandidates.length,
     generatedImportNoteCandidatePreviews: generatedImportNoteCandidates
       .slice(0, NOTE_PREVIEW_COUNT)
@@ -871,6 +913,11 @@ export const getPostCheckState = internalQuery({
       archive.deletedTradePlanIds,
       "post-check linked trade set",
     );
+    const salvagedNotesById = new Map(
+      salvagedNotes
+        .filter((note): note is Doc<"notes"> => note !== null)
+        .map((note) => [String(note._id), note]),
+    );
     const counts: PostCleanupStateCounts = {
       attachedNotesRemaining: notes.filter(
         (note) =>
@@ -892,6 +939,7 @@ export const getPostCheckState = internalQuery({
           ).length,
         0,
       ),
+      retrospectiveNotesExpected: archive.retrospectivesConverted,
       importTaskPlanReferencesRemaining: importTasks.filter(
         (task) =>
           task.tradePlanId !== undefined ||
@@ -904,12 +952,20 @@ export const getPostCheckState = internalQuery({
         (note) => note.origin === "retrospective",
       ).length,
       retrospectivesRemaining: retrospectives.length,
+      salvagedNotesExpected: archive.salvagedNoteIds.length,
       salvagedNotesVerified: salvagedNotes.filter(
         (note) =>
           note !== null &&
           note.campaignId === undefined &&
           note.tradePlanId === undefined,
       ).length,
+      salvagedNotesWithExpectedTickers:
+        archive.salvagedNoteTickerExpectations.filter((expectation) => {
+          const note = salvagedNotesById.get(String(expectation.noteId));
+          return note !== undefined && note.ticker === expectation.ticker;
+        }).length,
+      salvagedNotesWithExpectedTickersExpected:
+        archive.salvagedNoteTickerExpectations.length,
       tradePlanReferencesRemaining: linkedTrades.length,
       tradePlansRemaining: tradePlans.length,
       tradesBefore: archive.baselineTradeCount,
@@ -1069,18 +1125,17 @@ export const commit = internalMutation({
       productionSnapshotReference: args.productionSnapshotReference,
       retrospectivesConverted: material.retrospectives.length,
       salvagedNoteIds: material.notesToSalvage.map((note) => note._id),
+      salvagedNoteTickerExpectations: material.notesToSalvage.map((note) => ({
+        noteId: note._id,
+        ticker: salvagedNoteTicker(note, planById),
+      })),
       storageId: args.archiveStorageId,
     });
 
     for (const note of material.notesToSalvage) {
-      const ticker =
-        note.tradePlanId === undefined
-          ? note.ticker
-          : (planById.get(String(note.tradePlanId))?.instrumentSymbol ??
-            note.ticker);
       await ctx.db.patch(note._id, {
         campaignId: undefined,
-        ticker,
+        ticker: salvagedNoteTicker(note, planById),
         tradePlanId: undefined,
       });
     }
