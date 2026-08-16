@@ -16,6 +16,7 @@ const MAX_ARCHIVE_BYTES = 256 * 1024;
 const KNOWN_BRAVOS_ORPHAN_SOURCE_URL =
   "https://bravosresearch.com/news-feed/initiating-long-on-deere-company-de-potential-breakout/";
 const PRESERVED_NOTE_CONTENT = "Charts supporting rationale, entry, and target";
+export const ARCHIVE_ONLY_KEYS = ["scannedCounts"] as const;
 
 // This is an explicit operational-reference audit contract, not schema
 // reflection. Any new campaign, trade-plan, or note reference in schema.ts
@@ -362,8 +363,29 @@ function expectedPostCheckScannedCounts(
 
 function auditJsonFromArchiveJson(archiveJson: string) {
   const archive = JSON.parse(archiveJson) as Record<string, unknown>;
-  delete archive.scannedCounts;
+  for (const key of ARCHIVE_ONLY_KEYS) delete archive[key];
   return JSON.stringify(canonicalize(archive));
+}
+
+function archiveAuditPayloadDifference(
+  archiveJson: string,
+  auditJson: string,
+) {
+  try {
+    const archive = JSON.parse(archiveJson) as Record<string, unknown>;
+    const audit = JSON.parse(auditJson) as Record<string, unknown>;
+    for (const key of ARCHIVE_ONLY_KEYS) delete archive[key];
+    const keys = [...new Set([...Object.keys(archive), ...Object.keys(audit)])]
+      .filter(
+        (key) =>
+          JSON.stringify(canonicalize(archive[key])) !==
+          JSON.stringify(canonicalize(audit[key])),
+      )
+      .sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+    return keys.length > 0 ? keys.join(", ") : "unknown";
+  } catch {
+    return "invalid JSON";
+  }
 }
 
 function previewAuditValue(value: unknown) {
@@ -901,7 +923,7 @@ export const commit = internalMutation({
     }
     if (expectedAuditJsonFromArchive !== args.expectedAuditJson) {
       throw new ConvexError(
-        "Bravos dangling-reference repair refused: supplied archive payload does not match the approved audit payload",
+        `Bravos dangling-reference repair refused: supplied archive payload differs from the approved audit payload at key(s): ${archiveAuditPayloadDifference(args.expectedArchiveJson, args.expectedAuditJson)}`,
       );
     }
     const expectedArchiveContentHash = await sha256Hex(args.expectedArchiveJson);

@@ -4,7 +4,7 @@ import { convexTest } from "convex-test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { canonicalize } from "./bravosOrphanCleanup";
+import { ARCHIVE_ONLY_KEYS, canonicalize } from "./bravosOrphanCleanup";
 import { sha256Encodings } from "./lib/sha256";
 import schema from "./schema";
 
@@ -192,6 +192,20 @@ describe("audited Bravos dangling-reference repair", () => {
     expect(first).toBe(second);
     expect((await sha256Encodings(first)).hex).toBe(
       (await sha256Encodings(second)).hex,
+    );
+  });
+
+  it("names exactly the archive-only payload keys", async () => {
+    const spec = await insertAuditedOrphans();
+    const payload = await t.query(
+      internal.bravosOrphanCleanup.getArchivePayload,
+      spec,
+    );
+    const archiveKeys = Object.keys(JSON.parse(payload.archiveJson));
+    const auditKeys = new Set(Object.keys(JSON.parse(payload.auditJson)));
+
+    expect(ARCHIVE_ONLY_KEYS).toEqual(
+      archiveKeys.filter((key) => !auditKeys.has(key)).sort(),
     );
   });
 
@@ -671,6 +685,35 @@ describe("audited Bravos dangling-reference repair", () => {
         archiveStorageId: wrongStorageId,
       }),
     ).rejects.toThrow("stored archive blob content does not match");
+    expect(
+      await t.run((ctx) => ctx.db.get(spec.generatedNoteId)),
+    ).not.toBeNull();
+  });
+
+  it("refuses a substituted archive even when its blob and caller hash agree", async () => {
+    const spec = await insertAuditedOrphans();
+    const { payload } = await getStoredArchivePayload(spec);
+    const substitutedArchive = JSON.stringify({
+      ...JSON.parse(payload.archiveJson),
+      documents: { substituted: "archive" },
+    });
+    const substitutedStorageId = await t.run((ctx) =>
+      ctx.storage.store(
+        new Blob([substitutedArchive], { type: "application/json" }),
+      ),
+    );
+    const substitutedHash = (await sha256Encodings(substitutedArchive)).hex;
+
+    await expect(
+      t.mutation(internal.bravosOrphanCleanup.commit, {
+        archiveContentHash: substitutedHash,
+        archiveStorageId: substitutedStorageId,
+        expectedArchiveJson: substitutedArchive,
+        expectedAuditJson: payload.auditJson,
+        expectedAuditToken: payload.auditToken,
+        repairSpec: spec,
+      }),
+    ).rejects.toThrow("differs from the approved audit payload at key(s): documents");
     expect(
       await t.run((ctx) => ctx.db.get(spec.generatedNoteId)),
     ).not.toBeNull();
