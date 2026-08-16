@@ -160,9 +160,10 @@ type Snapshot = {
 };
 
 type SnapshotMaterial = Snapshot & {
+  archiveContentHash: string;
   archiveJson: string;
+  auditJson: string;
   auditToken: string;
-  contentHash: string;
 };
 
 type RepairSpec = {
@@ -249,6 +250,7 @@ const dryRunValidator = v.object({
   }),
   generatedNoteReferences: v.array(generatedNoteReferenceValidator),
   generatedNoteArchiveReferences: v.array(generatedNoteArchiveReferenceValidator),
+  refusalReason: v.union(v.string(), v.null()),
   safeToExecute: v.boolean(),
   scannedCounts: v.record(v.string(), v.number()),
   scannedArchivalReferenceFields: v.array(v.string()),
@@ -278,6 +280,10 @@ const postCheckValidator = v.object({
   deletedGeneratedNotesRemaining: v.number(),
   detachedNotesVerified: v.number(),
   generatedNoteReferencesRemaining: v.number(),
+  generatedNoteArchiveReferencesRemaining: v.number(),
+  scannedCountsAfter: v.record(v.string(), v.number()),
+  scannedCountsBefore: v.record(v.string(), v.number()),
+  scannedCountsExpectedAfter: v.record(v.string(), v.number()),
 });
 
 function assertBounded<T>(rows: T[], table: string): T[] {
@@ -293,7 +299,7 @@ function preview(content: string) {
   return content.replace(/\s+/g, " ").trim().slice(0, 240);
 }
 
-function canonicalize(value: unknown): unknown {
+export function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize);
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
@@ -304,6 +310,158 @@ function canonicalize(value: unknown): unknown {
     );
   }
   return value;
+}
+
+function archivePayload(snapshot: Snapshot, spec: RepairSpec) {
+  return {
+    archiveFormat: ARCHIVE_FORMAT,
+    archivalReferences: snapshot.archivalReferences,
+    danglingReferences: snapshot.danglingReferences,
+    documents: snapshot.documents,
+    generatedNoteArchiveReferences: snapshot.generatedNoteArchiveReferences,
+    generatedNoteReferences: snapshot.generatedNoteReferences,
+    repairSpec: spec,
+    scannedArchivalReferenceFields: snapshot.scannedArchivalReferenceFields,
+    scannedCounts: snapshot.scannedCounts,
+    scannedOperationalReferenceFields:
+      snapshot.scannedOperationalReferenceFields,
+  };
+}
+
+function auditPayload(snapshot: Snapshot, spec: RepairSpec) {
+  // This positive list is the approval contract. The recovery archive above is
+  // deliberately broader: it retains scan counts and every other audit fact.
+  return {
+    archiveFormat: ARCHIVE_FORMAT,
+    archivalReferences: snapshot.archivalReferences,
+    danglingReferences: snapshot.danglingReferences,
+    documents: snapshot.documents,
+    generatedNoteArchiveReferences: snapshot.generatedNoteArchiveReferences,
+    generatedNoteReferences: snapshot.generatedNoteReferences,
+    repairSpec: spec,
+    scannedArchivalReferenceFields: snapshot.scannedArchivalReferenceFields,
+    scannedOperationalReferenceFields:
+      snapshot.scannedOperationalReferenceFields,
+  };
+}
+
+function auditTokenForContentHash(contentHash: string) {
+  return `${ARCHIVE_FORMAT}:${contentHash}`;
+}
+
+function expectedPostCheckScannedCounts(
+  scannedCountsBefore: Record<string, number>,
+) {
+  return {
+    ...scannedCountsBefore,
+    bravosDanglingReferenceArchives:
+      (scannedCountsBefore.bravosDanglingReferenceArchives ?? 0) + 1,
+    notes: (scannedCountsBefore.notes ?? 0) - 1,
+  };
+}
+
+function auditJsonFromArchiveJson(archiveJson: string) {
+  const archive = JSON.parse(archiveJson) as Record<string, unknown>;
+  delete archive.scannedCounts;
+  return JSON.stringify(canonicalize(archive));
+}
+
+function previewAuditValue(value: unknown) {
+  const text = JSON.stringify(canonicalize(value));
+  return text.length > 480 ? `${text.slice(0, 477)}...` : text;
+}
+
+function auditDriftDetail(expectedAuditJson: string, actualAuditJson: string) {
+  try {
+    const expected = JSON.parse(expectedAuditJson) as Record<string, unknown>;
+    const actual = JSON.parse(actualAuditJson) as Record<string, unknown>;
+    const boundFacts = [
+      "danglingReferences",
+      "generatedNoteReferences",
+      "generatedNoteArchiveReferences",
+      "archivalReferences",
+      "documents",
+      "repairSpec",
+      "scannedOperationalReferenceFields",
+      "scannedArchivalReferenceFields",
+    ];
+    for (const fact of boundFacts) {
+      const expectedCanonical = JSON.stringify(canonicalize(expected[fact]));
+      const actualCanonical = JSON.stringify(canonicalize(actual[fact]));
+      if (expectedCanonical !== actualCanonical) {
+        return `${fact} changed from ${previewAuditValue(expected[fact])} to ${previewAuditValue(actual[fact])}`;
+      }
+    }
+  } catch {
+    return "the supplied approved audit payload is not valid JSON";
+  }
+  return "the audit content hash changed without an identifiable bound-fact difference";
+}
+
+function approvalFailure(snapshot: Snapshot, spec: RepairSpec): string | null {
+  const {
+    documents,
+    danglingReferences,
+    generatedNoteArchiveReferences,
+    generatedNoteReferences,
+  } = snapshot;
+  if (!documents) {
+    return "approved documents changed from all three required documents present to one or more missing";
+  }
+  if (generatedNoteArchiveReferences.length !== 0) {
+    return `the generated note gained archival references: ${previewAuditValue(generatedNoteArchiveReferences)}`;
+  }
+  if (generatedNoteReferences.length !== 0) {
+    return `the generated note gained operational references: ${previewAuditValue(generatedNoteReferences)}`;
+  }
+  if (danglingReferences.length !== 3) {
+    return `operational dangling references changed from exactly three approved references to ${previewAuditValue(danglingReferences)}`;
+  }
+  const expectedReferences = [
+    `${spec.generatedNoteId}:tradePlanId:${spec.generatedNotePlanId}`,
+    `${spec.importTaskId}:createdTradePlanId:${spec.generatedNotePlanId}`,
+    `${spec.preservedNoteId}:tradePlanId:${spec.preservedNotePlanId}`,
+  ];
+  const actualReferences = danglingReferences.map(
+    (reference) =>
+      `${reference.documentId}:${reference.field}:${reference.targetId}`,
+  );
+  if (!expectedReferences.every((reference) => actualReferences.includes(reference))) {
+    return `operational dangling references changed from ${previewAuditValue(expectedReferences)} to ${previewAuditValue(actualReferences)}`;
+  }
+  const { generatedNote, importTask, preservedNote } = documents;
+  if (
+    generatedNote.ownerId !== importTask.ownerId ||
+    generatedNote.ownerId !== preservedNote.ownerId
+  ) {
+    return "approved document owners no longer match";
+  }
+  if (generatedNote.tradePlanId !== spec.generatedNotePlanId) {
+    return `generated note tradePlanId changed from ${spec.generatedNotePlanId} to ${String(generatedNote.tradePlanId)}`;
+  }
+  const requiredMarker = `Imported from service post: ${KNOWN_BRAVOS_ORPHAN_SOURCE_URL}`;
+  if (generatedNote.content !== requiredMarker) {
+    return `generated note content changed from the exact approved import marker to ${preview(generatedNote.content)}`;
+  }
+  if (importTask.mode !== "create" || importTask.status !== "done") {
+    return `import task mode/status changed from create/done to ${importTask.mode}/${importTask.status}`;
+  }
+  if (importTask.sourceUrl !== KNOWN_BRAVOS_ORPHAN_SOURCE_URL) {
+    return `import task sourceUrl changed from ${KNOWN_BRAVOS_ORPHAN_SOURCE_URL} to ${String(importTask.sourceUrl)}`;
+  }
+  if (importTask.createdTradePlanId !== spec.generatedNotePlanId) {
+    return `import task createdTradePlanId changed from ${spec.generatedNotePlanId} to ${String(importTask.createdTradePlanId)}`;
+  }
+  if (importTask.tradePlanId !== undefined) {
+    return `import task tradePlanId changed from undefined to ${String(importTask.tradePlanId)}`;
+  }
+  if (preservedNote.tradePlanId !== spec.preservedNotePlanId) {
+    return `preserved note tradePlanId changed from ${spec.preservedNotePlanId} to ${String(preservedNote.tradePlanId)}`;
+  }
+  if (preservedNote.content !== PRESERVED_NOTE_CONTENT) {
+    return `preserved note content changed from ${PRESERVED_NOTE_CONTENT} to ${preview(preservedNote.content)}`;
+  }
+  return null;
 }
 
 async function sha256Hex(value: string) {
@@ -634,82 +792,27 @@ async function readSnapshot(
   };
 }
 
-function approvedShape(snapshot: Snapshot, spec: RepairSpec) {
-  const {
-    documents,
-    danglingReferences,
-    generatedNoteArchiveReferences,
-    generatedNoteReferences,
-  } = snapshot;
-  if (
-    !documents ||
-    danglingReferences.length !== 3 ||
-    generatedNoteArchiveReferences.length !== 0 ||
-    generatedNoteReferences.length !== 0
-  ) {
-    return false;
-  }
-  const { generatedNote, importTask, preservedNote } = documents;
-  const expectedReferences = [
-    `${spec.generatedNoteId}:tradePlanId:${spec.generatedNotePlanId}`,
-    `${spec.importTaskId}:createdTradePlanId:${spec.generatedNotePlanId}`,
-    `${spec.preservedNoteId}:tradePlanId:${spec.preservedNotePlanId}`,
-  ];
-  const actualReferences = danglingReferences.map(
-    (reference) =>
-      `${reference.documentId}:${reference.field}:${reference.targetId}`,
-  );
-  return (
-    expectedReferences.every((reference) =>
-      actualReferences.includes(reference),
-    ) &&
-    generatedNote.ownerId === importTask.ownerId &&
-    generatedNote.ownerId === preservedNote.ownerId &&
-    generatedNote.tradePlanId === spec.generatedNotePlanId &&
-    generatedNote.content ===
-      `Imported from service post: ${KNOWN_BRAVOS_ORPHAN_SOURCE_URL}` &&
-    importTask.mode === "create" &&
-    importTask.status === "done" &&
-    importTask.sourceUrl === KNOWN_BRAVOS_ORPHAN_SOURCE_URL &&
-    importTask.createdTradePlanId === spec.generatedNotePlanId &&
-    importTask.tradePlanId === undefined &&
-    preservedNote.tradePlanId === spec.preservedNotePlanId &&
-    preservedNote.content === PRESERVED_NOTE_CONTENT
-  );
-}
-
 async function snapshotMaterial(
   ctx: SnapshotCtx,
   spec: RepairSpec,
 ): Promise<SnapshotMaterial> {
   const snapshot = await readSnapshot(ctx, spec);
-  const archiveJson = JSON.stringify(
-    canonicalize({
-      archiveFormat: ARCHIVE_FORMAT,
-      archivalReferences: snapshot.archivalReferences,
-      danglingReferences: snapshot.danglingReferences,
-      documents: snapshot.documents,
-      generatedNoteArchiveReferences: snapshot.generatedNoteArchiveReferences,
-      repairSpec: spec,
-      scannedCounts: snapshot.scannedCounts,
-      generatedNoteReferences: snapshot.generatedNoteReferences,
-      scannedArchivalReferenceFields: snapshot.scannedArchivalReferenceFields,
-      scannedOperationalReferenceFields:
-        snapshot.scannedOperationalReferenceFields,
-    }),
-  );
+  const archiveJson = JSON.stringify(canonicalize(archivePayload(snapshot, spec)));
+  const auditJson = JSON.stringify(canonicalize(auditPayload(snapshot, spec)));
   const byteLength = new TextEncoder().encode(archiveJson).byteLength;
   if (byteLength > MAX_ARCHIVE_BYTES) {
     throw new ConvexError(
       `Bravos dangling-reference repair refused: archive exceeds its ${MAX_ARCHIVE_BYTES}-byte safety limit`,
     );
   }
-  const contentHash = await sha256Hex(archiveJson);
+  const archiveContentHash = await sha256Hex(archiveJson);
+  const auditContentHash = await sha256Hex(auditJson);
   return {
     ...snapshot,
+    archiveContentHash,
     archiveJson,
-    auditToken: `${ARCHIVE_FORMAT}:${contentHash}`,
-    contentHash,
+    auditJson,
+    auditToken: auditTokenForContentHash(auditContentHash),
   };
 }
 
@@ -730,7 +833,8 @@ function dryRun(material: SnapshotMaterial, spec: RepairSpec) {
     scannedArchivalReferenceFields: material.scannedArchivalReferenceFields,
     scannedOperationalReferenceFields:
       material.scannedOperationalReferenceFields,
-    safeToExecute: approvedShape(material, spec),
+    refusalReason: approvalFailure(material, spec),
+    safeToExecute: approvalFailure(material, spec) === null,
     scannedCounts: material.scannedCounts,
   };
 }
@@ -745,17 +849,21 @@ export const getArchivePayload = internalQuery({
   args: repairSpecValidator,
   returns: v.object({
     archiveJson: v.string(),
+    auditJson: v.string(),
     auditToken: v.string(),
     contentHash: v.string(),
+    refusalReason: v.union(v.string(), v.null()),
     safeToExecute: v.boolean(),
   }),
   handler: async (ctx, args) => {
     const material = await snapshotMaterial(ctx, args);
     return {
       archiveJson: material.archiveJson,
+      auditJson: material.auditJson,
       auditToken: material.auditToken,
-      contentHash: material.contentHash,
-      safeToExecute: approvedShape(material, args),
+      contentHash: material.archiveContentHash,
+      refusalReason: approvalFailure(material, args),
+      safeToExecute: approvalFailure(material, args) === null,
     };
   },
 });
@@ -774,50 +882,79 @@ export const commit = internalMutation({
   args: {
     archiveContentHash: v.string(),
     archiveStorageId: v.id("_storage"),
+    expectedArchiveJson: v.string(),
+    expectedAuditJson: v.string(),
     expectedAuditToken: v.string(),
     repairSpec: repairSpecValidator,
   },
   returns: executionValidator,
   handler: async (ctx, args) => {
+    let expectedAuditJsonFromArchive: string;
+    try {
+      expectedAuditJsonFromArchive = auditJsonFromArchiveJson(
+        args.expectedArchiveJson,
+      );
+    } catch {
+      throw new ConvexError(
+        "Bravos dangling-reference repair refused: supplied archive payload is not valid JSON",
+      );
+    }
+    if (expectedAuditJsonFromArchive !== args.expectedAuditJson) {
+      throw new ConvexError(
+        "Bravos dangling-reference repair refused: supplied archive payload does not match the approved audit payload",
+      );
+    }
+    const expectedArchiveContentHash = await sha256Hex(args.expectedArchiveJson);
+    if (expectedArchiveContentHash !== args.archiveContentHash) {
+      throw new ConvexError(
+        `Bravos dangling-reference repair refused: supplied archive content hash changed from ${args.archiveContentHash} to ${expectedArchiveContentHash}`,
+      );
+    }
     const material = await snapshotMaterial(ctx, args.repairSpec);
+    const expectedAuditTokenForJson = auditTokenForContentHash(
+      await sha256Hex(args.expectedAuditJson),
+    );
+    if (expectedAuditTokenForJson !== args.expectedAuditToken) {
+      throw new ConvexError(
+        "Bravos dangling-reference repair refused: supplied audit payload does not bind the expected audit token",
+      );
+    }
     if (material.auditToken !== args.expectedAuditToken) {
       throw new ConvexError(
-        "Bravos dangling-reference repair refused: live data no longer matches the approved audit token",
+        `Bravos dangling-reference repair refused: ${auditDriftDetail(args.expectedAuditJson, material.auditJson)}`,
       );
     }
-    if (!approvedShape(material, args.repairSpec)) {
+    const failure = approvalFailure(material, args.repairSpec);
+    if (failure) {
       throw new ConvexError(
-        "Bravos dangling-reference repair refused: live dangling references no longer match the approved three-document repair",
-      );
-    }
-    if (material.contentHash !== args.archiveContentHash) {
-      throw new ConvexError(
-        "Bravos dangling-reference repair refused: stored archive does not match the approved audit content",
+        `Bravos dangling-reference repair refused: ${failure}`,
       );
     }
     const storedArchive = await ctx.db.system.get(
       "_storage",
       args.archiveStorageId,
     );
-    const archiveDigest = await sha256Encodings(material.archiveJson);
-    if (
-      !storedArchive ||
-      normalizeStorageSha256(storedArchive.sha256) !== archiveDigest.hex
-    ) {
+    const archiveDigest = await sha256Encodings(args.expectedArchiveJson);
+    if (!storedArchive) {
       throw new ConvexError(
-        "Bravos dangling-reference repair refused: stored archive blob is missing or does not match the approved audit content",
+        "Bravos dangling-reference repair refused: stored archive blob is missing",
+      );
+    }
+    if (normalizeStorageSha256(storedArchive.sha256) !== archiveDigest.hex) {
+      throw new ConvexError(
+        "Bravos dangling-reference repair refused: stored archive blob content does not match the approved archive content hash",
       );
     }
     const documents = material.documents;
     if (!documents) {
       throw new ConvexError(
-        "Bravos dangling-reference repair refused: approved documents are missing",
+        "Bravos dangling-reference repair refused: approved document set changed from all documents present to one or more missing",
       );
     }
     const archiveId = await ctx.db.insert("bravosDanglingReferenceArchives", {
       archiveFormat: ARCHIVE_FORMAT,
       auditToken: material.auditToken,
-      contentHash: material.contentHash,
+      contentHash: material.archiveContentHash,
       createdAt: Date.now(),
       deletedGeneratedNoteId: documents.generatedNote._id,
       detachedNoteId: documents.preservedNote._id,
@@ -853,8 +990,10 @@ export const execute = internalAction({
   handler: async (ctx, args): Promise<ExecutionResult> => {
     const payload: {
       archiveJson: string;
+      auditJson: string;
       auditToken: string;
       contentHash: string;
+      refusalReason: string | null;
       safeToExecute: boolean;
     } = await ctx.runQuery(
       internal.bravosOrphanCleanup.getArchivePayload,
@@ -862,12 +1001,12 @@ export const execute = internalAction({
     );
     if (payload.auditToken !== args.expectedAuditToken) {
       throw new ConvexError(
-        "Bravos dangling-reference repair refused: live data no longer matches the approved audit token",
+        `Bravos dangling-reference repair refused: audit content hash changed from ${args.expectedAuditToken} to ${payload.auditToken}`,
       );
     }
     if (!payload.safeToExecute) {
       throw new ConvexError(
-        "Bravos dangling-reference repair refused: live dangling references no longer match the approved three-document repair",
+        `Bravos dangling-reference repair refused: ${payload.refusalReason ?? "current audit does not satisfy the approved three-document repair"}`,
       );
     }
     let archiveStorageId: Id<"_storage"> | undefined;
@@ -880,6 +1019,8 @@ export const execute = internalAction({
         {
           archiveContentHash: payload.contentHash,
           archiveStorageId,
+          expectedArchiveJson: payload.archiveJson,
+          expectedAuditJson: payload.auditJson,
           expectedAuditToken: args.expectedAuditToken,
           repairSpec: args.repairSpec,
         },
@@ -915,7 +1056,9 @@ export const getPostCheckState = internalQuery({
     deletedGeneratedNoteId: v.id("notes"),
     detachedNoteId: v.id("notes"),
     detachedNotesVerified: v.number(),
+    generatedNoteArchiveReferencesRemaining: v.number(),
     generatedNoteReferencesRemaining: v.number(),
+    scannedCountsAfter: v.record(v.string(), v.number()),
   }),
   handler: async (ctx, args) => {
     const archive = await ctx.db
@@ -954,7 +1097,10 @@ export const getPostCheckState = internalQuery({
         preservedNote !== null && preservedNote.tradePlanId === undefined
           ? 1
           : 0,
+      generatedNoteArchiveReferencesRemaining:
+        snapshot.generatedNoteArchiveReferences.length,
       generatedNoteReferencesRemaining: snapshot.generatedNoteReferences.length,
+      scannedCountsAfter: snapshot.scannedCounts,
     };
   },
 });
@@ -973,12 +1119,24 @@ export const postCheck = internalAction({
       deletedGeneratedNoteId: Id<"notes">;
       detachedNoteId: Id<"notes">;
       detachedNotesVerified: number;
+      generatedNoteArchiveReferencesRemaining: number;
       generatedNoteReferencesRemaining: number;
+      scannedCountsAfter: Record<string, number>;
     } = await ctx.runQuery(internal.bravosOrphanCleanup.getPostCheckState, {
       auditToken: args.auditToken,
     });
     const blob = await ctx.storage.get(state.archiveStorageId);
     const archiveText = blob ? await blob.text() : "";
+    let archivedPayload: { scannedCounts?: Record<string, number> } | null =
+      null;
+    try {
+      archivedPayload = archiveText
+        ? (JSON.parse(archiveText) as { scannedCounts?: Record<string, number> })
+        : null;
+    } catch {
+      // The hash check below reports a corrupt archive without hiding the rest
+      // of the independent post-check behind a JSON parse failure.
+    }
     return {
       archiveContentHashMatches:
         blob !== null && (await sha256Hex(archiveText)) === state.archiveContentHash,
@@ -996,7 +1154,14 @@ export const postCheck = internalAction({
       clearedImportTaskReferences: state.clearedImportTaskReferences,
       deletedGeneratedNotesRemaining: state.deletedGeneratedNotesRemaining,
       detachedNotesVerified: state.detachedNotesVerified,
+      generatedNoteArchiveReferencesRemaining:
+        state.generatedNoteArchiveReferencesRemaining,
       generatedNoteReferencesRemaining: state.generatedNoteReferencesRemaining,
+      scannedCountsAfter: state.scannedCountsAfter,
+      scannedCountsBefore: archivedPayload?.scannedCounts ?? {},
+      scannedCountsExpectedAfter: expectedPostCheckScannedCounts(
+        archivedPayload?.scannedCounts ?? {},
+      ),
     };
   },
 });

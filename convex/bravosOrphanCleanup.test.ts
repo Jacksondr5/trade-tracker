@@ -4,6 +4,8 @@ import { convexTest } from "convex-test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { canonicalize } from "./bravosOrphanCleanup";
+import { sha256Encodings } from "./lib/sha256";
 import schema from "./schema";
 
 interface ImportMetaWithGlob extends ImportMeta {
@@ -36,7 +38,9 @@ describe("audited Bravos dangling-reference repair", () => {
     t = convexTest(schema, modules);
   });
 
-  async function insertAuditedOrphans(): Promise<RepairSpec> {
+  async function insertAuditedOrphans(
+    options: { keepGeneratedPlan?: boolean } = {},
+  ): Promise<RepairSpec> {
     return await t.run(async (ctx) => {
       const generatedPlanId = await ctx.db.insert("tradePlans", {
         instrumentSymbol: "DE",
@@ -71,7 +75,7 @@ describe("audited Bravos dangling-reference repair", () => {
         sourceUrl,
         status: "done",
       });
-      await ctx.db.delete(generatedPlanId);
+      if (!options.keepGeneratedPlan) await ctx.db.delete(generatedPlanId);
       await ctx.db.delete(preservedPlanId);
       return {
         generatedNoteId,
@@ -146,6 +150,50 @@ describe("audited Bravos dangling-reference repair", () => {
       }),
     );
   }
+
+  async function insertPriorBravosArchiveReferencing(
+    spec: RepairSpec,
+    field: "deletedGeneratedNoteId" | "detachedNoteId",
+  ) {
+    const storageId = await t.run((ctx) =>
+      ctx.storage.store(new Blob(["prior Bravos archive"])),
+    );
+    return await t.run((ctx) =>
+      ctx.db.insert("bravosDanglingReferenceArchives", {
+        archiveFormat: "bravos_dangling_reference_repair_v1",
+        auditToken: "prior-bravos-audit",
+        contentHash: "prior-bravos-content",
+        createdAt: 1,
+        deletedGeneratedNoteId:
+          field === "deletedGeneratedNoteId"
+            ? spec.generatedNoteId
+            : spec.preservedNoteId,
+        detachedNoteId:
+          field === "detachedNoteId"
+            ? spec.generatedNoteId
+            : spec.preservedNoteId,
+        generatedNotePlanId: spec.generatedNotePlanId,
+        ownerId,
+        patchedImportTaskId: spec.importTaskId,
+        preservedNotePlanId: spec.preservedNotePlanId,
+        storageId,
+      }),
+    );
+  }
+
+  it("canonicalizes object key insertion order before approval hashing", async () => {
+    const first = JSON.stringify(
+      canonicalize({ z: { beta: 2, alpha: 1 }, a: [3, { y: 2, x: 1 }] }),
+    );
+    const second = JSON.stringify(
+      canonicalize({ a: [3, { x: 1, y: 2 }], z: { alpha: 1, beta: 2 } }),
+    );
+
+    expect(first).toBe(second);
+    expect((await sha256Encodings(first)).hex).toBe(
+      (await sha256Encodings(second)).hex,
+    );
+  });
 
   it("reports exact per-document effects in dry-run mode without changing records", async () => {
     const spec = await insertAuditedOrphans();
@@ -232,6 +280,7 @@ describe("audited Bravos dangling-reference repair", () => {
   it("archives then atomically applies the three approved treatments and proves zero remaining references", async () => {
     const spec = await insertAuditedOrphans();
     const dryRun = await t.query(internal.bravosOrphanCleanup.inspect, spec);
+    expect(dryRun.scannedCounts).toMatchObject({ notes: 2 });
 
     const result = await t.action(internal.bravosOrphanCleanup.execute, {
       expectedAuditToken: dryRun.auditToken,
@@ -272,7 +321,10 @@ describe("audited Bravos dangling-reference repair", () => {
       clearedImportTaskReferences: 1,
       deletedGeneratedNotesRemaining: 0,
       detachedNotesVerified: 1,
+      generatedNoteArchiveReferencesRemaining: 1,
       generatedNoteReferencesRemaining: 0,
+      scannedCountsBefore: expect.objectContaining({ notes: 2 }),
+      scannedCountsAfter: expect.objectContaining({ notes: 1 }),
     });
 
     const archiveText = await t.action(async (ctx) => {
@@ -284,6 +336,7 @@ describe("audited Bravos dangling-reference repair", () => {
         generatedNote?: { _id?: string; content?: string };
         preservedNote?: { _id?: string; content?: string };
       };
+      scannedCounts?: Record<string, number>;
     };
     expect(archive.documents?.generatedNote).toMatchObject({
       _id: String(spec.generatedNoteId),
@@ -293,6 +346,7 @@ describe("audited Bravos dangling-reference repair", () => {
       _id: String(spec.preservedNoteId),
       content: preservedNoteContent,
     });
+    expect(archive.scannedCounts).toMatchObject({ notes: 2 });
   });
 
   it("refuses a stale audit token after one approved record is externally repaired", async () => {
@@ -307,10 +361,36 @@ describe("audited Bravos dangling-reference repair", () => {
         expectedAuditToken: dryRun.auditToken,
         repairSpec: spec,
       }),
-    ).rejects.toThrow("live data no longer matches the approved audit token");
+    ).rejects.toThrow("audit content hash changed from");
     expect(
       await t.run((ctx) => ctx.db.get(spec.generatedNoteId)),
     ).not.toBeNull();
+  });
+
+  it("permits unrelated scan-count drift while preserving before and after evidence", async () => {
+    const spec = await insertAuditedOrphans();
+    const dryRun = await t.query(internal.bravosOrphanCleanup.inspect, spec);
+    await t.run((ctx) =>
+      ctx.db.insert("notes", {
+        content: "Unrelated parentless note",
+        noteDate: 3,
+        ownerId,
+      }),
+    );
+
+    await t.action(internal.bravosOrphanCleanup.execute, {
+      expectedAuditToken: dryRun.auditToken,
+      repairSpec: spec,
+    });
+    await expect(
+      t.action(internal.bravosOrphanCleanup.postCheck, {
+        auditToken: dryRun.auditToken,
+      }),
+    ).resolves.toMatchObject({
+      scannedCountsBefore: expect.objectContaining({ notes: 3 }),
+      scannedCountsAfter: expect.objectContaining({ notes: 2 }),
+      scannedCountsExpectedAfter: expect.objectContaining({ notes: 2 }),
+    });
   });
 
   it.each([
@@ -368,7 +448,7 @@ describe("audited Bravos dangling-reference repair", () => {
         expectedAuditToken: dryRun.auditToken,
         repairSpec: spec,
       }),
-    ).rejects.toThrow("no longer match the approved three-document repair");
+    ).rejects.toThrow("Bravos dangling-reference repair refused:");
     expect(
       await t.run((ctx) => ctx.db.get(spec.generatedNoteId)),
     ).not.toBeNull();
@@ -400,7 +480,55 @@ describe("audited Bravos dangling-reference repair", () => {
         expectedAuditToken: dryRun.auditToken,
         repairSpec: spec,
       }),
-    ).rejects.toThrow("no longer match the approved three-document repair");
+    ).rejects.toThrow("generated note gained archival references");
+    expect(
+      await t.run((ctx) => ctx.db.get(spec.generatedNoteId)),
+    ).not.toBeNull();
+  });
+
+  it.each([
+    ["plan-layer generated-note ids", async (spec: RepairSpec) => {
+      const storageId = await t.run((ctx) =>
+        ctx.storage.store(new Blob(["plan-layer generated note archive"])),
+      );
+      await t.run((ctx) =>
+        ctx.db.insert("planLayerArchives", {
+          archiveFormat: "plan_layer_clean_slate_v1",
+          auditToken: "prior-plan-layer-generated-note-audit",
+          baselineTradeCount: 0,
+          contentHash: "prior-plan-layer-generated-note-content",
+          createdAt: 1,
+          deletedTradePlanIds: [],
+          generatedNoteIds: [spec.generatedNoteId],
+          ownerId,
+          productionSnapshotReference: "prior snapshot",
+          retrospectivesConverted: 0,
+          salvagedNoteIds: [],
+          salvagedNoteTickerExpectations: [],
+          storageId,
+        }),
+      );
+    }],
+    ["a prior Bravos archive deleted-note field", async (spec: RepairSpec) => {
+      await insertPriorBravosArchiveReferencing(spec, "deletedGeneratedNoteId");
+    }],
+    ["a prior Bravos archive detached-note field", async (spec: RepairSpec) => {
+      await insertPriorBravosArchiveReferencing(spec, "detachedNoteId");
+    }],
+  ])("refuses deletion when %s preserves the generated note", async (_name, insertReference) => {
+    const spec = await insertAuditedOrphans();
+    await insertReference(spec);
+
+    const dryRun = await t.query(internal.bravosOrphanCleanup.inspect, spec);
+
+    expect(dryRun.safeToExecute).toBe(false);
+    expect(dryRun.refusalReason).toContain("generated note gained archival references");
+    await expect(
+      t.action(internal.bravosOrphanCleanup.execute, {
+        expectedAuditToken: dryRun.auditToken,
+        repairSpec: spec,
+      }),
+    ).rejects.toThrow("generated note gained archival references");
     expect(
       await t.run((ctx) => ctx.db.get(spec.generatedNoteId)),
     ).not.toBeNull();
@@ -430,7 +558,45 @@ describe("audited Bravos dangling-reference repair", () => {
         expectedAuditToken: dryRun.auditToken,
         repairSpec: spec,
       }),
-    ).rejects.toThrow("no longer match the approved three-document repair");
+    ).rejects.toThrow("operational dangling references changed from");
+  });
+
+  it("pins the every-reference bijection when only one approved triple remains dangling", async () => {
+    const spec = await insertAuditedOrphans({ keepGeneratedPlan: true });
+    await t.run(async (ctx) => {
+      for (const name of ["First unrelated orphan", "Second unrelated orphan"]) {
+        const missingPlan = await ctx.db.insert("tradePlans", {
+          instrumentSymbol: "MU",
+          name,
+          ownerId,
+          status: "active",
+        });
+        await ctx.db.insert("notes", {
+          content: name,
+          noteDate: 3,
+          ownerId,
+          tradePlanId: missingPlan,
+        });
+        await ctx.db.delete(missingPlan);
+      }
+    });
+
+    const dryRun = await t.query(internal.bravosOrphanCleanup.inspect, spec);
+
+    expect(dryRun.danglingReferences).toHaveLength(3);
+    expect(dryRun.safeToExecute).toBe(false);
+    expect(dryRun.refusalReason).toContain(
+      "operational dangling references changed from",
+    );
+    await expect(
+      t.action(internal.bravosOrphanCleanup.execute, {
+        expectedAuditToken: dryRun.auditToken,
+        repairSpec: spec,
+      }),
+    ).rejects.toThrow("operational dangling references changed from");
+    expect(
+      await t.run((ctx) => ctx.db.get(spec.generatedNoteId)),
+    ).not.toBeNull();
   });
 
   it.each([
@@ -466,7 +632,7 @@ describe("audited Bravos dangling-reference repair", () => {
         expectedAuditToken: dryRun.auditToken,
         repairSpec: spec,
       }),
-    ).rejects.toThrow("no longer match the approved three-document repair");
+    ).rejects.toThrow("generated note gained operational references");
     expect(
       await t.run((ctx) => ctx.db.get(spec.generatedNoteId)),
     ).not.toBeNull();
@@ -481,6 +647,8 @@ describe("audited Bravos dangling-reference repair", () => {
     const commitArgs = {
       archiveContentHash: payload.contentHash,
       archiveStorageId: storageId,
+      expectedArchiveJson: payload.archiveJson,
+      expectedAuditJson: payload.auditJson,
       expectedAuditToken: payload.auditToken,
       repairSpec: spec,
     };
@@ -490,19 +658,41 @@ describe("audited Bravos dangling-reference repair", () => {
         ...commitArgs,
         expectedAuditToken: "stale-token",
       }),
-    ).rejects.toThrow("live data no longer matches the approved audit token");
+    ).rejects.toThrow("supplied audit payload does not bind");
     await expect(
       t.mutation(internal.bravosOrphanCleanup.commit, {
         ...commitArgs,
         archiveContentHash: "wrong-hash",
       }),
-    ).rejects.toThrow("stored archive does not match the approved audit content");
+    ).rejects.toThrow("supplied archive content hash changed");
     await expect(
       t.mutation(internal.bravosOrphanCleanup.commit, {
         ...commitArgs,
         archiveStorageId: wrongStorageId,
       }),
-    ).rejects.toThrow("stored archive blob is missing or does not match");
+    ).rejects.toThrow("stored archive blob content does not match");
+    expect(
+      await t.run((ctx) => ctx.db.get(spec.generatedNoteId)),
+    ).not.toBeNull();
+  });
+
+  it("names the bound fact that drifted for a direct commit", async () => {
+    const spec = await insertAuditedOrphans();
+    const { payload, storageId } = await getStoredArchivePayload(spec);
+    await t.run((ctx) =>
+      ctx.db.patch(spec.importTaskId, { createdTradePlanId: undefined }),
+    );
+
+    await expect(
+      t.mutation(internal.bravosOrphanCleanup.commit, {
+        archiveContentHash: payload.contentHash,
+        archiveStorageId: storageId,
+        expectedArchiveJson: payload.archiveJson,
+        expectedAuditJson: payload.auditJson,
+        expectedAuditToken: payload.auditToken,
+        repairSpec: spec,
+      }),
+    ).rejects.toThrow("danglingReferences changed from");
     expect(
       await t.run((ctx) => ctx.db.get(spec.generatedNoteId)),
     ).not.toBeNull();
@@ -521,10 +711,12 @@ describe("audited Bravos dangling-reference repair", () => {
       t.mutation(internal.bravosOrphanCleanup.commit, {
         archiveContentHash: payload.contentHash,
         archiveStorageId: storageId,
+        expectedArchiveJson: payload.archiveJson,
+        expectedAuditJson: payload.auditJson,
         expectedAuditToken: payload.auditToken,
         repairSpec: spec,
       }),
-    ).rejects.toThrow("no longer match the approved three-document repair");
+    ).rejects.toThrow("generated note content changed from the exact approved import marker");
     expect(
       await t.run((ctx) => ctx.db.get(spec.generatedNoteId)),
     ).not.toBeNull();
@@ -576,7 +768,7 @@ describe("audited Bravos dangling-reference repair", () => {
         expectedAuditToken: dryRun.auditToken,
         repairSpec: spec,
       }),
-    ).rejects.toThrow("no longer match the approved three-document repair");
+    ).rejects.toThrow("operational dangling references changed from exactly three approved references");
     expect(
       await t.run((ctx) => ctx.db.get(spec.generatedNoteId)),
     ).not.toBeNull();
