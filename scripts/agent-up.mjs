@@ -8,6 +8,7 @@ import {
   formatAgentAge,
   getProjectRoot,
   getWorktreePresence,
+  mergeAllowedUserIds,
   parseDotenv,
   readLocalConvexConfig,
   shouldReapAgentRuntime,
@@ -126,6 +127,55 @@ function readLocalEnv() {
     return {};
   }
   return parseDotenv(fs.readFileSync(DOTENV_LOCAL_PATH, "utf8"));
+}
+
+function localPlaywrightOwnerId() {
+  const localEnvironment = readLocalEnv();
+  const playwrightOwnerId = localEnvironment.PLAYWRIGHT_OWNER_ID?.trim();
+  if (!playwrightOwnerId) {
+    throw new Error(
+      "PLAYWRIGHT_OWNER_ID is required to configure the local Convex allowlist.",
+    );
+  }
+
+  return playwrightOwnerId;
+}
+
+function localAllowedUserIds() {
+  const localEnvironment = readLocalEnv();
+  const playwrightOwnerId = localPlaywrightOwnerId();
+
+  return mergeAllowedUserIds(
+    localEnvironment.ALLOWED_USER_IDS,
+    playwrightOwnerId,
+  );
+}
+
+function configureLocalConvexEnvironment({
+  allowedUserIds,
+  playwrightOwnerId,
+}) {
+  const convexEnvironment = withoutConvexSelectors(process.env);
+  for (const [name, value] of [
+    ["ALLOWED_USER_IDS", allowedUserIds],
+    ["PLAYWRIGHT_OWNER_ID", playwrightOwnerId],
+  ]) {
+    run(
+      "pnpm",
+      [
+        "exec",
+        "convex",
+        "env",
+        "set",
+        "--deployment",
+        "local",
+        name,
+        value,
+        "--force",
+      ],
+      { env: convexEnvironment },
+    );
+  }
 }
 
 function ensureLocalDeploymentSelected() {
@@ -781,7 +831,10 @@ async function main() {
 
   ensureDependencies();
   ensureLocalDeploymentSelected();
+  const allowedUserIds = localAllowedUserIds();
+  const playwrightOwnerId = localPlaywrightOwnerId();
   updateDotenvFile(DOTENV_LOCAL_PATH, {
+    ALLOWED_USER_IDS: allowedUserIds,
     APP_URL: environment.origin,
     CONVEX_DEPLOY_KEY: null,
     CONVEX_SELF_HOSTED_ADMIN_KEY: null,
@@ -794,9 +847,11 @@ async function main() {
 
   const childEnvironment = {
     ...withoutConvexSelectors(process.env),
+    ALLOWED_USER_IDS: allowedUserIds,
     APP_URL: environment.origin,
     NEXT_PUBLIC_CONVEX_SITE_URL: environment.convexSiteUrl,
     NEXT_PUBLIC_CONVEX_URL: environment.convexUrl,
+    PLAYWRIGHT_OWNER_ID: playwrightOwnerId,
     PLAYWRIGHT_BASE_URL: environment.origin,
   };
   const convexChild = spawn(
@@ -891,11 +946,19 @@ async function main() {
 
   const readyDeadline = Date.now() + 60_000;
   let ready = false;
+  let localConvexEnvironmentConfigured = false;
   while (
     Date.now() < readyDeadline &&
     children.every(({ child }) => child.exitCode === null)
   ) {
     if (await environmentIsReady()) {
+      if (!localConvexEnvironmentConfigured) {
+        configureLocalConvexEnvironment({
+          allowedUserIds,
+          playwrightOwnerId,
+        });
+        localConvexEnvironmentConfigured = true;
+      }
       ready = children.every(({ child }) => child.exitCode === null);
       if (!ready) {
         break;

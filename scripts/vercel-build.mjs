@@ -2,8 +2,11 @@
 
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { mergeAllowedUserIds } from "./agent-environment.mjs";
 
 const CONVEX_URL_ENV_VAR_NAME = "NEXT_PUBLIC_CONVEX_URL";
+const ALLOWED_USER_IDS_ENV_VAR_NAME = "ALLOWED_USER_IDS";
+const PLAYWRIGHT_OWNER_ID_ENV_VAR_NAME = "PLAYWRIGHT_OWNER_ID";
 const PREVIEW_SEED_FUNCTION = "e2eSeed:setupPreviewData";
 const WORKER_URL_ENV_VAR_NAME = "BRAVOS_WORKER_URL";
 const WORKER_ROUTE_PATH = "/api/internal/bravos/run";
@@ -46,6 +49,11 @@ function requireEnv(name) {
   return value;
 }
 
+function optionalEnv(name) {
+  const value = process.env[name]?.trim();
+  return value || undefined;
+}
+
 function deploymentHostFromVercelEnv() {
   const host = process.env.VERCEL_BRANCH_URL ?? process.env.VERCEL_URL;
 
@@ -67,6 +75,12 @@ function configureConvexPreviewEnvironment() {
   requireEnv("CONVEX_DEPLOY_KEY");
 
   const previewName = requireEnv("VERCEL_GIT_COMMIT_REF");
+  const playwrightOwnerId = optionalEnv(PLAYWRIGHT_OWNER_ID_ENV_VAR_NAME);
+  const allowedUserIds = mergeAllowedUserIds(
+    process.env[ALLOWED_USER_IDS_ENV_VAR_NAME],
+    playwrightOwnerId,
+  );
+  process.env[ALLOWED_USER_IDS_ENV_VAR_NAME] = allowedUserIds;
   const workerUrl = `https://${deploymentHostFromVercelEnv()}${WORKER_ROUTE_PATH}`;
 
   console.log(
@@ -81,6 +95,34 @@ function configureConvexPreviewEnvironment() {
     previewName,
     WORKER_URL_ENV_VAR_NAME,
     workerUrl,
+    "--force",
+  ]);
+  if (playwrightOwnerId) {
+    run("pnpm", [
+      "exec",
+      "convex",
+      "env",
+      "set",
+      "--preview-name",
+      previewName,
+      PLAYWRIGHT_OWNER_ID_ENV_VAR_NAME,
+      playwrightOwnerId,
+      "--force",
+    ]);
+  } else {
+    console.log(
+      "PLAYWRIGHT_OWNER_ID is not configured; skipping Convex preview fixture provisioning. Preview E2E will fail, and if ALLOWED_USER_IDS is also unset this preview will authorize no one.",
+    );
+  }
+  run("pnpm", [
+    "exec",
+    "convex",
+    "env",
+    "set",
+    "--preview-name",
+    previewName,
+    ALLOWED_USER_IDS_ENV_VAR_NAME,
+    allowedUserIds,
     "--force",
   ]);
 }
@@ -102,12 +144,15 @@ function runConvexDeploy() {
   ];
 
   if (isVercelPreviewBuild()) {
-    args.push(
-      "--preview-create",
-      requireEnv("VERCEL_GIT_COMMIT_REF"),
-      "--preview-run",
-      PREVIEW_SEED_FUNCTION,
-    );
+    args.push("--preview-create", requireEnv("VERCEL_GIT_COMMIT_REF"));
+
+    if (optionalEnv(PLAYWRIGHT_OWNER_ID_ENV_VAR_NAME)) {
+      args.push("--preview-run", PREVIEW_SEED_FUNCTION);
+    } else {
+      console.log(
+        "PLAYWRIGHT_OWNER_ID is not configured; skipping preview fixture seeding. Preview E2E will fail, and if ALLOWED_USER_IDS is also unset this preview will authorize no one.",
+      );
+    }
   }
 
   run("pnpm", args);

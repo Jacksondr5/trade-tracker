@@ -130,6 +130,26 @@ export function quoteDotenvValue(value) {
   return `'${value}'`;
 }
 
+export function mergeAllowedUserIds(
+  allowedUserIds = "",
+  requiredUserId,
+) {
+  return Array.from(
+    new Set(
+      [
+        ...(typeof allowedUserIds === "string" ? allowedUserIds : "")
+          .split(",")
+          .map((userId) => userId.trim())
+          .filter(Boolean),
+        requiredUserId,
+      ]
+        .filter((userId) => typeof userId === "string")
+        .map((userId) => userId.trim())
+        .filter(Boolean),
+    ),
+  ).join(",");
+}
+
 export function readLocalConvexConfig(filePath) {
   const config = JSON.parse(fs.readFileSync(filePath, "utf8"));
   if (

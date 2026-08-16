@@ -1,11 +1,27 @@
 import type { ActionCtx, MutationCtx, QueryCtx } from "../_generated/server";
 import { ConvexError } from "convex/values";
+import { isAllowedTokenIdentifier } from "../../shared/auth/allowlist";
 
 type AuthCtx = Pick<ActionCtx | MutationCtx | QueryCtx, "auth">;
 
 export async function requireUser(ctx: AuthCtx): Promise<string> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity?.tokenIdentifier) {
+    throw new ConvexError("Unauthorized");
+  }
+
+  if (
+    !isAllowedTokenIdentifier(
+      identity.tokenIdentifier,
+      process.env.ALLOWED_USER_IDS,
+    )
+  ) {
+    // This intentionally logs only an authenticated identity rejected by the
+    // allowlist. The unauthenticated branch stays silent so a missing warning
+    // distinguishes it from an allowlist mismatch without changing the client error.
+    console.warn("Denied identity not in ALLOWED_USER_IDS", {
+      tokenIdentifier: identity.tokenIdentifier,
+    });
     throw new ConvexError("Unauthorized");
   }
 
