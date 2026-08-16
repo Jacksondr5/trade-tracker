@@ -457,6 +457,7 @@ async function snapshotMaterial(
   const archiveJson = JSON.stringify(
     canonicalize({
       archiveFormat: ARCHIVE_FORMAT,
+      archivalReferences: snapshot.archivalReferences,
       danglingReferences: snapshot.danglingReferences,
       documents: snapshot.documents,
       repairSpec: spec,
