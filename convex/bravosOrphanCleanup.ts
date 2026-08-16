@@ -8,6 +8,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { normalizeStorageSha256, sha256Encodings } from "./lib/sha256";
 
 const ARCHIVE_FORMAT = "bravos_dangling_reference_repair_v1";
 const MAX_ROWS_PER_TABLE = 5_000;
@@ -240,20 +241,6 @@ function canonicalize(value: unknown): unknown {
     );
   }
   return value;
-}
-
-async function sha256Encodings(value: string) {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(value),
-  );
-  const bytes = new Uint8Array(digest);
-  return {
-    base64: btoa(String.fromCharCode(...bytes)),
-    hex: Array.from(bytes, (byte) =>
-    byte.toString(16).padStart(2, "0"),
-    ).join(""),
-  };
 }
 
 async function sha256Hex(value: string) {
@@ -680,12 +667,9 @@ export const commit = internalMutation({
       args.archiveStorageId,
     );
     const archiveDigest = await sha256Encodings(material.archiveJson);
-    // Production `_storage.sha256` is base16. convex-test models the same
-    // digest as base64, so accept either representation of these exact bytes.
     if (
       !storedArchive ||
-      (storedArchive.sha256 !== archiveDigest.hex &&
-        storedArchive.sha256 !== archiveDigest.base64)
+      normalizeStorageSha256(storedArchive.sha256) !== archiveDigest.hex
     ) {
       throw new ConvexError(
         "Bravos dangling-reference repair refused: stored archive blob is missing or does not match the approved audit content",
