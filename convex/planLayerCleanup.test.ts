@@ -66,6 +66,12 @@ describe("plan-layer clean slate", () => {
         ownerId,
         ticker: "STALE",
       });
+      const untickeredCampaignNoteId = await ctx.db.insert("notes", {
+        campaignId,
+        content: "Campaign note with no ticker.",
+        noteDate: 101,
+        ownerId,
+      });
       const planNoteId = await ctx.db.insert("notes", {
         content: "GLDM entry conditions Jackson wrote.",
         noteDate: 200,
@@ -193,6 +199,7 @@ describe("plan-layer clean slate", () => {
       return {
         campaignId,
         campaignNoteId,
+        untickeredCampaignNoteId,
         campaignRetrospectiveId,
         campaignWatchlistId,
         checkInId,
@@ -238,13 +245,13 @@ describe("plan-layer clean slate", () => {
       deletedGeneratedNotes: 2,
       deletedWatchlistItems: 2,
       importTasksPatched: 1,
-      notesSalvagedFromCampaigns: 1,
+      notesSalvagedFromCampaigns: 2,
       notesSalvagedFromTradePlans: 2,
       retrospectivesConverted: 3,
       tradePlansDeleted: 3,
       tradesUnlinked: 1,
     });
-    expect(result.plannedWrites).toBe(24);
+    expect(result.plannedWrites).toBe(25);
     expect(result.generatedImportNoteCandidateCount).toBe(2);
     expect(result.generatedImportNoteCandidatePreviews).toEqual(
       expect.arrayContaining([
@@ -296,6 +303,10 @@ describe("plan-layer clean slate", () => {
           contentPreview: "Campaign thesis in Jackson's own words.",
           ticker: "STALE",
         }),
+        expect.objectContaining({
+          contentPreview: "Campaign note with no ticker.",
+          ticker: null,
+        }),
       ]),
     );
     expect(
@@ -332,6 +343,9 @@ describe("plan-layer clean slate", () => {
       campaigns: await ctx.db.query("campaigns").collect(),
       annotatedImportNote: await ctx.db.get(seeded.annotatedImportNoteId),
       campaignNote: await ctx.db.get(seeded.campaignNoteId),
+      untickeredCampaignNote: await ctx.db.get(
+        seeded.untickeredCampaignNoteId,
+      ),
       checkIn: await ctx.db.get(seeded.checkInId),
       generatedNote: await ctx.db.get(seeded.generatedNoteId),
       urlLessGeneratedNote: await ctx.db.get(seeded.urlLessGeneratedNoteId),
@@ -374,6 +388,8 @@ describe("plan-layer clean slate", () => {
     expect(state.annotatedImportNote).not.toHaveProperty("tradePlanId");
     expect(state.campaignNote).not.toHaveProperty("campaignId");
     expect(state.campaignNote).toMatchObject({ ticker: "STALE" });
+    expect(state.untickeredCampaignNote).not.toHaveProperty("campaignId");
+    expect(state.untickeredCampaignNote).not.toHaveProperty("ticker");
     expect(
       state.notes.filter((note) => note.origin === "retrospective"),
     ).toEqual(
@@ -407,10 +423,10 @@ describe("plan-layer clean slate", () => {
         inboxTradePlanReferencesRemaining: 0,
         retrospectiveNotesRemaining: 3,
         retrospectivesRemaining: 0,
-        salvagedNotesExpected: 3,
-        salvagedNotesVerified: 3,
-        salvagedNotesWithExpectedTickers: 3,
-        salvagedNotesWithExpectedTickersExpected: 3,
+        salvagedNotesExpected: 4,
+        salvagedNotesVerified: 4,
+        salvagedNotesWithExpectedTickers: 4,
+        salvagedNotesWithExpectedTickersExpected: 4,
         tradePlanReferencesRemaining: 0,
         tradePlansRemaining: 0,
         tradesAfter: 1,
