@@ -37,7 +37,11 @@ type OperationalReference = {
 };
 
 type Snapshot = {
-  archivalReferences: { archiveId: string; targetId: string }[];
+  archivalReferences: {
+    archiveId: string;
+    table: "bravosDanglingReferenceArchives" | "planLayerArchives";
+    targetId: string;
+  }[];
   danglingReferences: OperationalReference[];
   documents: {
     generatedNote: Doc<"notes">;
@@ -101,7 +105,14 @@ const referenceValidator = v.object({
 
 const dryRunValidator = v.object({
   archivalReferences: v.array(
-    v.object({ archiveId: v.string(), targetId: v.string() }),
+    v.object({
+      archiveId: v.string(),
+      table: v.union(
+        v.literal("bravosDanglingReferenceArchives"),
+        v.literal("planLayerArchives"),
+      ),
+      targetId: v.string(),
+    }),
   ),
   archiveByteLength: v.number(),
   auditToken: v.string(),
@@ -130,6 +141,7 @@ const postCheckValidator = v.object({
   archiveContainsDeletedGeneratedNote: v.boolean(),
   archiveContainsDetachedNote: v.boolean(),
   archiveReadable: v.boolean(),
+  archivalReferencesPreserved: v.number(),
   auditToken: v.string(),
   clearedImportTaskReferences: v.number(),
   danglingReferencesRemaining: v.number(),
@@ -187,7 +199,8 @@ async function readSnapshot(
     inboxTrades,
     retrospectives,
     reviewItems,
-    archives,
+    planLayerArchives,
+    bravosArchives,
   ] = await Promise.all([
     ctx.db.query("campaigns").take(MAX_ROWS_PER_TABLE + 1),
     ctx.db.query("tradePlans").take(MAX_ROWS_PER_TABLE + 1),
@@ -199,6 +212,9 @@ async function readSnapshot(
     ctx.db.query("retrospectives").take(MAX_ROWS_PER_TABLE + 1),
     ctx.db.query("bravosReviewItems").take(MAX_ROWS_PER_TABLE + 1),
     ctx.db.query("planLayerArchives").take(MAX_ROWS_PER_TABLE + 1),
+    ctx.db
+      .query("bravosDanglingReferenceArchives")
+      .take(MAX_ROWS_PER_TABLE + 1),
   ]);
   const scanned = {
     bravosReviewItems: assertBounded(reviewItems, "bravosReviewItems"),
@@ -206,7 +222,11 @@ async function readSnapshot(
     importTasks: assertBounded(importTasks, "importTasks"),
     inboxTrades: assertBounded(inboxTrades, "inboxTrades"),
     notes: assertBounded(notes, "notes"),
-    planLayerArchives: assertBounded(archives, "planLayerArchives"),
+    bravosDanglingReferenceArchives: assertBounded(
+      bravosArchives,
+      "bravosDanglingReferenceArchives",
+    ),
+    planLayerArchives: assertBounded(planLayerArchives, "planLayerArchives"),
     retrospectives: assertBounded(retrospectives, "retrospectives"),
     tradePlans: assertBounded(tradePlans, "tradePlans"),
     trades: assertBounded(trades, "trades"),
@@ -364,14 +384,26 @@ async function readSnapshot(
     (note) => note._id === spec.preservedNoteId,
   );
   return {
-    archivalReferences: scanned.planLayerArchives.flatMap((archive) =>
-      archive.deletedTradePlanIds
-        .filter((id) => !tradePlanIds.has(String(id)))
-        .map((targetId) => ({
-          archiveId: String(archive._id),
-          targetId: String(targetId),
-        })),
-    ),
+    archivalReferences: [
+      ...scanned.planLayerArchives.flatMap((archive) =>
+        archive.deletedTradePlanIds
+          .filter((id) => !tradePlanIds.has(String(id)))
+          .map((targetId) => ({
+            archiveId: String(archive._id),
+            table: "planLayerArchives" as const,
+            targetId: String(targetId),
+          })),
+      ),
+      ...scanned.bravosDanglingReferenceArchives.flatMap((archive) =>
+        [archive.generatedNotePlanId, archive.preservedNotePlanId]
+          .filter((id) => !tradePlanIds.has(String(id)))
+          .map((targetId) => ({
+            archiveId: String(archive._id),
+            table: "bravosDanglingReferenceArchives" as const,
+            targetId: String(targetId),
+          })),
+      ),
+    ],
     danglingReferences,
     documents:
       generatedNote && importTask && preservedNote
@@ -385,11 +417,7 @@ async function readSnapshot(
 
 function approvedShape(snapshot: Snapshot, spec: RepairSpec) {
   const { documents, danglingReferences } = snapshot;
-  if (
-    !documents ||
-    danglingReferences.length !== 3 ||
-    snapshot.archivalReferences.length !== 0
-  ) {
+  if (!documents || danglingReferences.length !== 3) {
     return false;
   }
   const { generatedNote, importTask, preservedNote } = documents;
@@ -626,6 +654,7 @@ export const getPostCheckState = internalQuery({
   args: { auditToken: v.string() },
   returns: v.object({
     archiveStorageId: v.id("_storage"),
+    archivalReferencesPreserved: v.number(),
     clearedImportTaskReferences: v.number(),
     danglingReferencesRemaining: v.number(),
     deletedGeneratedNotesRemaining: v.number(),
@@ -657,6 +686,7 @@ export const getPostCheckState = internalQuery({
       ]);
     return {
       archiveStorageId: archive.storageId,
+      archivalReferencesPreserved: snapshot.archivalReferences.length,
       clearedImportTaskReferences:
         importTask?.createdTradePlanId === undefined ? 1 : 0,
       danglingReferencesRemaining: snapshot.danglingReferences.length,
@@ -676,6 +706,7 @@ export const postCheck = internalAction({
   handler: async (ctx, args) => {
     const state: {
       archiveStorageId: Id<"_storage">;
+      archivalReferencesPreserved: number;
       clearedImportTaskReferences: number;
       danglingReferencesRemaining: number;
       deletedGeneratedNotesRemaining: number;
@@ -692,6 +723,7 @@ export const postCheck = internalAction({
         archiveText.includes(KNOWN_BRAVOS_ORPHAN_SOURCE_URL),
       archiveContainsDetachedNote: archiveText.includes(PRESERVED_NOTE_CONTENT),
       archiveReadable: blob !== null,
+      archivalReferencesPreserved: state.archivalReferencesPreserved,
       auditToken: args.auditToken,
       clearedImportTaskReferences: state.clearedImportTaskReferences,
       danglingReferencesRemaining: state.danglingReferencesRemaining,

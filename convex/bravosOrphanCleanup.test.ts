@@ -156,6 +156,7 @@ describe("audited Bravos dangling-reference repair", () => {
       archiveContainsDeletedGeneratedNote: true,
       archiveContainsDetachedNote: true,
       archiveReadable: true,
+      archivalReferencesPreserved: 2,
       auditToken: dryRun.auditToken,
       clearedImportTaskReferences: 1,
       danglingReferencesRemaining: 0,
