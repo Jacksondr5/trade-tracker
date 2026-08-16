@@ -330,6 +330,7 @@ export default defineSchema({
     ),
     noteDate: v.number(),
     ownerId: v.string(),
+    origin: v.optional(v.literal("retrospective")),
     ticker: v.optional(v.string()),
     tradePlanId: v.optional(v.id("tradePlans")),
   })
@@ -360,6 +361,29 @@ export default defineSchema({
   })
     .index("by_owner_date", ["ownerId", "date"])
     .index("by_owner", ["ownerId"]),
+
+  planLayerArchives: defineTable({
+    archiveFormat: v.literal("plan_layer_clean_slate_v1"),
+    auditToken: v.string(),
+    baselineTradeCount: v.number(),
+    contentHash: v.string(),
+    createdAt: v.number(),
+    deletedTradePlanIds: v.array(v.id("tradePlans")),
+    generatedNoteIds: v.array(v.id("notes")),
+    ownerId: v.string(),
+    productionSnapshotReference: v.string(),
+    retrospectivesConverted: v.number(),
+    salvagedNoteIds: v.array(v.id("notes")),
+    salvagedNoteTickerExpectations: v.array(
+      v.object({
+        noteId: v.id("notes"),
+        ticker: v.optional(v.string()),
+      }),
+    ),
+    storageId: v.id("_storage"),
+  })
+    .index("by_owner_auditToken", ["ownerId", "auditToken"])
+    .index("by_owner_createdAt", ["ownerId", "createdAt"]),
 
   campaigns: defineTable({
     closedAt: v.optional(v.number()),
