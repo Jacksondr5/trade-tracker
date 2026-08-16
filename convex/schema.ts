@@ -330,11 +330,36 @@ export default defineSchema({
     ),
     noteDate: v.number(),
     ownerId: v.string(),
+    ticker: v.optional(v.string()),
     tradePlanId: v.optional(v.id("tradePlans")),
   })
     .index("by_owner", ["ownerId"])
+    .index("by_owner_ticker", ["ownerId", "ticker"])
     .index("by_owner_campaignId", ["ownerId", "campaignId"])
     .index("by_owner_tradePlanId", ["ownerId", "tradePlanId"]),
+
+  checkIns: defineTable({
+    date: v.string(),
+    kind: v.union(
+      v.literal("mirror"),
+      v.literal("briefing"),
+      v.literal("backfill"),
+    ),
+    noteIds: v.optional(v.array(v.id("notes"))),
+    ownerId: v.string(),
+    respondedAt: v.optional(v.number()),
+    sentAt: v.number(),
+    // A mirror can surface accepted trades and pending inbox trades, so this
+    // stores their serialized IDs rather than a single table-scoped Id type.
+    surfacedTradeIds: v.optional(v.array(v.string())),
+    window: v.union(
+      v.literal("late_morning"),
+      v.literal("afternoon"),
+      v.literal("end_of_day"),
+    ),
+  })
+    .index("by_owner_date", ["ownerId", "date"])
+    .index("by_owner", ["ownerId"]),
 
   campaigns: defineTable({
     closedAt: v.optional(v.number()),
