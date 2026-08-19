@@ -15,6 +15,10 @@ import { resolveInstrumentForOwner } from "./marketData";
 import { validateInboxTradeCandidate } from "../shared/imports/validation";
 import { KRAKEN_DEFAULT_ACCOUNT_ID } from "../shared/imports/constants";
 import {
+  classifyIbkrExternalId,
+  ibkrLogicalFillFingerprint,
+} from "./lib/ibkrTradeIdentity";
+import {
   findAutoMatchTradePlanId,
   findMatchingTradePlans,
 } from "../shared/imports/auto-match";
@@ -464,6 +468,21 @@ export async function stageInboxTradesForOwner(
       )
       .map((t) => dedupKey(t.source, t.externalId)),
   ]);
+  const existingIbkrLogicalFills = new Map<
+    string,
+    Set<ReturnType<typeof classifyIbkrExternalId>>
+  >();
+  for (const existingTrade of [
+    ...existingTrades,
+    ...existingPendingInboxTrades,
+  ]) {
+    const fingerprint = ibkrLogicalFillFingerprint(existingTrade);
+    if (fingerprint === null || existingTrade.externalId === undefined)
+      continue;
+    const kinds = existingIbkrLogicalFills.get(fingerprint) ?? new Set();
+    kinds.add(classifyIbkrExternalId(existingTrade.externalId));
+    existingIbkrLogicalFills.set(fingerprint, kinds);
+  }
 
   const [activeTradePlans, ideaTradePlans, watchingTradePlans] =
     await Promise.all([
@@ -512,6 +531,12 @@ export async function stageInboxTradesForOwner(
       trade.brokerageAccountId,
     );
 
+    const logicalFillFingerprint = ibkrLogicalFillFingerprint({
+      ...trade,
+      brokerageAccountId,
+    });
+    const externalIdKind = classifyIbkrExternalId(trade.externalId);
+
     if (trade.externalId) {
       const key = dedupKey(trade.source, trade.externalId);
       if (existingExternalIds.has(key)) {
@@ -519,6 +544,22 @@ export async function stageInboxTradesForOwner(
         continue;
       }
       existingExternalIds.add(key);
+    }
+    if (
+      logicalFillFingerprint !== null &&
+      trade.externalId !== undefined &&
+      existingIbkrLogicalFills.has(logicalFillFingerprint) &&
+      !existingIbkrLogicalFills.get(logicalFillFingerprint)!.has(externalIdKind)
+    ) {
+      existingIbkrLogicalFills.get(logicalFillFingerprint)!.add(externalIdKind);
+      skippedDuplicates++;
+      continue;
+    }
+    if (logicalFillFingerprint !== null && trade.externalId !== undefined) {
+      const kinds =
+        existingIbkrLogicalFills.get(logicalFillFingerprint) ?? new Set();
+      kinds.add(externalIdKind);
+      existingIbkrLogicalFills.set(logicalFillFingerprint, kinds);
     }
 
     const validation = validateInboxTradeCandidate(trade, {
