@@ -288,6 +288,22 @@ describe("IBKR duplicate-fill repair", () => {
     ]);
   });
 
+  it("refuses a transition pair whose order ID differs from its mapped counterpart", async () => {
+    const { rowsByKind, spec, t } = await seedRepair();
+    const transition = rowsByKind["transition-0"]!;
+    await t.run((ctx) =>
+      ctx.db.patch(transition.survivor.id as Id<"inboxTrades">, {
+        externalId: "5523063597",
+      }),
+    );
+
+    await expect(
+      t.query(internal.ibkrDuplicateFillRepair.inspect, spec),
+    ).rejects.toThrow(
+      "transition mapping changed from 00015e71.6a7e2fbf.01.01->5523063596 to 00015e71.6a7e2fbf.01.01->5523063597",
+    );
+  });
+
   it("dry-runs the exact 31 supplied groups with per-document and reference evidence", async () => {
     const { spec, t } = await seedRepair({ references: true });
     const result = await t.query(
