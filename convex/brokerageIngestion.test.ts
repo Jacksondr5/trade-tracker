@@ -533,6 +533,7 @@ describe("brokerage ingestion", () => {
         reconciliationIssueCount: 5,
         referenceCode: "stale-reference",
         skippedDuplicateTrades: 6,
+        skippedLogicalDuplicateTrades: 2,
         status: "succeeded",
       });
     });
@@ -563,6 +564,7 @@ describe("brokerage ingestion", () => {
       positionSnapshotCount: 0,
       reconciliationIssueCount: 0,
       skippedDuplicateTrades: 0,
+      skippedLogicalDuplicateTrades: 0,
       status: "queued",
     });
     expect(requeuedRun).not.toHaveProperty("rawReportId");
@@ -901,7 +903,65 @@ describe("brokerage ingestion", () => {
       importedTrades: 1,
       positionSnapshotCount: 1,
       skippedDuplicateTrades: 1,
+      skippedLogicalDuplicateTrades: 0,
     });
+  });
+
+  it("persists cross-scheme logical skips separately on the Flex sync run", async () => {
+    const connectionId = await createConnection();
+    const syncRunId = await beginActivitySyncRun(connectionId);
+    const date = Date.UTC(2026, 4, 14, 16);
+    await t.run((ctx) =>
+      ctx.db.insert("trades", {
+        assetType: "stock",
+        brokerageAccountId: "U1234567",
+        date,
+        direction: "long",
+        externalId: "U1234567|AAPL|20260514;120000|100|10",
+        ownerId,
+        price: 100,
+        quantity: 10,
+        side: "buy",
+        source: "ibkr",
+        ticker: "AAPL",
+      }),
+    );
+
+    const result = await t.mutation(
+      internal.brokerageIngestion.ingestParsedFlexReport,
+      {
+        cashSnapshots: [],
+        positionSnapshots: [],
+        syncRunId,
+        trades: [
+          {
+            assetType: "stock",
+            brokerageAccountId: "U1234567",
+            date,
+            direction: "long",
+            externalId: "5523063596",
+            price: 100,
+            quantity: 10,
+            side: "buy",
+            ticker: "AAPL",
+          },
+        ],
+      },
+    );
+    const state = await t.run(async (ctx) => ({
+      inboxTrades: await ctx.db.query("inboxTrades").collect(),
+      syncRun: await ctx.db.get(syncRunId),
+    }));
+
+    expect(result).toMatchObject({
+      importedTrades: 0,
+      skippedDuplicateTrades: 1,
+    });
+    expect(state.syncRun).toMatchObject({
+      skippedDuplicateTrades: 1,
+      skippedLogicalDuplicateTrades: 1,
+    });
+    expect(state.inboxTrades).toHaveLength(0);
   });
 
   it("does not open reconciliation issues when accepted positions match brokerage snapshots", async () => {
@@ -1390,5 +1450,4 @@ describe("brokerage ingestion", () => {
     expect(syncRun?.rawReportId).toBeUndefined();
     expect(rawReport).toBeNull();
   });
-
 });

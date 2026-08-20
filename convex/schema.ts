@@ -676,6 +676,7 @@ export default defineSchema({
     reportType: brokerageSyncReportTypeValidator,
     requestedAt: v.number(),
     skippedDuplicateTrades: v.number(),
+    skippedLogicalDuplicateTrades: v.optional(v.number()),
     source: brokerageSourceValidator,
     startedAt: v.optional(v.number()),
     status: brokerageSyncRunStatusValidator,

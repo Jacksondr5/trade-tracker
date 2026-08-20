@@ -246,6 +246,7 @@ describe("IBKR Flex Convex workflow", () => {
     expect(state.syncRuns[0]).toMatchObject({
       importedTrades: 1,
       referenceCode: "12345",
+      skippedLogicalDuplicateTrades: 0,
       status: "succeeded",
     });
     expect(state.inboxTrades).toHaveLength(1);
@@ -254,6 +255,50 @@ describe("IBKR Flex Convex workflow", () => {
     expect(state.cashSnapshots[0]).toMatchObject({ rowKind: "currency" });
     expect(state.rawReports).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("persists cross-scheme suppression visibility through the full Flex workflow", async () => {
+    await createConnection("owner-a", "owner-a-secret-token", ["U1234567"]);
+    const parsed = parseIbkrFlexActivityXml(readyXml);
+    const flexTrade = parsed.trades[0]!;
+    await t.run((ctx) =>
+      ctx.db.insert("trades", {
+        assetType: "stock",
+        brokerageAccountId: flexTrade.brokerageAccountId,
+        date: flexTrade.date,
+        direction: flexTrade.direction,
+        externalId: `U1234567|AAPL|20260514;093005|${flexTrade.price}|${flexTrade.quantity}`,
+        ownerId: "owner-a",
+        price: flexTrade.price,
+        quantity: flexTrade.quantity,
+        side: flexTrade.side,
+        source: "ibkr",
+        ticker: flexTrade.ticker,
+      }),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(requestedXml))
+        .mockResolvedValueOnce(new Response(readyXml)),
+    );
+
+    await startWorkflow();
+    await finishWorkflow();
+    const state = await t.run(async (ctx) => ({
+      inboxTrades: await ctx.db.query("inboxTrades").collect(),
+      syncRuns: await ctx.db.query("brokerageSyncRuns").collect(),
+    }));
+
+    expect(state.syncRuns).toHaveLength(1);
+    expect(state.syncRuns[0]).toMatchObject({
+      importedTrades: 0,
+      skippedDuplicateTrades: 1,
+      skippedLogicalDuplicateTrades: 1,
+      status: "succeeded",
+    });
+    expect(state.inboxTrades).toHaveLength(0);
   });
 
   it("skips completeness validation when expected accounts are unset", async () => {
