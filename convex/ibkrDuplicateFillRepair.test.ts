@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { parseIbkrEasternTimestamp } from "../shared/brokerage/ibkr-flex/time";
+import { KNOWN_TRANSITION_EXTERNAL_ID_PAIRS } from "./ibkrDuplicateFillRepair";
 import schema from "./schema";
 
 interface ImportMetaWithGlob extends ImportMeta {
@@ -247,7 +248,46 @@ async function seedRepair(args?: { references?: boolean }) {
   };
 }
 
+async function seedRepairWithUnapprovedPair() {
+  const seeded = await seedRepair();
+  await seeded.t.run(async (ctx) => {
+    const identity = {
+      assetType: "stock" as const,
+      brokerageAccountId: "U1",
+      date: baseDate + 90_000,
+      direction: "long" as const,
+      ownerId,
+      price: 999,
+      quantity: 1,
+      side: "buy" as const,
+      source: "ibkr" as const,
+      ticker: "EXTRA",
+    };
+    await ctx.db.insert("trades", {
+      ...identity,
+      externalId: "U1|EXTRA|20260813;103130|999|1",
+    });
+    await ctx.db.insert("inboxTrades", {
+      ...identity,
+      externalId: "6999999999",
+      status: "pending_review",
+      validationErrors: [],
+      validationWarnings: [],
+    });
+  });
+  return seeded;
+}
+
 describe("IBKR duplicate-fill repair", () => {
+  it("pins the exact four #158 transition external-ID mappings", () => {
+    expect(KNOWN_TRANSITION_EXTERNAL_ID_PAIRS).toEqual([
+      ["00015e71.6a7e2fbf.01.01", "5523063596"],
+      ["00030e5e.6e4fb220.01.01", "5523042492"],
+      ["0001ebd7.6a7dcc9e.01.01", "5523128204"],
+      ["00024966.6a7dc56c.01.01", "5523594973"],
+    ]);
+  });
+
   it("dry-runs the exact 31 supplied groups with per-document and reference evidence", async () => {
     const { spec, t } = await seedRepair({ references: true });
     const result = await t.query(
@@ -646,32 +686,7 @@ describe("IBKR duplicate-fill repair", () => {
   });
 
   it("refuses an unapproved discovered pair outside the exact supplied set", async () => {
-    const { spec, t } = await seedRepair();
-    await t.run(async (ctx) => {
-      const identity = {
-        assetType: "stock" as const,
-        brokerageAccountId: "U1",
-        date: baseDate + 90_000,
-        direction: "long" as const,
-        ownerId,
-        price: 999,
-        quantity: 1,
-        side: "buy" as const,
-        source: "ibkr" as const,
-        ticker: "EXTRA",
-      };
-      await ctx.db.insert("trades", {
-        ...identity,
-        externalId: "U1|EXTRA|20260813;103130|999|1",
-      });
-      await ctx.db.insert("inboxTrades", {
-        ...identity,
-        externalId: "6999999999",
-        status: "pending_review",
-        validationErrors: [],
-        validationWarnings: [],
-      });
-    });
+    const { spec, t } = await seedRepairWithUnapprovedPair();
     const result = await t.query(
       internal.ibkrDuplicateFillRepair.inspect,
       spec,
@@ -680,6 +695,68 @@ describe("IBKR duplicate-fill repair", () => {
     expect(result.refusalReasons).toEqual([
       expect.stringContaining("unapproved duplicate pair(s) discovered"),
     ]);
+  });
+
+  it("rejects an unsafe dry-run's own audit token through execute", async () => {
+    const { rowsByKind, spec, t } = await seedRepairWithUnapprovedPair();
+    const dryRun = await t.query(
+      internal.ibkrDuplicateFillRepair.inspect,
+      spec,
+    );
+    expect(dryRun.safeToExecute).toBe(false);
+    expect(dryRun.refusalReasons).toEqual([
+      expect.stringContaining("unapproved duplicate pair(s) discovered"),
+    ]);
+
+    await expect(
+      t.action(internal.ibkrDuplicateFillRepair.execute, {
+        expectedAuditJson: dryRun.auditJson,
+        expectedAuditToken: dryRun.auditToken,
+        repairSpec: spec,
+      }),
+    ).rejects.toThrow("unapproved duplicate pair(s) discovered");
+    expect(
+      await t.run((ctx) =>
+        ctx.db.get(
+          rowsByKind["accepted-inbox-0"]!.deleted.id as Id<"inboxTrades">,
+        ),
+      ),
+    ).not.toBeNull();
+  });
+
+  it("rejects an unsafe dry-run's own audit token through direct commit", async () => {
+    const { rowsByKind, spec, t } = await seedRepairWithUnapprovedPair();
+    const payload = await t.query(
+      internal.ibkrDuplicateFillRepair.getArchivePayload,
+      spec,
+    );
+    expect(payload.safeToExecute).toBe(false);
+    expect(payload.refusalReasons).toEqual([
+      expect.stringContaining("unapproved duplicate pair(s) discovered"),
+    ]);
+    const archiveStorageId = await t.run((ctx) =>
+      ctx.storage.store(
+        new Blob([payload.archiveJson], { type: "application/json" }),
+      ),
+    );
+
+    await expect(
+      t.mutation(internal.ibkrDuplicateFillRepair.commit, {
+        archiveContentHash: payload.contentHash,
+        archiveStorageId,
+        expectedArchiveJson: payload.archiveJson,
+        expectedAuditJson: payload.auditJson,
+        expectedAuditToken: payload.auditToken,
+        repairSpec: spec,
+      }),
+    ).rejects.toThrow("unapproved duplicate pair(s) discovered");
+    expect(
+      await t.run((ctx) =>
+        ctx.db.get(
+          rowsByKind["accepted-inbox-0"]!.deleted.id as Id<"inboxTrades">,
+        ),
+      ),
+    ).not.toBeNull();
   });
 
   it("refuses drift in the approved pair-kind denominator", async () => {

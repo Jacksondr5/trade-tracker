@@ -30,12 +30,16 @@ export const INBOUND_REFERENCE_FIELD_DENOMINATOR = [
   "portfolioPriceMarks.sourceTradeId",
 ] as const;
 
-const KNOWN_TRANSITION_PAIRS = new Map([
+export const KNOWN_TRANSITION_EXTERNAL_ID_PAIRS = [
   ["00015e71.6a7e2fbf.01.01", "5523063596"],
   ["00030e5e.6e4fb220.01.01", "5523042492"],
   ["0001ebd7.6a7dcc9e.01.01", "5523128204"],
   ["00024966.6a7dc56c.01.01", "5523594973"],
-]);
+] as const;
+
+const KNOWN_TRANSITION_PAIRS = new Map<string, string>(
+  KNOWN_TRANSITION_EXTERNAL_ID_PAIRS,
+);
 
 type Locator =
   | { id: Id<"trades">; table: "trades" }
