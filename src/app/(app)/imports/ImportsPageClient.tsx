@@ -532,6 +532,16 @@ export default function ImportsPageClient({
                   ? "duplicates"
                   : "duplicate"}
                 .
+                {importResult.skippedLogicalDuplicates > 0 && (
+                  <>
+                    {" "}
+                    <span className="font-semibold">
+                      {importResult.skippedLogicalDuplicates}
+                    </span>{" "}
+                    matched an existing IBKR fill across identifier formats and
+                    was recorded in the import logs.
+                  </>
+                )}
               </>
             )}
             {importResult.withValidationErrors > 0 && (

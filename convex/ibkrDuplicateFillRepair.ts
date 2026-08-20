@@ -10,8 +10,10 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
   classifyIbkrExternalId,
   ibkrLogicalFillFingerprint,
+  ibkrLogicalFillFingerprintResult,
   isMidnightEastern,
 } from "./lib/ibkrTradeIdentity";
+import type { IbkrFingerprintExclusionReason } from "./lib/ibkrTradeIdentity";
 
 const ARCHIVE_FORMAT = "ibkr_duplicate_fill_repair_v1";
 const EXPECTED_GROUP_COUNT = 31;
@@ -84,12 +86,19 @@ type ReferenceSnapshot = {
 };
 
 type Snapshot = {
-  candidateRowsScanned: { inboxTrades: number; trades: number };
+  fingerprintCoverage: FingerprintCoverage;
   discoveredPairKeys: string[];
   pairPlans: PlannedPair[];
   referenceSnapshot: ReferenceSnapshot;
   refusalReasons: string[];
   suppliedPairKeys: string[];
+};
+
+type FingerprintCoverage = {
+  eligibleIbkrRows: number;
+  fingerprintableRows: number;
+  rowsEnumerated: { inboxTrades: number; trades: number };
+  rowsExcludedFromFingerprint: Record<IbkrFingerprintExclusionReason, number>;
 };
 
 type SnapshotMaterial = Snapshot & {
@@ -190,14 +199,37 @@ const referenceObservationValidator = v.object({
   ),
 });
 
+const fingerprintExclusionCountsValidator = v.object({
+  midnight_eastern: v.number(),
+  missing_brokerage_account: v.number(),
+  missing_date: v.number(),
+  missing_direction: v.number(),
+  missing_price: v.number(),
+  missing_quantity: v.number(),
+  missing_side: v.number(),
+  missing_ticker: v.number(),
+  non_finite_date: v.number(),
+  non_finite_price: v.number(),
+  non_finite_quantity: v.number(),
+  non_ibkr_source: v.number(),
+  non_stock_asset: v.number(),
+});
+
+const fingerprintCoverageValidator = v.object({
+  eligibleIbkrRows: v.number(),
+  fingerprintableRows: v.number(),
+  rowsEnumerated: v.object({
+    inboxTrades: v.number(),
+    trades: v.number(),
+  }),
+  rowsExcludedFromFingerprint: fingerprintExclusionCountsValidator,
+});
+
 const dryRunValidator = v.object({
   archiveByteLength: v.number(),
   auditJson: v.string(),
   auditToken: v.string(),
-  candidateRowsScanned: v.object({
-    inboxTrades: v.number(),
-    trades: v.number(),
-  }),
+  fingerprintCoverage: fingerprintCoverageValidator,
   expectedEffects: v.object({
     deletedInboxTrades: v.number(),
     deletedTrades: v.number(),
@@ -229,14 +261,11 @@ const executionValidator = v.object({
 });
 
 const postCheckValidator = v.object({
-  archiveContainsEveryDeletedDocument: v.boolean(),
+  archiveDeletedDocumentSetMatchesApprovedAudit: v.boolean(),
   archiveContentHashMatches: v.boolean(),
   archiveReadable: v.boolean(),
   auditToken: v.string(),
-  candidateRowsScanned: v.object({
-    inboxTrades: v.number(),
-    trades: v.number(),
-  }),
+  fingerprintCoverage: fingerprintCoverageValidator,
   deletedRowsExpected: v.number(),
   deletedRowsRemaining: v.number(),
   duplicateGroupsRemaining: v.number(),
@@ -718,6 +747,8 @@ async function scanInboundReferences(
   ctx: SnapshotCtx,
   pairPlans: PlannedPair[],
 ): Promise<ReferenceSnapshot> {
+  // Deliberately scan every owner: an invalid cross-owner reference to a doomed
+  // row must still be repointed or refuse the repair. Counts are global.
   const [checkIns, importTasks, marketDataFetchJobs, portfolioPriceMarks] =
     await Promise.all([
       ctx.db
@@ -867,14 +898,48 @@ async function scanInboundReferences(
   };
 }
 
+const FINGERPRINT_EXCLUSION_REASONS = [
+  "midnight_eastern",
+  "missing_brokerage_account",
+  "missing_date",
+  "missing_direction",
+  "missing_price",
+  "missing_quantity",
+  "missing_side",
+  "missing_ticker",
+  "non_finite_date",
+  "non_finite_price",
+  "non_finite_quantity",
+  "non_ibkr_source",
+  "non_stock_asset",
+] as const satisfies readonly IbkrFingerprintExclusionReason[];
+
+function emptyFingerprintExclusionCounts(): Record<
+  IbkrFingerprintExclusionReason,
+  number
+> {
+  return Object.fromEntries(
+    FINGERPRINT_EXCLUSION_REASONS.map((reason) => [reason, 0]),
+  ) as Record<IbkrFingerprintExclusionReason, number>;
+}
+
 function discoveredGroups(rows: DuplicateRow[]): {
+  fingerprintableRows: number;
   keys: string[];
   oversized: string[];
+  rowsExcludedFromFingerprint: Record<IbkrFingerprintExclusionReason, number>;
 } {
   const grouped = new Map<string, DuplicateRow[]>();
+  const rowsExcludedFromFingerprint = emptyFingerprintExclusionCounts();
+  let fingerprintableRows = 0;
   for (const row of rows) {
-    const fingerprint = ibkrLogicalFillFingerprint(row.document);
-    if (!fingerprint) continue;
+    const result = ibkrLogicalFillFingerprintResult(row.document);
+    if (result.fingerprint === null) {
+      rowsExcludedFromFingerprint[result.exclusionReason] += 1;
+      continue;
+    }
+    const fingerprint = result.fingerprint;
+    fingerprintableRows += 1;
     const group = grouped.get(fingerprint) ?? [];
     group.push(row);
     grouped.set(fingerprint, group);
@@ -887,7 +952,12 @@ function discoveredGroups(rows: DuplicateRow[]): {
     if (group.length === 2) keys.push(key);
     else oversized.push(`${fingerprint}:${key}`);
   }
-  return { keys: keys.sort(), oversized: oversized.sort() };
+  return {
+    fingerprintableRows,
+    keys: keys.sort(),
+    oversized: oversized.sort(),
+    rowsExcludedFromFingerprint,
+  };
 }
 
 function pairKindCounts(pairPlans: PlannedPair[]) {
@@ -953,9 +1023,14 @@ async function readSnapshot(
     );
   }
   return {
-    candidateRowsScanned: {
-      inboxTrades: ownerRows.inboxTrades.length,
-      trades: ownerRows.trades.length,
+    fingerprintCoverage: {
+      eligibleIbkrRows: ownerRows.rows.length,
+      fingerprintableRows: discovered.fingerprintableRows,
+      rowsEnumerated: {
+        inboxTrades: ownerRows.inboxTrades.length,
+        trades: ownerRows.trades.length,
+      },
+      rowsExcludedFromFingerprint: discovered.rowsExcludedFromFingerprint,
     },
     discoveredPairKeys: discovered.keys,
     pairPlans,
@@ -986,6 +1061,7 @@ function auditPayload(snapshot: Snapshot, spec: RepairSpec) {
   return {
     archiveFormat: ARCHIVE_FORMAT,
     discoveredPairKeys: snapshot.discoveredPairKeys,
+    fingerprintCoverage: snapshot.fingerprintCoverage,
     inboundReferenceFieldDenominator: [...INBOUND_REFERENCE_FIELD_DENOMINATOR],
     ownerId: spec.ownerId,
     pairs: snapshot.pairPlans.map(pairAuditEvidence),
@@ -1001,7 +1077,6 @@ function auditPayload(snapshot: Snapshot, spec: RepairSpec) {
 function archivePayload(snapshot: Snapshot, spec: RepairSpec) {
   return {
     ...auditPayload(snapshot, spec),
-    candidateRowsScanned: snapshot.candidateRowsScanned,
     referenceRowsScanned: snapshot.referenceSnapshot.scannedCounts,
   };
 }
@@ -1058,7 +1133,7 @@ function dryRun(material: SnapshotMaterial) {
       .byteLength,
     auditJson: material.auditJson,
     auditToken: material.auditToken,
-    candidateRowsScanned: material.candidateRowsScanned,
+    fingerprintCoverage: material.fingerprintCoverage,
     expectedEffects: expectedEffects(material),
     inboundReferenceFieldDenominator: [...INBOUND_REFERENCE_FIELD_DENOMINATOR],
     pairKindCounts: pairKindCounts(material.pairPlans),
@@ -1076,10 +1151,7 @@ function dryRun(material: SnapshotMaterial) {
 export const discover = internalQuery({
   args: { ownerId: v.string() },
   returns: v.object({
-    candidateRowsScanned: v.object({
-      inboxTrades: v.number(),
-      trades: v.number(),
-    }),
+    fingerprintCoverage: fingerprintCoverageValidator,
     groups: v.array(
       v.object({
         fingerprint: v.string(),
@@ -1090,6 +1162,7 @@ export const discover = internalQuery({
   }),
   handler: async (ctx, args) => {
     const ownerRows = await readOwnerCandidateRows(ctx, args.ownerId);
+    const discovery = discoveredGroups(ownerRows.rows);
     const grouped = new Map<string, DuplicateRow[]>();
     const midnightRowsExcluded: DuplicateRow[] = [];
     for (const row of ownerRows.rows) {
@@ -1107,9 +1180,14 @@ export const discover = internalQuery({
       grouped.set(fingerprint, group);
     }
     return {
-      candidateRowsScanned: {
-        inboxTrades: ownerRows.inboxTrades.length,
-        trades: ownerRows.trades.length,
+      fingerprintCoverage: {
+        eligibleIbkrRows: ownerRows.rows.length,
+        fingerprintableRows: discovery.fingerprintableRows,
+        rowsEnumerated: {
+          inboxTrades: ownerRows.inboxTrades.length,
+          trades: ownerRows.trades.length,
+        },
+        rowsExcludedFromFingerprint: discovery.rowsExcludedFromFingerprint,
       },
       groups: [...grouped.entries()]
         .filter(([, rows]) => rows.length > 1)
@@ -1170,9 +1248,51 @@ export const hasCommittedAuditToken = internalQuery({
 
 function auditJsonFromArchiveJson(archiveJson: string): string {
   const parsed = JSON.parse(archiveJson) as Record<string, unknown>;
-  delete parsed.candidateRowsScanned;
   delete parsed.referenceRowsScanned;
   return JSON.stringify(parsed);
+}
+
+function deletedDocumentKeysFromAuditJson(auditJson: string): string[] {
+  const parsed = JSON.parse(auditJson) as {
+    pairs?: Array<{
+      deleted?: { id?: unknown; table?: unknown };
+    }>;
+  };
+  if (!Array.isArray(parsed.pairs)) {
+    throw new ConvexError(
+      "IBKR duplicate-fill repair refused: approved audit JSON has no pair list",
+    );
+  }
+  const keys = parsed.pairs.map((pair, index) => {
+    const id = pair.deleted?.id;
+    const table = pair.deleted?.table;
+    if (
+      typeof id !== "string" ||
+      (table !== "trades" && table !== "inboxTrades")
+    ) {
+      throw new ConvexError(
+        `IBKR duplicate-fill repair refused: approved audit pair ${index + 1} has an invalid deleted document locator`,
+      );
+    }
+    return `${table}:${id}`;
+  });
+  if (
+    keys.length !== EXPECTED_GROUP_COUNT ||
+    new Set(keys).size !== EXPECTED_GROUP_COUNT
+  ) {
+    throw new ConvexError(
+      `IBKR duplicate-fill repair refused: approved audit deleted-document set contains ${new Set(keys).size} unique rows across ${keys.length} pairs, expected ${EXPECTED_GROUP_COUNT}`,
+    );
+  }
+  return keys.sort();
+}
+
+async function deletedDocumentSetHashFromAuditJson(
+  auditJson: string,
+): Promise<string> {
+  return await sha256Hex(
+    JSON.stringify(deletedDocumentKeysFromAuditJson(auditJson)),
+  );
 }
 
 async function applyReferencePatches(
@@ -1186,6 +1306,8 @@ async function applyReferencePatches(
       rowLocator(plan.survivor),
     );
   }
+  // Match the deliberately global preflight scan so cross-owner references
+  // cannot drift between evidence and this atomic write.
   const [checkIns, importTasks, marketDataFetchJobs, portfolioPriceMarks] =
     await Promise.all([
       ctx.db
@@ -1382,11 +1504,15 @@ export const commit = internalMutation({
       );
     }
     const effects = expectedEffects(material);
+    const deletedDocumentSetHash = await deletedDocumentSetHashFromAuditJson(
+      args.expectedAuditJson,
+    );
     const archiveId = await ctx.db.insert("ibkrDuplicateFillRepairArchives", {
       archiveFormat: ARCHIVE_FORMAT,
       auditToken: args.expectedAuditToken,
       contentHash: args.archiveContentHash,
       createdAt: Date.now(),
+      deletedDocumentSetHash,
       deletedInboxTrades: effects.deletedInboxTrades,
       deletedTrades: effects.deletedTrades,
       ownerId: args.repairSpec.ownerId,
@@ -1412,11 +1538,7 @@ export const commit = internalMutation({
       );
     }
     for (const plan of material.pairPlans) {
-      if (plan.deleted.table === "trades") {
-        await ctx.db.delete(plan.deleted.document._id);
-      } else {
-        await ctx.db.delete(plan.deleted.document._id);
-      }
+      await ctx.db.delete(plan.deleted.document._id);
     }
 
     return {
@@ -1522,6 +1644,7 @@ export const getCommittedArchive = internalQuery({
   args: { auditToken: v.string(), ownerId: v.string() },
   returns: v.object({
     contentHash: v.string(),
+    deletedDocumentSetHash: v.string(),
     storageId: v.id("_storage"),
   }),
   handler: async (ctx, args) => {
@@ -1536,7 +1659,11 @@ export const getCommittedArchive = internalQuery({
         "IBKR duplicate-fill repair post-check refused: no committed archive matches this owner and audit token",
       );
     }
-    return { contentHash: archive.contentHash, storageId: archive.storageId };
+    return {
+      contentHash: archive.contentHash,
+      deletedDocumentSetHash: archive.deletedDocumentSetHash,
+      storageId: archive.storageId,
+    };
   },
 });
 
@@ -1544,6 +1671,7 @@ async function countInboundReferencesToIds(
   ctx: QueryCtx,
   ids: Set<string>,
 ): Promise<{ count: number; scannedCounts: Record<string, number> }> {
+  // Post-check uses the same global denominator as preflight and execution.
   const [checkIns, importTasks, marketDataFetchJobs, portfolioPriceMarks] =
     await Promise.all([
       ctx.db
@@ -1608,10 +1736,7 @@ export const verifyPostState = internalQuery({
     ),
   },
   returns: v.object({
-    candidateRowsScanned: v.object({
-      inboxTrades: v.number(),
-      trades: v.number(),
-    }),
+    fingerprintCoverage: fingerprintCoverageValidator,
     deletedRowsRemaining: v.number(),
     duplicateGroupsRemaining: v.number(),
     inboundReferencesToDeletedRowsRemaining: v.number(),
@@ -1635,9 +1760,14 @@ export const verifyPostState = internalQuery({
       new Set(args.deleted.map((locator) => String(locator.id))),
     );
     return {
-      candidateRowsScanned: {
-        inboxTrades: ownerRows.inboxTrades.length,
-        trades: ownerRows.trades.length,
+      fingerprintCoverage: {
+        eligibleIbkrRows: ownerRows.rows.length,
+        fingerprintableRows: discovered.fingerprintableRows,
+        rowsEnumerated: {
+          inboxTrades: ownerRows.inboxTrades.length,
+          trades: ownerRows.trades.length,
+        },
+        rowsExcludedFromFingerprint: discovered.rowsExcludedFromFingerprint,
       },
       deletedRowsRemaining: deletedRows.filter((row) => row !== null).length,
       duplicateGroupsRemaining:
@@ -1658,11 +1788,14 @@ export const postCheck = internalAction({
   args: { auditToken: v.string(), ownerId: v.string() },
   returns: postCheckValidator,
   handler: async (ctx, args) => {
-    const archive: { contentHash: string; storageId: Id<"_storage"> } =
-      await ctx.runQuery(
-        internal.ibkrDuplicateFillRepair.getCommittedArchive,
-        args,
-      );
+    const archive: {
+      contentHash: string;
+      deletedDocumentSetHash: string;
+      storageId: Id<"_storage">;
+    } = await ctx.runQuery(
+      internal.ibkrDuplicateFillRepair.getCommittedArchive,
+      args,
+    );
     const blob = await ctx.storage.get(archive.storageId);
     const archiveText = blob ? await blob.text() : "";
     let parsed:
@@ -1706,7 +1839,7 @@ export const postCheck = internalAction({
       },
     );
     const state: {
-      candidateRowsScanned: { inboxTrades: number; trades: number };
+      fingerprintCoverage: FingerprintCoverage;
       deletedRowsRemaining: number;
       duplicateGroupsRemaining: number;
       inboundReferencesToDeletedRowsRemaining: number;
@@ -1717,15 +1850,21 @@ export const postCheck = internalAction({
       ownerId: args.ownerId,
       survivors,
     });
+    let archiveDeletedDocumentSetMatchesApprovedAudit = false;
+    try {
+      archiveDeletedDocumentSetMatchesApprovedAudit =
+        (await deletedDocumentSetHashFromAuditJson(archiveText)) ===
+        archive.deletedDocumentSetHash;
+    } catch {
+      // Invalid or incomplete blobs are reported by the explicit archive checks.
+    }
     return {
-      archiveContainsEveryDeletedDocument:
-        deleted.length === EXPECTED_GROUP_COUNT &&
-        deleted.every((locator) => archiveText.includes(String(locator.id))),
+      archiveDeletedDocumentSetMatchesApprovedAudit,
       archiveContentHashMatches:
         blob !== null && (await sha256Hex(archiveText)) === archive.contentHash,
       archiveReadable: blob !== null,
       auditToken: args.auditToken,
-      candidateRowsScanned: state.candidateRowsScanned,
+      fingerprintCoverage: state.fingerprintCoverage,
       deletedRowsExpected: EXPECTED_GROUP_COUNT,
       deletedRowsRemaining: state.deletedRowsRemaining,
       duplicateGroupsRemaining: state.duplicateGroupsRemaining,

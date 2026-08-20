@@ -281,6 +281,16 @@ describe("IBKR duplicate-fill repair", () => {
       marketDataFetchJobs: 1,
       portfolioPriceMarks: 1,
     });
+    expect(result.fingerprintCoverage).toMatchObject({
+      eligibleIbkrRows: 62,
+      fingerprintableRows: 62,
+      rowsEnumerated: { inboxTrades: 33, trades: 29 },
+    });
+    expect(
+      Object.values(
+        result.fingerprintCoverage.rowsExcludedFromFingerprint,
+      ).every((count) => count === 0),
+    ).toBe(true);
     expect(result.referenceObservations).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -362,7 +372,7 @@ describe("IBKR duplicate-fill repair", () => {
         ownerId,
       }),
     ).resolves.toMatchObject({
-      archiveContainsEveryDeletedDocument: true,
+      archiveDeletedDocumentSetMatchesApprovedAudit: true,
       archiveContentHashMatches: true,
       archiveReadable: true,
       deletedRowsExpected: 31,
@@ -529,6 +539,283 @@ describe("IBKR duplicate-fill repair", () => {
     ).rejects.toThrow(/pair \d+ (first|second).* is missing/);
   });
 
+  it("refuses a repair spec whose pair-count guard changes", async () => {
+    const { spec, t } = await seedRepair();
+    await expect(
+      t.query(internal.ibkrDuplicateFillRepair.inspect, {
+        ...spec,
+        pairs: spec.pairs.slice(0, -1),
+      }),
+    ).rejects.toThrow("supplied pair count changed from 31 to 30");
+  });
+
+  it("refuses when one document appears in two supplied pairs", async () => {
+    const { spec, t } = await seedRepair();
+    const repeated = spec.pairs[0]!.first;
+    spec.pairs[1] = {
+      ...spec.pairs[1]!,
+      first: repeated,
+      survivor: repeated,
+    };
+    await expect(
+      t.query(internal.ibkrDuplicateFillRepair.inspect, spec),
+    ).rejects.toThrow("appears in more than one supplied pair");
+  });
+
+  it.each(["portfolioId", "tradePlanId"] as const)(
+    "refuses conflicting %s metadata instead of dropping either value",
+    async (field) => {
+      const { rowsByKind, spec, t } = await seedRepair();
+      const target = rowsByKind["accepted-accepted-0"]!;
+      await t.run(async (ctx) => {
+        if (field === "portfolioId") {
+          const conflictingId = await ctx.db.insert("portfolios", {
+            name: "Conflicting",
+            ownerId,
+          });
+          await ctx.db.patch(target.survivor.id as Id<"trades">, {
+            portfolioId: conflictingId,
+          });
+        } else {
+          const firstId = await ctx.db.insert("tradePlans", {
+            instrumentSymbol: "A0",
+            name: "First",
+            ownerId,
+            status: "active",
+          });
+          const conflictingId = await ctx.db.insert("tradePlans", {
+            instrumentSymbol: "A0",
+            name: "Second",
+            ownerId,
+            status: "active",
+          });
+          await ctx.db.patch(target.deleted.id as Id<"trades">, {
+            tradePlanId: firstId,
+          });
+          await ctx.db.patch(target.survivor.id as Id<"trades">, {
+            tradePlanId: conflictingId,
+          });
+        }
+      });
+      await expect(
+        t.query(internal.ibkrDuplicateFillRepair.inspect, spec),
+      ).rejects.toThrow(`${field} conflicts between survivor`);
+    },
+  );
+
+  it("reports both a supplied pair missing from discovery and its oversized fingerprint group", async () => {
+    const { rowsByKind, spec, t } = await seedRepair();
+    const target = rowsByKind["accepted-inbox-0"]!;
+    await t.run(async (ctx) => {
+      const existing = await ctx.db.get(target.deleted.id as Id<"inboxTrades">);
+      await ctx.db.insert("inboxTrades", {
+        assetType: existing!.assetType!,
+        brokerageAccountId: existing!.brokerageAccountId,
+        date: existing!.date,
+        direction: existing!.direction,
+        externalId: "6000000099",
+        fees: existing!.fees,
+        orderType: existing!.orderType,
+        ownerId,
+        price: existing!.price,
+        quantity: existing!.quantity,
+        side: existing!.side,
+        source: "ibkr",
+        status: "pending_review",
+        taxes: existing!.taxes,
+        ticker: existing!.ticker,
+        validationErrors: [],
+        validationWarnings: [],
+      });
+    });
+    const result = await t.query(
+      internal.ibkrDuplicateFillRepair.inspect,
+      spec,
+    );
+    expect(result.safeToExecute).toBe(false);
+    expect(result.refusalReasons).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(
+          "logical fingerprint scan found group(s) larger than two",
+        ),
+        expect.stringContaining(
+          "supplied duplicate pair(s) no longer discovered",
+        ),
+      ]),
+    );
+  });
+
+  it("refuses an unapproved discovered pair outside the exact supplied set", async () => {
+    const { spec, t } = await seedRepair();
+    await t.run(async (ctx) => {
+      const identity = {
+        assetType: "stock" as const,
+        brokerageAccountId: "U1",
+        date: baseDate + 90_000,
+        direction: "long" as const,
+        ownerId,
+        price: 999,
+        quantity: 1,
+        side: "buy" as const,
+        source: "ibkr" as const,
+        ticker: "EXTRA",
+      };
+      await ctx.db.insert("trades", {
+        ...identity,
+        externalId: "U1|EXTRA|20260813;103130|999|1",
+      });
+      await ctx.db.insert("inboxTrades", {
+        ...identity,
+        externalId: "6999999999",
+        status: "pending_review",
+        validationErrors: [],
+        validationWarnings: [],
+      });
+    });
+    const result = await t.query(
+      internal.ibkrDuplicateFillRepair.inspect,
+      spec,
+    );
+    expect(result.safeToExecute).toBe(false);
+    expect(result.refusalReasons).toEqual([
+      expect.stringContaining("unapproved duplicate pair(s) discovered"),
+    ]);
+  });
+
+  it("refuses drift in the approved pair-kind denominator", async () => {
+    const { rowsByKind, spec, t } = await seedRepair();
+    const target = rowsByKind["accepted-inbox-0"]!;
+    const replacementId = await t.run(async (ctx) => {
+      const existing = await ctx.db.get(target.deleted.id as Id<"inboxTrades">);
+      await ctx.db.delete(target.deleted.id as Id<"inboxTrades">);
+      return await ctx.db.insert("trades", {
+        assetType: existing!.assetType!,
+        brokerageAccountId: existing!.brokerageAccountId,
+        date: existing!.date!,
+        direction: existing!.direction!,
+        externalId: existing!.externalId,
+        fees: existing!.fees,
+        orderType: existing!.orderType,
+        ownerId,
+        price: existing!.price!,
+        quantity: existing!.quantity!,
+        side: existing!.side!,
+        source: "ibkr",
+        taxes: existing!.taxes,
+        ticker: existing!.ticker!,
+      });
+    });
+    const pair = spec.pairs.find(
+      (candidate) => String(candidate.second.id) === String(target.deleted.id),
+    )!;
+    const replacement = { id: replacementId, table: "trades" as const };
+    pair.second = replacement;
+    pair.survivor = replacement;
+
+    const result = await t.query(
+      internal.ibkrDuplicateFillRepair.inspect,
+      spec,
+    );
+    expect(result.safeToExecute).toBe(false);
+    expect(result.refusalReasons).toEqual(
+      expect.arrayContaining([
+        "accepted/accepted pair count changed from 2 to 3",
+        "accepted/inbox pair count changed from 25 to 24",
+      ]),
+    );
+  });
+
+  it("prints the exact fingerprint denominator and every exclusion reason", async () => {
+    const { spec, t } = await seedRepair();
+    await t.run(async (ctx) => {
+      const base = {
+        assetType: "stock" as const,
+        brokerageAccountId: "U1",
+        date: baseDate + 100_000,
+        direction: "long" as const,
+        ownerId,
+        price: 10,
+        quantity: 1,
+        side: "buy" as const,
+        source: "ibkr" as const,
+        ticker: "COVERAGE",
+      };
+      await ctx.db.insert("trades", {
+        ...base,
+        externalId: "coverage-midnight",
+        date: parseIbkrEasternTimestamp("20260813")!,
+      });
+      await ctx.db.insert("trades", {
+        ...base,
+        assetType: "crypto",
+        externalId: "coverage-crypto",
+      });
+      await ctx.db.insert("trades", {
+        ...base,
+        brokerageAccountId: undefined,
+        externalId: "coverage-no-account",
+      });
+      await ctx.db.insert("trades", {
+        ...base,
+        externalId: "coverage-manual",
+        source: "manual",
+      });
+    });
+    const result = await t.query(
+      internal.ibkrDuplicateFillRepair.inspect,
+      spec,
+    );
+    expect(result.fingerprintCoverage).toMatchObject({
+      eligibleIbkrRows: 65,
+      fingerprintableRows: 62,
+      rowsEnumerated: { inboxTrades: 33, trades: 33 },
+      rowsExcludedFromFingerprint: {
+        midnight_eastern: 1,
+        missing_brokerage_account: 1,
+        non_ibkr_source: 0,
+        non_stock_asset: 1,
+      },
+    });
+  });
+
+  it("binds the archive blob's deleted set to the approved audit record", async () => {
+    const { spec, t } = await seedRepair();
+    const dryRun = await t.query(
+      internal.ibkrDuplicateFillRepair.inspect,
+      spec,
+    );
+    await t.action(internal.ibkrDuplicateFillRepair.execute, {
+      expectedAuditJson: dryRun.auditJson,
+      expectedAuditToken: dryRun.auditToken,
+      repairSpec: spec,
+    });
+    const substitutedStorageId = await t.run((ctx) =>
+      ctx.storage.store(
+        new Blob([JSON.stringify({ archiveFormat: "substituted", pairs: [] })]),
+      ),
+    );
+    await t.run(async (ctx) => {
+      const archive = await ctx.db
+        .query("ibkrDuplicateFillRepairArchives")
+        .withIndex("by_owner_auditToken", (q) =>
+          q.eq("ownerId", ownerId).eq("auditToken", dryRun.auditToken),
+        )
+        .unique();
+      await ctx.db.patch(archive!._id, { storageId: substitutedStorageId });
+    });
+
+    await expect(
+      t.action(internal.ibkrDuplicateFillRepair.postCheck, {
+        auditToken: dryRun.auditToken,
+        ownerId,
+      }),
+    ).resolves.toMatchObject({
+      archiveContentHashMatches: false,
+      archiveDeletedDocumentSetMatchesApprovedAudit: false,
+      archiveReadable: true,
+    });
+  });
+
   it("reports an unreadable archive without claiming post-check success", async () => {
     const { spec, t } = await seedRepair();
     const dryRun = await t.query(
@@ -548,7 +835,7 @@ describe("IBKR duplicate-fill repair", () => {
         ownerId,
       }),
     ).resolves.toMatchObject({
-      archiveContainsEveryDeletedDocument: false,
+      archiveDeletedDocumentSetMatchesApprovedAudit: false,
       archiveContentHashMatches: false,
       archiveReadable: false,
     });

@@ -212,6 +212,7 @@ describe("imports review workspace", () => {
     expect(result).toEqual({
       imported: 1,
       skippedDuplicates: 0,
+      skippedLogicalDuplicates: 0,
       withValidationErrors: 0,
       withWarnings: 0,
     });
@@ -274,6 +275,7 @@ describe("imports review workspace", () => {
     expect(result).toEqual({
       imported: 0,
       skippedDuplicates: 1,
+      skippedLogicalDuplicates: 0,
       withValidationErrors: 0,
       withWarnings: 0,
     });
@@ -281,6 +283,7 @@ describe("imports review workspace", () => {
   });
 
   it("dedupes the same IBKR stock fill across CSV and Flex external ids", async () => {
+    const auditLog = vi.spyOn(console, "warn").mockImplementation(() => {});
     await insertResolvedInstrument({
       assetType: "stock",
       ownerId: ownerA,
@@ -316,9 +319,15 @@ describe("imports review workspace", () => {
     expect(result).toEqual({
       imported: 0,
       skippedDuplicates: 1,
+      skippedLogicalDuplicates: 1,
       withValidationErrors: 0,
       withWarnings: 0,
     });
+    expect(auditLog).toHaveBeenCalledWith(
+      "ibkr_logical_duplicate_skipped",
+      expect.stringContaining('"incomingExternalId":"5523063596"'),
+    );
+    auditLog.mockRestore();
     expect(
       await asUser(ownerA).query(api.imports.listInboxTrades, {}),
     ).toHaveLength(1);
@@ -360,6 +369,7 @@ describe("imports review workspace", () => {
 
     expect(result.imported).toBe(0);
     expect(result.skippedDuplicates).toBe(1);
+    expect(result.skippedLogicalDuplicates).toBe(1);
   });
 
   it("keeps distinct IBKR fills when any economic identity field differs", async () => {
@@ -390,6 +400,7 @@ describe("imports review workspace", () => {
 
     expect(result.imported).toBe(3);
     expect(result.skippedDuplicates).toBe(0);
+    expect(result.skippedLogicalDuplicates).toBe(0);
   });
 
   it("keeps same-fingerprint IBKR orders when both ids use the same scheme", async () => {
@@ -419,6 +430,7 @@ describe("imports review workspace", () => {
 
     expect(result.imported).toBe(2);
     expect(result.skippedDuplicates).toBe(0);
+    expect(result.skippedLogicalDuplicates).toBe(0);
   });
 
   it("skips only the first cross-scheme collision when two same-scheme orders share a fingerprint", async () => {
@@ -458,6 +470,7 @@ describe("imports review workspace", () => {
 
     expect(result.imported).toBe(1);
     expect(result.skippedDuplicates).toBe(1);
+    expect(result.skippedLogicalDuplicates).toBe(1);
   });
 
   it("includes manual accounts from accepted trades in known accounts", async () => {

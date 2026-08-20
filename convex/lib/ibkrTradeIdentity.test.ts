@@ -3,6 +3,7 @@ import { parseIbkrEasternTimestamp } from "../../shared/brokerage/ibkr-flex/time
 import {
   classifyIbkrExternalId,
   ibkrLogicalFillFingerprint,
+  ibkrLogicalFillFingerprintResult,
   isMidnightEastern,
 } from "./ibkrTradeIdentity";
 
@@ -50,6 +51,24 @@ describe("IBKR logical fill identity", () => {
       expect(ibkrLogicalFillFingerprint({ ...fill, date })).toBeNull();
     },
   );
+
+  it("reports why a row was excluded from the scan denominator", () => {
+    expect(
+      ibkrLogicalFillFingerprintResult({ ...fill, brokerageAccountId: "" }),
+    ).toEqual({
+      exclusionReason: "missing_brokerage_account",
+      fingerprint: null,
+    });
+    expect(
+      ibkrLogicalFillFingerprintResult({
+        ...fill,
+        date: parseIbkrEasternTimestamp("20260813")!,
+      }),
+    ).toEqual({
+      exclusionReason: "midnight_eastern",
+      fingerprint: null,
+    });
+  });
 
   it("classifies every historical identifier scheme", () => {
     expect(classifyIbkrExternalId("U1|ARM|20260813;103000|50|2")).toBe("csv");

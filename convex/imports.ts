@@ -222,6 +222,7 @@ export type StageInboxTradeInput = {
 export type StageInboxTradesResult = {
   imported: number;
   skippedDuplicates: number;
+  skippedLogicalDuplicates: number;
   withValidationErrors: number;
   withWarnings: number;
 };
@@ -518,6 +519,7 @@ export async function stageInboxTradesForOwner(
 
   let imported = 0;
   let skippedDuplicates = 0;
+  let skippedLogicalDuplicates = 0;
   let withValidationErrors = 0;
   let withWarnings = 0;
   const scheduledResolutionKeys = new Set<string>();
@@ -551,8 +553,28 @@ export async function stageInboxTradesForOwner(
       existingIbkrLogicalFills.has(logicalFillFingerprint) &&
       !existingIbkrLogicalFills.get(logicalFillFingerprint)!.has(externalIdKind)
     ) {
+      const matchedExternalIdKinds = [
+        ...existingIbkrLogicalFills.get(logicalFillFingerprint)!,
+      ].sort();
       existingIbkrLogicalFills.get(logicalFillFingerprint)!.add(externalIdKind);
+      console.warn(
+        "ibkr_logical_duplicate_skipped",
+        JSON.stringify({
+          brokerageAccountId,
+          date: trade.date,
+          direction: trade.direction,
+          incomingExternalId: trade.externalId,
+          incomingExternalIdKind: externalIdKind,
+          matchedExternalIdKinds,
+          ownerId,
+          price: trade.price,
+          quantity: trade.quantity,
+          side: trade.side,
+          ticker: trade.ticker,
+        }),
+      );
       skippedDuplicates++;
+      skippedLogicalDuplicates++;
       continue;
     }
     if (logicalFillFingerprint !== null && trade.externalId !== undefined) {
@@ -661,7 +683,13 @@ export async function stageInboxTradesForOwner(
     imported++;
   }
 
-  return { imported, skippedDuplicates, withValidationErrors, withWarnings };
+  return {
+    imported,
+    skippedDuplicates,
+    skippedLogicalDuplicates,
+    withValidationErrors,
+    withWarnings,
+  };
 }
 
 export const importTrades = mutation({
@@ -691,6 +719,7 @@ export const importTrades = mutation({
   returns: v.object({
     imported: v.number(),
     skippedDuplicates: v.number(),
+    skippedLogicalDuplicates: v.number(),
     withValidationErrors: v.number(),
     withWarnings: v.number(),
   }),

@@ -301,6 +301,7 @@ export default defineSchema({
     dismissedAt: v.optional(v.number()),
     error: v.optional(v.string()),
     extractedData: v.optional(v.string()),
+    // Load-bearing repair marker: add one beside every typed or serialized trade reference.
     // IBKR_DUPLICATE_REFERENCE_FIELD: importTasks.inboxTradeId
     inboxTradeId: v.optional(v.id("inboxTrades")),
     mode: importTaskModeValidator,
@@ -408,6 +409,7 @@ export default defineSchema({
     auditToken: v.string(),
     contentHash: v.string(),
     createdAt: v.number(),
+    deletedDocumentSetHash: v.string(),
     deletedInboxTrades: v.number(),
     deletedTrades: v.number(),
     ownerId: v.string(),
