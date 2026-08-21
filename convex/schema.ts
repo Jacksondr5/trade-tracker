@@ -385,6 +385,22 @@ export default defineSchema({
     .index("by_owner_auditToken", ["ownerId", "auditToken"])
     .index("by_owner_createdAt", ["ownerId", "createdAt"]),
 
+  bravosDanglingReferenceArchives: defineTable({
+    archiveFormat: v.literal("bravos_dangling_reference_repair_v1"),
+    auditToken: v.string(),
+    contentHash: v.string(),
+    createdAt: v.number(),
+    deletedGeneratedNoteId: v.id("notes"),
+    generatedNotePlanId: v.id("tradePlans"),
+    detachedNoteId: v.id("notes"),
+    preservedNotePlanId: v.id("tradePlans"),
+    ownerId: v.string(),
+    patchedImportTaskId: v.id("importTasks"),
+    storageId: v.id("_storage"),
+  })
+    .index("by_auditToken", ["auditToken"])
+    .index("by_owner_createdAt", ["ownerId", "createdAt"]),
+
   campaigns: defineTable({
     closedAt: v.optional(v.number()),
     name: v.string(),
