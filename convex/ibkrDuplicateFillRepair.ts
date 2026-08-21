@@ -101,8 +101,12 @@ type Snapshot = {
 type FingerprintCoverage = {
   eligibleIbkrRows: number;
   fingerprintableRows: number;
+  nonIbkrTradeRowsExcluded: number;
   rowsEnumerated: { inboxTrades: number; trades: number };
-  rowsExcludedFromFingerprint: Record<IbkrFingerprintExclusionReason, number>;
+  rowsExcludedFromFingerprint: Record<
+    Exclude<IbkrFingerprintExclusionReason, "non_ibkr_source">,
+    number
+  >;
 };
 
 type SnapshotMaterial = Snapshot & {
@@ -215,13 +219,13 @@ const fingerprintExclusionCountsValidator = v.object({
   non_finite_date: v.number(),
   non_finite_price: v.number(),
   non_finite_quantity: v.number(),
-  non_ibkr_source: v.number(),
   non_stock_asset: v.number(),
 });
 
 const fingerprintCoverageValidator = v.object({
   eligibleIbkrRows: v.number(),
   fingerprintableRows: v.number(),
+  nonIbkrTradeRowsExcluded: v.number(),
   rowsEnumerated: v.object({
     inboxTrades: v.number(),
     trades: v.number(),
@@ -914,24 +918,32 @@ const FINGERPRINT_EXCLUSION_REASONS = [
   "non_finite_date",
   "non_finite_price",
   "non_finite_quantity",
-  "non_ibkr_source",
   "non_stock_asset",
-] as const satisfies readonly IbkrFingerprintExclusionReason[];
+] as const satisfies readonly Exclude<
+  IbkrFingerprintExclusionReason,
+  "non_ibkr_source"
+>[];
 
 function emptyFingerprintExclusionCounts(): Record<
-  IbkrFingerprintExclusionReason,
+  Exclude<IbkrFingerprintExclusionReason, "non_ibkr_source">,
   number
 > {
   return Object.fromEntries(
     FINGERPRINT_EXCLUSION_REASONS.map((reason) => [reason, 0]),
-  ) as Record<IbkrFingerprintExclusionReason, number>;
+  ) as Record<
+    Exclude<IbkrFingerprintExclusionReason, "non_ibkr_source">,
+    number
+  >;
 }
 
 function discoveredGroups(rows: DuplicateRow[]): {
   fingerprintableRows: number;
   keys: string[];
   oversized: string[];
-  rowsExcludedFromFingerprint: Record<IbkrFingerprintExclusionReason, number>;
+  rowsExcludedFromFingerprint: Record<
+    Exclude<IbkrFingerprintExclusionReason, "non_ibkr_source">,
+    number
+  >;
 } {
   const grouped = new Map<string, DuplicateRow[]>();
   const rowsExcludedFromFingerprint = emptyFingerprintExclusionCounts();
@@ -939,7 +951,9 @@ function discoveredGroups(rows: DuplicateRow[]): {
   for (const row of rows) {
     const result = ibkrLogicalFillFingerprintResult(row.document);
     if (result.fingerprint === null) {
-      rowsExcludedFromFingerprint[result.exclusionReason] += 1;
+      if (result.exclusionReason !== "non_ibkr_source") {
+        rowsExcludedFromFingerprint[result.exclusionReason] += 1;
+      }
       continue;
     }
     const fingerprint = result.fingerprint;
@@ -1030,6 +1044,9 @@ async function readSnapshot(
     fingerprintCoverage: {
       eligibleIbkrRows: ownerRows.rows.length,
       fingerprintableRows: discovered.fingerprintableRows,
+      nonIbkrTradeRowsExcluded: ownerRows.trades.filter(
+        (trade) => trade.source !== "ibkr",
+      ).length,
       rowsEnumerated: {
         inboxTrades: ownerRows.inboxTrades.length,
         trades: ownerRows.trades.length,
@@ -1187,6 +1204,9 @@ export const discover = internalQuery({
       fingerprintCoverage: {
         eligibleIbkrRows: ownerRows.rows.length,
         fingerprintableRows: discovery.fingerprintableRows,
+        nonIbkrTradeRowsExcluded: ownerRows.trades.filter(
+          (trade) => trade.source !== "ibkr",
+        ).length,
         rowsEnumerated: {
           inboxTrades: ownerRows.inboxTrades.length,
           trades: ownerRows.trades.length,
@@ -1767,6 +1787,9 @@ export const verifyPostState = internalQuery({
       fingerprintCoverage: {
         eligibleIbkrRows: ownerRows.rows.length,
         fingerprintableRows: discovered.fingerprintableRows,
+        nonIbkrTradeRowsExcluded: ownerRows.trades.filter(
+          (trade) => trade.source !== "ibkr",
+        ).length,
         rowsEnumerated: {
           inboxTrades: ownerRows.inboxTrades.length,
           trades: ownerRows.trades.length,

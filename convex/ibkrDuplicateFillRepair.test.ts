@@ -853,6 +853,11 @@ describe("IBKR duplicate-fill repair", () => {
         externalId: "coverage-manual",
         source: "manual",
       });
+      await ctx.db.insert("trades", {
+        ...base,
+        externalId: "coverage-no-source",
+        source: undefined,
+      });
     });
     const result = await t.query(
       internal.ibkrDuplicateFillRepair.inspect,
@@ -861,14 +866,17 @@ describe("IBKR duplicate-fill repair", () => {
     expect(result.fingerprintCoverage).toMatchObject({
       eligibleIbkrRows: 65,
       fingerprintableRows: 62,
-      rowsEnumerated: { inboxTrades: 33, trades: 33 },
+      nonIbkrTradeRowsExcluded: 2,
+      rowsEnumerated: { inboxTrades: 33, trades: 34 },
       rowsExcludedFromFingerprint: {
         midnight_eastern: 1,
         missing_brokerage_account: 1,
-        non_ibkr_source: 0,
         non_stock_asset: 1,
       },
     });
+    expect(
+      result.fingerprintCoverage.rowsExcludedFromFingerprint,
+    ).not.toHaveProperty("non_ibkr_source");
   });
 
   it("binds the archive blob's deleted set to the approved audit record", async () => {

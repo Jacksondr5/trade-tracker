@@ -560,13 +560,11 @@ export async function stageInboxTradesForOwner(
       console.warn(
         "ibkr_logical_duplicate_skipped",
         JSON.stringify({
-          brokerageAccountId,
           date: trade.date,
           direction: trade.direction,
           incomingExternalId: trade.externalId,
           incomingExternalIdKind: externalIdKind,
           matchedExternalIdKinds,
-          ownerId,
           price: trade.price,
           quantity: trade.quantity,
           side: trade.side,

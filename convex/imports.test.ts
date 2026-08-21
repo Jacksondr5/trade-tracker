@@ -327,6 +327,21 @@ describe("imports review workspace", () => {
       "ibkr_logical_duplicate_skipped",
       expect.stringContaining('"incomingExternalId":"5523063596"'),
     );
+    const logPayload = JSON.parse(String(auditLog.mock.calls[0]?.[1])) as Record<
+      string,
+      unknown
+    >;
+    expect(logPayload).toEqual({
+      date: flexFill.date,
+      direction: flexFill.direction,
+      incomingExternalId: flexFill.externalId,
+      incomingExternalIdKind: "order",
+      matchedExternalIdKinds: ["csv"],
+      price: flexFill.price,
+      quantity: flexFill.quantity,
+      side: flexFill.side,
+      ticker: flexFill.ticker,
+    });
     auditLog.mockRestore();
     expect(
       await asUser(ownerA).query(api.imports.listInboxTrades, {}),
