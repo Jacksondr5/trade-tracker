@@ -33,6 +33,7 @@ import type * as lib_ibkrTradeIdentity from "../lib/ibkrTradeIdentity.js";
 import type * as lib_marketCalendar from "../lib/marketCalendar.js";
 import type * as lib_marketDataInstruments from "../lib/marketDataInstruments.js";
 import type * as lib_openPositions from "../lib/openPositions.js";
+import type * as lib_sha256 from "../lib/sha256.js";
 import type * as lib_statuses from "../lib/statuses.js";
 import type * as lib_tradeValidator from "../lib/tradeValidator.js";
 import type * as marketData from "../marketData.js";
@@ -82,6 +83,7 @@ declare const fullApi: ApiFromModules<{
   "lib/marketCalendar": typeof lib_marketCalendar;
   "lib/marketDataInstruments": typeof lib_marketDataInstruments;
   "lib/openPositions": typeof lib_openPositions;
+  "lib/sha256": typeof lib_sha256;
   "lib/statuses": typeof lib_statuses;
   "lib/tradeValidator": typeof lib_tradeValidator;
   marketData: typeof marketData;
