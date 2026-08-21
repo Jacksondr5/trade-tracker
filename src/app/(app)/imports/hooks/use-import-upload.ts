@@ -13,6 +13,7 @@ import type {
 interface ImportResult {
   imported: number;
   skippedDuplicates: number;
+  skippedLogicalDuplicates: number;
   withValidationErrors: number;
   withWarnings: number;
 }

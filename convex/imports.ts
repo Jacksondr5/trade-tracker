@@ -15,6 +15,10 @@ import { resolveInstrumentForOwner } from "./marketData";
 import { validateInboxTradeCandidate } from "../shared/imports/validation";
 import { KRAKEN_DEFAULT_ACCOUNT_ID } from "../shared/imports/constants";
 import {
+  classifyIbkrExternalId,
+  ibkrLogicalFillFingerprint,
+} from "./lib/ibkrTradeIdentity";
+import {
   findAutoMatchTradePlanId,
   findMatchingTradePlans,
 } from "../shared/imports/auto-match";
@@ -218,6 +222,7 @@ export type StageInboxTradeInput = {
 export type StageInboxTradesResult = {
   imported: number;
   skippedDuplicates: number;
+  skippedLogicalDuplicates: number;
   withValidationErrors: number;
   withWarnings: number;
 };
@@ -464,6 +469,21 @@ export async function stageInboxTradesForOwner(
       )
       .map((t) => dedupKey(t.source, t.externalId)),
   ]);
+  const existingIbkrLogicalFills = new Map<
+    string,
+    Set<ReturnType<typeof classifyIbkrExternalId>>
+  >();
+  for (const existingTrade of [
+    ...existingTrades,
+    ...existingPendingInboxTrades,
+  ]) {
+    const fingerprint = ibkrLogicalFillFingerprint(existingTrade);
+    if (fingerprint === null || existingTrade.externalId === undefined)
+      continue;
+    const kinds = existingIbkrLogicalFills.get(fingerprint) ?? new Set();
+    kinds.add(classifyIbkrExternalId(existingTrade.externalId));
+    existingIbkrLogicalFills.set(fingerprint, kinds);
+  }
 
   const [activeTradePlans, ideaTradePlans, watchingTradePlans] =
     await Promise.all([
@@ -499,6 +519,7 @@ export async function stageInboxTradesForOwner(
 
   let imported = 0;
   let skippedDuplicates = 0;
+  let skippedLogicalDuplicates = 0;
   let withValidationErrors = 0;
   let withWarnings = 0;
   const scheduledResolutionKeys = new Set<string>();
@@ -512,6 +533,12 @@ export async function stageInboxTradesForOwner(
       trade.brokerageAccountId,
     );
 
+    const logicalFillFingerprint = ibkrLogicalFillFingerprint({
+      ...trade,
+      brokerageAccountId,
+    });
+    const externalIdKind = classifyIbkrExternalId(trade.externalId);
+
     if (trade.externalId) {
       const key = dedupKey(trade.source, trade.externalId);
       if (existingExternalIds.has(key)) {
@@ -519,6 +546,40 @@ export async function stageInboxTradesForOwner(
         continue;
       }
       existingExternalIds.add(key);
+    }
+    if (
+      logicalFillFingerprint !== null &&
+      trade.externalId !== undefined &&
+      existingIbkrLogicalFills.has(logicalFillFingerprint) &&
+      !existingIbkrLogicalFills.get(logicalFillFingerprint)!.has(externalIdKind)
+    ) {
+      const matchedExternalIdKinds = [
+        ...existingIbkrLogicalFills.get(logicalFillFingerprint)!,
+      ].sort();
+      existingIbkrLogicalFills.get(logicalFillFingerprint)!.add(externalIdKind);
+      console.warn(
+        "ibkr_logical_duplicate_skipped",
+        JSON.stringify({
+          date: trade.date,
+          direction: trade.direction,
+          incomingExternalId: trade.externalId,
+          incomingExternalIdKind: externalIdKind,
+          matchedExternalIdKinds,
+          price: trade.price,
+          quantity: trade.quantity,
+          side: trade.side,
+          ticker: trade.ticker,
+        }),
+      );
+      skippedDuplicates++;
+      skippedLogicalDuplicates++;
+      continue;
+    }
+    if (logicalFillFingerprint !== null && trade.externalId !== undefined) {
+      const kinds =
+        existingIbkrLogicalFills.get(logicalFillFingerprint) ?? new Set();
+      kinds.add(externalIdKind);
+      existingIbkrLogicalFills.set(logicalFillFingerprint, kinds);
     }
 
     const validation = validateInboxTradeCandidate(trade, {
@@ -620,7 +681,13 @@ export async function stageInboxTradesForOwner(
     imported++;
   }
 
-  return { imported, skippedDuplicates, withValidationErrors, withWarnings };
+  return {
+    imported,
+    skippedDuplicates,
+    skippedLogicalDuplicates,
+    withValidationErrors,
+    withWarnings,
+  };
 }
 
 export const importTrades = mutation({
@@ -650,6 +717,7 @@ export const importTrades = mutation({
   returns: v.object({
     imported: v.number(),
     skippedDuplicates: v.number(),
+    skippedLogicalDuplicates: v.number(),
     withValidationErrors: v.number(),
     withWarnings: v.number(),
   }),

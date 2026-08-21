@@ -897,6 +897,7 @@ export const beginSyncRunForConnection = internalMutation({
         referenceCode: undefined,
         requestedAt: now,
         skippedDuplicateTrades: 0,
+        skippedLogicalDuplicateTrades: 0,
         startedAt: now,
         status: "queued",
         updatedAt: now,
@@ -945,6 +946,7 @@ export const beginSyncRunForConnection = internalMutation({
       reportType: args.reportType,
       requestedAt: now,
       skippedDuplicateTrades: 0,
+      skippedLogicalDuplicateTrades: 0,
       source: connection.source,
       startedAt: now,
       status: "queued",
@@ -1236,6 +1238,10 @@ export const ingestParsedFlexReport = internalMutation({
       skippedDuplicateTrades: Math.max(
         syncRun.skippedDuplicateTrades ?? 0,
         importResult.skippedDuplicates,
+      ),
+      skippedLogicalDuplicateTrades: Math.max(
+        syncRun.skippedLogicalDuplicateTrades ?? 0,
+        importResult.skippedLogicalDuplicates,
       ),
       status: "processing",
       updatedAt: now,

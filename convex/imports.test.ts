@@ -212,6 +212,7 @@ describe("imports review workspace", () => {
     expect(result).toEqual({
       imported: 1,
       skippedDuplicates: 0,
+      skippedLogicalDuplicates: 0,
       withValidationErrors: 0,
       withWarnings: 0,
     });
@@ -274,10 +275,217 @@ describe("imports review workspace", () => {
     expect(result).toEqual({
       imported: 0,
       skippedDuplicates: 1,
+      skippedLogicalDuplicates: 0,
       withValidationErrors: 0,
       withWarnings: 0,
     });
     expect(inboxTrades).toHaveLength(1);
+  });
+
+  it("dedupes the same IBKR stock fill across CSV and Flex external ids", async () => {
+    const auditLog = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await insertResolvedInstrument({
+      assetType: "stock",
+      ownerId: ownerA,
+      symbol: "ARM",
+    });
+
+    const csvFill = {
+      assetType: "stock" as const,
+      brokerageAccountId: " U123 ",
+      date: 1_771_597_800_000,
+      direction: "long" as const,
+      externalId: "U123|ARM|20260220;093000|200|3",
+      price: 200,
+      quantity: 3,
+      side: "buy" as const,
+      source: "ibkr" as const,
+      ticker: "ARM",
+    };
+    const flexFill = {
+      ...csvFill,
+      brokerageAccountId: "u123",
+      externalId: "5523063596",
+      ticker: "arm",
+    };
+
+    await asUser(ownerA).mutation(api.imports.importTrades, {
+      trades: [csvFill],
+    });
+    const result = await asUser(ownerA).mutation(api.imports.importTrades, {
+      trades: [flexFill],
+    });
+
+    expect(result).toEqual({
+      imported: 0,
+      skippedDuplicates: 1,
+      skippedLogicalDuplicates: 1,
+      withValidationErrors: 0,
+      withWarnings: 0,
+    });
+    expect(auditLog).toHaveBeenCalledWith(
+      "ibkr_logical_duplicate_skipped",
+      expect.stringContaining('"incomingExternalId":"5523063596"'),
+    );
+    const logPayload = JSON.parse(String(auditLog.mock.calls[0]?.[1])) as Record<
+      string,
+      unknown
+    >;
+    expect(logPayload).toEqual({
+      date: flexFill.date,
+      direction: flexFill.direction,
+      incomingExternalId: flexFill.externalId,
+      incomingExternalIdKind: "order",
+      matchedExternalIdKinds: ["csv"],
+      price: flexFill.price,
+      quantity: flexFill.quantity,
+      side: flexFill.side,
+      ticker: flexFill.ticker,
+    });
+    auditLog.mockRestore();
+    expect(
+      await asUser(ownerA).query(api.imports.listInboxTrades, {}),
+    ).toHaveLength(1);
+  });
+
+  it("dedupes an IBKR Flex fill against an accepted CSV trade", async () => {
+    await t.run((ctx) =>
+      ctx.db.insert("trades", {
+        assetType: "stock",
+        brokerageAccountId: "U123",
+        date: 1_771_597_800_000,
+        direction: "long",
+        externalId: "U123|INTC|20260220;093000|20|30",
+        ownerId: ownerA,
+        price: 20,
+        quantity: 30,
+        side: "buy",
+        source: "ibkr",
+        ticker: "INTC",
+      }),
+    );
+
+    const result = await asUser(ownerA).mutation(api.imports.importTrades, {
+      trades: [
+        {
+          assetType: "stock",
+          brokerageAccountId: "U123",
+          date: 1_771_597_800_000,
+          direction: "long",
+          externalId: "5523042492",
+          price: 20,
+          quantity: 30,
+          side: "buy",
+          source: "ibkr",
+          ticker: "INTC",
+        },
+      ],
+    });
+
+    expect(result.imported).toBe(0);
+    expect(result.skippedDuplicates).toBe(1);
+    expect(result.skippedLogicalDuplicates).toBe(1);
+  });
+
+  it("keeps distinct IBKR fills when any economic identity field differs", async () => {
+    await insertResolvedInstrument({
+      assetType: "stock",
+      ownerId: ownerA,
+      symbol: "TBBB",
+    });
+    const baseFill = {
+      assetType: "stock" as const,
+      brokerageAccountId: "U123",
+      date: 1_771_597_800_000,
+      direction: "long" as const,
+      price: 30,
+      quantity: 3,
+      side: "buy" as const,
+      source: "ibkr" as const,
+      ticker: "TBBB",
+    };
+
+    const result = await asUser(ownerA).mutation(api.imports.importTrades, {
+      trades: [
+        { ...baseFill, externalId: "1" },
+        { ...baseFill, externalId: "2", quantity: 4 },
+        { ...baseFill, date: baseFill.date + 1, externalId: "3" },
+      ],
+    });
+
+    expect(result.imported).toBe(3);
+    expect(result.skippedDuplicates).toBe(0);
+    expect(result.skippedLogicalDuplicates).toBe(0);
+  });
+
+  it("keeps same-fingerprint IBKR orders when both ids use the same scheme", async () => {
+    await insertResolvedInstrument({
+      assetType: "stock",
+      ownerId: ownerA,
+      symbol: "TXRH",
+    });
+    const fill = {
+      assetType: "stock" as const,
+      brokerageAccountId: "U123",
+      date: 1_771_597_800_000,
+      direction: "long" as const,
+      price: 30,
+      quantity: 3,
+      side: "buy" as const,
+      source: "ibkr" as const,
+      ticker: "TXRH",
+    };
+
+    const result = await asUser(ownerA).mutation(api.imports.importTrades, {
+      trades: [
+        { ...fill, externalId: "5523594973" },
+        { ...fill, externalId: "5523594974" },
+      ],
+    });
+
+    expect(result.imported).toBe(2);
+    expect(result.skippedDuplicates).toBe(0);
+    expect(result.skippedLogicalDuplicates).toBe(0);
+  });
+
+  it("skips only the first cross-scheme collision when two same-scheme orders share a fingerprint", async () => {
+    await t.run((ctx) =>
+      ctx.db.insert("trades", {
+        assetType: "stock",
+        brokerageAccountId: "U123",
+        date: 1_771_597_800_000,
+        direction: "long",
+        externalId: "U123|ARM|20260220;093000|200|3",
+        ownerId: ownerA,
+        price: 200,
+        quantity: 3,
+        side: "buy",
+        source: "ibkr",
+        ticker: "ARM",
+      }),
+    );
+    const fill = {
+      assetType: "stock" as const,
+      brokerageAccountId: "U123",
+      date: 1_771_597_800_000,
+      direction: "long" as const,
+      price: 200,
+      quantity: 3,
+      side: "buy" as const,
+      source: "ibkr" as const,
+      ticker: "ARM",
+    };
+
+    const result = await asUser(ownerA).mutation(api.imports.importTrades, {
+      trades: [
+        { ...fill, externalId: "5523063596" },
+        { ...fill, externalId: "5523063597" },
+      ],
+    });
+
+    expect(result.imported).toBe(1);
+    expect(result.skippedDuplicates).toBe(1);
+    expect(result.skippedLogicalDuplicates).toBe(1);
   });
 
   it("includes manual accounts from accepted trades in known accounts", async () => {
@@ -287,24 +495,30 @@ describe("imports review workspace", () => {
       symbol: "AAPL",
     });
 
-    const importResult = await asUser(ownerA).mutation(api.imports.importTrades, {
-      trades: [
-        {
-          assetType: "stock",
-          brokerageAccountId: "Manual Ledger",
-          date: 1_771_597_800_000,
-          direction: "long",
-          externalId: "manual-accepted-1",
-          price: 200,
-          quantity: 3,
-          side: "buy",
-          source: "manual",
-          ticker: "AAPL",
-        },
-      ],
-    });
+    const importResult = await asUser(ownerA).mutation(
+      api.imports.importTrades,
+      {
+        trades: [
+          {
+            assetType: "stock",
+            brokerageAccountId: "Manual Ledger",
+            date: 1_771_597_800_000,
+            direction: "long",
+            externalId: "manual-accepted-1",
+            price: 200,
+            quantity: 3,
+            side: "buy",
+            source: "manual",
+            ticker: "AAPL",
+          },
+        ],
+      },
+    );
 
-    const inboxTrades = await asUser(ownerA).query(api.imports.listInboxTrades, {});
+    const inboxTrades = await asUser(ownerA).query(
+      api.imports.listInboxTrades,
+      {},
+    );
     expect(importResult.imported).toBe(1);
     expect(inboxTrades).toHaveLength(1);
 
