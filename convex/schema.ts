@@ -301,6 +301,8 @@ export default defineSchema({
     dismissedAt: v.optional(v.number()),
     error: v.optional(v.string()),
     extractedData: v.optional(v.string()),
+    // Load-bearing repair marker: add one beside every typed or serialized trade reference.
+    // IBKR_DUPLICATE_REFERENCE_FIELD: importTasks.inboxTradeId
     inboxTradeId: v.optional(v.id("inboxTrades")),
     mode: importTaskModeValidator,
     ownerId: v.string(),
@@ -352,6 +354,7 @@ export default defineSchema({
     sentAt: v.number(),
     // A mirror can surface accepted trades and pending inbox trades, so this
     // stores their serialized IDs rather than a single table-scoped Id type.
+    // IBKR_DUPLICATE_REFERENCE_FIELD: checkIns.surfacedTradeIds
     surfacedTradeIds: v.optional(v.array(v.string())),
     window: v.union(
       v.literal("late_morning"),
@@ -399,6 +402,22 @@ export default defineSchema({
     storageId: v.id("_storage"),
   })
     .index("by_auditToken", ["auditToken"])
+    .index("by_owner_createdAt", ["ownerId", "createdAt"]),
+
+  ibkrDuplicateFillRepairArchives: defineTable({
+    archiveFormat: v.literal("ibkr_duplicate_fill_repair_v1"),
+    auditToken: v.string(),
+    contentHash: v.string(),
+    createdAt: v.number(),
+    deletedDocumentSetHash: v.string(),
+    deletedInboxTrades: v.number(),
+    deletedTrades: v.number(),
+    ownerId: v.string(),
+    patchedReferenceDocuments: v.number(),
+    patchedSurvivors: v.number(),
+    storageId: v.id("_storage"),
+  })
+    .index("by_owner_auditToken", ["ownerId", "auditToken"])
     .index("by_owner_createdAt", ["ownerId", "createdAt"]),
 
   campaigns: defineTable({
@@ -489,6 +508,7 @@ export default defineSchema({
     portfolioId: v.id("portfolios"),
     price: v.number(),
     source: v.literal("last_trade"),
+    // IBKR_DUPLICATE_REFERENCE_FIELD: portfolioPriceMarks.sourceTradeId
     sourceTradeId: v.id("trades"),
     symbol: v.string(),
     updatedAt: v.number(),
@@ -560,6 +580,7 @@ export default defineSchema({
     provider: marketDataProviderValidator,
     providerSymbol: v.optional(v.string()),
     runId: v.id("marketDataRefreshRuns"),
+    // IBKR_DUPLICATE_REFERENCE_FIELD: marketDataFetchJobs.sourceTradeIds
     sourceTradeIds: v.array(v.id("trades")),
     startDate: v.optional(v.string()),
     status: marketDataFetchJobStatusValidator,
@@ -655,6 +676,7 @@ export default defineSchema({
     reportType: brokerageSyncReportTypeValidator,
     requestedAt: v.number(),
     skippedDuplicateTrades: v.number(),
+    skippedLogicalDuplicateTrades: v.optional(v.number()),
     source: brokerageSourceValidator,
     startedAt: v.optional(v.number()),
     status: brokerageSyncRunStatusValidator,
