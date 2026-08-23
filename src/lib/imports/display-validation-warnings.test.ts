@@ -8,6 +8,7 @@ describe("filterLegacyStatementWarnings", () => {
         "No Orders section found",
         "No OpenPositions section found",
         "No CashReport section found",
+        "No Trades section found",
         "Could not infer direction for SPY 20260514;120000",
       ]),
     ).toEqual(["Could not infer direction for SPY 20260514;120000"]);
