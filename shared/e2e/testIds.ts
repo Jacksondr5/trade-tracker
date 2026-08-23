@@ -185,6 +185,7 @@ export const IMPORTS_INDEX_TEST_IDS = {
   brokerageReconciliationIssues: "brokerage-reconciliation-issues",
   brokerageReconciliationToggle: "brokerage-reconciliation-toggle",
   brokerageSyncStatus: "brokerage-sync-status",
+  brokerageSyncWarnings: "brokerage-sync-warnings",
   emptyState: "imports-empty-state",
   brokerageSelect: "brokerage-select",
   templateDownloadButton: "imports-template-download-button",

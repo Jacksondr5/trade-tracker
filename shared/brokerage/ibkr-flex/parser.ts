@@ -314,8 +314,6 @@ export function parseIbkrFlexActivityXml(xml: string): IbkrFlexParseResult {
         result.errors.push(
           "Trades section contains Trade rows but no Order rows; order-level ingestion requires Orders",
         );
-      } else {
-        result.warnings.push("No Orders section found");
       }
     }
     if (positionRows.length === 0) {
@@ -327,8 +325,16 @@ export function parseIbkrFlexActivityXml(xml: string): IbkrFlexParseResult {
     for (const [index, row] of orderRows.entries()) {
       try {
         const parsed = parseOrder(row, statement);
-        if (parsed.trade) result.trades.push(parsed.trade);
-        result.warnings.push(...parsed.warnings);
+        if (parsed.trade) {
+          result.trades.push({
+            ...parsed.trade,
+            ...(parsed.warnings.length > 0
+              ? { validationWarnings: parsed.warnings }
+              : {}),
+          });
+        } else {
+          result.warnings.push(...parsed.warnings);
+        }
       } catch (error) {
         result.errors.push(
           `Order row ${index + 1}: ${error instanceof Error ? error.message : String(error)}`,

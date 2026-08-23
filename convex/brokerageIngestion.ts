@@ -67,6 +67,7 @@ const brokerageSyncRunSummaryValidator = v.object({
   reportType: brokerageSyncReportTypeValidator,
   status: brokerageSyncRunStatusValidator,
   updatedAt: v.number(),
+  warnings: v.array(v.string()),
 });
 
 function toSyncRunSummary(run: Doc<"brokerageSyncRuns">) {
@@ -81,6 +82,7 @@ function toSyncRunSummary(run: Doc<"brokerageSyncRuns">) {
     reportType: run.reportType,
     status: run.status,
     updatedAt: run.updatedAt,
+    warnings: run.warnings ?? [],
   };
 }
 
@@ -98,6 +100,7 @@ const normalizedTradeValidator = v.object({
   side: v.union(v.literal("buy"), v.literal("sell")),
   taxes: v.optional(v.number()),
   ticker: v.string(),
+  validationWarnings: v.optional(v.array(v.string())),
 });
 
 const positionSnapshotValidator = v.object({
@@ -901,6 +904,7 @@ export const beginSyncRunForConnection = internalMutation({
         startedAt: now,
         status: "queued",
         updatedAt: now,
+        warnings: [],
       });
       await ctx.db.patch(connection._id, {
         connectionError: undefined,
@@ -951,6 +955,7 @@ export const beginSyncRunForConnection = internalMutation({
       startedAt: now,
       status: "queued",
       updatedAt: now,
+      warnings: [],
     });
     return { created: true, ownerId: connection.ownerId, queryId, syncRunId };
   },
@@ -1126,7 +1131,7 @@ export const ingestParsedFlexReport = internalMutation({
       taxes: trade.taxes,
       ticker: trade.ticker,
       validationErrors: args.errors,
-      validationWarnings: args.warnings,
+      validationWarnings: trade.validationWarnings,
     }));
     const importResult = await stageInboxTradesForOwner(
       ctx,
@@ -1245,6 +1250,9 @@ export const ingestParsedFlexReport = internalMutation({
       ),
       status: "processing",
       updatedAt: now,
+      warnings: [
+        ...new Set([...(syncRun.warnings ?? []), ...(args.warnings ?? [])]),
+      ],
     });
 
     return {

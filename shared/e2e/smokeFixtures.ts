@@ -38,6 +38,11 @@ export const E2E_SMOKE_FIXTURES = {
     queryId: "987654",
     tokenExpiresAt: Date.parse("2027-12-31T23:59:59.999Z"),
   },
+  brokerageSyncWarning: {
+    message:
+      "Skipped IBKR Order e2e-non-usd-1 (6988): currency JPY is unsupported; only USD stock orders are supported",
+    reportDate: "2026-12-31",
+  },
   campaign: {
     name: "E2E Macro Rotation",
     status: "active" as const,

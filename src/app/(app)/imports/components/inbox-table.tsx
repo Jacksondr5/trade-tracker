@@ -18,6 +18,7 @@ import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { IMPORTS_INDEX_TEST_IDS } from "../../../../../shared/e2e/testIds";
 import { cn } from "~/lib/utils";
+import { filterLegacyStatementWarnings } from "~/lib/imports/display-validation-warnings";
 import {
   KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME,
   isKrakenDefaultAccountId,
@@ -720,6 +721,9 @@ function InboxRow({
   const acceptable = canAcceptTrade(trade, hasPortfolio, priceMapping);
   const rowStatus = getRowStatus(trade, hasPortfolio, hasTradePlan, priceMapping);
   const priceMappingBlocking = !isPriceMappingResolved(priceMapping);
+  const displayWarnings = filterLegacyStatementWarnings(
+    trade.validationWarnings,
+  );
   const ticker = trade.ticker?.toUpperCase();
   const matchingPlans =
     openTradePlans?.filter(
@@ -761,7 +765,7 @@ function InboxRow({
             </div>
           ) : null}
           {(trade.validationErrors.length > 0 ||
-            trade.validationWarnings.length > 0) && (
+            displayWarnings.length > 0) && (
             <div className="mt-1 space-y-0.5">
               {trade.validationErrors
                 .slice(0, MAX_VALIDATION_BADGES)
@@ -777,7 +781,7 @@ function InboxRow({
                 tradeId={trade._id}
                 type="error"
               />
-              {trade.validationWarnings
+              {displayWarnings
                 .slice(0, MAX_VALIDATION_BADGES)
                 .map((warning, index) => (
                   <div key={`${trade._id}-warning-${index}`}>
@@ -787,7 +791,7 @@ function InboxRow({
                   </div>
                 ))}
               <ValidationOverflowIndicator
-                messages={trade.validationWarnings}
+                messages={displayWarnings}
                 tradeId={trade._id}
                 type="warning"
               />

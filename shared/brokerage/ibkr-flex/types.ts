@@ -12,6 +12,7 @@ export type IbkrFlexTrade = {
   side: "buy" | "sell";
   taxes?: number;
   ticker: string;
+  validationWarnings?: string[];
 };
 
 export type IbkrFlexPositionSnapshot = {
