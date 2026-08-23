@@ -829,7 +829,14 @@ describe("brokerage ingestion", () => {
           quantity: 10,
           side: "buy" as const,
           ticker: "aapl",
+          validationWarnings: [
+            "Could not infer direction for AAPL 20260514;093005",
+          ],
         },
+      ],
+      warnings: [
+        "No OpenPositions section found",
+        "No CashReport section found",
       ],
     };
 
@@ -888,6 +895,9 @@ describe("brokerage ingestion", () => {
       brokerageAccountId: "U1234567",
       source: "ibkr",
       ticker: "AAPL",
+      validationWarnings: [
+        "Could not infer direction for AAPL 20260514;093005",
+      ],
     });
     expect(positions).toHaveLength(1);
     expect(positions[0]).toMatchObject({
@@ -904,6 +914,10 @@ describe("brokerage ingestion", () => {
       positionSnapshotCount: 1,
       skippedDuplicateTrades: 1,
       skippedLogicalDuplicateTrades: 0,
+      warnings: [
+        "No OpenPositions section found",
+        "No CashReport section found",
+      ],
     });
   });
 

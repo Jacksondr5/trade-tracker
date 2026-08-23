@@ -681,6 +681,7 @@ export default defineSchema({
     startedAt: v.optional(v.number()),
     status: brokerageSyncRunStatusValidator,
     updatedAt: v.number(),
+    warnings: v.optional(v.array(v.string())),
   })
     .index("by_connectionId_and_reportType_and_reportDate_and_queryId", [
       "connectionId",

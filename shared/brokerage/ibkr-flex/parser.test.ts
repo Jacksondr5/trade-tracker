@@ -84,10 +84,8 @@ describe("parseIbkrFlexActivityXml", () => {
         rowKind: "base_summary",
       },
     ]);
-    expect(result.warnings).toEqual([
-      "No Orders section found",
-      "No OpenPositions section found",
-    ]);
+    expect(result.warnings).toEqual(["No OpenPositions section found"]);
+    expect(result.warnings).not.toContain("No Orders section found");
     const emptyAccountCash = result.cashSnapshots.filter(
       (snapshot) => snapshot.brokerageAccountId === "U1111111",
     );
@@ -175,9 +173,12 @@ describe("parseIbkrFlexActivityXml", () => {
     expect(result.cashSnapshots).toEqual([]);
     expect(result.warnings).toContain("No OpenPositions section found");
     expect(result.warnings).toContain("No CashReport section found");
-    expect(result.warnings).toContain(
+    expect(result.warnings).not.toContain(
       "Could not infer direction for SPY 20260514;120000",
     );
+    expect(result.trades[0]?.validationWarnings).toEqual([
+      "Could not infer direction for SPY 20260514;120000",
+    ]);
   });
 
   it("collects row-level errors without discarding the whole report", () => {

@@ -474,10 +474,15 @@ describe("IBKR Flex Convex workflow", () => {
       positionSnapshots: await ctx.db
         .query("brokeragePositionSnapshots")
         .collect(),
+      syncRuns: await ctx.db.query("brokerageSyncRuns").collect(),
     }));
     expect(state.inboxTrades).toHaveLength(1);
+    expect(state.inboxTrades[0]?.validationWarnings).toEqual([]);
     expect(state.positionSnapshots).toHaveLength(1);
     expect(state.cashSnapshots).toHaveLength(2);
+    expect(state.syncRuns[0]?.warnings).toEqual([
+      "No OpenPositions section found",
+    ]);
   });
 
   it("never persists the plaintext token in workflow arguments or step results", async () => {
