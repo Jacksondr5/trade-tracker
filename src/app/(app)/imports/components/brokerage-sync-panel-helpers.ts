@@ -31,6 +31,12 @@ export function hasInFlightRetryAfterCurrentFailure(args: {
   );
 }
 
+export function getLatestSyncRunWithWarnings<
+  T extends { warnings: string[] },
+>(syncRuns: T[]): T | undefined {
+  return syncRuns.find((syncRun) => syncRun.warnings.length > 0);
+}
+
 export function toOptionalStringArrayPatch(args: {
   cleared: boolean;
   fieldName: string;

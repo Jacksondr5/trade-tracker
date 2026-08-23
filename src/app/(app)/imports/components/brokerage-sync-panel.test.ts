@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { IMPORTS_INDEX_TEST_IDS } from "../../../../../shared/e2e/testIds";
 import {
+  getLatestSyncRunWithWarnings,
   hasInFlightRetryAfterCurrentFailure,
   hasCurrentSyncFailure,
   parseExpectedAccountIds,
@@ -79,9 +80,33 @@ describe("expected account ID form helpers", () => {
     ).toBe(false);
   });
 
+  it("selects the newest sync run with warnings", () => {
+    const latestWithWarnings = {
+      id: "warning-run",
+      warnings: ["No OpenPositions section found"],
+    };
+
+    expect(
+      getLatestSyncRunWithWarnings([
+        { id: "newest-run", warnings: [] },
+        latestWithWarnings,
+        {
+          id: "older-warning-run",
+          warnings: ["No CashReport section found"],
+        },
+      ]),
+    ).toEqual(latestWithWarnings);
+  });
+
   it("registers the current-failure badge in the shared selector contract", () => {
     expect(IMPORTS_INDEX_TEST_IDS.brokerageCurrentFailureBadge).toBe(
       "brokerage-current-failure-badge",
+    );
+  });
+
+  it("registers the sync warnings panel in the shared selector contract", () => {
+    expect(IMPORTS_INDEX_TEST_IDS.brokerageSyncWarnings).toBe(
+      "brokerage-sync-warnings",
     );
   });
 });

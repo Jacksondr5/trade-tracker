@@ -834,10 +834,7 @@ describe("brokerage ingestion", () => {
           ],
         },
       ],
-      warnings: [
-        "No OpenPositions section found",
-        "No CashReport section found",
-      ],
+      warnings: ["No OpenPositions section found"],
     };
 
     const first = await t.mutation(
@@ -846,11 +843,17 @@ describe("brokerage ingestion", () => {
     );
     const second = await t.mutation(
       internal.brokerageIngestion.ingestParsedFlexReport,
-      payload,
+      {
+        ...payload,
+        warnings: ["No CashReport section found"],
+      },
     );
     const third = await t.mutation(
       internal.brokerageIngestion.ingestParsedFlexReport,
-      payload,
+      {
+        ...payload,
+        warnings: ["No CashReport section found"],
+      },
     );
     const inboxTrades = await t.run(async (ctx) =>
       (await ctx.db.query("inboxTrades").collect()).filter(
@@ -871,6 +874,10 @@ describe("brokerage ingestion", () => {
       ),
     );
     const syncRun = await t.run(async (ctx) => await ctx.db.get(syncRunId));
+    const status = await asUser().query(
+      api.brokerageIngestion.getBrokerageIngestionStatus,
+      {},
+    );
 
     expect(first).toMatchObject({
       cashSnapshotsWritten: 1,
@@ -919,6 +926,10 @@ describe("brokerage ingestion", () => {
         "No CashReport section found",
       ],
     });
+    expect(status.latestSyncRuns[0]?.warnings).toEqual([
+      "No OpenPositions section found",
+      "No CashReport section found",
+    ]);
   });
 
   it("persists cross-scheme logical skips separately on the Flex sync run", async () => {

@@ -67,6 +67,7 @@ const brokerageSyncRunSummaryValidator = v.object({
   reportType: brokerageSyncReportTypeValidator,
   status: brokerageSyncRunStatusValidator,
   updatedAt: v.number(),
+  warnings: v.array(v.string()),
 });
 
 function toSyncRunSummary(run: Doc<"brokerageSyncRuns">) {
@@ -81,6 +82,7 @@ function toSyncRunSummary(run: Doc<"brokerageSyncRuns">) {
     reportType: run.reportType,
     status: run.status,
     updatedAt: run.updatedAt,
+    warnings: run.warnings ?? [],
   };
 }
 

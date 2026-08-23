@@ -30,6 +30,7 @@ import {
 } from "../../../../../shared/brokerage/constants";
 import { IMPORTS_INDEX_TEST_IDS } from "../../../../../shared/e2e/testIds";
 import {
+  getLatestSyncRunWithWarnings,
   hasInFlightRetryAfterCurrentFailure,
   hasCurrentSyncFailure,
   parseExpectedAccountIds,
@@ -375,6 +376,9 @@ export function BrokerageSyncPanel({
     currentSyncFailure,
     latestSyncRunStatus: status.latestSyncRuns[0]?.status,
   });
+  const latestSyncRunWithWarnings = getLatestSyncRunWithWarnings(
+    status.latestSyncRuns,
+  );
 
   return (
     <Card
@@ -530,6 +534,22 @@ export function BrokerageSyncPanel({
           )}
         </div>
       </div>
+
+      {latestSyncRunWithWarnings ? (
+        <div
+          className="border-t border-olive-6 bg-amber-2 px-4 py-3"
+          data-testid={IMPORTS_INDEX_TEST_IDS.brokerageSyncWarnings}
+        >
+          <h3 className="text-sm font-semibold text-amber-12">
+            Sync warnings · report {latestSyncRunWithWarnings.reportDate}
+          </h3>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-12">
+            {latestSyncRunWithWarnings.warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {showIssues && status.openIssues.length > 0 ? (
         <div

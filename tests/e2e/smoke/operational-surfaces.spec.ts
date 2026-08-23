@@ -25,6 +25,7 @@ import {
   getBrokerageReconciliationIssues,
   getBrokerageSelect,
   getBrokerageSyncStatus,
+  getBrokerageSyncWarnings,
   getLinkedTradeRow,
   getTradePlansFilterStandalone,
   getTradePlansFilteredEmptyState,
@@ -134,6 +135,32 @@ test.describe("operational surfaces regression", () => {
       await replaceTokenButton.click();
     }
     await expect(tokenInput).toHaveValue("");
+  });
+
+  test("sync warning panel shows skipped non-USD IBKR orders", async ({
+    page,
+  }) => {
+    const configuredBaseUrl = getConfiguredBaseUrl();
+    test.skip(
+      !configuredBaseUrl || !isLocalPlaywrightTarget(configuredBaseUrl),
+      "The sync warning fixture is available only on local E2E targets.",
+    );
+
+    runConvexFunction("e2eSeed:setBrokerageSyncWarningFixture", {
+      state: "persisted",
+    });
+    try {
+      await page.goto("/imports");
+      await waitForAuthenticatedApp(page, APP_PAGE_TITLES.imports);
+
+      await expect(getBrokerageSyncWarnings(page)).toContainText(
+        E2E_SMOKE_FIXTURES.brokerageSyncWarning.message,
+      );
+    } finally {
+      runConvexFunction("e2eSeed:setBrokerageSyncWarningFixture", {
+        state: "unset",
+      });
+    }
   });
 
   test("IBKR metadata fields stage independent Clear and Undo actions", async ({

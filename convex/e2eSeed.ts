@@ -605,6 +605,77 @@ export const resetPlaywrightData = internalMutation({
   },
 });
 
+export const setBrokerageSyncWarningFixture = internalMutation({
+  args: {
+    state: v.union(v.literal("persisted"), v.literal("unset")),
+  },
+  returns: v.union(v.literal("persisted"), v.literal("unset")),
+  handler: async (ctx, args) => {
+    const ownerId = getPlaywrightOwnerId();
+    const connection = await ctx.db
+      .query("brokerageConnections")
+      .withIndex("by_ownerId_and_source", (q) =>
+        q.eq("ownerId", ownerId).eq("source", "ibkr"),
+      )
+      .unique();
+    if (!connection?.queryId) {
+      throw new ConvexError(
+        "Playwright brokerage connection with a query ID is not seeded.",
+      );
+    }
+    const queryId = connection.queryId;
+
+    const fixture = E2E_SMOKE_FIXTURES.brokerageSyncWarning;
+    const existing = await ctx.db
+      .query("brokerageSyncRuns")
+      .withIndex(
+        "by_connectionId_and_reportType_and_reportDate_and_queryId",
+        (q) =>
+          q
+            .eq("connectionId", connection._id)
+            .eq("reportType", "activity")
+            .eq("reportDate", fixture.reportDate)
+            .eq("queryId", queryId),
+      )
+      .unique();
+
+    if (args.state === "unset") {
+      if (existing) await ctx.db.delete(existing._id);
+      return args.state;
+    }
+
+    const now = Date.now();
+    const patch = {
+      completedAt: now,
+      importedTrades: 0,
+      ownerId,
+      positionSnapshotCount: 0,
+      reconciliationIssueCount: 0,
+      requestedAt: now,
+      skippedDuplicateTrades: 0,
+      skippedLogicalDuplicateTrades: 0,
+      source: "ibkr" as const,
+      startedAt: now,
+      status: "succeeded" as const,
+      updatedAt: now,
+      warnings: [fixture.message],
+    };
+    if (existing) {
+      await ctx.db.patch(existing._id, patch);
+    } else {
+      await ctx.db.insert("brokerageSyncRuns", {
+        ...patch,
+        connectionId: connection._id,
+        queryId,
+        reportDate: fixture.reportDate,
+        reportType: "activity",
+      });
+    }
+
+    return args.state;
+  },
+});
+
 export const setBrokerageConnectionMetadataFixture = internalMutation({
   args: {
     state: v.union(v.literal("persisted"), v.literal("unset")),

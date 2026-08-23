@@ -639,6 +639,10 @@ export function getBrokerageSyncStatus(page: Page): Locator {
   return page.getByTestId(IMPORTS_INDEX_TEST_IDS.brokerageSyncStatus);
 }
 
+export function getBrokerageSyncWarnings(page: Page): Locator {
+  return page.getByTestId(IMPORTS_INDEX_TEST_IDS.brokerageSyncWarnings);
+}
+
 export function getTradesFilteredEmptyState(page: Page): Locator {
   return page.getByTestId(TRADES_INDEX_TEST_IDS.filteredEmptyState);
 }
