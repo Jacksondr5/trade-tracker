@@ -7,13 +7,6 @@ import { Alert, Button, useAppForm } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 
-interface TradePlanOption {
-  _id: Id<"tradePlans">;
-  instrumentSymbol: string;
-  name: string;
-  status: string;
-}
-
 interface PortfolioOption {
   _id: Id<"portfolios">;
   name: string;
@@ -28,7 +21,6 @@ export interface EditTradeFormValues {
   quantity: string;
   side: "buy" | "sell";
   ticker: string;
-  tradePlanId: string;
 }
 
 interface EditTradeFormProps {
@@ -37,7 +29,6 @@ interface EditTradeFormProps {
   onSaved: () => void;
   portfolios: PortfolioOption[];
   tradeId: Id<"trades">;
-  tradePlans: TradePlanOption[];
 }
 
 const editTradeSchema = z.object({
@@ -48,14 +39,19 @@ const editTradeSchema = z.object({
   price: z
     .string()
     .min(1, "Price is required")
-    .refine((value) => Number.isFinite(parseFloat(value.trim())), "Price must be a valid number"),
+    .refine(
+      (value) => Number.isFinite(parseFloat(value.trim())),
+      "Price must be a valid number",
+    ),
   quantity: z
     .string()
     .min(1, "Quantity is required")
-    .refine((value) => Number.isFinite(parseFloat(value.trim())), "Quantity must be a valid number"),
+    .refine(
+      (value) => Number.isFinite(parseFloat(value.trim())),
+      "Quantity must be a valid number",
+    ),
   side: z.enum(["buy", "sell"]),
   ticker: z.string().min(1, "Ticker is required"),
-  tradePlanId: z.string().optional(),
 });
 
 export function EditTradeForm({
@@ -64,7 +60,6 @@ export function EditTradeForm({
   onSaved,
   portfolios,
   tradeId,
-  tradePlans,
 }: EditTradeFormProps) {
   const updateTrade = useMutation(api.trades.updateTrade);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -96,9 +91,6 @@ export function EditTradeForm({
           side: parsed.side,
           ticker: parsed.ticker.toUpperCase(),
           tradeId,
-          tradePlanId: parsed.tradePlanId
-            ? (parsed.tradePlanId as Id<"tradePlans">)
-            : null,
         });
         onSaved();
       } catch (error) {
@@ -112,7 +104,11 @@ export function EditTradeForm({
   return (
     <div className="p-4">
       {errorMessage && (
-        <Alert variant="error" className="mb-3" onDismiss={() => setErrorMessage(null)}>
+        <Alert
+          variant="error"
+          className="mb-3"
+          onDismiss={() => setErrorMessage(null)}
+        >
           {errorMessage}
         </Alert>
       )}
@@ -126,19 +122,10 @@ export function EditTradeForm({
         <div className="flex flex-wrap items-end gap-4">
           <form.AppField name="ticker">
             {(field) => (
-              <field.FieldInput label="Ticker" type="text" className="w-[140px]" />
-            )}
-          </form.AppField>
-          <form.AppField name="tradePlanId">
-            {(field) => (
-              <field.FieldSelect
-                label="Trade Plan"
-                className="w-[200px]"
-                placeholder="No trade plan"
-                options={tradePlans.map((tp) => ({
-                  label: `${tp.name} (${tp.instrumentSymbol}) [${tp.status}]`,
-                  value: tp._id,
-                }))}
+              <field.FieldInput
+                label="Ticker"
+                type="text"
+                className="w-[140px]"
               />
             )}
           </form.AppField>

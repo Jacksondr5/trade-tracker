@@ -20,5 +20,4 @@ export const tradeValidator = v.object({
   ),
   taxes: v.optional(v.number()),
   ticker: v.string(),
-  tradePlanId: v.optional(v.id("tradePlans")),
 });

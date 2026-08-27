@@ -106,7 +106,6 @@ describe("campaign workspace queries", () => {
         side: "buy",
         source: "manual",
         ticker: args.ticker,
-        tradePlanId: args.tradePlanId,
       });
     });
   }
@@ -249,8 +248,8 @@ describe("campaign workspace queries", () => {
         watchingCount: 0,
       },
       linkedTrades: {
-        latestTradeDate: tradeDate,
-        totalCount: 1,
+        latestTradeDate: null,
+        totalCount: 0,
       },
       status: "closed",
     });
@@ -265,10 +264,10 @@ describe("campaign workspace queries", () => {
           instrumentSymbol: "NVDA",
           invalidatedAt: null,
           isWatched: false,
-          latestTradeDate: tradeDate,
+          latestTradeDate: null,
           name: "Closed Linked Plan",
           status: "closed",
-          tradeCount: 1,
+          tradeCount: 0,
         },
       ],
       summary: summaries[0],
@@ -417,8 +416,8 @@ describe("campaign workspace queries", () => {
         watchingCount: 1,
       },
       linkedTrades: {
-        latestTradeDate: Date.UTC(2026, 2, 12),
-        totalCount: 3,
+        latestTradeDate: null,
+        totalCount: 0,
       },
       name: "Mixed Campaign",
       status: "active",
@@ -443,18 +442,18 @@ describe("campaign workspace queries", () => {
         {
           id: activePlanId,
           isWatched: false,
-          latestTradeDate: Date.UTC(2026, 2, 12),
+          latestTradeDate: null,
           name: "Active Plan",
           status: "active",
-          tradeCount: 2,
+          tradeCount: 0,
         },
         {
           id: closedPlanId,
           isWatched: false,
-          latestTradeDate: Date.UTC(2026, 2, 8),
+          latestTradeDate: null,
           name: "Closed Plan",
           status: "closed",
-          tradeCount: 1,
+          tradeCount: 0,
         },
       ],
       summary: summaries[0],
@@ -540,8 +539,8 @@ describe("campaign workspace queries", () => {
           watchingCount: 1,
         },
         linkedTrades: {
-          latestTradeDate: Date.UTC(2026, 2, 13),
-          totalCount: 1,
+          latestTradeDate: null,
+          totalCount: 0,
         },
         status: "active",
       },
@@ -564,8 +563,8 @@ describe("campaign workspace queries", () => {
           totalCount: 1,
         },
         linkedTrades: {
-          latestTradeDate: Date.UTC(2026, 2, 12),
-          totalCount: 1,
+          latestTradeDate: null,
+          totalCount: 0,
         },
         status: "closed",
       },

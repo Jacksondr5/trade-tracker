@@ -23,11 +23,7 @@ import { InboxTable } from "./components/inbox-table";
 import { InboxToolbar } from "./components/inbox-toolbar";
 import { useImportUpload } from "./hooks/use-import-upload";
 import { useInlineInboxEdits } from "./hooks/use-inline-inbox-edits";
-import type {
-  InboxTrade,
-  InboxTradePriceMapping,
-  OpenTradePlanOption,
-} from "./types";
+import type { InboxTrade, InboxTradePriceMapping } from "./types";
 import { isTradeReadyForAcceptance, toDateTimeLocalValue } from "./utils";
 
 const DEFAULT_EDIT_VALUES: EditTradeFormValues = {
@@ -43,10 +39,8 @@ const DEFAULT_EDIT_VALUES: EditTradeFormValues = {
 export default function ImportsPageClient({
   preloadedAccountMappings,
   preloadedBrokerageIngestionStatus,
-  preloadedCampaigns,
   preloadedInboxTradePriceMappings,
   preloadedInboxTrades,
-  preloadedOpenTradePlans,
   preloadedPortfolios,
 }: {
   preloadedAccountMappings: Preloaded<
@@ -55,12 +49,10 @@ export default function ImportsPageClient({
   preloadedBrokerageIngestionStatus: Preloaded<
     typeof api.brokerageIngestion.getBrokerageIngestionStatus
   >;
-  preloadedCampaigns: Preloaded<typeof api.campaigns.listCampaigns>;
   preloadedInboxTradePriceMappings: Preloaded<
     typeof api.imports.listInboxTradePriceMappings
   >;
   preloadedInboxTrades: Preloaded<typeof api.imports.listInboxTrades>;
-  preloadedOpenTradePlans: Preloaded<typeof api.tradePlans.listOpenTradePlans>;
   preloadedPortfolios: Preloaded<typeof api.portfolios.listPortfolios>;
 }) {
   const [brokerage, setBrokerage] = useState<BrokerageSource>("ibkr");
@@ -81,22 +73,8 @@ export default function ImportsPageClient({
   const inboxTradePriceMappings = usePreloadedQuery(
     preloadedInboxTradePriceMappings,
   );
-  const openTradePlansRaw = usePreloadedQuery(preloadedOpenTradePlans);
   const accountMappings = usePreloadedQuery(preloadedAccountMappings);
   const portfolios = usePreloadedQuery(preloadedPortfolios);
-  const allCampaigns = usePreloadedQuery(preloadedCampaigns);
-  const openTradePlans = (openTradePlansRaw ?? undefined) as
-    | OpenTradePlanOption[]
-    | undefined;
-  const campaigns = useMemo(
-    () =>
-      allCampaigns?.filter(
-        (c) => c.status === "active" || c.status === "planning",
-      ),
-    [allCampaigns],
-  );
-
-  const createTradePlan = useMutation(api.tradePlans.createTradePlan);
 
   const accountLabelByKey = useMemo(
     () =>
@@ -130,12 +108,9 @@ export default function ImportsPageClient({
     setErrorMessage,
   });
 
-  const {
-    inlinePortfolioIds,
-    inlineTradePlanIds,
-    setInlinePortfolioIds,
-    setInlineTradePlanIds,
-  } = useInlineInboxEdits(inboxTrades as InboxTrade[] | undefined);
+  const { inlinePortfolioIds, setInlinePortfolioIds } = useInlineInboxEdits(
+    inboxTrades as InboxTrade[] | undefined,
+  );
 
   // Compute summary counts
   const typedTrades = inboxTrades as InboxTrade[] | undefined;
@@ -157,55 +132,23 @@ export default function ImportsPageClient({
     [priceMappingByInboxTradeId],
   );
 
-  // "Ready" = valid fields + has portfolio + has trade plan + resolved mapping (green)
+  // "Ready" = valid fields + portfolio + resolved mapping.
   const readyCount = useMemo(
     () =>
       typedTrades?.filter((t) => {
         const hasPortfolio = (inlinePortfolioIds[t._id] ?? "") !== "";
-        const hasTradePlan = (inlineTradePlanIds[t._id] ?? "") !== "";
         return (
           t.validationErrors.length === 0 &&
           isTradeReadyForAcceptance(t) &&
           hasPortfolio &&
-          hasTradePlan &&
           isPriceMappingResolved(t._id)
         );
       }).length ?? 0,
-    [
-      typedTrades,
-      inlinePortfolioIds,
-      inlineTradePlanIds,
-      isPriceMappingResolved,
-    ],
+    [typedTrades, inlinePortfolioIds, isPriceMappingResolved],
   );
 
-  // "Missing plan" = valid + has portfolio + resolved mapping but no trade plan (amber)
-  const missingPlanCount = useMemo(
-    () =>
-      typedTrades?.filter((t) => {
-        const hasPortfolio = (inlinePortfolioIds[t._id] ?? "") !== "";
-        const hasTradePlan = (inlineTradePlanIds[t._id] ?? "") !== "";
-        return (
-          t.validationErrors.length === 0 &&
-          isTradeReadyForAcceptance(t) &&
-          hasPortfolio &&
-          !hasTradePlan &&
-          isPriceMappingResolved(t._id)
-        );
-      }).length ?? 0,
-    [
-      typedTrades,
-      inlinePortfolioIds,
-      inlineTradePlanIds,
-      isPriceMappingResolved,
-    ],
-  );
-
-  // "Needs review" = everything else (red)
-  const needsReviewCount = totalCount - readyCount - missingPlanCount;
-
-  // Acceptable = can be accepted (ready + missing-plan)
-  const acceptableCount = readyCount + missingPlanCount;
+  const needsReviewCount = totalCount - readyCount;
+  const acceptableCount = readyCount;
 
   const onBrokerageChange = (value: BrokerageSource) => {
     setBrokerage(value);
@@ -226,24 +169,6 @@ export default function ImportsPageClient({
     URL.revokeObjectURL(url);
   };
 
-  const persistTradePlanSelection = async (
-    inboxTradeId: Id<"inboxTrades">,
-    value: string,
-  ): Promise<boolean> => {
-    try {
-      await updateInboxTrade({
-        inboxTradeId,
-        tradePlanId: value ? (value as Id<"tradePlans">) : null,
-      });
-      return true;
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to update trade plan",
-      );
-      return false;
-    }
-  };
-
   const persistPortfolioSelection = (
     inboxTradeId: Id<"inboxTrades">,
     value: string,
@@ -256,45 +181,6 @@ export default function ImportsPageClient({
         error instanceof Error ? error.message : "Failed to update portfolio",
       );
     });
-  };
-
-  const handleQuickCreateTradePlan = async (
-    inboxTradeId: Id<"inboxTrades">,
-    args: {
-      name: string;
-      instrumentSymbol: string;
-      campaignId?: Id<"campaigns">;
-    },
-  ): Promise<boolean> => {
-    try {
-      const newPlanId = await createTradePlan({
-        campaignId: args.campaignId,
-        instrumentSymbol: args.instrumentSymbol,
-        name: args.name,
-      });
-      const previousTradePlanId = inlineTradePlanIds[inboxTradeId] ?? "";
-      setInlineTradePlanIds((prev) => ({
-        ...prev,
-        [inboxTradeId]: newPlanId,
-      }));
-      const persisted = await persistTradePlanSelection(
-        inboxTradeId,
-        newPlanId,
-      );
-      if (!persisted) {
-        setInlineTradePlanIds((prev) => ({
-          ...prev,
-          [inboxTradeId]: previousTradePlanId,
-        }));
-        return false;
-      }
-      return true;
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to create trade plan",
-      );
-      return false;
-    }
   };
 
   const handleEdit = (trade: InboxTrade) => {
@@ -359,12 +245,9 @@ export default function ImportsPageClient({
     )
       return;
 
-    const tradePlanId = inlineTradePlanIds[inboxTradeId] || undefined;
-
     void acceptTrade({
       inboxTradeId,
       portfolioId: portfolioId ? (portfolioId as Id<"portfolios">) : undefined,
-      tradePlanId: tradePlanId ? (tradePlanId as Id<"tradePlans">) : undefined,
     })
       .then((result) => {
         if (!result.accepted && result.error) {
@@ -385,20 +268,15 @@ export default function ImportsPageClient({
       if (inboxTrades) {
         await Promise.all(
           inboxTrades.map((trade) => {
-            const selected = inlineTradePlanIds[trade._id] ?? "";
             const portfolio = inlinePortfolioIds[trade._id] ?? "";
-            const tradePlanChanged =
-              selected !== (trade.tradePlanId ? String(trade.tradePlanId) : "");
             const portfolioChanged =
               portfolio !==
               (trade.portfolioId ? String(trade.portfolioId) : "");
-            if (!tradePlanChanged && !portfolioChanged)
-              return Promise.resolve();
+            if (!portfolioChanged) return Promise.resolve();
 
             return updateInboxTrade({
               inboxTradeId: trade._id,
               portfolioId: portfolio ? (portfolio as Id<"portfolios">) : null,
-              tradePlanId: selected ? (selected as Id<"tradePlans">) : null,
             });
           }),
         );
@@ -587,7 +465,6 @@ export default function ImportsPageClient({
           acceptableCount={acceptableCount}
           isAccepting={isAcceptingAll}
           isDeleting={isDeletingAll}
-          missingPlanCount={missingPlanCount}
           needsReviewCount={needsReviewCount}
           onAcceptAll={handleAcceptAll}
           onDeleteAll={handleDeleteAll}
@@ -597,11 +474,9 @@ export default function ImportsPageClient({
 
         <InboxTable
           accountLabelByKey={accountLabelByKey}
-          campaigns={campaigns}
           editingTradeId={editingTradeId}
           editInitialValues={editInitialValues}
           inlinePortfolioIds={inlinePortfolioIds}
-          inlineTradePlanIds={inlineTradePlanIds}
           inboxTrades={typedTrades}
           priceMappingByInboxTradeId={priceMappingByInboxTradeId}
           onAccept={handleAccept}
@@ -623,33 +498,7 @@ export default function ImportsPageClient({
             }));
             persistPortfolioSelection(inboxTradeId, value);
           }}
-          onInlineTradePlanChange={(inboxTradeId, value) => {
-            const previousTradePlanId = inlineTradePlanIds[inboxTradeId] ?? "";
-            const attemptedTradePlanId = value;
-            setInlineTradePlanIds((prev) => ({
-              ...prev,
-              [inboxTradeId]: attemptedTradePlanId,
-            }));
-            void persistTradePlanSelection(
-              inboxTradeId,
-              attemptedTradePlanId,
-            ).then((persisted) => {
-              if (!persisted) {
-                setInlineTradePlanIds((prev) => {
-                  if ((prev[inboxTradeId] ?? "") !== attemptedTradePlanId) {
-                    return prev;
-                  }
-                  return {
-                    ...prev,
-                    [inboxTradeId]: previousTradePlanId,
-                  };
-                });
-              }
-            });
-          }}
-          onQuickCreateTradePlan={handleQuickCreateTradePlan}
           onSaveEdit={handleSaveEdit}
-          openTradePlans={openTradePlans}
           portfolios={portfolios}
         />
       </div>

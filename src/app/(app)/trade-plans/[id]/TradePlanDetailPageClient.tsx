@@ -7,14 +7,7 @@ import {
   usePreloadedQuery,
   useQuery,
 } from "convex/react";
-import {
-  Check,
-  CheckCircle2,
-  Loader2,
-  Pencil,
-  Save,
-  X,
-} from "lucide-react";
+import { Check, CheckCircle2, Loader2, Pencil, Save, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RetrospectiveSection } from "~/components/RetrospectiveSection";
@@ -145,7 +138,7 @@ function InlineEditableField({
           data-testid={`${dataTestId}-edit-button`}
           aria-label={`Edit ${label}`}
           onClick={() => setIsEditing(true)}
-          className="rounded p-1 text-olive-10 opacity-0 transition-opacity hover:bg-olive-4 hover:text-olive-12 group-hover:opacity-100"
+          className="rounded p-1 text-olive-10 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-olive-4 hover:text-olive-12"
         >
           <Pencil className="h-3.5 w-3.5" />
         </button>
@@ -279,7 +272,7 @@ function TacticalField({
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <h4
-            className="text-xs font-medium uppercase tracking-wide text-olive-11"
+            className="text-xs font-medium tracking-wide text-olive-11 uppercase"
             data-testid={`${dataTestId}-label`}
           >
             {label}
@@ -303,14 +296,14 @@ function TacticalField({
         </div>
         {value ? (
           <p
-            className="whitespace-pre-wrap text-sm text-olive-12"
+            className="text-sm whitespace-pre-wrap text-olive-12"
             data-testid={`${dataTestId}-content`}
           >
             {value}
           </p>
         ) : (
           <p
-            className="text-sm italic text-olive-11"
+            className="text-sm text-olive-11 italic"
             data-testid={`${dataTestId}-empty`}
           >
             {placeholder}
@@ -324,7 +317,7 @@ function TacticalField({
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
         <h4
-          className="text-xs font-medium uppercase tracking-wide text-olive-11"
+          className="text-xs font-medium tracking-wide text-olive-11 uppercase"
           data-testid={`${dataTestId}-label`}
         >
           {label}
@@ -414,9 +407,7 @@ export default function TradePlanDetailPageClient({
   const [isChangingRelationship, setIsChangingRelationship] = useState(false);
   const [isEditingCampaign, setIsEditingCampaign] = useState(false);
 
-  const handleCampaignChange = async (
-    campaignId: Id<"campaigns"> | null,
-  ) => {
+  const handleCampaignChange = async (campaignId: Id<"campaigns"> | null) => {
     setRelationshipError(null);
     setIsChangingRelationship(true);
     try {
@@ -526,7 +517,6 @@ export default function TradePlanDetailPageClient({
     try {
       const result = await acceptTrade({
         inboxTradeId,
-        tradePlanId,
         portfolioId: portfolioId
           ? (portfolioId as Id<"portfolios">)
           : undefined,
@@ -673,7 +663,7 @@ export default function TradePlanDetailPageClient({
             ) : isLinked ? (
               <>
                 <span
-                  className="text-xs font-medium uppercase tracking-[0.18em] text-olive-11"
+                  className="text-xs font-medium tracking-[0.18em] text-olive-11 uppercase"
                   data-testid={TRADE_PLAN_DETAIL_TEST_IDS.relationshipLabel}
                 >
                   {relationshipLabel}
@@ -699,7 +689,7 @@ export default function TradePlanDetailPageClient({
                   data-testid={TRADE_PLAN_DETAIL_TEST_IDS.campaignSelect}
                   aria-label="Change campaign"
                   onClick={() => setIsEditingCampaign(true)}
-                  className="rounded p-1 text-olive-10 opacity-0 transition-opacity hover:bg-olive-4 hover:text-olive-12 group-hover:opacity-100"
+                  className="rounded p-1 text-olive-10 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-olive-4 hover:text-olive-12"
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
@@ -707,7 +697,7 @@ export default function TradePlanDetailPageClient({
             ) : (
               <>
                 <span
-                  className="text-xs font-medium uppercase tracking-[0.18em] text-olive-11"
+                  className="text-xs font-medium tracking-[0.18em] text-olive-11 uppercase"
                   data-testid={TRADE_PLAN_DETAIL_TEST_IDS.relationshipLabel}
                 >
                   {relationshipLabel}
@@ -785,9 +775,7 @@ export default function TradePlanDetailPageClient({
         data-testid={TRADE_PLAN_DETAIL_TEST_IDS.tacticalSection}
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-olive-12">
-            Tactical Plan
-          </h2>
+          <h2 className="text-lg font-semibold text-olive-12">Tactical Plan</h2>
           <button
             type="button"
             data-testid={TRADE_PLAN_DETAIL_TEST_IDS.importFollowUpButton}
@@ -898,7 +886,7 @@ export default function TradePlanDetailPageClient({
         {assignedInboxTrades.length > 0 && (
           <div className="mb-4">
             <h3
-              className="mb-2 text-xs font-medium uppercase tracking-wide text-olive-11"
+              className="mb-2 text-xs font-medium tracking-wide text-olive-11 uppercase"
               data-testid="trade-plan-assigned-pending-title"
             >
               Pending &mdash; Assigned
@@ -907,7 +895,7 @@ export default function TradePlanDetailPageClient({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-6 text-left text-xs font-medium text-slate-11">
-                    <th scope="col" className="pl-4 pr-2 py-2">
+                    <th scope="col" className="py-2 pr-2 pl-4">
                       <span className="sr-only">Status</span>
                     </th>
                     <th className="px-3 py-2">Date</th>
@@ -930,9 +918,7 @@ export default function TradePlanDetailPageClient({
                       matchType="assigned"
                       accountNameByAccountId={accountNameByAccountId}
                       portfolios={portfolios}
-                      portfolioId={
-                        pendingPortfolioIds[inboxTrade._id] ?? ""
-                      }
+                      portfolioId={pendingPortfolioIds[inboxTrade._id] ?? ""}
                       onPortfolioChange={(val) =>
                         setPendingPortfolioIds((prev) => ({
                           ...prev,
@@ -940,10 +926,7 @@ export default function TradePlanDetailPageClient({
                         }))
                       }
                       onAccept={(portfolioId) =>
-                        void handleAcceptInboxTrade(
-                          inboxTrade._id,
-                          portfolioId,
-                        )
+                        void handleAcceptInboxTrade(inboxTrade._id, portfolioId)
                       }
                       isAccepting={acceptingInboxTradeIds.has(inboxTrade._id)}
                     />
@@ -958,7 +941,7 @@ export default function TradePlanDetailPageClient({
         {suggestedInboxTrades.length > 0 && (
           <div className="mb-4">
             <h3
-              className="mb-2 text-xs font-medium uppercase tracking-wide text-olive-11"
+              className="mb-2 text-xs font-medium tracking-wide text-olive-11 uppercase"
               data-testid="trade-plan-suggested-pending-title"
             >
               Pending &mdash; Symbol Matches
@@ -967,7 +950,7 @@ export default function TradePlanDetailPageClient({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-6 text-left text-xs font-medium text-slate-11">
-                    <th scope="col" className="pl-4 pr-2 py-2">
+                    <th scope="col" className="py-2 pr-2 pl-4">
                       <span className="sr-only">Status</span>
                     </th>
                     <th className="px-3 py-2">Date</th>
@@ -990,9 +973,7 @@ export default function TradePlanDetailPageClient({
                       matchType="suggested"
                       accountNameByAccountId={accountNameByAccountId}
                       portfolios={portfolios}
-                      portfolioId={
-                        pendingPortfolioIds[inboxTrade._id] ?? ""
-                      }
+                      portfolioId={pendingPortfolioIds[inboxTrade._id] ?? ""}
                       onPortfolioChange={(val) =>
                         setPendingPortfolioIds((prev) => ({
                           ...prev,
@@ -1000,10 +981,7 @@ export default function TradePlanDetailPageClient({
                         }))
                       }
                       onAccept={(portfolioId) =>
-                        void handleAcceptInboxTrade(
-                          inboxTrade._id,
-                          portfolioId,
-                        )
+                        void handleAcceptInboxTrade(inboxTrade._id, portfolioId)
                       }
                       isAccepting={acceptingInboxTradeIds.has(inboxTrade._id)}
                     />
@@ -1018,7 +996,7 @@ export default function TradePlanDetailPageClient({
         {trades.length > 0 ? (
           <div>
             <h3
-              className="mb-2 text-xs font-medium uppercase tracking-wide text-olive-11"
+              className="mb-2 text-xs font-medium tracking-wide text-olive-11 uppercase"
               data-testid="trade-plan-linked-trades-title"
             >
               Linked Trades
@@ -1040,10 +1018,7 @@ export default function TradePlanDetailPageClient({
                     <tr
                       key={trade._id}
                       className="border-b border-slate-6/60"
-                      data-testid={getTradeRowTestId(
-                        trade.ticker,
-                        trade.date,
-                      )}
+                      data-testid={getTradeRowTestId(trade.ticker, trade.date)}
                     >
                       <td className="px-3 py-2 text-slate-11">
                         {new Date(trade.date).toLocaleDateString("en-US")}
@@ -1060,17 +1035,15 @@ export default function TradePlanDetailPageClient({
                       </td>
                       <td className="px-3 py-2">
                         <Badge
-                          variant={
-                            trade.side === "buy" ? "success" : "danger"
-                          }
+                          variant={trade.side === "buy" ? "success" : "danger"}
                         >
                           {trade.side}
                         </Badge>
                       </td>
-                      <td className="px-3 py-2 tabular-nums text-slate-11">
+                      <td className="px-3 py-2 text-slate-11 tabular-nums">
                         {trade.quantity}
                       </td>
-                      <td className="px-3 py-2 tabular-nums text-slate-11">
+                      <td className="px-3 py-2 text-slate-11 tabular-nums">
                         {formatCurrency(trade.price)}
                       </td>
                     </tr>
@@ -1148,7 +1121,7 @@ function InboxTradeRow({
         inboxTrade.externalId ?? inboxTrade._id,
       )}
     >
-      <td className="pl-4 pr-2 py-2">
+      <td className="py-2 pr-2 pl-4">
         <Badge variant={matchType === "suggested" ? "info" : "warning"}>
           {matchType === "suggested" ? "Suggested" : "Pending"}
         </Badge>
@@ -1158,9 +1131,7 @@ function InboxTradeRow({
           ? new Date(inboxTrade.date).toLocaleDateString("en-US")
           : "---"}
       </td>
-      <td className="px-3 py-2 text-slate-12">
-        {inboxTrade.ticker ?? "---"}
-      </td>
+      <td className="px-3 py-2 text-slate-12">{inboxTrade.ticker ?? "---"}</td>
       <td className="px-3 py-2 text-slate-11">
         {accountNameByAccountId.get(inboxTrade.brokerageAccountId ?? "") ??
           inboxTrade.brokerageAccountId ??
@@ -1179,10 +1150,10 @@ function InboxTradeRow({
           {inboxTrade.side ?? "---"}
         </Badge>
       </td>
-      <td className="px-3 py-2 tabular-nums text-slate-11">
+      <td className="px-3 py-2 text-slate-11 tabular-nums">
         {inboxTrade.quantity ?? "---"}
       </td>
-      <td className="px-3 py-2 tabular-nums text-slate-11">
+      <td className="px-3 py-2 text-slate-11 tabular-nums">
         {inboxTrade.price !== undefined
           ? formatCurrency(inboxTrade.price)
           : "---"}

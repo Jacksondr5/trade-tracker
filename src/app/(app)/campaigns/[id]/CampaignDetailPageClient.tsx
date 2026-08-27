@@ -132,14 +132,6 @@ export default function CampaignDetailPageClient({
   const watchItem = useMutation(api.watchlist.watchItem);
   const unwatchItem = useMutation(api.watchlist.unwatchItem);
 
-  const tradePlanNameById = useMemo(() => {
-    const map = new Map<Id<"tradePlans">, string>();
-    for (const tradePlan of linkedTradePlans) {
-      map.set(tradePlan.id, tradePlan.name);
-    }
-    return map;
-  }, [linkedTradePlans]);
-
   const accountNameByAccountId = useMemo(() => {
     const map = new Map<string, string>();
     for (const mapping of accountMappings) {
@@ -662,10 +654,7 @@ export default function CampaignDetailPageClient({
                           onClick={() => {
                             if (isSubmitting) return;
                             setIsEditingThesis(false);
-                            thesisForm.setFieldValue(
-                              "thesis",
-                              campaign.thesis,
-                            );
+                            thesisForm.setFieldValue("thesis", campaign.thesis);
                             setThesisError(null);
                           }}
                         >
@@ -749,7 +738,7 @@ export default function CampaignDetailPageClient({
             campaign&apos;s thesis.
           </p>
         ) : (
-              <div className="mb-4 space-y-3">
+          <div className="mb-4 space-y-3">
             {linkedTradePlans.map((plan) => (
               <div
                 key={plan.id}
@@ -938,7 +927,6 @@ export default function CampaignDetailPageClient({
                   <th className="px-2 py-2">Date</th>
                   <th className="px-2 py-2">Ticker</th>
                   <th className="px-2 py-2">Account</th>
-                  <th className="px-2 py-2">Trade Plan</th>
                   <th className="px-2 py-2">Side</th>
                   <th className="px-2 py-2">Qty</th>
                   <th className="px-2 py-2">Price</th>
@@ -957,18 +945,6 @@ export default function CampaignDetailPageClient({
                             trade.brokerageAccountId,
                           ) ?? trade.brokerageAccountId)
                         : "\u2014"}
-                    </td>
-                    <td className="px-2 py-2 text-olive-11">
-                      {trade.tradePlanId ? (
-                        <Link
-                          href={`/trade-plans/${trade.tradePlanId}`}
-                          className="text-blue-9 hover:underline"
-                        >
-                          {tradePlanNameById.get(trade.tradePlanId) ?? "\u2014"}
-                        </Link>
-                      ) : (
-                        "\u2014"
-                      )}
                     </td>
                     <td className="px-2 py-2 text-olive-11">{trade.side}</td>
                     <td className="px-2 py-2 text-olive-11">

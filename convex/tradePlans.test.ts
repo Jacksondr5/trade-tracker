@@ -100,7 +100,6 @@ describe("trade plan workspace queries", () => {
         side: "buy",
         source: "manual",
         ticker: args.ticker,
-        tradePlanId: args.tradePlanId,
       });
     });
   }
@@ -122,7 +121,6 @@ describe("trade plan workspace queries", () => {
         source: "ibkr",
         status: "pending_review",
         ticker: args.ticker,
-        tradePlanId: args.tradePlanId,
         validationErrors: [],
         validationWarnings: [],
       });
@@ -278,11 +276,11 @@ describe("trade plan workspace queries", () => {
         parentCampaign: null,
       },
       execution: {
-        latestTradeDate: 100,
-        pendingAssignedCount: 1,
-        pendingSuggestedCount: 1,
+        latestTradeDate: null,
+        pendingAssignedCount: 0,
+        pendingSuggestedCount: 2,
         totalPendingCount: 2,
-        tradeCount: 1,
+        tradeCount: 0,
       },
       lifecycle: {
         closedAt: null,
@@ -301,11 +299,11 @@ describe("trade plan workspace queries", () => {
         },
       },
       execution: {
-        latestTradeDate: 200,
+        latestTradeDate: null,
         pendingAssignedCount: 0,
         pendingSuggestedCount: 0,
         totalPendingCount: 0,
-        tradeCount: 1,
+        tradeCount: 0,
       },
       isWatched: false,
       status: "active",
@@ -418,11 +416,11 @@ describe("trade plan workspace queries", () => {
         },
       },
       execution: {
-        latestTradeDate: 400,
-        pendingAssignedCount: 1,
-        pendingSuggestedCount: 1,
+        latestTradeDate: null,
+        pendingAssignedCount: 0,
+        pendingSuggestedCount: 2,
         totalPendingCount: 2,
-        tradeCount: 1,
+        tradeCount: 0,
       },
     });
     expect(detail?.tradePlan).toEqual({
@@ -463,13 +461,7 @@ describe("trade plan workspace queries", () => {
         },
       ],
     });
-    expect(detail?.trades).toHaveLength(1);
-    expect(detail?.trades[0]).toMatchObject({
-      brokerageAccountId: "ACC-1",
-      portfolioId,
-      ticker: "NVDA",
-      tradePlanId,
-    });
+    expect(detail?.trades).toEqual([]);
     expect(detail?.accountMappings).toHaveLength(1);
     expect(detail?.accountMappings[0].friendlyName).toBe("Primary IBKR");
     expect(detail?.portfolios).toHaveLength(1);
@@ -479,7 +471,7 @@ describe("trade plan workspace queries", () => {
         (item: NonNullable<typeof detail>["inboxTrades"][number]) =>
           item.matchType,
       ),
-    ).toEqual(["assigned", "suggested"]);
+    ).toEqual(["suggested", "suggested"]);
   });
 
   it("keeps detail workspace rollups scoped to the requested plan", async () => {
@@ -543,11 +535,11 @@ describe("trade plan workspace queries", () => {
     expect(detail?.summary).toMatchObject({
       id: requestedPlanId,
       execution: {
-        latestTradeDate: 400,
-        pendingAssignedCount: 1,
-        pendingSuggestedCount: 1,
+        latestTradeDate: null,
+        pendingAssignedCount: 0,
+        pendingSuggestedCount: 2,
         totalPendingCount: 2,
-        tradeCount: 1,
+        tradeCount: 0,
       },
       isWatched: true,
       relationship: {

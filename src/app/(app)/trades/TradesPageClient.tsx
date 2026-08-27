@@ -1,6 +1,11 @@
 "use client";
 
-import { Preloaded, useMutation, usePreloadedQuery, useQuery } from "convex/react";
+import {
+  Preloaded,
+  useMutation,
+  usePreloadedQuery,
+  useQuery,
+} from "convex/react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pencil, X } from "lucide-react";
 import {
@@ -81,7 +86,6 @@ export default function TradesPageClient({
   preloadedKnownAccounts,
   preloadedPortfolios,
   preloadedTradesPage,
-  preloadedTradePlans,
 }: {
   initialFilterState: {
     account: string;
@@ -100,10 +104,8 @@ export default function TradesPageClient({
   >;
   preloadedPortfolios: Preloaded<typeof api.portfolios.listPortfolios>;
   preloadedTradesPage: Preloaded<typeof api.trades.listTradesPage>;
-  preloadedTradePlans: Preloaded<typeof api.tradePlans.listTradePlans>;
 }) {
   const initialTradesPage = usePreloadedQuery(preloadedTradesPage);
-  const tradePlans = usePreloadedQuery(preloadedTradePlans);
   const accountMappings = usePreloadedQuery(preloadedAccountMappings);
   const knownAccounts = usePreloadedQuery(preloadedKnownAccounts);
   const portfolios = usePreloadedQuery(preloadedPortfolios);
@@ -131,9 +133,9 @@ export default function TradesPageClient({
   );
   const [cursorHistory, setCursorHistory] = useState<Array<string | null>>([]);
   const [pageSize, setPageSize] = useState(initialFilterState.pageSize);
-  const [selectedTradeIds, setSelectedTradeIds] = useState<
-    Set<Id<"trades">>
-  >(new Set());
+  const [selectedTradeIds, setSelectedTradeIds] = useState<Set<Id<"trades">>>(
+    new Set(),
+  );
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const bulkUpdateTrades = useMutation(api.trades.bulkUpdateTrades);
@@ -155,11 +157,6 @@ export default function TradesPageClient({
     setSelectedTradeIds(new Set());
     setBulkError(null);
   }, []);
-
-  const tradePlanNameMap = useMemo(
-    () => new Map(tradePlans.map((p) => [p._id, p.name])),
-    [tradePlans],
-  );
 
   const portfolioNameMap = useMemo(
     () => new Map(portfolios.map((p) => [p._id, p.name])),
@@ -333,19 +330,16 @@ export default function TradesPageClient({
     setCursorHistory([]);
   };
 
-  const handleBulkUpdate = async (field: "tradePlanId" | "portfolioId", value: string) => {
+  const handleBulkUpdate = async (value: string) => {
     if (selectedTradeIds.size === 0) return;
     setBulkUpdating(true);
     setBulkError(null);
     try {
-      const resolvedValue = value === "__remove__"
-        ? null
-        : value as Id<"tradePlans"> | Id<"portfolios">;
+      const resolvedValue =
+        value === "__remove__" ? null : (value as Id<"portfolios">);
       const result = await bulkUpdateTrades({
         tradeIds: Array.from(selectedTradeIds),
-        ...(field === "tradePlanId"
-          ? { tradePlanId: resolvedValue as Id<"tradePlans"> | null }
-          : { portfolioId: resolvedValue as Id<"portfolios"> | null }),
+        portfolioId: resolvedValue as Id<"portfolios"> | null,
       });
       if (result.errors.length > 0) {
         setBulkError(
@@ -531,9 +525,6 @@ export default function TradesPageClient({
                     Ticker
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-11">
-                    Trade Plan
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-11">
                     Portfolio
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-11">
@@ -599,7 +590,10 @@ export default function TradesPageClient({
                             editingTradeId === trade._id,
                           "hover:bg-slate-3/50": editingTradeId !== trade._id,
                         })}
-                        data-testid={getTradeRowTestId(trade.ticker, trade.date)}
+                        data-testid={getTradeRowTestId(
+                          trade.ticker,
+                          trade.date,
+                        )}
                       >
                         <td className="px-4 py-3">
                           <input
@@ -616,11 +610,6 @@ export default function TradesPageClient({
                         </td>
                         <td className="px-4 py-3 text-sm font-medium whitespace-nowrap text-slate-12">
                           {trade.ticker}
-                        </td>
-                        <td className="px-4 py-3 text-sm whitespace-nowrap text-slate-11">
-                          {trade.tradePlanId
-                            ? (tradePlanNameMap.get(trade.tradePlanId) ?? "—")
-                            : "—"}
                         </td>
                         <td className="px-4 py-3 text-sm whitespace-nowrap text-slate-11">
                           {trade.portfolioId
@@ -669,7 +658,7 @@ export default function TradesPageClient({
                       </tr>
                       {editingTradeId === trade._id && (
                         <tr className="bg-amber-3/30 shadow-[inset_0_-1px_0_0_var(--amber-7),inset_1px_0_0_0_var(--amber-7),inset_-1px_0_0_0_var(--amber-7)]">
-                          <td colSpan={12} className="p-0">
+                          <td colSpan={11} className="p-0">
                             <EditTradeForm
                               tradeId={trade._id}
                               initialValues={{
@@ -681,10 +670,8 @@ export default function TradesPageClient({
                                 quantity: String(trade.quantity),
                                 side: trade.side,
                                 ticker: trade.ticker,
-                                tradePlanId: trade.tradePlanId ?? "",
                               }}
                               portfolios={portfolios}
-                              tradePlans={tradePlans}
                               onCancel={() => setEditingTradeId(null)}
                               onSaved={() => setEditingTradeId(null)}
                             />
@@ -708,30 +695,6 @@ export default function TradesPageClient({
               </span>
               <label className="flex flex-col gap-1">
                 <span className="text-xs font-medium text-olive-11">
-                  Trade Plan
-                </span>
-                <Select
-                  dataTestId={TRADES_INDEX_TEST_IDS.bulkTradePlanSelect}
-                  className="w-[220px]"
-                  value=""
-                  disabled={bulkUpdating}
-                  onChange={(e) => {
-                    if (e.target.value !== "") {
-                      void handleBulkUpdate("tradePlanId", e.target.value);
-                    }
-                  }}
-                >
-                  <option value="">— Set trade plan —</option>
-                  <option value="__remove__">— Remove trade plan —</option>
-                  {tradePlans.map((tp) => (
-                    <option key={tp._id} value={tp._id}>
-                      {tp.name} ({tp.instrumentSymbol})
-                    </option>
-                  ))}
-                </Select>
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-olive-11">
                   Portfolio
                 </span>
                 <Select
@@ -741,7 +704,7 @@ export default function TradesPageClient({
                   disabled={bulkUpdating}
                   onChange={(e) => {
                     if (e.target.value !== "") {
-                      void handleBulkUpdate("portfolioId", e.target.value);
+                      void handleBulkUpdate(e.target.value);
                     }
                   }}
                 >
@@ -768,7 +731,11 @@ export default function TradesPageClient({
           )}
 
           {bulkError && (
-            <Alert variant="error" className="mt-3" onDismiss={() => setBulkError(null)}>
+            <Alert
+              variant="error"
+              className="mt-3"
+              onDismiss={() => setBulkError(null)}
+            >
               {bulkError}
             </Alert>
           )}
@@ -779,7 +746,7 @@ export default function TradesPageClient({
             </div>
             <div className="flex items-center gap-3">
               <label
-                className="whitespace-nowrap text-sm text-slate-11"
+                className="text-sm whitespace-nowrap text-slate-11"
                 htmlFor="page-size-select"
               >
                 Rows per page

@@ -245,10 +245,7 @@ function summedOptional(
     : values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
 }
 
-function sameOptionalIds(
-  rows: ExistingRow[],
-  field: "portfolioId" | "tradePlanId",
-): boolean {
+function sameOptionalIds(rows: ExistingRow[], field: "portfolioId"): boolean {
   return (
     new Set(rows.map(({ document }) => String(document[field] ?? ""))).size ===
     1
@@ -313,7 +310,6 @@ function buildPlan(order: RawOrder, rows: ExistingRow[]): MigrationPlan {
   const metadataMatches =
     ownerIds.size === 1 &&
     sameOptionalIds(rows, "portfolioId") &&
-    sameOptionalIds(rows, "tradePlanId") &&
     rows.every(
       ({ document }) =>
         document.brokerageAccountId === target.brokerageAccountId &&
@@ -373,9 +369,6 @@ function auditHash(
           table,
           taxes: optionalNumber(document.taxes),
           ticker: optionalString(document.ticker),
-          tradePlanId: optionalString(
-            document.tradePlanId ? String(document.tradePlanId) : undefined,
-          ),
           validationErrors:
             table === "inboxTrades" ? document.validationErrors : [],
           validationWarnings:

@@ -177,14 +177,6 @@ export const completeImportTask = mutation({
         tradePlanId,
       });
 
-      // Auto-assign to inbox trade if created from the imports review page
-      if (task.inboxTradeId) {
-        const inboxTrade = await ctx.db.get(task.inboxTradeId);
-        if (inboxTrade && inboxTrade.ownerId === ownerId && inboxTrade.status === "pending_review") {
-          await ctx.db.patch(task.inboxTradeId, { tradePlanId });
-        }
-      }
-
       await ctx.db.patch(args.taskId, {
         createdTradePlanId: tradePlanId,
         extractedData: args.extractedData,
@@ -206,7 +198,9 @@ export const completeImportTask = mutation({
       );
 
       const planPatch: Record<string, unknown> = {};
-      const updateDate = new Date(task._creationTime).toISOString().slice(0, 10);
+      const updateDate = new Date(task._creationTime)
+        .toISOString()
+        .slice(0, 10);
       for (const update of data.fieldUpdates) {
         const field = update.field as keyof typeof tradePlan;
         const currentValue =

@@ -38,7 +38,7 @@ It reads:
 - the strategy document
 - market prices
 
-Writing is routine, not exceptional. The counterpart regularly creates and updates notes, lessons, campaigns, and episodes as conversations produce them. Brokerage-derived records such as trades stay read-only, but the counterpart is a full participant in the record, not a commentator on it. Its writes stay legible and reviewable: it proposes, attributes, and corrects rather than silently restructuring the record.
+Writing is routine, not exceptional. The counterpart regularly creates and updates notes, lessons, campaigns, and episodes as conversations produce them. It may accept a brokerage-derived inbox fill only after the target user has confirmed that fill in conversation; acceptance records the already-executed trade and never places, modifies, or cancels an order. Otherwise brokerage-derived records stay read-only. The counterpart is a full participant in the record, not a commentator on it, and its writes stay legible and reviewable: it proposes, attributes, and corrects rather than silently restructuring the record.
 
 Automated brokerage ingestion is what makes the counterpart useful from day one. The system deposits trades, positions, and cash nightly without any user discipline, so the counterpart always has real material to pay with — even when the user has written nothing.
 

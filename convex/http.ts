@@ -1,10 +1,13 @@
 import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { acceptCounterpartTradeViaAction } from "./imports";
 
 type JsonObject = Record<string, unknown>;
 type CounterpartErrorCode =
   | "UNAUTHORIZED"
+  | "FORBIDDEN"
   | "VALIDATION"
   | "NOT_FOUND"
   | "RATE_LIMITED"
@@ -340,6 +343,17 @@ export function validateRecordCheckInResponseBody(body: JsonObject) {
   };
 }
 
+export function validateAcceptTradeBody(body: JsonObject) {
+  assertExactKeys(body, ["ownerId", "inboxTradeId", "portfolioId"]);
+  return {
+    inboxTradeId: requireString(body, "inboxTradeId") as Id<"inboxTrades">,
+    ownerId: requireString(body, "ownerId"),
+    portfolioId: optionalString(body, "portfolioId") as
+      | Id<"portfolios">
+      | undefined,
+  };
+}
+
 async function authorizedJson(
   req: Request,
   handler: (body: JsonObject, ownerId: string) => Promise<Response>,
@@ -367,6 +381,30 @@ async function authorizedJson(
 }
 
 const http = httpRouter();
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, configuredOwnerId) => {
+      const args = validateAcceptTradeBody(body);
+      if (args.ownerId !== configuredOwnerId) {
+        throw new HttpRequestError(
+          "FORBIDDEN",
+          "ownerId does not match the configured counterpart owner",
+          403,
+          false,
+        );
+      }
+      const data = await acceptCounterpartTradeViaAction(
+        ctx,
+        configuredOwnerId,
+        args,
+      );
+      return successResponse(data);
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/accept-trade",
+});
 
 http.route({
   handler: httpAction(async (ctx, req) => {

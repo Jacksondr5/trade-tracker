@@ -3,7 +3,10 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
 import { assertOwner, requireUser } from "./lib/auth";
-import { campaignStatusValidator, tradePlanStatusValidator } from "./lib/statuses";
+import {
+  campaignStatusValidator,
+  tradePlanStatusValidator,
+} from "./lib/statuses";
 
 const nullableNumberValidator = v.union(v.number(), v.null());
 
@@ -102,9 +105,7 @@ function createEmptyTradePlanRollup() {
   };
 }
 
-function buildTradePlanRollup(
-  tradePlans: Array<Pick<TradePlanDoc, "status">>,
-) {
+function buildTradePlanRollup(tradePlans: Array<Pick<TradePlanDoc, "status">>) {
   const rollup = createEmptyTradePlanRollup();
 
   for (const tradePlan of tradePlans) {
@@ -135,7 +136,10 @@ function buildTradePlanRollup(
 
 function buildTradeRollup(
   tradePlanIds: Set<Id<"tradePlans">>,
-  tradeStatsByPlanId: Map<Id<"tradePlans">, { latestTradeDate: number | null; totalCount: number }>,
+  tradeStatsByPlanId: Map<
+    Id<"tradePlans">,
+    { latestTradeDate: number | null; totalCount: number }
+  >,
 ) {
   let totalCount = 0;
   let latestTradeDate: number | null = null;
@@ -161,17 +165,10 @@ function buildTradeRollup(
   };
 }
 
-async function loadCampaignWorkspaceSourceData(
-  ctx: QueryCtx,
-  ownerId: string,
-) {
-  const [tradePlans, trades, watchedItems, retrospectives] = await Promise.all([
+async function loadCampaignWorkspaceSourceData(ctx: QueryCtx, ownerId: string) {
+  const [tradePlans, watchedItems, retrospectives] = await Promise.all([
     ctx.db
       .query("tradePlans")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect(),
-    ctx.db
-      .query("trades")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
       .collect(),
     ctx.db
@@ -198,7 +195,10 @@ async function loadCampaignWorkspaceSourceData(
     }
   }
 
-  const tradePlansByCampaignId = new Map<Id<"campaigns">, Array<TradePlanDoc>>();
+  const tradePlansByCampaignId = new Map<
+    Id<"campaigns">,
+    Array<TradePlanDoc>
+  >();
   for (const tradePlan of tradePlans) {
     if (!tradePlan.campaignId) {
       continue;
@@ -213,22 +213,6 @@ async function loadCampaignWorkspaceSourceData(
     Id<"tradePlans">,
     { latestTradeDate: number | null; totalCount: number }
   >();
-  for (const trade of trades) {
-    if (!trade.tradePlanId) {
-      continue;
-    }
-
-    const existing = tradeStatsByPlanId.get(trade.tradePlanId) ?? {
-      latestTradeDate: null,
-      totalCount: 0,
-    };
-    existing.totalCount += 1;
-    existing.latestTradeDate =
-      existing.latestTradeDate === null || trade.date > existing.latestTradeDate
-        ? trade.date
-        : existing.latestTradeDate;
-    tradeStatsByPlanId.set(trade.tradePlanId, existing);
-  }
 
   const retrospectiveParentIds = new Set(
     retrospectives
@@ -250,26 +234,27 @@ async function loadCampaignWorkspaceDetailSourceData(
   ownerId: string,
   campaignId: Id<"campaigns">,
 ) {
-  const [tradePlans, watchedCampaign, campaignRetrospective] = await Promise.all([
-    ctx.db
-      .query("tradePlans")
-      .withIndex("by_owner_campaignId", (q) =>
-        q.eq("ownerId", ownerId).eq("campaignId", campaignId),
-      )
-      .collect(),
-    ctx.db
-      .query("watchlist")
-      .withIndex("by_owner_campaignId", (q) =>
-        q.eq("ownerId", ownerId).eq("campaignId", campaignId),
-      )
-      .first(),
-    ctx.db
-      .query("retrospectives")
-      .withIndex("by_owner_parent", (q) =>
-        q.eq("ownerId", ownerId).eq("parentId", campaignId),
-      )
-      .unique(),
-  ]);
+  const [tradePlans, watchedCampaign, campaignRetrospective] =
+    await Promise.all([
+      ctx.db
+        .query("tradePlans")
+        .withIndex("by_owner_campaignId", (q) =>
+          q.eq("ownerId", ownerId).eq("campaignId", campaignId),
+        )
+        .collect(),
+      ctx.db
+        .query("watchlist")
+        .withIndex("by_owner_campaignId", (q) =>
+          q.eq("ownerId", ownerId).eq("campaignId", campaignId),
+        )
+        .first(),
+      ctx.db
+        .query("retrospectives")
+        .withIndex("by_owner_parent", (q) =>
+          q.eq("ownerId", ownerId).eq("parentId", campaignId),
+        )
+        .unique(),
+    ]);
 
   const watchedCampaignIds = new Set<Id<"campaigns">>();
   if (watchedCampaign?.itemType === "campaign" && watchedCampaign.campaignId) {
@@ -283,40 +268,30 @@ async function loadCampaignWorkspaceDetailSourceData(
   >();
 
   for (let i = 0; i < tradePlans.length; i += DETAIL_SOURCE_DATA_CONCURRENCY) {
-    const tradePlanChunk = tradePlans.slice(i, i + DETAIL_SOURCE_DATA_CONCURRENCY);
+    const tradePlanChunk = tradePlans.slice(
+      i,
+      i + DETAIL_SOURCE_DATA_CONCURRENCY,
+    );
 
     await Promise.all(
       tradePlanChunk.map(async (tradePlan) => {
-        const [trades, watchedTradePlan] = await Promise.all([
-          ctx.db
-            .query("trades")
-            .withIndex("by_owner_tradePlanId", (q) =>
-              q.eq("ownerId", ownerId).eq("tradePlanId", tradePlan._id),
-            )
-            .collect(),
-          ctx.db
-            .query("watchlist")
-            .withIndex("by_owner_tradePlanId", (q) =>
-              q.eq("ownerId", ownerId).eq("tradePlanId", tradePlan._id),
-            )
-            .unique(),
-        ]);
+        const watchedTradePlan = await ctx.db
+          .query("watchlist")
+          .withIndex("by_owner_tradePlanId", (q) =>
+            q.eq("ownerId", ownerId).eq("tradePlanId", tradePlan._id),
+          )
+          .unique();
 
-        if (watchedTradePlan?.itemType === "tradePlan" && watchedTradePlan.tradePlanId) {
+        if (
+          watchedTradePlan?.itemType === "tradePlan" &&
+          watchedTradePlan.tradePlanId
+        ) {
           watchedTradePlanIds.add(watchedTradePlan.tradePlanId);
         }
 
-        let latestTradeDate: number | null = null;
-        for (const trade of trades) {
-          latestTradeDate =
-            latestTradeDate === null || trade.date > latestTradeDate
-              ? trade.date
-              : latestTradeDate;
-        }
-
         tradeStatsByPlanId.set(tradePlan._id, {
-          latestTradeDate,
-          totalCount: trades.length,
+          latestTradeDate: null,
+          totalCount: 0,
         });
       }),
     );
@@ -343,11 +318,18 @@ function buildCampaignWorkspaceSummary(
 ) {
   const linkedTradePlans =
     linkedTradePlansOverride ??
-    sourceData.tradePlansByCampaignId.get(campaign._id)?.sort(sortTradePlansByOrderThenNewest) ??
+    sourceData.tradePlansByCampaignId
+      .get(campaign._id)
+      ?.sort(sortTradePlansByOrderThenNewest) ??
     [];
   const linkedTradePlanRollup = buildTradePlanRollup(linkedTradePlans);
-  const linkedTradePlanIds = new Set(linkedTradePlans.map((tradePlan) => tradePlan._id));
-  const linkedTradeRollup = buildTradeRollup(linkedTradePlanIds, sourceData.tradeStatsByPlanId);
+  const linkedTradePlanIds = new Set(
+    linkedTradePlans.map((tradePlan) => tradePlan._id),
+  );
+  const linkedTradeRollup = buildTradeRollup(
+    linkedTradePlanIds,
+    sourceData.tradeStatsByPlanId,
+  );
 
   return {
     createdAt: campaign._creationTime,
@@ -512,7 +494,9 @@ export const listCampaignWorkspaceSummaries = query({
 
     const sourceData = await loadCampaignWorkspaceSourceData(ctx, ownerId);
 
-    return campaigns.map((campaign) => buildCampaignWorkspaceSummary(campaign, sourceData));
+    return campaigns.map((campaign) =>
+      buildCampaignWorkspaceSummary(campaign, sourceData),
+    );
   },
 });
 
@@ -549,8 +533,9 @@ export const getCampaignWorkspace = query({
       campaign._id,
     );
     const linkedTradePlans =
-      sourceData.tradePlansByCampaignId.get(campaign._id)?.sort(sortTradePlansByOrderThenNewest) ??
-      [];
+      sourceData.tradePlansByCampaignId
+        .get(campaign._id)
+        ?.sort(sortTradePlansByOrderThenNewest) ?? [];
 
     return {
       linkedTradePlans: linkedTradePlans.map((tradePlan) => {
@@ -571,7 +556,11 @@ export const getCampaignWorkspace = query({
           tradeCount: tradeStats.totalCount,
         };
       }),
-      summary: buildCampaignWorkspaceSummary(campaign, sourceData, linkedTradePlans),
+      summary: buildCampaignWorkspaceSummary(
+        campaign,
+        sourceData,
+        linkedTradePlans,
+      ),
     };
   },
 });

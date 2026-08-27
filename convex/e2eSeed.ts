@@ -275,7 +275,6 @@ async function upsertTrade(
     ownerId: string;
     portfolioId?: Id<"portfolios">;
     trade: SeedTradeFixture;
-    tradePlanId: Id<"tradePlans">;
   },
 ) {
   const existingTrade = (
@@ -285,9 +284,7 @@ async function upsertTrade(
       .collect()
   ).find(
     (trade) =>
-      trade.ticker === args.trade.ticker &&
-      trade.date === args.trade.date &&
-      trade.tradePlanId === args.tradePlanId,
+      trade.ticker === args.trade.ticker && trade.date === args.trade.date,
   );
 
   const patch = {
@@ -301,7 +298,6 @@ async function upsertTrade(
     side: args.trade.side,
     source: "manual" as const,
     ticker: args.trade.ticker,
-    tradePlanId: args.tradePlanId,
   };
 
   if (existingTrade) {
@@ -327,7 +323,6 @@ async function upsertInboxTrade(
     side: "buy" | "sell";
     source: "ibkr" | "kraken";
     ticker: string;
-    tradePlanId?: Id<"tradePlans">;
   },
 ) {
   const existingTrade = await ctx.db
@@ -353,7 +348,6 @@ async function upsertInboxTrade(
     source: args.source,
     status: "pending_review" as const,
     ticker: args.ticker,
-    tradePlanId: args.tradePlanId,
     validationErrors: [],
     validationWarnings: [],
   };
@@ -446,10 +440,6 @@ export const setupPreviewData = internalMutation({
         ownerId,
         portfolioId: trade.portfolio === "shared" ? portfolio._id : undefined,
         trade,
-        tradePlanId:
-          trade.tradePlan === "linked"
-            ? linkedTradePlan._id
-            : standaloneTradePlan._id,
       });
     }
 
@@ -773,7 +763,6 @@ export const seedTradePlanInboxScenarios = internalMutation({
       side: "sell",
       source: "kraken",
       ticker: standaloneTradePlan.instrumentSymbol,
-      tradePlanId: standaloneTradePlan._id,
     });
 
     return {

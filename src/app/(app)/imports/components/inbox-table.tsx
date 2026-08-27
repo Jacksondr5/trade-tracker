@@ -1,5 +1,5 @@
 import { useAction } from "convex/react";
-import { AlertTriangle, Check, FileText, Pencil, Plus } from "lucide-react";
+import { AlertTriangle, Check, Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   Badge,
@@ -23,21 +23,13 @@ import {
   KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME,
   isKrakenDefaultAccountId,
 } from "../../../../../shared/imports/constants";
-import { ImportPostDialog } from "../../trade-plans/ImportPostDialog";
-import type {
-  InboxTrade,
-  InboxTradePriceMapping,
-  OpenTradePlanOption,
-} from "../types";
+import type { InboxTrade, InboxTradePriceMapping } from "../types";
 import {
   formatCurrency,
   formatDate,
   isTradeReadyForAcceptance,
 } from "../utils";
-import {
-  EditTradeForm,
-  type EditTradeFormValues,
-} from "./edit-trade-form";
+import { EditTradeForm, type EditTradeFormValues } from "./edit-trade-form";
 
 interface PortfolioOption {
   _id: Id<"portfolios">;
@@ -46,13 +38,9 @@ interface PortfolioOption {
 
 interface InboxTableProps {
   accountLabelByKey: Map<string, string>;
-  campaigns:
-    | Array<{ _id: Id<"campaigns">; name: string; status: string }>
-    | undefined;
   editingTradeId: Id<"inboxTrades"> | null;
   editInitialValues: EditTradeFormValues;
   inlinePortfolioIds: Record<string, string>;
-  inlineTradePlanIds: Record<string, string>;
   inboxTrades: InboxTrade[] | undefined;
   priceMappingByInboxTradeId: Map<Id<"inboxTrades">, InboxTradePriceMapping>;
   onAccept: (inboxTradeId: Id<"inboxTrades">) => void;
@@ -63,24 +51,11 @@ interface InboxTableProps {
     inboxTradeId: Id<"inboxTrades">,
     value: string,
   ) => void;
-  onInlineTradePlanChange: (
-    inboxTradeId: Id<"inboxTrades">,
-    value: string,
-  ) => void;
-  onQuickCreateTradePlan: (
-    inboxTradeId: Id<"inboxTrades">,
-    args: {
-      name: string;
-      instrumentSymbol: string;
-      campaignId?: Id<"campaigns">;
-    },
-  ) => Promise<boolean>;
   onSaveEdit: (values: EditTradeFormValues) => Promise<void>;
-  openTradePlans: OpenTradePlanOption[] | undefined;
   portfolios: PortfolioOption[] | undefined;
 }
 
-const TOTAL_COLUMNS = 12;
+const TOTAL_COLUMNS = 11;
 const MAX_VALIDATION_BADGES = 2;
 
 interface ValidationOverflowIndicatorProps {
@@ -150,7 +125,7 @@ function SkeletonRow() {
   );
 }
 
-type RowStatus = "ready" | "missing-plan" | "needs-review";
+type RowStatus = "ready" | "needs-review";
 
 function isPriceMappingResolved(
   mapping: InboxTradePriceMapping | undefined,
@@ -161,7 +136,6 @@ function isPriceMappingResolved(
 function getRowStatus(
   trade: InboxTrade,
   hasPortfolio: boolean,
-  hasTradePlan: boolean,
   priceMapping: InboxTradePriceMapping | undefined,
 ): RowStatus {
   const hasErrors = trade.validationErrors.length > 0;
@@ -173,7 +147,6 @@ function getRowStatus(
     !isPriceMappingResolved(priceMapping)
   )
     return "needs-review";
-  if (!hasTradePlan) return "missing-plan";
   return "ready";
 }
 
@@ -199,7 +172,6 @@ function RowStatusDot({
 }) {
   const config = {
     ready: { color: "bg-grass-9", label: "Ready to accept" },
-    "missing-plan": { color: "bg-amber-9", label: "Missing trade plan" },
     "needs-review": { color: "bg-red-9", label: "Needs review" },
   }[status];
 
@@ -234,8 +206,7 @@ function PriceMappingPopover({
   const lastError =
     priceMapping.state === "needs_review" ? priceMapping.lastError : undefined;
   const showInstrumentControls =
-    priceMapping.state === "needs_review" ||
-    priceMapping.state === "resolved";
+    priceMapping.state === "needs_review" || priceMapping.state === "resolved";
 
   useEffect(() => {
     if (!open) return;
@@ -292,9 +263,9 @@ function PriceMappingPopover({
             Price mapping required
           </p>
           <p className="text-[11px] text-olive-11">
-            We couldn&apos;t auto-resolve <span className="font-mono">{ticker}</span>{" "}
-            against Twelve Data. Set the provider symbol manually to unblock
-            acceptance.
+            We couldn&apos;t auto-resolve{" "}
+            <span className="font-mono">{ticker}</span> against Twelve Data. Set
+            the provider symbol manually to unblock acceptance.
           </p>
           {lastError ? (
             <p className="text-[11px] text-red-11">{lastError}</p>
@@ -306,7 +277,7 @@ function PriceMappingPopover({
                 value={providerSymbol}
                 onChange={(e) => setProviderSymbolValue(e.target.value)}
                 placeholder="e.g. AAPL or AAPL.US"
-                className="h-7 w-full rounded-md border border-slate-6 bg-slate-3 px-2 text-xs text-slate-12 focus:outline-none focus:ring-1 focus:ring-blue-8"
+                className="h-7 w-full rounded-md border border-slate-6 bg-slate-3 px-2 text-xs text-slate-12 focus:ring-1 focus:ring-blue-8 focus:outline-none"
                 data-testid={`price-mapping-symbol-input-${inboxTradeId}`}
               />
               {error ? (
@@ -344,113 +315,11 @@ function PriceMappingPopover({
   );
 }
 
-function QuickCreatePopover({
-  campaigns,
-  defaultSymbol,
-  isLoading,
-  onCancel,
-  onCreate,
-  onImportFromPost,
-}: {
-  campaigns:
-    | Array<{ _id: Id<"campaigns">; name: string; status: string }>
-    | undefined;
-  defaultSymbol: string;
-  isLoading: boolean;
-  onCancel: () => void;
-  onCreate: (args: {
-    name: string;
-    instrumentSymbol: string;
-    campaignId?: Id<"campaigns">;
-  }) => void;
-  onImportFromPost: () => void;
-}) {
-  const [name, setName] = useState("");
-  const [instrument, setInstrument] = useState(defaultSymbol);
-  const [campaignId, setCampaignId] = useState("");
-
-  return (
-    <div className="flex flex-col gap-2">
-      <p className="text-xs font-medium text-olive-12">New trade plan</p>
-      <input
-        type="text"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="AAPL breakout setup"
-        className="h-7 w-full rounded-md border border-slate-6 bg-slate-3 px-2 text-xs text-slate-12 focus:outline-none focus:ring-1 focus:ring-blue-8"
-        data-testid="quick-create-name-input"
-      />
-      <input
-        type="text"
-        value={instrument}
-        onChange={(e) => setInstrument(e.target.value)}
-        placeholder="Symbol"
-        className="h-7 w-full rounded-md border border-slate-6 bg-slate-3 px-2 text-xs text-slate-12 focus:outline-none focus:ring-1 focus:ring-blue-8"
-        data-testid="quick-create-symbol-input"
-      />
-      <Select
-        dataTestId="quick-create-campaign-select"
-        size="dense"
-        surface="dense"
-        value={campaignId}
-        onChange={(e) => setCampaignId(e.target.value)}
-      >
-        <option value="">No campaign</option>
-        {campaigns?.map((c) => (
-          <option key={c._id} value={c._id}>
-            {c.name}
-          </option>
-        ))}
-      </Select>
-      <div className="flex gap-1">
-        <Button
-          dataTestId="quick-create-submit"
-          size="sm"
-          disabled={!name.trim() || !instrument.trim() || isLoading}
-          isLoading={isLoading}
-          onClick={() =>
-            onCreate({
-              name: name.trim(),
-              instrumentSymbol: instrument.trim(),
-              campaignId: campaignId
-                ? (campaignId as Id<"campaigns">)
-                : undefined,
-            })
-          }
-        >
-          Create trade plan
-        </Button>
-        <Button
-          dataTestId="quick-create-cancel"
-          variant="ghost"
-          size="sm"
-          onClick={onCancel}
-        >
-          Cancel
-        </Button>
-      </div>
-      <div className="border-t border-olive-6 pt-2">
-        <button
-          type="button"
-          data-testid="quick-create-import-from-post"
-          onClick={onImportFromPost}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-olive-11 hover:bg-olive-4 hover:text-olive-12"
-        >
-          <FileText className="h-3.5 w-3.5" />
-          Import from post
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export function InboxTable({
   accountLabelByKey,
-  campaigns,
   editingTradeId,
   editInitialValues,
   inlinePortfolioIds,
-  inlineTradePlanIds,
   inboxTrades,
   priceMappingByInboxTradeId,
   onAccept,
@@ -458,19 +327,9 @@ export function InboxTable({
   onDelete,
   onEdit,
   onInlinePortfolioChange,
-  onInlineTradePlanChange,
-  onQuickCreateTradePlan,
   onSaveEdit,
-  openTradePlans,
   portfolios,
 }: InboxTableProps) {
-  const [quickCreateOpenForTradeId, setQuickCreateOpenForTradeId] =
-    useState<Id<"inboxTrades"> | null>(null);
-  const [quickCreateLoadingByTradeId, setQuickCreateLoadingByTradeId] =
-    useState<Record<string, boolean>>({});
-  const [importDialogTradeId, setImportDialogTradeId] =
-    useState<Id<"inboxTrades"> | null>(null);
-
   if (inboxTrades === undefined) {
     return (
       <div className="overflow-visible rounded-lg border border-slate-6">
@@ -487,7 +346,6 @@ export function InboxTable({
                 "Qty",
                 "Value",
                 "Account",
-                "Trade Plan",
                 "Portfolio",
                 "Actions",
               ].map((header) => (
@@ -521,31 +379,6 @@ export function InboxTable({
     );
   }
 
-  const handleQuickCreate = async (
-    tradeId: Id<"inboxTrades">,
-    args: {
-      name: string;
-      instrumentSymbol: string;
-      campaignId?: Id<"campaigns">;
-    },
-  ) => {
-    setQuickCreateLoadingByTradeId((prev) => ({
-      ...prev,
-      [tradeId]: true,
-    }));
-    try {
-      const created = await onQuickCreateTradePlan(tradeId, args);
-      if (created) {
-        setQuickCreateOpenForTradeId(null);
-      }
-    } finally {
-      setQuickCreateLoadingByTradeId((prev) => ({
-        ...prev,
-        [tradeId]: false,
-      }));
-    }
-  };
-
   return (
     <div className="overflow-visible rounded-lg border border-slate-6">
       <table className="w-full table-auto">
@@ -577,9 +410,6 @@ export function InboxTable({
               Account
             </th>
             <th className="px-4 py-2 text-left text-xs font-medium text-slate-11">
-              Trade Plan
-            </th>
-            <th className="px-4 py-2 text-left text-xs font-medium text-slate-11">
               Portfolio
             </th>
             <th className="px-4 py-2 text-right text-xs font-medium text-slate-11">
@@ -601,16 +431,10 @@ export function InboxTable({
               <InboxRow
                 key={trade._id}
                 accountFriendlyName={accountFriendlyName ?? null}
-                campaigns={campaigns}
                 editInitialValues={editInitialValues}
                 inlinePortfolioId={inlinePortfolioIds[trade._id] ?? ""}
-                inlineTradePlanId={inlineTradePlanIds[trade._id] ?? ""}
                 isEditing={isEditing}
                 priceMapping={priceMappingByInboxTradeId.get(trade._id)}
-                isQuickCreateLoading={Boolean(
-                  quickCreateLoadingByTradeId[trade._id],
-                )}
-                isQuickCreateOpen={quickCreateOpenForTradeId === trade._id}
                 onAccept={() => onAccept(trade._id)}
                 onCancelEdit={onCancelEdit}
                 onDelete={() => onDelete(trade._id)}
@@ -618,28 +442,7 @@ export function InboxTable({
                 onInlinePortfolioChange={(v) =>
                   onInlinePortfolioChange(trade._id, v)
                 }
-                onInlineTradePlanChange={(v) =>
-                  onInlineTradePlanChange(trade._id, v)
-                }
-                onQuickCreate={(args) =>
-                  void handleQuickCreate(trade._id, args)
-                }
-                onQuickCreateCancel={() =>
-                  setQuickCreateOpenForTradeId(null)
-                }
-                onQuickCreateToggle={() =>
-                  setQuickCreateOpenForTradeId(
-                    quickCreateOpenForTradeId === trade._id
-                      ? null
-                      : trade._id,
-                  )
-                }
-                onImportFromPost={() => {
-                  setQuickCreateOpenForTradeId(null);
-                  setImportDialogTradeId(trade._id);
-                }}
                 onSaveEdit={onSaveEdit}
-                openTradePlans={openTradePlans}
                 portfolios={portfolios}
                 trade={trade}
               />
@@ -647,92 +450,46 @@ export function InboxTable({
           })}
         </tbody>
       </table>
-      <ImportPostDialog
-        inboxTradeId={importDialogTradeId ?? undefined}
-        mode="create"
-        open={importDialogTradeId !== null}
-        onOpenChange={(open) => {
-          if (!open) setImportDialogTradeId(null);
-        }}
-      />
     </div>
   );
 }
 
 function InboxRow({
   accountFriendlyName,
-  campaigns,
   editInitialValues,
   inlinePortfolioId,
-  inlineTradePlanId,
   isEditing,
-  isQuickCreateLoading,
-  isQuickCreateOpen,
   onAccept,
   onCancelEdit,
   onDelete,
   onEdit,
-  onImportFromPost,
   onInlinePortfolioChange,
-  onInlineTradePlanChange,
-  onQuickCreate,
-  onQuickCreateCancel,
-  onQuickCreateToggle,
   onSaveEdit,
-  openTradePlans,
   portfolios,
   priceMapping,
   trade,
 }: {
   accountFriendlyName: string | null;
-  campaigns:
-    | Array<{ _id: Id<"campaigns">; name: string; status: string }>
-    | undefined;
   editInitialValues: EditTradeFormValues;
   inlinePortfolioId: string;
-  inlineTradePlanId: string;
   isEditing: boolean;
-  isQuickCreateLoading: boolean;
-  isQuickCreateOpen: boolean;
   onAccept: () => void;
   onCancelEdit: () => void;
   onDelete: () => void;
   onEdit: () => void;
-  onImportFromPost: () => void;
   onInlinePortfolioChange: (value: string) => void;
-  onInlineTradePlanChange: (value: string) => void;
-  onQuickCreate: (args: {
-    name: string;
-    instrumentSymbol: string;
-    campaignId?: Id<"campaigns">;
-  }) => void;
-  onQuickCreateCancel: () => void;
-  onQuickCreateToggle: () => void;
   onSaveEdit: (values: EditTradeFormValues) => Promise<void>;
-  openTradePlans: OpenTradePlanOption[] | undefined;
-  portfolios:
-    | Array<{ _id: Id<"portfolios">; name: string }>
-    | undefined;
+  portfolios: Array<{ _id: Id<"portfolios">; name: string }> | undefined;
   priceMapping: InboxTradePriceMapping | undefined;
   trade: InboxTrade;
 }) {
   const hasPortfolio = inlinePortfolioId !== "";
-  const hasTradePlan = inlineTradePlanId !== "";
   const acceptable = canAcceptTrade(trade, hasPortfolio, priceMapping);
-  const rowStatus = getRowStatus(trade, hasPortfolio, hasTradePlan, priceMapping);
+  const rowStatus = getRowStatus(trade, hasPortfolio, priceMapping);
   const priceMappingBlocking = !isPriceMappingResolved(priceMapping);
   const displayWarnings = filterLegacyStatementWarnings(
     trade.validationWarnings,
   );
-  const ticker = trade.ticker?.toUpperCase();
-  const matchingPlans =
-    openTradePlans?.filter(
-      (p) => p.instrumentSymbol.toUpperCase() === ticker,
-    ) ?? [];
-  const otherPlans =
-    openTradePlans?.filter(
-      (p) => p.instrumentSymbol.toUpperCase() !== ticker,
-    ) ?? [];
 
   return (
     <>
@@ -749,13 +506,15 @@ function InboxRow({
           testId={`inbox-row-status-${trade._id}`}
         />
         {/* Date */}
-        <td className="whitespace-nowrap px-4 py-2 text-sm text-slate-12">
+        <td className="px-4 py-2 text-sm whitespace-nowrap text-slate-12">
           {trade.date !== undefined ? formatDate(trade.date) : "---"}
         </td>
         {/* Ticker + validation */}
-        <td className="whitespace-nowrap px-4 py-2 text-sm font-medium text-slate-12">
+        <td className="px-4 py-2 text-sm font-medium whitespace-nowrap text-slate-12">
           {trade.ticker ?? "---"}
-          {priceMappingBlocking && priceMapping !== undefined && trade.ticker ? (
+          {priceMappingBlocking &&
+          priceMapping !== undefined &&
+          trade.ticker ? (
             <div className="mt-1">
               <PriceMappingPopover
                 inboxTradeId={trade._id}
@@ -799,7 +558,7 @@ function InboxRow({
           )}
         </td>
         {/* Side */}
-        <td className="whitespace-nowrap px-4 py-2 text-sm">
+        <td className="px-4 py-2 text-sm whitespace-nowrap">
           {trade.side ? (
             <Badge variant={trade.side === "buy" ? "success" : "danger"}>
               {trade.side.toUpperCase()}
@@ -809,11 +568,9 @@ function InboxRow({
           )}
         </td>
         {/* Direction */}
-        <td className="whitespace-nowrap px-4 py-2 text-sm">
+        <td className="px-4 py-2 text-sm whitespace-nowrap">
           {trade.direction ? (
-            <Badge
-              variant={trade.direction === "long" ? "info" : "warning"}
-            >
+            <Badge variant={trade.direction === "long" ? "info" : "warning"}>
               {trade.direction.toUpperCase()}
             </Badge>
           ) : (
@@ -821,21 +578,21 @@ function InboxRow({
           )}
         </td>
         {/* Price */}
-        <td className="whitespace-nowrap px-4 py-2 text-right text-sm text-slate-12">
+        <td className="px-4 py-2 text-right text-sm whitespace-nowrap text-slate-12">
           {trade.price !== undefined ? formatCurrency(trade.price) : "---"}
         </td>
         {/* Qty */}
-        <td className="whitespace-nowrap px-4 py-2 text-right text-sm text-slate-12">
+        <td className="px-4 py-2 text-right text-sm whitespace-nowrap text-slate-12">
           {trade.quantity !== undefined ? trade.quantity.toFixed(1) : "---"}
         </td>
         {/* Value */}
-        <td className="whitespace-nowrap px-4 py-2 text-right text-sm text-slate-12">
+        <td className="px-4 py-2 text-right text-sm whitespace-nowrap text-slate-12">
           {trade.price !== undefined && trade.quantity !== undefined
             ? formatCurrency(trade.price * trade.quantity)
             : "---"}
         </td>
         {/* Account */}
-        <td className="whitespace-nowrap px-4 py-2 text-sm text-slate-11">
+        <td className="px-4 py-2 text-sm whitespace-nowrap text-slate-11">
           {trade.brokerageAccountId
             ? accountFriendlyName
               ? isKrakenDefaultAccountId(trade.brokerageAccountId)
@@ -845,77 +602,6 @@ function InboxRow({
                 ? KRAKEN_DEFAULT_ACCOUNT_FRIENDLY_NAME
                 : trade.brokerageAccountId
             : "---"}
-        </td>
-        {/* Trade Plan */}
-        <td className="px-4 py-2 text-sm">
-          <div className="flex items-center gap-1">
-            <Select
-              dataTestId={`trade-plan-select-${trade._id}`}
-              size="dense"
-              surface="dense"
-              className="min-w-[120px]"
-              value={inlineTradePlanId}
-              onChange={(e) => onInlineTradePlanChange(e.target.value)}
-            >
-              <option value="">None</option>
-              {matchingPlans.length > 0 && (
-                <optgroup label="Matching plans">
-                  {matchingPlans.map((plan) => (
-                    <option key={plan._id} value={plan._id}>
-                      {plan.name} ({plan.instrumentSymbol})
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-              {otherPlans.length > 0 && (
-                <optgroup
-                  label={
-                    matchingPlans.length > 0 ? "Other plans" : "Trade plans"
-                  }
-                >
-                  {otherPlans.map((plan) => (
-                    <option key={plan._id} value={plan._id}>
-                      {plan.name} ({plan.instrumentSymbol})
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-            </Select>
-            <Popover
-              open={isQuickCreateOpen}
-              onOpenChange={(open) => {
-                if (!open) onQuickCreateCancel();
-                else onQuickCreateToggle();
-              }}
-            >
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Quick create trade plan"
-                  title="New trade plan"
-                  className="shrink-0 rounded p-1 text-olive-10 hover:bg-olive-4 hover:text-olive-12"
-                  data-testid={`quick-create-trigger-${trade._id}`}
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent
-                align="start"
-                side="right"
-                className="w-64"
-                data-testid={`quick-create-popover-${trade._id}`}
-              >
-                <QuickCreatePopover
-                  campaigns={campaigns}
-                  defaultSymbol={trade.ticker ?? ""}
-                  isLoading={isQuickCreateLoading}
-                  onCancel={onQuickCreateCancel}
-                  onCreate={onQuickCreate}
-                  onImportFromPost={onImportFromPost}
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
         </td>
         {/* Portfolio */}
         <td className="px-4 py-2 text-sm">
@@ -937,7 +623,7 @@ function InboxRow({
           </Select>
         </td>
         {/* Actions */}
-        <td className="whitespace-nowrap px-4 py-2 text-right text-sm">
+        <td className="px-4 py-2 text-right text-sm whitespace-nowrap">
           <div className="flex items-center justify-end gap-1">
             <button
               type="button"

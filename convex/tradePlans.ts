@@ -392,21 +392,6 @@ function buildTradePlanWorkspaceSourceData(args: {
     Id<"tradePlans">,
     { latestTradeDate: number | null; tradeCount: number }
   >();
-  for (const trade of args.trades) {
-    if (!trade.tradePlanId) {
-      continue;
-    }
-
-    const existing =
-      tradeStatsByPlanId.get(trade.tradePlanId) ??
-      createEmptyTradeExecutionStats();
-    existing.tradeCount += 1;
-    existing.latestTradeDate =
-      existing.latestTradeDate === null || trade.date > existing.latestTradeDate
-        ? trade.date
-        : existing.latestTradeDate;
-    tradeStatsByPlanId.set(trade.tradePlanId, existing);
-  }
 
   const suggestedPendingCountBySymbol = new Map<string, number>();
   const pendingStatsByPlanId = new Map<
@@ -414,15 +399,6 @@ function buildTradePlanWorkspaceSourceData(args: {
     { pendingAssignedCount: number; pendingSuggestedCount: number }
   >();
   for (const inboxTrade of args.inboxTrades) {
-    if (inboxTrade.tradePlanId) {
-      const existing =
-        pendingStatsByPlanId.get(inboxTrade.tradePlanId) ??
-        createEmptyPendingStats();
-      existing.pendingAssignedCount += 1;
-      pendingStatsByPlanId.set(inboxTrade.tradePlanId, existing);
-      continue;
-    }
-
     if (!inboxTrade.ticker) {
       continue;
     }
@@ -447,13 +423,9 @@ async function loadTradePlanWorkspaceSourceData(
   ctx: QueryCtx,
   ownerId: string,
 ) {
-  const [campaigns, trades, watchedItems, inboxTrades] = await Promise.all([
+  const [campaigns, watchedItems, inboxTrades] = await Promise.all([
     ctx.db
       .query("campaigns")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect(),
-    ctx.db
-      .query("trades")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
       .collect(),
     ctx.db
@@ -471,7 +443,7 @@ async function loadTradePlanWorkspaceSourceData(
   return buildTradePlanWorkspaceSourceData({
     campaigns,
     inboxTrades,
-    trades,
+    trades: [],
     watchedTradePlanIds: watchedItems
       .filter(
         (watchedItem) =>
@@ -487,61 +459,38 @@ async function loadTradePlanWorkspaceSourceDataForPlan(
   ownerId: string,
   tradePlan: TradePlanDoc,
 ) {
-  const [
-    campaigns,
-    trades,
-    watchlistItems,
-    assignedInboxTrades,
-    suggestedInboxTrades,
-  ] = await Promise.all([
-    tradePlan.campaignId ? [await ctx.db.get(tradePlan.campaignId)] : [],
-    ctx.db
-      .query("trades")
-      .withIndex("by_owner_tradePlanId", (q) =>
-        q.eq("ownerId", ownerId).eq("tradePlanId", tradePlan._id),
-      )
-      .collect(),
-    ctx.db
-      .query("watchlist")
-      .withIndex("by_owner_tradePlanId", (q) =>
-        q.eq("ownerId", ownerId).eq("tradePlanId", tradePlan._id),
-      )
-      .collect(),
-    ctx.db
-      .query("inboxTrades")
-      .withIndex("by_owner_status_tradePlanId", (q) =>
-        q
-          .eq("ownerId", ownerId)
-          .eq("status", "pending_review")
-          .eq("tradePlanId", tradePlan._id),
-      )
-      .collect(),
-    ctx.db
-      .query("inboxTrades")
-      .withIndex("by_owner_status_ticker", (q) =>
-        q
-          .eq("ownerId", ownerId)
-          .eq("status", "pending_review")
-          .eq("ticker", tradePlan.instrumentSymbol.toUpperCase()),
-      )
-      .collect(),
-  ]);
-
-  const suggestedUnassignedInboxTrades = suggestedInboxTrades.filter(
-    (inboxTrade) => inboxTrade.tradePlanId === undefined,
-  );
+  const [campaigns, trades, watchlistItems, suggestedInboxTrades] =
+    await Promise.all([
+      tradePlan.campaignId ? [await ctx.db.get(tradePlan.campaignId)] : [],
+      Promise.resolve([] as Doc<"trades">[]),
+      ctx.db
+        .query("watchlist")
+        .withIndex("by_owner_tradePlanId", (q) =>
+          q.eq("ownerId", ownerId).eq("tradePlanId", tradePlan._id),
+        )
+        .collect(),
+      ctx.db
+        .query("inboxTrades")
+        .withIndex("by_owner_status_ticker", (q) =>
+          q
+            .eq("ownerId", ownerId)
+            .eq("status", "pending_review")
+            .eq("ticker", tradePlan.instrumentSymbol.toUpperCase()),
+        )
+        .collect(),
+    ]);
 
   return {
-    assignedInboxTrades,
+    assignedInboxTrades: [] as InboxTradeDoc[],
     sourceData: buildTradePlanWorkspaceSourceData({
       campaigns: campaigns.filter((campaign): campaign is CampaignDoc =>
         Boolean(campaign),
       ),
-      inboxTrades: [...assignedInboxTrades, ...suggestedUnassignedInboxTrades],
+      inboxTrades: suggestedInboxTrades,
       trades,
       watchedTradePlanIds: watchlistItems.length > 0 ? [tradePlan._id] : [],
     }),
-    suggestedInboxTrades: suggestedUnassignedInboxTrades,
+    suggestedInboxTrades,
   };
 }
 
@@ -793,12 +742,7 @@ export const getTradePlanWorkspace = query({
           q.eq("ownerId", ownerId).eq("tradePlanId", args.tradePlanId),
         )
         .collect(),
-      ctx.db
-        .query("trades")
-        .withIndex("by_owner_tradePlanId", (q) =>
-          q.eq("ownerId", ownerId).eq("tradePlanId", args.tradePlanId),
-        )
-        .collect(),
+      Promise.resolve([] as Doc<"trades">[]),
       ctx.db
         .query("accountMappings")
         .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
@@ -833,12 +777,10 @@ export const getTradePlanWorkspace = query({
         inboxTrade,
         matchType: "assigned" as const,
       })),
-      ...suggestedInboxTrades
-        .filter((inboxTrade) => inboxTrade.tradePlanId === undefined)
-        .map((inboxTrade) => ({
-          inboxTrade,
-          matchType: "suggested" as const,
-        })),
+      ...suggestedInboxTrades.map((inboxTrade) => ({
+        inboxTrade,
+        matchType: "suggested" as const,
+      })),
     ].sort((a, b) => sortPendingInboxTrades(a.inboxTrade, b.inboxTrade));
 
     return {
