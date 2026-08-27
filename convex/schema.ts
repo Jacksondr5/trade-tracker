@@ -338,6 +338,8 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_ticker", ["ownerId", "ticker"])
+    .index("by_owner_ticker_noteDate", ["ownerId", "ticker", "noteDate"])
+    .index("by_owner_noteDate", ["ownerId", "noteDate"])
     .index("by_owner_campaignId", ["ownerId", "campaignId"])
     .index("by_owner_tradePlanId", ["ownerId", "tradePlanId"]),
 
