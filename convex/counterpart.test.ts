@@ -668,6 +668,58 @@ describe("counterpart service surface", () => {
     ).toBe("invalid_note_ids");
   });
 
+  it("unions surfaced fills on a create-check-in retry", async () => {
+    const [tradeA, tradeB] = await t.run(async (ctx) => {
+      return await Promise.all(
+        ["A", "B"].map((ticker, index) =>
+          ctx.db.insert("trades", {
+            assetType: "stock",
+            date: Date.UTC(2026, 4, 14, 15 + index, 0, 0),
+            direction: "long",
+            ownerId,
+            price: 100 + index,
+            quantity: 1,
+            side: "buy",
+            ticker,
+          }),
+        ),
+      );
+    });
+    const first = await t.mutation(internal.counterpart.createCheckIn, {
+      date: "2026-05-15",
+      kind: "mirror",
+      ownerId,
+      surfacedTradeIds: [tradeA],
+      window: "late_morning",
+    });
+    const retry = await t.mutation(internal.counterpart.createCheckIn, {
+      date: "2026-05-15",
+      kind: "mirror",
+      ownerId,
+      surfacedTradeIds: [tradeA, tradeB],
+      window: "late_morning",
+    });
+    expect(retry).toEqual({ checkInId: first.checkInId, created: false });
+
+    const storedAfterRetry = await t.run(async (ctx) => {
+      return await ctx.db.get(first.checkInId);
+    });
+    expect(storedAfterRetry?.surfacedTradeIds).toEqual([tradeA, tradeB]);
+
+    expect(
+      await t.mutation(internal.counterpart.recordCheckInResponse, {
+        checkInId: first.checkInId,
+        ownerId,
+        respondedAt: now,
+      }),
+    ).toBe("recorded");
+    const daily = await t.query(internal.counterpart.getDailyContext, {
+      now,
+      ownerId,
+    });
+    expect(daily.undiscussedFills).toEqual([]);
+  });
+
   it("finds an existing check-in window beyond other same-day rows", async () => {
     const existingAfternoonId = await t.run(async (ctx) => {
       for (let index = 0; index < 4; index += 1) {

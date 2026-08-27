@@ -1181,7 +1181,20 @@ export const createCheckIn = internalMutation({
           .eq("window", args.window),
       )
       .first();
-    if (existing) return { checkInId: existing._id, created: false };
+    if (existing) {
+      const surfacedTradeIds = [
+        ...new Set([
+          ...(existing.surfacedTradeIds ?? []),
+          ...(args.surfacedTradeIds ?? []),
+        ]),
+      ];
+      if (
+        surfacedTradeIds.length !== (existing.surfacedTradeIds?.length ?? 0)
+      ) {
+        await ctx.db.patch(existing._id, { surfacedTradeIds });
+      }
+      return { checkInId: existing._id, created: false };
+    }
 
     const checkInId = await ctx.db.insert("checkIns", {
       date: args.date,
