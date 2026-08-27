@@ -20,7 +20,7 @@ const MAX_POSITION_TRADES = 5_000;
 const MAX_PENDING_FILLS = 100;
 const MAX_RECENT_ACCEPTED_FILLS = 25;
 const MAX_CHECK_INS_IN_RECENT_WINDOW = 100;
-const MAX_SYNC_RUNS_TO_INSPECT = 100;
+const MAX_TODAY_CHECK_INS = 25;
 const MAX_NOTES_FOR_EXACT_COUNT = 5_000;
 const MAX_RECONCILIATION_ISSUES = 500;
 const MAX_BROKER_SNAPSHOT_ROWS = 1_000;
@@ -100,10 +100,17 @@ const notePageValidator = v.object({
 
 const checkInHistoryValidator = v.object({
   checkInId: v.id("checkIns"),
+  deliveredAt: v.union(v.number(), v.null()),
   kind: checkInKindValidator,
   respondedAt: v.union(v.number(), v.null()),
   sentAt: v.number(),
   window: checkInWindowValidator,
+});
+
+const checkInValidator = checkInHistoryValidator.extend({
+  date: v.string(),
+  noteIds: v.array(v.id("notes")),
+  surfacedTradeIds: v.array(v.string()),
 });
 
 const skippedOrderValidator = v.object({
@@ -134,34 +141,26 @@ const syncStatusValidator = v.union(
   }),
 );
 
-const reconciliationIssueValidator = v.object({
-  actualQuantity: v.union(v.number(), v.null()),
-  expectedQuantity: v.union(v.number(), v.null()),
-  issueType: v.union(
-    v.literal("position_mismatch"),
-    v.literal("missing_local_position"),
-    v.literal("missing_brokerage_position"),
-    v.literal("cash_mismatch"),
-    v.literal("pending_import_review"),
-  ),
-  message: v.string(),
-  reportDate: v.string(),
-  ticker: v.union(v.string(), v.null()),
-});
+const reconciliationIssueTypeValidator = v.union(
+  v.literal("position_mismatch"),
+  v.literal("missing_local_position"),
+  v.literal("missing_brokerage_position"),
+  v.literal("cash_mismatch"),
+  v.literal("pending_import_review"),
+);
 
 const instrumentReconciliationIssueValidator = v.object({
   actualQuantity: v.union(v.number(), v.null()),
   expectedQuantity: v.union(v.number(), v.null()),
-  issueType: v.union(
-    v.literal("position_mismatch"),
-    v.literal("missing_local_position"),
-    v.literal("missing_brokerage_position"),
-    v.literal("cash_mismatch"),
-    v.literal("pending_import_review"),
-  ),
+  issueType: reconciliationIssueTypeValidator,
   message: v.string(),
   reportDate: v.string(),
 });
+
+const reconciliationIssueValidator =
+  instrumentReconciliationIssueValidator.extend({
+    ticker: v.union(v.string(), v.null()),
+  });
 
 function easternMidnight(date: string): number {
   const timestamp = parseIbkrEasternTimestamp(
@@ -245,35 +244,50 @@ function reconciliationIssueFromDocument(
   issue: Doc<"brokerageReconciliationIssues">,
 ) {
   return {
+    ...instrumentReconciliationIssueFromDocument(issue),
+    ticker: issue.ticker?.toUpperCase() ?? null,
+  };
+}
+
+function instrumentReconciliationIssueFromDocument(
+  issue: Doc<"brokerageReconciliationIssues">,
+) {
+  return {
     actualQuantity: issue.actualQuantity ?? null,
     expectedQuantity: issue.expectedQuantity ?? null,
     issueType: issue.issueType,
     message: issue.message,
     reportDate: issue.reportDate,
-    ticker: issue.ticker?.toUpperCase() ?? null,
   };
 }
 
-function parseSkippedOrders(warnings: string[]) {
+function partitionSyncWarnings(warnings: string[]) {
   const prefix = "Skipped IBKR Order ";
-  return warnings.flatMap((warning) => {
-    if (!warning.startsWith(prefix)) return [];
+  const skippedOrders: Array<{ reason: string; ticker: string | null }> = [];
+  const remainingWarnings: string[] = [];
+  for (const warning of warnings) {
+    if (!warning.startsWith(prefix)) {
+      remainingWarnings.push(warning);
+      continue;
+    }
     const separatorIndex = warning.indexOf(": ", prefix.length);
-    if (separatorIndex === -1) return [];
+    if (separatorIndex === -1) {
+      remainingWarnings.push(warning);
+      continue;
+    }
     const label = warning.slice(prefix.length, separatorIndex);
     const tickerMatch = /\(([^()]*)\)$/.exec(label);
-    return [
-      {
-        reason: warning.slice(separatorIndex + 2),
-        ticker: tickerMatch?.[1]?.trim().toUpperCase() || null,
-      },
-    ];
-  });
+    skippedOrders.push({
+      reason: warning.slice(separatorIndex + 2),
+      ticker: tickerMatch?.[1]?.trim().toUpperCase() || null,
+    });
+  }
+  return { skippedOrders, warnings: remainingWarnings };
 }
 
 function syncStatusFromRun(run: Doc<"brokerageSyncRuns"> | undefined) {
   if (!run) return null;
-  const warnings = run.warnings ?? [];
+  const { skippedOrders, warnings } = partitionSyncWarnings(run.warnings ?? []);
   return {
     completedAt: run.completedAt ?? null,
     errorMessage: run.errorMessage ?? null,
@@ -281,30 +295,33 @@ function syncStatusFromRun(run: Doc<"brokerageSyncRuns"> | undefined) {
     reconciliationIssueCount: run.reconciliationIssueCount,
     reportDate: run.reportDate,
     skippedDuplicateTrades: run.skippedDuplicateTrades,
-    skippedOrders: parseSkippedOrders(warnings),
+    skippedOrders,
     status: run.status,
     warnings,
   };
 }
 
-async function getRecentActivityRuns(ctx: QueryCtx, ownerId: string) {
-  const runs = await ctx.db
+async function getLatestActivityRun(ctx: QueryCtx, ownerId: string) {
+  return await ctx.db
     .query("brokerageSyncRuns")
-    .withIndex("by_ownerId_and_startedAt", (q) => q.eq("ownerId", ownerId))
+    .withIndex("by_ownerId_and_reportType_and_startedAt", (q) =>
+      q.eq("ownerId", ownerId).eq("reportType", "activity"),
+    )
     .order("desc")
-    .take(MAX_SYNC_RUNS_TO_INSPECT);
-  return runs.filter((run) => run.reportType === "activity");
+    .first();
 }
 
 async function getLatestSuccessfulActivityRun(ctx: QueryCtx, ownerId: string) {
-  const succeededRuns = await ctx.db
+  return await ctx.db
     .query("brokerageSyncRuns")
-    .withIndex("by_ownerId_and_status_and_updatedAt", (q) =>
-      q.eq("ownerId", ownerId).eq("status", "succeeded"),
+    .withIndex("by_ownerId_and_reportType_and_status_and_updatedAt", (q) =>
+      q
+        .eq("ownerId", ownerId)
+        .eq("reportType", "activity")
+        .eq("status", "succeeded"),
     )
     .order("desc")
-    .take(MAX_SYNC_RUNS_TO_INSPECT);
-  return succeededRuns.find((run) => run.reportType === "activity");
+    .first();
 }
 
 async function getPositionTradesOrThrow(ctx: QueryCtx, ownerId: string) {
@@ -318,6 +335,38 @@ async function getPositionTradesOrThrow(ctx: QueryCtx, ownerId: string) {
     );
   }
   return trades;
+}
+
+async function getRecentInboxTrades(
+  ctx: QueryCtx,
+  ownerId: string,
+  startTimestamp: number,
+  endTimestamp: number,
+) {
+  const datedRows = await ctx.db
+    .query("inboxTrades")
+    .withIndex("by_owner_status_date", (q) =>
+      q
+        .eq("ownerId", ownerId)
+        .eq("status", "pending_review")
+        .gte("date", startTimestamp)
+        .lt("date", endTimestamp),
+    )
+    .order("desc")
+    .take(MAX_RECENT_FILLS_PER_TABLE);
+  const remaining = MAX_RECENT_FILLS_PER_TABLE - datedRows.length;
+  if (remaining === 0) return datedRows;
+
+  const undatedRows = await ctx.db
+    .query("inboxTrades")
+    .withIndex("by_owner_status_date", (q) =>
+      q
+        .eq("ownerId", ownerId)
+        .eq("status", "pending_review")
+        .eq("date", undefined),
+    )
+    .take(remaining);
+  return [...datedRows, ...undatedRows];
 }
 
 async function getOpenReconciliationIssuesOrThrow(
@@ -343,6 +392,9 @@ async function getOwnerNotesForExactCountOrThrow(
   ctx: QueryCtx,
   ownerId: string,
 ) {
+  // Daily note summaries require exact per-ticker counts. Fail closed instead
+  // of silently returning partial counts if an owner's note history exceeds
+  // the intentionally bounded read ceiling.
   const notes = await ctx.db
     .query("notes")
     .withIndex("by_owner_noteDate", (q) => q.eq("ownerId", ownerId))
@@ -356,18 +408,45 @@ async function getOwnerNotesForExactCountOrThrow(
   return notes;
 }
 
-async function areNoteIdsValidForOwner(
+async function normalizeNoteIdsForOwner(
   ctx: QueryCtx | MutationCtx,
   ownerId: string,
   noteIds: string[],
 ) {
+  const normalizedIds: Id<"notes">[] = [];
   for (const noteId of noteIds) {
     const normalized = ctx.db.normalizeId("notes", noteId);
-    if (!normalized) return false;
+    if (!normalized) return null;
     const note = await ctx.db.get(normalized);
-    if (!note || note.ownerId !== ownerId) return false;
+    if (!note || note.ownerId !== ownerId) return null;
+    normalizedIds.push(normalized);
   }
-  return true;
+  return normalizedIds;
+}
+
+async function getOwnedCheckIn(
+  ctx: QueryCtx | MutationCtx,
+  ownerId: string,
+  checkInId: string,
+) {
+  const normalized = ctx.db.normalizeId("checkIns", checkInId);
+  if (!normalized) return null;
+  const checkIn = await ctx.db.get(normalized);
+  return checkIn?.ownerId === ownerId ? checkIn : null;
+}
+
+function checkInFromDocument(checkIn: Doc<"checkIns">) {
+  return {
+    checkInId: checkIn._id,
+    date: checkIn.date,
+    deliveredAt: checkIn.deliveredAt ?? null,
+    kind: checkIn.kind,
+    noteIds: checkIn.noteIds ?? [],
+    respondedAt: checkIn.respondedAt ?? null,
+    sentAt: checkIn.sentAt,
+    surfacedTradeIds: checkIn.surfacedTradeIds ?? [],
+    window: checkIn.window,
+  };
 }
 
 function dateBounds(
@@ -380,6 +459,30 @@ function dateBounds(
       : undefined,
     startTimestamp: startDate ? easternMidnight(startDate) : undefined,
   };
+}
+
+function applyDateBounds<T>(
+  bounds: ReturnType<typeof dateBounds>,
+  ranges: {
+    all: () => T;
+    endingBefore: (endTimestamp: number) => T;
+    startingAt: (startTimestamp: number) => T;
+    within: (startTimestamp: number, endTimestamp: number) => T;
+  },
+): T {
+  if (
+    bounds.startTimestamp !== undefined &&
+    bounds.endTimestamp !== undefined
+  ) {
+    return ranges.within(bounds.startTimestamp, bounds.endTimestamp);
+  }
+  if (bounds.startTimestamp !== undefined) {
+    return ranges.startingAt(bounds.startTimestamp);
+  }
+  if (bounds.endTimestamp !== undefined) {
+    return ranges.endingBefore(bounds.endTimestamp);
+  }
+  return ranges.all();
 }
 
 export const getDailyContext = internalQuery({
@@ -411,8 +514,7 @@ export const getDailyContext = internalQuery({
       recentInboxTrades,
       positionTrades,
       recentCheckIns,
-      todayCheckIns,
-      activityRuns,
+      latestActivityRun,
       ownerNotes,
     ] = await Promise.all([
       ctx.db
@@ -425,32 +527,32 @@ export const getDailyContext = internalQuery({
         )
         .order("desc")
         .take(MAX_RECENT_FILLS_PER_TABLE),
-      ctx.db
-        .query("inboxTrades")
-        .withIndex("by_owner_date", (q) =>
-          q
-            .eq("ownerId", args.ownerId)
-            .gte("date", startTimestamp)
-            .lt("date", endTimestamp),
-        )
-        .order("desc")
-        .take(MAX_RECENT_FILLS_PER_TABLE),
+      getRecentInboxTrades(ctx, args.ownerId, startTimestamp, endTimestamp),
       getPositionTradesOrThrow(ctx, args.ownerId),
       ctx.db
         .query("checkIns")
         .withIndex("by_owner_date", (q) =>
           q.eq("ownerId", args.ownerId).gte("date", startDate),
         )
-        .take(MAX_CHECK_INS_IN_RECENT_WINDOW),
-      ctx.db
-        .query("checkIns")
-        .withIndex("by_owner_date", (q) =>
-          q.eq("ownerId", args.ownerId).eq("date", today),
-        )
-        .take(3),
-      getRecentActivityRuns(ctx, args.ownerId),
+        .order("desc")
+        .take(MAX_CHECK_INS_IN_RECENT_WINDOW + 1),
+      getLatestActivityRun(ctx, args.ownerId),
       getOwnerNotesForExactCountOrThrow(ctx, args.ownerId),
     ]);
+
+    if (recentCheckIns.length > MAX_CHECK_INS_IN_RECENT_WINDOW) {
+      throw new Error(
+        `Counterpart recent check-in query exceeds the ${MAX_CHECK_INS_IN_RECENT_WINDOW}-row limit`,
+      );
+    }
+    const todayCheckIns = recentCheckIns.filter(
+      (checkIn) => checkIn.date === today,
+    );
+    if (todayCheckIns.length > MAX_TODAY_CHECK_INS) {
+      throw new Error(
+        `Counterpart today's check-in query exceeds the ${MAX_TODAY_CHECK_INS}-row limit`,
+      );
+    }
 
     const answeredFillIds = new Set(
       recentCheckIns
@@ -492,9 +594,10 @@ export const getDailyContext = internalQuery({
         a.ticker.localeCompare(b.ticker),
       ),
       openPositions,
-      syncStatus: syncStatusFromRun(activityRuns[0]),
+      syncStatus: syncStatusFromRun(latestActivityRun ?? undefined),
       todayCheckIns: todayCheckIns.map((checkIn) => ({
         checkInId: checkIn._id,
+        deliveredAt: checkIn.deliveredAt ?? null,
         kind: checkIn.kind,
         respondedAt: checkIn.respondedAt ?? null,
         sentAt: checkIn.sentAt,
@@ -508,7 +611,6 @@ export const getDailyContext = internalQuery({
 export const getInstrumentContext = internalQuery({
   args: {
     notesLimit: v.number(),
-    now: v.number(),
     ownerId: v.string(),
     ticker: v.string(),
   },
@@ -553,18 +655,20 @@ export const getInstrumentContext = internalQuery({
       getPositionTradesOrThrow(ctx, args.ownerId),
       ctx.db
         .query("trades")
-        .withIndex("by_owner_date", (q) => q.eq("ownerId", args.ownerId))
-        .filter((q) => q.eq(q.field("ticker"), ticker))
+        .withIndex("by_owner_ticker_date", (q) =>
+          q.eq("ownerId", args.ownerId).eq("ticker", ticker),
+        )
         .order("desc")
         .take(MAX_RECENT_ACCEPTED_FILLS),
       ctx.db
         .query("inboxTrades")
-        .withIndex("by_owner_status_ticker", (q) =>
+        .withIndex("by_owner_status_ticker_date", (q) =>
           q
             .eq("ownerId", args.ownerId)
             .eq("status", "pending_review")
             .eq("ticker", ticker),
         )
+        .order("desc")
         .take(MAX_PENDING_FILLS + 1),
       ctx.db
         .query("notes")
@@ -613,13 +717,7 @@ export const getInstrumentContext = internalQuery({
     const pendingItems = pendingTrades.slice(0, MAX_PENDING_FILLS);
     const matchingIssues = openIssues
       .filter((issue) => issue.ticker?.toUpperCase() === ticker)
-      .map((issue) => ({
-        actualQuantity: issue.actualQuantity ?? null,
-        expectedQuantity: issue.expectedQuantity ?? null,
-        issueType: issue.issueType,
-        message: issue.message,
-        reportDate: issue.reportDate,
-      }));
+      .map(instrumentReconciliationIssueFromDocument);
 
     let brokerPositions: Array<{
       asOf: string;
@@ -709,72 +807,62 @@ export const listNotes = internalQuery({
   returns: notePageValidator,
   handler: async (ctx, args) => {
     const ticker = normalizeOptionalTicker(args.ticker);
-    const { endTimestamp, startTimestamp } = dateBounds(
-      args.startDate,
-      args.endDate,
-    );
+    const bounds = dateBounds(args.startDate, args.endDate);
 
-    const page = ticker
-      ? await ctx.db
+    let query = ticker
+      ? ctx.db
           .query("notes")
           .withIndex("by_owner_ticker_noteDate", (q) => {
             const ownerTicker = q
               .eq("ownerId", args.ownerId)
               .eq("ticker", ticker);
-            if (startTimestamp !== undefined && endTimestamp !== undefined) {
-              return ownerTicker
-                .gte("noteDate", startTimestamp)
-                .lt("noteDate", endTimestamp);
-            }
-            if (startTimestamp !== undefined) {
-              return ownerTicker.gte("noteDate", startTimestamp);
-            }
-            if (endTimestamp !== undefined) {
-              return ownerTicker.lt("noteDate", endTimestamp);
-            }
-            return ownerTicker;
+            return applyDateBounds(bounds, {
+              all: () => ownerTicker,
+              endingBefore: (endTimestamp) =>
+                ownerTicker.lt("noteDate", endTimestamp),
+              startingAt: (startTimestamp) =>
+                ownerTicker.gte("noteDate", startTimestamp),
+              within: (startTimestamp, endTimestamp) =>
+                ownerTicker
+                  .gte("noteDate", startTimestamp)
+                  .lt("noteDate", endTimestamp),
+            });
           })
-          .filter((q) =>
-            args.origin
-              ? q.eq(q.field("origin"), args.origin)
-              : q.eq(q.field("ownerId"), args.ownerId),
-          )
           .order("desc")
-          .paginate(args.paginationOpts)
-      : await ctx.db
+      : ctx.db
           .query("notes")
           .withIndex("by_owner_noteDate", (q) => {
             const owner = q.eq("ownerId", args.ownerId);
-            if (startTimestamp !== undefined && endTimestamp !== undefined) {
-              return owner
-                .gte("noteDate", startTimestamp)
-                .lt("noteDate", endTimestamp);
-            }
-            if (startTimestamp !== undefined) {
-              return owner.gte("noteDate", startTimestamp);
-            }
-            if (endTimestamp !== undefined) {
-              return owner.lt("noteDate", endTimestamp);
-            }
-            return owner;
+            return applyDateBounds(bounds, {
+              all: () => owner,
+              endingBefore: (endTimestamp) =>
+                owner.lt("noteDate", endTimestamp),
+              startingAt: (startTimestamp) =>
+                owner.gte("noteDate", startTimestamp),
+              within: (startTimestamp, endTimestamp) =>
+                owner
+                  .gte("noteDate", startTimestamp)
+                  .lt("noteDate", endTimestamp),
+            });
           })
-          .filter((q) => {
-            if (args.generalOnly && args.origin) {
-              return q.and(
-                q.eq(q.field("ticker"), undefined),
-                q.eq(q.field("origin"), args.origin),
-              );
-            }
-            if (args.generalOnly) {
-              return q.eq(q.field("ticker"), undefined);
-            }
-            if (args.origin) {
-              return q.eq(q.field("origin"), args.origin);
-            }
-            return q.eq(q.field("ownerId"), args.ownerId);
-          })
-          .order("desc")
-          .paginate(args.paginationOpts);
+          .order("desc");
+
+    if (ticker && args.origin) {
+      query = query.filter((q) => q.eq(q.field("origin"), args.origin));
+    } else if (args.generalOnly && args.origin) {
+      query = query.filter((q) =>
+        q.and(
+          q.eq(q.field("ticker"), undefined),
+          q.eq(q.field("origin"), args.origin),
+        ),
+      );
+    } else if (args.generalOnly) {
+      query = query.filter((q) => q.eq(q.field("ticker"), undefined));
+    } else if (args.origin) {
+      query = query.filter((q) => q.eq(q.field("origin"), args.origin));
+    }
+
+    const page = await query.paginate(args.paginationOpts);
 
     return {
       hasMore: !page.isDone,
@@ -806,48 +894,54 @@ export const listFills = internalQuery({
   }),
   handler: async (ctx, args) => {
     const ticker = normalizeOptionalTicker(args.ticker);
-    const { endTimestamp, startTimestamp } = dateBounds(
-      args.startDate,
-      args.endDate,
-    );
+    const bounds = dateBounds(args.startDate, args.endDate);
 
     const acceptedPage = await ctx.db
       .query("trades")
-      .withIndex("by_owner_date", (q) => {
-        const owner = q.eq("ownerId", args.ownerId);
-        if (startTimestamp !== undefined && endTimestamp !== undefined) {
-          return owner.gte("date", startTimestamp).lt("date", endTimestamp);
-        }
-        if (startTimestamp !== undefined)
-          return owner.gte("date", startTimestamp);
-        if (endTimestamp !== undefined) return owner.lt("date", endTimestamp);
-        return owner;
+      .withIndex(ticker ? "by_owner_ticker_date" : "by_owner_date", (q) => {
+        const owner = ticker
+          ? q.eq("ownerId", args.ownerId).eq("ticker", ticker)
+          : q.eq("ownerId", args.ownerId);
+        return applyDateBounds(bounds, {
+          all: () => owner,
+          endingBefore: (endTimestamp) => owner.lt("date", endTimestamp),
+          startingAt: (startTimestamp) => owner.gte("date", startTimestamp),
+          within: (startTimestamp, endTimestamp) =>
+            owner.gte("date", startTimestamp).lt("date", endTimestamp),
+        });
       })
-      .filter((q) =>
-        ticker
-          ? q.eq(q.field("ticker"), ticker)
-          : q.eq(q.field("ownerId"), args.ownerId),
-      )
       .order("desc")
       .paginate(args.paginationOpts);
 
-    const pendingRows = await ctx.db
+    let pendingQuery = ctx.db
       .query("inboxTrades")
-      .withIndex("by_owner_date", (q) => {
-        const owner = q.eq("ownerId", args.ownerId);
-        if (startTimestamp !== undefined && endTimestamp !== undefined) {
-          return owner.gte("date", startTimestamp).lt("date", endTimestamp);
-        }
-        if (startTimestamp !== undefined)
-          return owner.gte("date", startTimestamp);
-        if (endTimestamp !== undefined) return owner.lt("date", endTimestamp);
-        return owner;
-      })
-      .filter((q) =>
-        ticker
-          ? q.eq(q.field("ticker"), ticker)
-          : q.eq(q.field("status"), "pending_review"),
-      )
+      .withIndex(
+        ticker ? "by_owner_status_ticker_date" : "by_owner_status_date",
+        (q) => {
+          const pending = ticker
+            ? q
+                .eq("ownerId", args.ownerId)
+                .eq("status", "pending_review")
+                .eq("ticker", ticker)
+            : q.eq("ownerId", args.ownerId).eq("status", "pending_review");
+          return applyDateBounds(bounds, {
+            all: () => pending,
+            endingBefore: (endTimestamp) => pending.lt("date", endTimestamp),
+            startingAt: (startTimestamp) => pending.gte("date", startTimestamp),
+            within: (startTimestamp, endTimestamp) =>
+              pending.gte("date", startTimestamp).lt("date", endTimestamp),
+          });
+        },
+      );
+    if (
+      bounds.startTimestamp !== undefined ||
+      bounds.endTimestamp !== undefined
+    ) {
+      pendingQuery = pendingQuery.filter((q) =>
+        q.neq(q.field("date"), undefined),
+      );
+    }
+    const pendingRows = await pendingQuery
       .order("desc")
       .take(MAX_PENDING_FILLS + 1);
 
@@ -936,7 +1030,7 @@ export const getPortfolioContext = internalQuery({
       positionTrades,
       pendingRows,
       openIssues,
-      activityRuns,
+      latestActivityRun,
       latestSuccessfulActivityRun,
     ] = await Promise.all([
       getPositionTradesOrThrow(ctx, args.ownerId),
@@ -947,7 +1041,7 @@ export const getPortfolioContext = internalQuery({
         )
         .take(MAX_POSITION_TRADES + 1),
       getOpenReconciliationIssuesOrThrow(ctx, args.ownerId),
-      getRecentActivityRuns(ctx, args.ownerId),
+      getLatestActivityRun(ctx, args.ownerId),
       getLatestSuccessfulActivityRun(ctx, args.ownerId),
     ]);
     if (pendingRows.length > MAX_POSITION_TRADES) {
@@ -1033,7 +1127,7 @@ export const getPortfolioContext = internalQuery({
         total: pendingRows.length,
       },
       reconciliation: openIssues.map(reconciliationIssueFromDocument),
-      syncStatus: syncStatusFromRun(activityRuns[0]),
+      syncStatus: syncStatusFromRun(latestActivityRun ?? undefined),
     };
   },
 });
@@ -1056,11 +1150,12 @@ export const addNote = internalMutation({
   },
 });
 
-export const areNoteIdsValid = internalQuery({
-  args: { noteIds: v.array(v.string()), ownerId: v.string() },
-  returns: v.boolean(),
+export const getCheckIn = internalQuery({
+  args: { checkInId: v.string(), ownerId: v.string() },
+  returns: v.union(checkInValidator, v.null()),
   handler: async (ctx, args) => {
-    return await areNoteIdsValidForOwner(ctx, args.ownerId, args.noteIds);
+    const checkIn = await getOwnedCheckIn(ctx, args.ownerId, args.checkInId);
+    return checkIn ? checkInFromDocument(checkIn) : null;
   },
 });
 
@@ -1077,15 +1172,15 @@ export const createCheckIn = internalMutation({
     created: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    const sameDayCheckIns = await ctx.db
+    const existing = await ctx.db
       .query("checkIns")
-      .withIndex("by_owner_date", (q) =>
-        q.eq("ownerId", args.ownerId).eq("date", args.date),
+      .withIndex("by_owner_date_window", (q) =>
+        q
+          .eq("ownerId", args.ownerId)
+          .eq("date", args.date)
+          .eq("window", args.window),
       )
-      .take(4);
-    const existing = sameDayCheckIns.find(
-      (checkIn) => checkIn.window === args.window,
-    );
+      .first();
     if (existing) return { checkInId: existing._id, created: false };
 
     const checkInId = await ctx.db.insert("checkIns", {
@@ -1106,6 +1201,23 @@ const recordCheckInResponseResultValidator = v.union(
   v.literal("invalid_note_ids"),
 );
 
+export const confirmCheckInDelivery = internalMutation({
+  args: {
+    checkInId: v.string(),
+    deliveredAt: v.number(),
+    ownerId: v.string(),
+  },
+  returns: v.union(v.literal("confirmed"), v.literal("not_found")),
+  handler: async (ctx, args) => {
+    const checkIn = await getOwnedCheckIn(ctx, args.ownerId, args.checkInId);
+    if (!checkIn) return "not_found";
+    if (checkIn.deliveredAt === undefined) {
+      await ctx.db.patch(checkIn._id, { deliveredAt: args.deliveredAt });
+    }
+    return "confirmed";
+  },
+});
+
 export const recordCheckInResponse = internalMutation({
   args: {
     checkInId: v.string(),
@@ -1115,20 +1227,15 @@ export const recordCheckInResponse = internalMutation({
   },
   returns: recordCheckInResponseResultValidator,
   handler: async (ctx, args) => {
-    const normalizedCheckInId = ctx.db.normalizeId("checkIns", args.checkInId);
-    if (!normalizedCheckInId) return "not_found";
-    const checkIn = await ctx.db.get(normalizedCheckInId);
-    if (!checkIn || checkIn.ownerId !== args.ownerId) return "not_found";
+    const checkIn = await getOwnedCheckIn(ctx, args.ownerId, args.checkInId);
+    if (!checkIn) return "not_found";
 
-    if (
-      args.noteIds &&
-      !(await areNoteIdsValidForOwner(ctx, args.ownerId, args.noteIds))
-    ) {
-      return "invalid_note_ids";
-    }
-    const noteIds = (args.noteIds ?? []).map((noteId) =>
-      ctx.db.normalizeId("notes", noteId),
-    ) as Id<"notes">[];
+    const noteIds = await normalizeNoteIdsForOwner(
+      ctx,
+      args.ownerId,
+      args.noteIds ?? [],
+    );
+    if (!noteIds) return "invalid_note_ids";
     await ctx.db.patch(checkIn._id, {
       noteIds: [...new Set([...(checkIn.noteIds ?? []), ...noteIds])],
       respondedAt: checkIn.respondedAt ?? args.respondedAt,

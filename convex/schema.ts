@@ -337,7 +337,6 @@ export default defineSchema({
     tradePlanId: v.optional(v.id("tradePlans")),
   })
     .index("by_owner", ["ownerId"])
-    .index("by_owner_ticker", ["ownerId", "ticker"])
     .index("by_owner_ticker_noteDate", ["ownerId", "ticker", "noteDate"])
     .index("by_owner_noteDate", ["ownerId", "noteDate"])
     .index("by_owner_campaignId", ["ownerId", "campaignId"])
@@ -345,6 +344,7 @@ export default defineSchema({
 
   checkIns: defineTable({
     date: v.string(),
+    deliveredAt: v.optional(v.number()),
     kind: v.union(
       v.literal("mirror"),
       v.literal("briefing"),
@@ -365,6 +365,7 @@ export default defineSchema({
     ),
   })
     .index("by_owner_date", ["ownerId", "date"])
+    .index("by_owner_date_window", ["ownerId", "date", "window"])
     .index("by_owner", ["ownerId"]),
 
   planLayerArchives: defineTable({
@@ -697,6 +698,17 @@ export default defineSchema({
       "reportDate",
       "reportType",
     ])
+    .index("by_ownerId_and_reportType_and_startedAt", [
+      "ownerId",
+      "reportType",
+      "startedAt",
+    ])
+    .index("by_ownerId_and_reportType_and_status_and_updatedAt", [
+      "ownerId",
+      "reportType",
+      "status",
+      "updatedAt",
+    ])
     .index("by_ownerId_and_startedAt", ["ownerId", "startedAt"])
     .index("by_ownerId_and_status", ["ownerId", "status"])
     .index("by_ownerId_and_status_and_updatedAt", [
@@ -882,6 +894,7 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_date", ["ownerId", "date"])
+    .index("by_owner_ticker_date", ["ownerId", "ticker", "date"])
     .index("by_source_externalId", ["source", "externalId"])
     .index("by_owner_portfolioId", ["ownerId", "portfolioId"])
     .index("by_owner_portfolioId_date", ["ownerId", "portfolioId", "date"])
@@ -918,6 +931,13 @@ export default defineSchema({
     .index("by_source_externalId", ["source", "externalId"])
     .index("by_owner_portfolioId", ["ownerId", "portfolioId"])
     .index("by_owner_date", ["ownerId", "date"])
+    .index("by_owner_status_date", ["ownerId", "status", "date"])
+    .index("by_owner_status_ticker_date", [
+      "ownerId",
+      "status",
+      "ticker",
+      "date",
+    ])
     .index("by_owner_status_tradePlanId", ["ownerId", "status", "tradePlanId"])
     .index("by_owner_status_ticker", ["ownerId", "status", "ticker"]),
 

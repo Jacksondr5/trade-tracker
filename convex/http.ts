@@ -226,17 +226,10 @@ function validateDateRange(startDate?: string, endDate?: string) {
   }
 }
 
-function validateReadFilters(
-  body: JsonObject,
-  options: { allowGeneralOnly: boolean; allowOrigin: boolean },
-) {
+function validateNoteFilters(body: JsonObject) {
   const ticker = optionalString(body, "ticker")?.toUpperCase();
-  const generalOnly = options.allowGeneralOnly
-    ? optionalBoolean(body, "generalOnly")
-    : undefined;
-  const origin = options.allowOrigin
-    ? optionalLiteral(body, "origin", ["retrospective"] as const)
-    : undefined;
+  const generalOnly = optionalBoolean(body, "generalOnly");
+  const origin = optionalLiteral(body, "origin", ["retrospective"] as const);
   const startDate = optionalEasternDate(body, "startDate");
   const endDate = optionalEasternDate(body, "endDate");
   validateDateRange(startDate, endDate);
@@ -246,11 +239,6 @@ function validateReadFilters(
     );
   }
   return { endDate, generalOnly, origin, startDate, ticker };
-}
-
-export function validateDailyContextBody(body: JsonObject) {
-  assertExactKeys(body, []);
-  return {};
 }
 
 export function validateInstrumentContextBody(body: JsonObject) {
@@ -271,10 +259,7 @@ export function validateListNotesBody(body: JsonObject) {
     "cursor",
     "limit",
   ]);
-  const filters = validateReadFilters(body, {
-    allowGeneralOnly: true,
-    allowOrigin: true,
-  });
+  const filters = validateNoteFilters(body);
   return {
     ...filters,
     paginationOpts: {
@@ -286,18 +271,18 @@ export function validateListNotesBody(body: JsonObject) {
 
 export function validateListFillsBody(body: JsonObject) {
   assertExactKeys(body, ["ticker", "startDate", "endDate", "cursor", "limit"]);
-  const filters = validateReadFilters(body, {
-    allowGeneralOnly: false,
-    allowOrigin: false,
-  });
+  const ticker = optionalString(body, "ticker")?.toUpperCase();
+  const startDate = optionalEasternDate(body, "startDate");
+  const endDate = optionalEasternDate(body, "endDate");
+  validateDateRange(startDate, endDate);
   return {
-    endDate: filters.endDate,
+    endDate,
     paginationOpts: {
       cursor: optionalCursor(body),
       numItems: optionalInteger(body, "limit", 1, 100, 25),
     },
-    startDate: filters.startDate,
-    ticker: filters.ticker,
+    startDate,
+    ticker,
   };
 }
 
@@ -330,6 +315,19 @@ export function validateCreateCheckInBody(body: JsonObject) {
       "afternoon",
       "end_of_day",
     ] as const),
+  };
+}
+
+export function validateGetCheckInBody(body: JsonObject) {
+  assertExactKeys(body, ["checkInId"]);
+  return { checkInId: requireString(body, "checkInId") };
+}
+
+export function validateConfirmCheckInDeliveryBody(body: JsonObject) {
+  assertExactKeys(body, ["checkInId", "deliveredAt"]);
+  return {
+    checkInId: requireString(body, "checkInId"),
+    deliveredAt: requireNumber(body, "deliveredAt"),
   };
 }
 
@@ -373,7 +371,7 @@ const http = httpRouter();
 http.route({
   handler: httpAction(async (ctx, req) => {
     return await authorizedJson(req, async (body, ownerId) => {
-      validateDailyContextBody(body);
+      validateEmptyBody(body);
       const data = await ctx.runQuery(internal.counterpart.getDailyContext, {
         now: Date.now(),
         ownerId,
@@ -391,7 +389,7 @@ http.route({
       const args = validateInstrumentContextBody(body);
       const data = await ctx.runQuery(
         internal.counterpart.getInstrumentContext,
-        { ...args, now: Date.now(), ownerId },
+        { ...args, ownerId },
       );
       return successResponse(data);
     });
@@ -462,6 +460,29 @@ http.route({
 http.route({
   handler: httpAction(async (ctx, req) => {
     return await authorizedJson(req, async (body, ownerId) => {
+      const args = validateGetCheckInBody(body);
+      const checkIn = await ctx.runQuery(internal.counterpart.getCheckIn, {
+        ...args,
+        ownerId,
+      });
+      if (!checkIn) {
+        throw new HttpRequestError(
+          "NOT_FOUND",
+          "Check-in not found",
+          404,
+          false,
+        );
+      }
+      return successResponse({ checkIn });
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/get-check-in",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
       const args = validateAddNoteBody(body);
       const noteId = await ctx.runMutation(internal.counterpart.addNote, {
         ...args,
@@ -487,6 +508,29 @@ http.route({
   }),
   method: "POST",
   path: "/internal/counterpart/create-check-in",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
+      const args = validateConfirmCheckInDeliveryBody(body);
+      const result = await ctx.runMutation(
+        internal.counterpart.confirmCheckInDelivery,
+        { ...args, ownerId },
+      );
+      if (result === "not_found") {
+        throw new HttpRequestError(
+          "NOT_FOUND",
+          "Check-in not found",
+          404,
+          false,
+        );
+      }
+      return successResponse({ confirmed: true });
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/confirm-check-in-delivery",
 });
 
 http.route({
