@@ -689,9 +689,13 @@ describe("counterpart service surface", () => {
       date: "2026-05-15",
       kind: "mirror",
       ownerId,
-      surfacedTradeIds: [tradeA],
+      surfacedTradeIds: [tradeA, tradeA],
       window: "late_morning",
     });
+    const storedAfterCreate = await t.run(async (ctx) => {
+      return await ctx.db.get(first.checkInId);
+    });
+    expect(storedAfterCreate?.surfacedTradeIds).toEqual([tradeA]);
     const retry = await t.mutation(internal.counterpart.createCheckIn, {
       date: "2026-05-15",
       kind: "mirror",
@@ -706,6 +710,14 @@ describe("counterpart service surface", () => {
     });
     expect(storedAfterRetry?.surfacedTradeIds).toEqual([tradeA, tradeB]);
 
+    const beforeResponse = await t.query(internal.counterpart.getDailyContext, {
+      now,
+      ownerId,
+    });
+    expect(beforeResponse.undiscussedFills.map((fill) => fill.id)).toEqual(
+      expect.arrayContaining([tradeA, tradeB]),
+    );
+
     expect(
       await t.mutation(internal.counterpart.recordCheckInResponse, {
         checkInId: first.checkInId,
@@ -718,6 +730,34 @@ describe("counterpart service surface", () => {
       ownerId,
     });
     expect(daily.undiscussedFills).toEqual([]);
+  });
+
+  it("repairs duplicate stored surfaced IDs while unioning a retry", async () => {
+    const checkInId = await t.run(async (ctx) => {
+      return await ctx.db.insert("checkIns", {
+        date: "2026-05-15",
+        kind: "mirror",
+        ownerId,
+        sentAt: now,
+        surfacedTradeIds: ["trade-a", "trade-a"],
+        window: "late_morning",
+      });
+    });
+
+    expect(
+      await t.mutation(internal.counterpart.createCheckIn, {
+        date: "2026-05-15",
+        kind: "mirror",
+        ownerId,
+        surfacedTradeIds: ["trade-a", "trade-b"],
+        window: "late_morning",
+      }),
+    ).toEqual({ checkInId, created: false });
+
+    const stored = await t.run(async (ctx) => {
+      return await ctx.db.get(checkInId);
+    });
+    expect(stored?.surfacedTradeIds).toEqual(["trade-a", "trade-b"]);
   });
 
   it("finds an existing check-in window beyond other same-day rows", async () => {

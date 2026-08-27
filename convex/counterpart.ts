@@ -189,6 +189,17 @@ function normalizeOptionalTicker(
   return trimmed ? trimmed : undefined;
 }
 
+function dedupeStrings(values: string[] | undefined) {
+  return values ? [...new Set(values)] : undefined;
+}
+
+function stringArraysEqual(left: string[], right: string[]) {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
+}
+
 function acceptedFillFromTrade(trade: Doc<"trades">) {
   return {
     assetType: trade.assetType,
@@ -1189,7 +1200,7 @@ export const createCheckIn = internalMutation({
         ]),
       ];
       if (
-        surfacedTradeIds.length !== (existing.surfacedTradeIds?.length ?? 0)
+        !stringArraysEqual(existing.surfacedTradeIds ?? [], surfacedTradeIds)
       ) {
         await ctx.db.patch(existing._id, { surfacedTradeIds });
       }
@@ -1201,7 +1212,7 @@ export const createCheckIn = internalMutation({
       kind: args.kind,
       ownerId: args.ownerId,
       sentAt: Date.now(),
-      surfacedTradeIds: args.surfacedTradeIds,
+      surfacedTradeIds: dedupeStrings(args.surfacedTradeIds),
       window: args.window,
     });
     return { checkInId, created: true };
