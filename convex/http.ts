@@ -351,6 +351,11 @@ export function validateAcceptTradeBody(body: JsonObject) {
   };
 }
 
+export function validateFillDiscussionContextBody(body: JsonObject) {
+  assertExactKeys(body, ["inboxTradeId"]);
+  return { inboxTradeId: requireString(body, "inboxTradeId") };
+}
+
 async function authorizedJson(
   req: Request,
   handler: (body: JsonObject, ownerId: string) => Promise<Response>,
@@ -407,6 +412,21 @@ http.route({
   }),
   method: "POST",
   path: "/internal/counterpart/accept-trade",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
+      const args = validateFillDiscussionContextBody(body);
+      const data = await ctx.runQuery(
+        internal.counterpart.getFillDiscussionContext,
+        { ...args, ownerId },
+      );
+      return successResponse(data);
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/fill-discussion-context",
 });
 
 http.route({

@@ -885,6 +885,9 @@ export default defineSchema({
     price: v.number(),
     quantity: v.number(),
     side: v.union(v.literal("buy"), v.literal("sell")),
+    // Preserves a durable acceptance receipt after the pending inbox row is
+    // deleted. Optional so existing accepted trades need no migration.
+    sourceInboxTradeId: v.optional(v.id("inboxTrades")),
     source: v.optional(
       v.union(v.literal("manual"), v.literal("ibkr"), v.literal("kraken")),
     ),
@@ -895,6 +898,7 @@ export default defineSchema({
     .index("by_owner_date", ["ownerId", "date"])
     .index("by_owner_ticker_date", ["ownerId", "ticker", "date"])
     .index("by_source_externalId", ["source", "externalId"])
+    .index("by_owner_sourceInboxTradeId", ["ownerId", "sourceInboxTradeId"])
     .index("by_owner_portfolioId", ["ownerId", "portfolioId"])
     .index("by_owner_portfolioId_date", ["ownerId", "portfolioId", "date"]),
 
