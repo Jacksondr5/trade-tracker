@@ -23,13 +23,13 @@ export default async function TradesPage({
   const token = await getConvexTokenOrThrow();
   const resolvedSearchParams = await searchParams;
 
-
   const initialFilterState = {
-    account: normalizeTradesAccountParam(
-      typeof resolvedSearchParams.account === "string"
-        ? resolvedSearchParams.account
-        : null,
-    ) ?? "",
+    account:
+      normalizeTradesAccountParam(
+        typeof resolvedSearchParams.account === "string"
+          ? resolvedSearchParams.account
+          : null,
+      ) ?? "",
     cursor: normalizeTradesCursor(
       typeof resolvedSearchParams.cursor === "string"
         ? resolvedSearchParams.cursor
@@ -48,11 +48,12 @@ export default async function TradesPage({
           : String(DEFAULT_TRADES_PAGE_SIZE),
       ),
     ),
-    portfolio: normalizeTradesPortfolioParam(
-      typeof resolvedSearchParams.portfolio === "string"
-        ? resolvedSearchParams.portfolio
-        : null,
-    ) ?? "",
+    portfolio:
+      normalizeTradesPortfolioParam(
+        typeof resolvedSearchParams.portfolio === "string"
+          ? resolvedSearchParams.portfolio
+          : null,
+      ) ?? "",
     startDate:
       normalizeTradesDateParam(
         typeof resolvedSearchParams.startDate === "string"
@@ -68,7 +69,6 @@ export default async function TradesPage({
 
   const [
     preloadedTradesPage,
-    preloadedTradePlans,
     preloadedAccountMappings,
     preloadedKnownAccounts,
     preloadedPortfolios,
@@ -80,7 +80,6 @@ export default async function TradesPage({
         token,
       },
     ),
-    preloadQuery(api.tradePlans.listTradePlans, {}, { token }),
     preloadQuery(api.accountMappings.listAccountMappings, {}, { token }),
     preloadQuery(api.accountMappings.listKnownBrokerageAccounts, {}, { token }),
     preloadQuery(api.portfolios.listPortfolios, {}, { token }),
@@ -93,7 +92,6 @@ export default async function TradesPage({
       preloadedPortfolios={preloadedPortfolios}
       preloadedTradesPage={preloadedTradesPage}
       initialFilterState={initialFilterState}
-      preloadedTradePlans={preloadedTradePlans}
     />
   );
 }

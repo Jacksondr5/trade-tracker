@@ -1,12 +1,15 @@
 import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
+import { acceptCounterpartTradeViaAction } from "./imports";
 
 type JsonObject = Record<string, unknown>;
 type CounterpartErrorCode =
   | "UNAUTHORIZED"
+  | "FORBIDDEN"
   | "VALIDATION"
   | "NOT_FOUND"
+  | "CONFLICT"
   | "RATE_LIMITED"
   | "INTERNAL";
 
@@ -340,6 +343,15 @@ export function validateRecordCheckInResponseBody(body: JsonObject) {
   };
 }
 
+export function validateAcceptTradeBody(body: JsonObject) {
+  assertExactKeys(body, ["ownerId", "inboxTradeId", "portfolioId"]);
+  return {
+    inboxTradeId: requireString(body, "inboxTradeId"),
+    ownerId: requireString(body, "ownerId"),
+    portfolioId: optionalString(body, "portfolioId"),
+  };
+}
+
 async function authorizedJson(
   req: Request,
   handler: (body: JsonObject, ownerId: string) => Promise<Response>,
@@ -367,6 +379,44 @@ async function authorizedJson(
 }
 
 const http = httpRouter();
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, configuredOwnerId) => {
+      const args = validateAcceptTradeBody(body);
+      if (args.ownerId !== configuredOwnerId) {
+        throw new HttpRequestError(
+          "FORBIDDEN",
+          "ownerId does not match the configured counterpart owner",
+          403,
+          false,
+        );
+      }
+      const data = await acceptCounterpartTradeViaAction(
+        ctx,
+        configuredOwnerId,
+        args,
+      );
+      if (data.kind === "error") {
+        const status =
+          data.code === "NOT_FOUND"
+            ? 404
+            : data.code === "CONFLICT"
+              ? 409
+              : 400;
+        throw new HttpRequestError(
+          data.code,
+          data.error,
+          status,
+          data.code === "CONFLICT",
+        );
+      }
+      return successResponse(data);
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/accept-trade",
+});
 
 http.route({
   handler: httpAction(async (ctx, req) => {

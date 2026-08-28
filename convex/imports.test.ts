@@ -327,10 +327,9 @@ describe("imports review workspace", () => {
       "ibkr_logical_duplicate_skipped",
       expect.stringContaining('"incomingExternalId":"5523063596"'),
     );
-    const logPayload = JSON.parse(String(auditLog.mock.calls[0]?.[1])) as Record<
-      string,
-      unknown
-    >;
+    const logPayload = JSON.parse(
+      String(auditLog.mock.calls[0]?.[1]),
+    ) as Record<string, unknown>;
     expect(logPayload).toEqual({
       date: flexFill.date,
       direction: flexFill.direction,
@@ -634,11 +633,10 @@ describe("imports review workspace", () => {
 
     expect(workspace.summary).toEqual({
       ambiguousCount: 0,
-      assignedCount: 1,
       errorCount: 0,
       needsReviewCount: 0,
       readyCount: 2,
-      suggestedCount: 0,
+      suggestedCount: 1,
       totalPendingCount: 2,
       unmatchedCount: 1,
       validCount: 0,
@@ -669,14 +667,10 @@ describe("imports review workspace", () => {
     ).toContain(assignedPlanId);
     expect(workspace.rows[0]).toMatchObject({
       matchContext: {
-        assignedTradePlan: {
-          _id: assignedPlanId,
-          name: "NVDA momentum",
-        },
         candidateCount: 1,
         ticker: "NVDA",
       },
-      matchState: "assigned",
+      matchState: "suggested",
       readiness: {
         isReady: true,
         missingFields: [],
@@ -686,7 +680,6 @@ describe("imports review workspace", () => {
     });
     expect(workspace.rows[1]).toMatchObject({
       matchContext: {
-        assignedTradePlan: null,
         candidateCount: 0,
         ticker: "MSFT",
       },
@@ -758,7 +751,6 @@ describe("imports review workspace", () => {
 
     expect(workspace.summary).toEqual({
       ambiguousCount: 1,
-      assignedCount: 0,
       errorCount: 1,
       needsReviewCount: 1,
       readyCount: 1,
@@ -771,7 +763,6 @@ describe("imports review workspace", () => {
     expect(workspace.rows[0]).toMatchObject({
       matchState: "ambiguous",
       matchContext: {
-        assignedTradePlan: null,
         candidateCount: 2,
       },
       readiness: {

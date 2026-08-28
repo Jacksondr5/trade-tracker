@@ -45,7 +45,6 @@ describe("cross-owner authorization boundaries", () => {
     ownerId: string,
     args: {
       portfolioId?: Id<"portfolios">;
-      tradePlanId?: Id<"tradePlans">;
     } = {},
   ): Promise<Id<"inboxTrades">> {
     return await t.run(async (ctx) => {
@@ -61,7 +60,6 @@ describe("cross-owner authorization boundaries", () => {
         source: "manual",
         status: "pending_review",
         ticker: "AAPL",
-        tradePlanId: args.tradePlanId,
         validationErrors: [],
         validationWarnings: [],
       });
@@ -95,7 +93,6 @@ describe("cross-owner authorization boundaries", () => {
   async function insertTrade(args: {
     ownerId: string;
     portfolioId?: Id<"portfolios">;
-    tradePlanId?: Id<"tradePlans">;
   }): Promise<Id<"trades">> {
     return await t.run(async (ctx) => {
       return await ctx.db.insert("trades", {
@@ -109,7 +106,6 @@ describe("cross-owner authorization boundaries", () => {
         side: "buy",
         source: "manual",
         ticker: "AAPL",
-        tradePlanId: args.tradePlanId,
       });
     });
   }
@@ -216,12 +212,10 @@ describe("cross-owner authorization boundaries", () => {
     ]);
   });
 
-  it("rejects cross-owner portfolio and trade-plan references during import", async () => {
+  it("rejects cross-owner portfolio references during import", async () => {
     const portfolioId = await insertPortfolio(ownerA);
-    const tradePlanId = await insertTradePlan(ownerA);
     const ownerAInboxTradeId = await insertInboxTrade(ownerA);
     const ownerBPortfolioId = await insertPortfolio(ownerB);
-    const ownerBTradePlanId = await insertTradePlan(ownerB);
 
     await expect(
       asUser(ownerB).mutation(api.imports.importTrades, {
@@ -230,17 +224,10 @@ describe("cross-owner authorization boundaries", () => {
     ).rejects.toThrow("Portfolio not found");
     await expect(
       asUser(ownerB).mutation(api.imports.importTrades, {
-        trades: [{ source: "manual", tradePlanId }],
-      }),
-    ).rejects.toThrow("Trade plan not found");
-
-    await expect(
-      asUser(ownerB).mutation(api.imports.importTrades, {
         trades: [
           {
             portfolioId: ownerBPortfolioId,
             source: "manual",
-            tradePlanId: ownerBTradePlanId,
           },
         ],
       }),
@@ -254,19 +241,16 @@ describe("cross-owner authorization boundaries", () => {
     expect(ownerBInboxTrades[0]).toMatchObject({
       ownerId: ownerB,
       portfolioId: ownerBPortfolioId,
-      tradePlanId: ownerBTradePlanId,
     });
     expect(ownerBInboxTrades.map((trade) => trade._id)).not.toContain(
       ownerAInboxTradeId,
     );
   });
 
-  it("prevents acceptTrade from using another owner's inbox row or parents", async () => {
+  it("prevents acceptTrade from using another owner's inbox row or portfolio", async () => {
     const ownerAInboxTradeId = await insertInboxTrade(ownerA);
     const ownerAPortfolioId = await insertPortfolio(ownerA);
-    const ownerATradePlanId = await insertTradePlan(ownerA);
     const ownerBPortfolioId = await insertPortfolio(ownerB);
-    const ownerBTradePlanId = await insertTradePlan(ownerB);
     const ownerBInboxTradeId = await insertInboxTrade(ownerB);
     await insertResolvedInstrument(ownerB);
 
@@ -274,7 +258,6 @@ describe("cross-owner authorization boundaries", () => {
       asUser(ownerB).action(api.imports.acceptTrade, {
         inboxTradeId: ownerAInboxTradeId,
         portfolioId: ownerBPortfolioId,
-        tradePlanId: ownerBTradePlanId,
       }),
     ).rejects.toThrow("Inbox trade not found");
     await expect(
@@ -286,15 +269,7 @@ describe("cross-owner authorization boundaries", () => {
     await expect(
       asUser(ownerB).action(api.imports.acceptTrade, {
         inboxTradeId: ownerBInboxTradeId,
-        tradePlanId: ownerATradePlanId,
-      }),
-    ).rejects.toThrow("Trade plan not found");
-
-    await expect(
-      asUser(ownerB).action(api.imports.acceptTrade, {
-        inboxTradeId: ownerBInboxTradeId,
         portfolioId: ownerBPortfolioId,
-        tradePlanId: ownerBTradePlanId,
       }),
     ).resolves.toEqual({ accepted: true });
 
@@ -304,7 +279,6 @@ describe("cross-owner authorization boundaries", () => {
       {
         ownerId: ownerB,
         portfolioId: ownerBPortfolioId,
-        tradePlanId: ownerBTradePlanId,
       },
     ]);
     await expect(
@@ -314,16 +288,12 @@ describe("cross-owner authorization boundaries", () => {
 
   it("acceptAllTrades promotes only the authenticated owner's inbox rows", async () => {
     const ownerAPortfolioId = await insertPortfolio(ownerA);
-    const ownerATradePlanId = await insertTradePlan(ownerA);
     const ownerAInboxTradeId = await insertInboxTrade(ownerA, {
       portfolioId: ownerAPortfolioId,
-      tradePlanId: ownerATradePlanId,
     });
     const ownerBPortfolioId = await insertPortfolio(ownerB);
-    const ownerBTradePlanId = await insertTradePlan(ownerB);
     await insertInboxTrade(ownerB, {
       portfolioId: ownerBPortfolioId,
-      tradePlanId: ownerBTradePlanId,
     });
     await insertResolvedInstrument(ownerA);
     await insertResolvedInstrument(ownerB);
@@ -347,14 +317,12 @@ describe("cross-owner authorization boundaries", () => {
       {
         ownerId: ownerB,
         portfolioId: ownerBPortfolioId,
-        tradePlanId: ownerBTradePlanId,
       },
     ]);
   });
 
-  it("prevents bulk updates and parent reassignment across owners", async () => {
+  it("prevents bulk updates and portfolio reassignment across owners", async () => {
     const ownerAPortfolioId = await insertPortfolio(ownerA);
-    const ownerATradePlanId = await insertTradePlan(ownerA);
     const ownerATradeId = await insertTrade({
       ownerId: ownerA,
       portfolioId: ownerAPortfolioId,
@@ -379,13 +347,6 @@ describe("cross-owner authorization boundaries", () => {
       }),
     ).rejects.toThrow("Portfolio not found");
     await expect(
-      asUser(ownerB).mutation(api.trades.updateTrade, {
-        tradeId: ownerBTradeId,
-        tradePlanId: ownerATradePlanId,
-      }),
-    ).rejects.toThrow("Trade plan not found");
-
-    await expect(
       asUser(ownerB).query(api.trades.listTrades, {}),
     ).resolves.toMatchObject([
       {
@@ -396,7 +357,6 @@ describe("cross-owner authorization boundaries", () => {
       return await ctx.db.get(ownerBTradeId);
     });
     expect(ownerBTrade?.portfolioId).toBeUndefined();
-    expect(ownerBTrade?.tradePlanId).toBeUndefined();
     await expect(
       asUser(ownerA).query(api.trades.listTrades, {}),
     ).resolves.toMatchObject([

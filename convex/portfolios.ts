@@ -176,45 +176,13 @@ export const getPortfolioDetail = query({
       .collect();
     const sortedTrades = [...portfolioTrades].sort((a, b) => b.date - a.date);
 
-    // Derive campaigns: trades -> trade plans -> campaigns, counting trades per campaign.
-    const tradePlanToCampaign = new Map<
-      Id<"tradePlans">,
-      Id<"campaigns"> | null
-    >();
-    const campaignTradeCounts = new Map<Id<"campaigns">, number>();
-    for (const trade of portfolioTrades) {
-      if (!trade.tradePlanId) continue;
-
-      if (!tradePlanToCampaign.has(trade.tradePlanId)) {
-        const tradePlan = await ctx.db.get(trade.tradePlanId);
-        tradePlanToCampaign.set(
-          trade.tradePlanId,
-          tradePlan?.campaignId ?? null,
-        );
-      }
-
-      const campaignId = tradePlanToCampaign.get(trade.tradePlanId);
-      if (campaignId) {
-        campaignTradeCounts.set(
-          campaignId,
-          (campaignTradeCounts.get(campaignId) ?? 0) + 1,
-        );
-      }
-    }
-
-    const campaigns = [];
-    for (const [campaignId, tradeCount] of campaignTradeCounts) {
-      const campaign = await ctx.db.get(campaignId);
-      if (campaign && campaign.ownerId === ownerId) {
-        campaigns.push({
-          _creationTime: campaign._creationTime,
-          _id: campaign._id,
-          name: campaign.name,
-          status: campaign.status,
-          tradeCount,
-        });
-      }
-    }
+    const campaigns: Array<{
+      _creationTime: number;
+      _id: Id<"campaigns">;
+      name: string;
+      status: "active" | "closed" | "planning";
+      tradeCount: number;
+    }> = [];
 
     return {
       campaigns,
@@ -457,10 +425,6 @@ export const getPortfolioOverview = query({
     const asOfDate = latestValuationRow?.date ?? null;
 
     // Aggregate open positions and link them through trade plans -> campaigns.
-    const tradePlanToCampaign = new Map<
-      Id<"tradePlans">,
-      Id<"campaigns"> | null
-    >();
     const positions = new Map<PositionKey, AggregatedPosition>();
 
     for (const trade of trades) {
@@ -480,28 +444,7 @@ export const getPortfolioOverview = query({
       existing.quantity += signedQuantity;
       existing.tradeCount += 1;
 
-      let attributedToCampaign: Id<"campaigns"> | null = null;
-      if (trade.tradePlanId) {
-        if (!tradePlanToCampaign.has(trade.tradePlanId)) {
-          const tradePlan = await ctx.db.get(trade.tradePlanId);
-          tradePlanToCampaign.set(
-            trade.tradePlanId,
-            tradePlan?.campaignId ?? null,
-          );
-        }
-        attributedToCampaign =
-          tradePlanToCampaign.get(trade.tradePlanId) ?? null;
-        if (attributedToCampaign) {
-          existing.campaignQuantities.set(
-            attributedToCampaign,
-            (existing.campaignQuantities.get(attributedToCampaign) ?? 0) +
-              signedQuantity,
-          );
-        }
-      }
-      if (attributedToCampaign === null) {
-        existing.uncoveredQuantity += signedQuantity;
-      }
+      existing.uncoveredQuantity += signedQuantity;
 
       positions.set(key, existing);
     }
@@ -610,32 +553,6 @@ export const getPortfolioOverview = query({
       tradeCount: 0,
     };
 
-    for (const trade of trades) {
-      if (!trade.tradePlanId) continue;
-      const campaignId = tradePlanToCampaign.get(trade.tradePlanId) ?? null;
-      if (!campaignId) continue;
-
-      let bucket = exposureByCampaign.get(campaignId);
-      if (!bucket) {
-        const campaign = await ctx.db.get(campaignId);
-        if (!campaign || campaign.ownerId !== ownerId) {
-          continue;
-        }
-        bucket = {
-          awaitingSnapshotSymbols: new Set<string>(),
-          campaign,
-          exposure: 0,
-          hasUnpricedSlice: false,
-          needsMappingSymbols: new Set<string>(),
-          openPositionCount: 0,
-          tickers: new Set<string>(),
-          tradeCount: 0,
-        };
-        exposureByCampaign.set(campaignId, bucket);
-      }
-      bucket.tradeCount += 1;
-    }
-
     for (const position of overviewPositions) {
       for (const [
         campaignId,
@@ -684,18 +601,7 @@ export const getPortfolioOverview = query({
       }
     }
 
-    // Tally trades whose campaigns we couldn't link (no trade plan, or trade
-    // plan has no campaign).
-    for (const trade of trades) {
-      if (!trade.tradePlanId) {
-        uncoveredBucket.tradeCount += 1;
-        continue;
-      }
-      const campaignId = tradePlanToCampaign.get(trade.tradePlanId) ?? null;
-      if (!campaignId || !exposureByCampaign.has(campaignId)) {
-        uncoveredBucket.tradeCount += 1;
-      }
-    }
+    uncoveredBucket.tradeCount = trades.length;
 
     const denominator =
       totalGrossMarketValue !== 0

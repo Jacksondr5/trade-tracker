@@ -51,15 +51,13 @@ function normalizeTickerFilter(ticker: string | undefined): string | undefined {
 function hasAdditionalTradeFilters(args: ListTradesPageArgs): boolean {
   return Boolean(
     normalizeTickerFilter(args.ticker) ||
-      args.portfolioId ||
-      args.withoutPortfolio ||
-      (args.accountSource && args.accountId),
+    args.portfolioId ||
+    args.withoutPortfolio ||
+    (args.accountSource && args.accountId),
   );
 }
 
-function encodeFilteredTradesCursor(
-  state: FilteredTradesCursorState,
-): string {
+function encodeFilteredTradesCursor(state: FilteredTradesCursorState): string {
   return JSON.stringify(state);
 }
 
@@ -136,7 +134,10 @@ function matchesTradeFilters(
       trade.brokerageAccountId,
     );
 
-    if (tradeAccountId !== normalizeBrokerageAccountId(args.accountSource, args.accountId)) {
+    if (
+      tradeAccountId !==
+      normalizeBrokerageAccountId(args.accountSource, args.accountId)
+    ) {
       return false;
     }
   }
@@ -223,7 +224,6 @@ async function listFilteredTradesPage(
   };
 }
 
-
 export const createTradeInternal = internalMutation({
   args: {
     assetType: v.union(v.literal("crypto"), v.literal("stock")),
@@ -236,15 +236,9 @@ export const createTradeInternal = internalMutation({
     quantity: v.number(),
     side: v.union(v.literal("buy"), v.literal("sell")),
     ticker: v.string(),
-    tradePlanId: v.optional(v.id("tradePlans")),
   },
   returns: v.id("trades"),
-  handler: async (ctx, args) => {
-    if (args.tradePlanId) {
-      const tradePlan = await ctx.db.get(args.tradePlanId);
-      assertOwner(tradePlan, args.ownerId, "Trade plan not found");
-    }
-
+  handler: async (ctx, args): Promise<Id<"trades">> => {
     if (args.portfolioId) {
       const portfolio = await ctx.db.get(args.portfolioId);
       assertOwner(portfolio, args.ownerId, "Portfolio not found");
@@ -281,7 +275,6 @@ export const createTradeInternal = internalMutation({
       side: args.side,
       source: "manual",
       ticker: args.ticker,
-      tradePlanId: args.tradePlanId,
     });
   },
 });
@@ -296,7 +289,6 @@ export const createTrade = action({
     quantity: v.number(),
     side: v.union(v.literal("buy"), v.literal("sell")),
     ticker: v.string(),
-    tradePlanId: v.optional(v.id("tradePlans")),
   },
   returns: v.id("trades"),
   handler: async (ctx, args): Promise<Id<"trades">> => {
@@ -307,10 +299,7 @@ export const createTrade = action({
       assetType: args.assetType,
       ticker,
     });
-    if (
-      resolution.status !== "resolved" &&
-      resolution.status !== "ignored"
-    ) {
+    if (resolution.status !== "resolved" && resolution.status !== "ignored") {
       throw new ConvexError(
         `Price mapping required for ${ticker}: ${resolution.instrument.lastError ?? "instrument not resolved"}`,
       );
@@ -329,7 +318,6 @@ export const createTrade = action({
         quantity: args.quantity,
         side: args.side,
         ticker,
-        tradePlanId: args.tradePlanId,
       },
     );
     return tradeId;
@@ -347,7 +335,6 @@ export const updateTrade = mutation({
     side: v.optional(v.union(v.literal("buy"), v.literal("sell"))),
     ticker: v.optional(v.string()),
     tradeId: v.id("trades"),
-    tradePlanId: v.optional(v.union(v.id("tradePlans"), v.null())),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -359,11 +346,6 @@ export const updateTrade = mutation({
       ownerId,
       "Trade not found",
     );
-
-    if (updates.tradePlanId !== undefined && updates.tradePlanId !== null) {
-      const tradePlan = await ctx.db.get(updates.tradePlanId);
-      assertOwner(tradePlan, ownerId, "Trade plan not found");
-    }
 
     if (updates.portfolioId !== undefined && updates.portfolioId !== null) {
       const portfolio = await ctx.db.get(updates.portfolioId);
@@ -394,10 +376,6 @@ export const updateTrade = mutation({
     if (updates.quantity !== undefined) patch.quantity = updates.quantity;
     if (updates.side !== undefined) patch.side = updates.side;
     if (updates.ticker !== undefined) patch.ticker = nextTicker;
-    if (updates.tradePlanId !== undefined) {
-      patch.tradePlanId =
-        updates.tradePlanId === null ? undefined : updates.tradePlanId;
-    }
     patch.ownerId = ownerId;
 
     await ctx.db.patch(tradeId, patch);
@@ -410,7 +388,6 @@ export const bulkUpdateTrades = mutation({
   args: {
     tradeIds: v.array(v.id("trades")),
     portfolioId: v.optional(v.union(v.id("portfolios"), v.null())),
-    tradePlanId: v.optional(v.union(v.id("tradePlans"), v.null())),
   },
   returns: v.object({
     updated: v.number(),
@@ -426,17 +403,12 @@ export const bulkUpdateTrades = mutation({
       };
     }
 
-    if (args.tradePlanId !== undefined && args.tradePlanId !== null) {
-      const tradePlan = await ctx.db.get(args.tradePlanId);
-      assertOwner(tradePlan, ownerId, "Trade plan not found");
-    }
-
     if (args.portfolioId !== undefined && args.portfolioId !== null) {
       const portfolio = await ctx.db.get(args.portfolioId);
       assertOwner(portfolio, ownerId, "Portfolio not found");
     }
 
-    if (args.tradePlanId === undefined && args.portfolioId === undefined) {
+    if (args.portfolioId === undefined) {
       return {
         updated: 0,
         errors: ["At least one bulk update field must be provided"],
@@ -444,10 +416,6 @@ export const bulkUpdateTrades = mutation({
     }
 
     const patch: Record<string, unknown> = {};
-    if (args.tradePlanId !== undefined) {
-      patch.tradePlanId =
-        args.tradePlanId === null ? undefined : args.tradePlanId;
-    }
     if (args.portfolioId !== undefined) {
       patch.portfolioId =
         args.portfolioId === null ? undefined : args.portfolioId;
@@ -483,67 +451,6 @@ export const listTrades = query({
       .withIndex("by_owner_date", (q) => q.eq("ownerId", ownerId))
       .order("desc")
       .collect();
-  },
-});
-
-export const listTradesByTradePlan = query({
-  args: {
-    tradePlanId: v.id("tradePlans"),
-  },
-  returns: v.array(tradeValidator),
-  handler: async (ctx, args) => {
-    const ownerId = await requireUser(ctx);
-    const tradePlan = await ctx.db.get(args.tradePlanId);
-    if (!tradePlan || tradePlan.ownerId !== ownerId) {
-      return [];
-    }
-
-    const trades = await ctx.db
-      .query("trades")
-      .withIndex("by_owner_tradePlanId", (q) =>
-        q.eq("ownerId", ownerId).eq("tradePlanId", args.tradePlanId),
-      )
-      .collect();
-
-    return trades.sort((a, b) => b.date - a.date);
-  },
-});
-
-export const listTradesByCampaign = query({
-  args: {
-    campaignId: v.id("campaigns"),
-  },
-  returns: v.array(tradeValidator),
-  handler: async (ctx, args) => {
-    const ownerId = await requireUser(ctx);
-    const campaign = await ctx.db.get(args.campaignId);
-    if (!campaign || campaign.ownerId !== ownerId) {
-      return [];
-    }
-
-    const tradePlans = await ctx.db
-      .query("tradePlans")
-      .withIndex("by_owner_campaignId", (q) =>
-        q.eq("ownerId", ownerId).eq("campaignId", args.campaignId),
-      )
-      .collect();
-
-    if (tradePlans.length === 0) {
-      return [];
-    }
-
-    const tradesByPlan = await Promise.all(
-      tradePlans.map((tradePlan) =>
-        ctx.db
-          .query("trades")
-          .withIndex("by_owner_tradePlanId", (q) =>
-            q.eq("ownerId", ownerId).eq("tradePlanId", tradePlan._id),
-          )
-          .collect(),
-      ),
-    );
-
-    return tradesByPlan.flat().sort((a, b) => b.date - a.date);
   },
 });
 

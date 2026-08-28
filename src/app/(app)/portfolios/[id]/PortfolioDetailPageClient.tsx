@@ -738,8 +738,8 @@ export default function PortfolioDetailPageClient({
             className="text-sm text-olive-11"
             data-testid={PORTFOLIO_DETAIL_TEST_IDS.campaignExposureEmpty}
           >
-            No campaigns are linked through this portfolio&apos;s trades yet.
-            Link trades to a trade plan and a campaign to see exposure here.
+            Accepted trades do not carry campaign attribution. Portfolio
+            exposure appears as Unlinked when trades are present.
           </p>
         ) : (
           <ul className="space-y-2">
@@ -804,7 +804,7 @@ export default function PortfolioDetailPageClient({
                   <div className="flex flex-wrap items-center gap-2">
                     <span
                       className="font-medium text-olive-12 italic"
-                      title="Trades whose trade plan has no campaign — included in the portfolio total but not in any campaign."
+                      title="Accepted trades are included in the portfolio total without campaign attribution."
                     >
                       Trades not in a campaign
                     </span>
@@ -1003,12 +1003,11 @@ function DataIssuesPanel({
             data-testid={PORTFOLIO_DATA_ISSUES_TEST_IDS.uncoveredTradesGroup}
           >
             <p className="font-semibold text-olive-12">
-              Trades not linked to a campaign ({uncoveredTradeCount})
+              Trades without campaign attribution ({uncoveredTradeCount})
             </p>
             <p className="mt-1 text-sm text-olive-11">
-              These trades count toward the portfolio total but don&apos;t show
-              up in campaign exposure. Link them to a trade plan to include
-              them.
+              These trades count toward the portfolio total and appear as
+              Unlinked in campaign exposure.
             </p>
           </div>
         ) : null}

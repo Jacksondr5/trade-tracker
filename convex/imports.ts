@@ -10,7 +10,7 @@ import { internal } from "./_generated/api";
 import { assertOwner, requireUser } from "./lib/auth";
 import { ensureMarketDataInstrumentReviewRecord } from "./lib/marketDataInstruments";
 import type { Doc, Id } from "./_generated/dataModel";
-import type { MutationCtx } from "./_generated/server";
+import type { ActionCtx, MutationCtx, QueryCtx } from "./_generated/server";
 import { resolveInstrumentForOwner } from "./marketData";
 import { validateInboxTradeCandidate } from "../shared/imports/validation";
 import { KRAKEN_DEFAULT_ACCOUNT_ID } from "../shared/imports/constants";
@@ -18,10 +18,11 @@ import {
   classifyIbkrExternalId,
   ibkrLogicalFillFingerprint,
 } from "./lib/ibkrTradeIdentity";
+import { findMatchingTradePlans } from "../shared/imports/auto-match";
 import {
-  findAutoMatchTradePlanId,
-  findMatchingTradePlans,
-} from "../shared/imports/auto-match";
+  deriveInstrumentPositionEpisodes,
+  MAX_DERIVED_POSITION_TRADES,
+} from "./lib/openPositions";
 
 type CanonicalCandidate = {
   assetType: "stock" | "crypto";
@@ -53,6 +54,115 @@ const sourceValidator = v.union(
   v.literal("manual"),
 );
 
+const MAX_COUNTERPART_HISTORY_SCAN = MAX_DERIVED_POSITION_TRADES;
+
+export type EpisodeTradeEvidence = {
+  _creationTime: number;
+  date: number;
+  direction: "long" | "short";
+  portfolioId?: Id<"portfolios">;
+  portfolioName?: string;
+  price: number;
+  quantity: number;
+  side: "buy" | "sell";
+  ticker: string;
+  tradeId: Id<"trades">;
+};
+
+export function acceptedHistoryAtOrBeforeFill<T extends { date: number }>(
+  history: T[],
+  fillDate: number,
+): T[] {
+  return history.filter((trade) => trade.date <= fillDate);
+}
+
+type PortfolioInferenceEvidence = {
+  date: number;
+  portfolioId: Id<"portfolios">;
+  portfolioName: string;
+  tradeId: Id<"trades">;
+};
+
+export type PortfolioInferenceResult =
+  | {
+      kind: "inferred";
+      groupOpeningTradeDate: number;
+      inheritedFromTrade: PortfolioInferenceEvidence;
+      openPositionSignedQuantity: number;
+      portfolioId: Id<"portfolios">;
+      portfolioName: string;
+    }
+  | {
+      kind: "needsPortfolio";
+      reason:
+        | "opening_trade"
+        | "implausible_history"
+        | "history_scan_limit"
+        | "open_episode_portfolio_missing"
+        | "open_episode_portfolio_conflict";
+    };
+
+/**
+ * Inherit only inside a plausible open flat-to-flat episode. This is Phase 3's
+ * episode concept computed on demand; it deliberately persists no episode ID.
+ */
+export function inferPortfolioFromOpenEpisode(
+  trades: EpisodeTradeEvidence[],
+): PortfolioInferenceResult {
+  const firstTrade = trades[0];
+  if (firstTrade === undefined) {
+    return { kind: "needsPortfolio", reason: "opening_trade" };
+  }
+  const position = deriveInstrumentPositionEpisodes(trades).get(
+    `${firstTrade.ticker.toUpperCase()}:${firstTrade.direction}`,
+  );
+  if (position === undefined) {
+    return { kind: "needsPortfolio", reason: "opening_trade" };
+  }
+  if (!position.isPlausible) {
+    return { kind: "needsPortfolio", reason: "implausible_history" };
+  }
+  if (position.netQuantity === 0 || position.openingTrade === null) {
+    return { kind: "needsPortfolio", reason: "opening_trade" };
+  }
+  const openingIndex = position.orderedTrades.indexOf(position.openingTrade);
+  const openEpisode = position.orderedTrades.slice(openingIndex);
+  const latest = openEpisode[openEpisode.length - 1]!;
+  if (latest.portfolioId === undefined || latest.portfolioName === undefined) {
+    return {
+      kind: "needsPortfolio",
+      reason: "open_episode_portfolio_missing",
+    };
+  }
+  if (
+    openEpisode.some(
+      (trade) =>
+        trade.portfolioId !== undefined &&
+        trade.portfolioId !== latest.portfolioId,
+    )
+  ) {
+    return {
+      kind: "needsPortfolio",
+      reason: "open_episode_portfolio_conflict",
+    };
+  }
+  const signedQuantity =
+    latest.direction === "long" ? position.netQuantity : -position.netQuantity;
+  return {
+    groupOpeningTradeDate: position.openingTrade.date,
+    inheritedFromTrade: {
+      date: latest.date,
+      portfolioId: latest.portfolioId,
+      portfolioName: latest.portfolioName,
+      tradeId: latest.tradeId,
+    },
+    kind: "inferred",
+    openPositionSignedQuantity: signedQuantity,
+    portfolioId: latest.portfolioId,
+    portfolioName: latest.portfolioName,
+  };
+}
+
 const inboxTradeValidator = v.object({
   _creationTime: v.number(),
   _id: v.id("inboxTrades"),
@@ -72,7 +182,6 @@ const inboxTradeValidator = v.object({
   status: v.union(v.literal("pending_review")),
   taxes: v.optional(v.number()),
   ticker: v.optional(v.string()),
-  tradePlanId: v.optional(v.id("tradePlans")),
   validationErrors: v.array(v.string()),
   validationWarnings: v.array(v.string()),
 });
@@ -84,19 +193,6 @@ const openTradePlanReferenceValidator = v.object({
   name: v.string(),
   status: v.union(
     v.literal("active"),
-    v.literal("idea"),
-    v.literal("watching"),
-  ),
-});
-
-const assignedTradePlanReferenceValidator = v.object({
-  _id: v.id("tradePlans"),
-  campaignId: v.optional(v.id("campaigns")),
-  instrumentSymbol: v.string(),
-  name: v.string(),
-  status: v.union(
-    v.literal("active"),
-    v.literal("closed"),
     v.literal("idea"),
     v.literal("watching"),
   ),
@@ -125,14 +221,12 @@ const priceMappingStateValidator = v.union(
 const importReviewRowValidator = v.object({
   inboxTrade: inboxTradeValidator,
   matchContext: v.object({
-    assignedTradePlan: v.union(assignedTradePlanReferenceValidator, v.null()),
     candidateCount: v.number(),
     suggestedTradePlans: v.array(openTradePlanReferenceValidator),
     ticker: v.union(v.string(), v.null()),
   }),
   matchState: v.union(
     v.literal("ambiguous"),
-    v.literal("assigned"),
     v.literal("suggested"),
     v.literal("unmatched"),
   ),
@@ -185,7 +279,6 @@ const importsReviewWorkspaceValidator = v.object({
   rows: v.array(importReviewRowValidator),
   summary: v.object({
     ambiguousCount: v.number(),
-    assignedCount: v.number(),
     errorCount: v.number(),
     needsReviewCount: v.number(),
     readyCount: v.number(),
@@ -214,7 +307,6 @@ export type StageInboxTradeInput = {
   source: ImportSource;
   taxes?: number;
   ticker?: string;
-  tradePlanId?: Id<"tradePlans">;
   validationErrors?: string[];
   validationWarnings?: string[];
 };
@@ -299,7 +391,6 @@ type InboxAcceptanceCheck =
       candidate: CanonicalCandidate;
       inboxTrade: Doc<"inboxTrades">;
       portfolioId: Id<"portfolios"> | undefined;
-      tradePlanId: Id<"tradePlans"> | undefined;
     }
   | { ok: false; error: string };
 
@@ -309,7 +400,6 @@ async function checkInboxTradeForAcceptance(
   inboxTradeId: Id<"inboxTrades">,
   args: {
     portfolioId?: Id<"portfolios">;
-    tradePlanId?: Id<"tradePlans">;
   },
 ): Promise<InboxAcceptanceCheck> {
   const rawInboxTrade = await ctx.db.get(inboxTradeId);
@@ -323,15 +413,8 @@ async function checkInboxTradeForAcceptance(
     return { ok: false, error: "Trade is not pending review" };
   }
 
-  const tradePlanId =
-    args.tradePlanId !== undefined ? args.tradePlanId : inboxTrade.tradePlanId;
   const portfolioId =
     args.portfolioId !== undefined ? args.portfolioId : inboxTrade.portfolioId;
-
-  if (tradePlanId !== undefined) {
-    const tradePlan = await ctx.db.get(tradePlanId);
-    assertOwner(tradePlan, ownerId, "Trade plan not found");
-  }
 
   if (portfolioId !== undefined) {
     const portfolio = await ctx.db.get(portfolioId);
@@ -365,7 +448,6 @@ async function checkInboxTradeForAcceptance(
     candidate,
     inboxTrade,
     portfolioId,
-    tradePlanId,
   };
 }
 
@@ -377,7 +459,6 @@ async function commitInboxTradeAcceptance(
     inboxTrade: Doc<"inboxTrades">;
     instrumentId: Id<"marketDataInstruments">;
     portfolioId: Id<"portfolios"> | undefined;
-    tradePlanId: Id<"tradePlans"> | undefined;
   },
 ): Promise<{ accepted: boolean; error?: string }> {
   const instrument = assertOwner(
@@ -423,7 +504,6 @@ async function commitInboxTradeAcceptance(
     source: args.inboxTrade.source,
     taxes: args.inboxTrade.taxes,
     ticker: args.candidate.ticker,
-    tradePlanId: args.tradePlanId,
   });
 
   await ctx.db.delete(args.inboxTrade._id);
@@ -485,38 +565,6 @@ export async function stageInboxTradesForOwner(
     existingIbkrLogicalFills.set(fingerprint, kinds);
   }
 
-  const [activeTradePlans, ideaTradePlans, watchingTradePlans] =
-    await Promise.all([
-      ctx.db
-        .query("tradePlans")
-        .withIndex("by_owner_status", (q) =>
-          q.eq("ownerId", ownerId).eq("status", "active"),
-        )
-        .collect(),
-      ctx.db
-        .query("tradePlans")
-        .withIndex("by_owner_status", (q) =>
-          q.eq("ownerId", ownerId).eq("status", "idea"),
-        )
-        .collect(),
-      ctx.db
-        .query("tradePlans")
-        .withIndex("by_owner_status", (q) =>
-          q.eq("ownerId", ownerId).eq("status", "watching"),
-        )
-        .collect(),
-    ]);
-  const openTradePlans = [
-    ...activeTradePlans,
-    ...ideaTradePlans,
-    ...watchingTradePlans,
-  ];
-
-  const tradePlanMatchList = openTradePlans.map((p) => ({
-    id: p._id as string,
-    instrumentSymbol: p.instrumentSymbol,
-  }));
-
   let imported = 0;
   let skippedDuplicates = 0;
   let skippedLogicalDuplicates = 0;
@@ -525,7 +573,6 @@ export async function stageInboxTradesForOwner(
   const scheduledResolutionKeys = new Set<string>();
 
   const portfolioOwnerCache = new Map<Id<"portfolios">, true>();
-  const tradePlanOwnerCache = new Map<Id<"tradePlans">, true>();
 
   for (const trade of trades) {
     const brokerageAccountId = normalizeBrokerageAccountId(
@@ -601,25 +648,6 @@ export async function stageInboxTradesForOwner(
     if (validationErrors.length > 0) withValidationErrors++;
     if (validationWarnings.length > 0) withWarnings++;
 
-    if (trade.tradePlanId !== undefined) {
-      if (!tradePlanOwnerCache.has(trade.tradePlanId)) {
-        const tradePlan = await ctx.db.get(trade.tradePlanId);
-        assertOwner(tradePlan, ownerId, "Trade plan not found");
-        tradePlanOwnerCache.set(trade.tradePlanId, true);
-      }
-    }
-
-    let resolvedTradePlanId = trade.tradePlanId;
-    if (resolvedTradePlanId === undefined && validation.normalizedTicker) {
-      const autoMatchId = findAutoMatchTradePlanId(
-        validation.normalizedTicker,
-        tradePlanMatchList,
-      );
-      if (autoMatchId) {
-        resolvedTradePlanId = autoMatchId as Id<"tradePlans">;
-      }
-    }
-
     if (trade.portfolioId !== undefined) {
       if (!portfolioOwnerCache.has(trade.portfolioId)) {
         const portfolio = await ctx.db.get(trade.portfolioId);
@@ -673,7 +701,6 @@ export async function stageInboxTradesForOwner(
       status: "pending_review",
       taxes: trade.taxes,
       ticker: validation.normalizedTicker,
-      tradePlanId: resolvedTradePlanId,
       validationErrors,
       validationWarnings,
     });
@@ -708,7 +735,6 @@ export const importTrades = mutation({
         source: sourceValidator,
         taxes: v.optional(v.number()),
         ticker: v.optional(v.string()),
-        tradePlanId: v.optional(v.id("tradePlans")),
         validationErrors: v.optional(v.array(v.string())),
         validationWarnings: v.optional(v.array(v.string())),
       }),
@@ -824,7 +850,6 @@ export const getImportsReviewWorkspace = query({
       activeTradePlans,
       ideaTradePlans,
       watchingTradePlans,
-      allTradePlans,
       ownerTrades,
       ownerInstruments,
     ] = await Promise.all([
@@ -874,10 +899,6 @@ export const getImportsReviewWorkspace = query({
         .withIndex("by_owner_status", (q) =>
           q.eq("ownerId", ownerId).eq("status", "watching"),
         )
-        .collect(),
-      ctx.db
-        .query("tradePlans")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .collect(),
       ctx.db
         .query("trades")
@@ -948,19 +969,6 @@ export const getImportsReviewWorkspace = query({
     const openTradePlanReferenceById = new Map(
       openTradePlanReferences.map((plan) => [plan._id, plan]),
     );
-    const assignedTradePlanById = new Map(
-      allTradePlans.map((plan) => [
-        plan._id,
-        {
-          _id: plan._id,
-          campaignId: plan.campaignId,
-          instrumentSymbol: plan.instrumentSymbol,
-          name: plan.name,
-          status: plan.status,
-        },
-      ]),
-    );
-
     const tradeCountByPortfolioId = new Map<Id<"portfolios">, number>();
     for (const trade of ownerTrades) {
       if (!trade.portfolioId) continue;
@@ -1001,19 +1009,12 @@ export const getImportsReviewWorkspace = query({
           )
           .filter((plan) => plan !== undefined);
 
-        const assignedTradePlan =
-          trade.tradePlanId !== undefined
-            ? (assignedTradePlanById.get(trade.tradePlanId) ?? null)
-            : null;
-
-        const matchState: "ambiguous" | "assigned" | "suggested" | "unmatched" =
-          assignedTradePlan !== null
-            ? "assigned"
-            : matchedPlans.length === 1
-              ? "suggested"
-              : matchedPlans.length > 1
-                ? "ambiguous"
-                : "unmatched";
+        const matchState: "ambiguous" | "suggested" | "unmatched" =
+          matchedPlans.length === 1
+            ? "suggested"
+            : matchedPlans.length > 1
+              ? "ambiguous"
+              : "unmatched";
 
         const instrument =
           trade.assetType !== undefined && trade.ticker !== undefined
@@ -1051,7 +1052,6 @@ export const getImportsReviewWorkspace = query({
         return {
           inboxTrade: trade,
           matchContext: {
-            assignedTradePlan,
             candidateCount: matchedPlans.length,
             suggestedTradePlans: matchedPlans,
             ticker: trade.ticker ?? null,
@@ -1071,9 +1071,6 @@ export const getImportsReviewWorkspace = query({
         switch (row.matchState) {
           case "ambiguous":
             counts.ambiguousCount += 1;
-            break;
-          case "assigned":
-            counts.assignedCount += 1;
             break;
           case "suggested":
             counts.suggestedCount += 1;
@@ -1108,7 +1105,6 @@ export const getImportsReviewWorkspace = query({
       },
       {
         ambiguousCount: 0,
-        assignedCount: 0,
         errorCount: 0,
         needsReviewCount: 0,
         readyCount: 0,
@@ -1148,7 +1144,7 @@ export const listInboxTradesForTradePlan = query({
   returns: v.array(
     v.object({
       inboxTrade: inboxTradeValidator,
-      matchType: v.union(v.literal("assigned"), v.literal("suggested")),
+      matchType: v.literal("suggested"),
     }),
   ),
   handler: async (ctx, args) => {
@@ -1160,41 +1156,20 @@ export const listInboxTradesForTradePlan = query({
     );
 
     const normalizedSymbol = tradePlan.instrumentSymbol.toUpperCase();
-    const [assigned, suggested] = await Promise.all([
-      ctx.db
-        .query("inboxTrades")
-        .withIndex("by_owner_status_tradePlanId", (q) =>
-          q
-            .eq("ownerId", ownerId)
-            .eq("status", "pending_review")
-            .eq("tradePlanId", args.tradePlanId),
-        )
-        .collect(),
-      ctx.db
-        .query("inboxTrades")
-        .withIndex("by_owner_status_ticker", (q) =>
-          q
-            .eq("ownerId", ownerId)
-            .eq("status", "pending_review")
-            .eq("ticker", normalizedSymbol),
-        )
-        .collect(),
-    ]);
-
-    const sortedAssigned = assigned.sort(
+    const suggested = await ctx.db
+      .query("inboxTrades")
+      .withIndex("by_owner_status_ticker", (q) =>
+        q
+          .eq("ownerId", ownerId)
+          .eq("status", "pending_review")
+          .eq("ticker", normalizedSymbol),
+      )
+      .collect();
+    const sortedSuggested = suggested.sort(
       (a, b) => (b.date ?? b._creationTime) - (a.date ?? a._creationTime),
     );
-    const sortedSuggested = suggested
-      .filter((trade) => trade.tradePlanId === undefined)
-      .sort(
-        (a, b) => (b.date ?? b._creationTime) - (a.date ?? a._creationTime),
-      );
 
     return [
-      ...sortedAssigned.map((trade) => ({
-        inboxTrade: trade,
-        matchType: "assigned" as const,
-      })),
       ...sortedSuggested.map((trade) => ({
         inboxTrade: trade,
         matchType: "suggested" as const,
@@ -1210,7 +1185,6 @@ type AcceptCheckResult =
       candidate: CanonicalCandidate;
       inboxTradeId: Id<"inboxTrades">;
       portfolioId: Id<"portfolios"> | undefined;
-      tradePlanId: Id<"tradePlans"> | undefined;
     }
   | { ok: false; error: string };
 
@@ -1229,7 +1203,6 @@ const acceptCheckValidator = v.union(
     }),
     inboxTradeId: v.id("inboxTrades"),
     portfolioId: v.optional(v.id("portfolios")),
-    tradePlanId: v.optional(v.id("tradePlans")),
   }),
   v.object({
     ok: v.literal(false),
@@ -1242,7 +1215,6 @@ export const checkInboxTradeForAcceptanceInternal = internalMutation({
     inboxTradeId: v.id("inboxTrades"),
     ownerId: v.string(),
     portfolioId: v.optional(v.id("portfolios")),
-    tradePlanId: v.optional(v.id("tradePlans")),
   },
   returns: acceptCheckValidator,
   handler: async (ctx, args): Promise<AcceptCheckResult> => {
@@ -1252,7 +1224,6 @@ export const checkInboxTradeForAcceptanceInternal = internalMutation({
       args.inboxTradeId,
       {
         portfolioId: args.portfolioId,
-        tradePlanId: args.tradePlanId,
       },
     );
     if (!result.ok) {
@@ -1264,43 +1235,7 @@ export const checkInboxTradeForAcceptanceInternal = internalMutation({
       candidate: result.candidate,
       inboxTradeId: result.inboxTrade._id,
       portfolioId: result.portfolioId,
-      tradePlanId: result.tradePlanId,
     };
-  },
-});
-
-export const commitInboxTradeAcceptanceInternal = internalMutation({
-  args: {
-    inboxTradeId: v.id("inboxTrades"),
-    instrumentId: v.id("marketDataInstruments"),
-    ownerId: v.string(),
-    portfolioId: v.optional(v.id("portfolios")),
-    tradePlanId: v.optional(v.id("tradePlans")),
-  },
-  returns: v.object({
-    accepted: v.boolean(),
-    error: v.optional(v.string()),
-  }),
-  handler: async (ctx, args) => {
-    const checkResult = await checkInboxTradeForAcceptance(
-      ctx,
-      args.ownerId,
-      args.inboxTradeId,
-      {
-        portfolioId: args.portfolioId,
-        tradePlanId: args.tradePlanId,
-      },
-    );
-    if (!checkResult.ok) {
-      return { accepted: false, error: checkResult.error };
-    }
-    return await commitInboxTradeAcceptance(ctx, args.ownerId, {
-      candidate: checkResult.candidate,
-      inboxTrade: checkResult.inboxTrade,
-      instrumentId: args.instrumentId,
-      portfolioId: checkResult.portfolioId,
-      tradePlanId: checkResult.tradePlanId,
-    });
   },
 });
 
@@ -1318,13 +1253,637 @@ export const listPendingInboxTradesInternal = internalQuery({
   },
 });
 
-async function acceptInboxTradeViaAction(
+const portfolioInferenceEvidenceValidator = v.object({
+  date: v.number(),
+  portfolioId: v.id("portfolios"),
+  portfolioName: v.string(),
+  tradeId: v.id("trades"),
+});
+
+const counterpartTradeSummaryValidator = v.object({
+  date: v.number(),
+  direction: v.union(v.literal("long"), v.literal("short")),
+  inboxTradeId: v.id("inboxTrades"),
+  price: v.number(),
+  quantity: v.number(),
+  side: v.union(v.literal("buy"), v.literal("sell")),
+  ticker: v.string(),
+});
+
+const prepareCounterpartAcceptanceValidator = v.union(
+  v.object({
+    kind: v.literal("ready"),
+    portfolio: v.object({
+      evidence: v.object({
+        groupOpeningTradeDate: v.union(v.number(), v.null()),
+        inheritedFromTrade: v.union(
+          portfolioInferenceEvidenceValidator,
+          v.null(),
+        ),
+        openPositionSignedQuantity: v.union(v.number(), v.null()),
+      }),
+      id: v.id("portfolios"),
+      name: v.string(),
+      reason: v.union(
+        v.literal("explicit_override"),
+        v.literal("open_episode_inheritance"),
+      ),
+    }),
+    trade: counterpartTradeSummaryValidator,
+  }),
+  v.object({
+    kind: v.literal("needsPortfolio"),
+    candidates: v.array(
+      v.object({
+        evidence: v.array(portfolioInferenceEvidenceValidator),
+        evidenceCount: v.number(),
+        mostRecentTradeDate: v.number(),
+        portfolioId: v.id("portfolios"),
+        portfolioName: v.string(),
+      }),
+    ),
+    reason: v.union(
+      v.literal("opening_trade"),
+      v.literal("implausible_history"),
+      v.literal("history_scan_limit"),
+      v.literal("open_episode_portfolio_missing"),
+      v.literal("open_episode_portfolio_conflict"),
+    ),
+    trade: counterpartTradeSummaryValidator,
+  }),
+  v.object({
+    kind: v.literal("outOfOrder"),
+    conflict: v.union(
+      v.object({
+        kind: v.literal("older_pending"),
+        date: v.number(),
+        inboxTradeId: v.id("inboxTrades"),
+        ticker: v.string(),
+      }),
+      v.object({
+        kind: v.literal("newer_accepted"),
+        date: v.number(),
+        ticker: v.string(),
+        tradeId: v.id("trades"),
+      }),
+    ),
+    trade: counterpartTradeSummaryValidator,
+  }),
+  v.object({
+    code: v.union(
+      v.literal("CONFLICT"),
+      v.literal("NOT_FOUND"),
+      v.literal("VALIDATION"),
+    ),
+    error: v.string(),
+    kind: v.literal("error"),
+  }),
+);
+
+const counterpartAcceptanceFingerprintValidator = v.object({
+  portfolio: v.object({
+    groupOpeningTradeDate: v.union(v.number(), v.null()),
+    inheritedFromTradeId: v.union(v.id("trades"), v.null()),
+    openPositionSignedQuantity: v.union(v.number(), v.null()),
+    portfolioId: v.id("portfolios"),
+    reason: v.union(
+      v.literal("explicit_override"),
+      v.literal("open_episode_inheritance"),
+    ),
+  }),
+  trade: counterpartTradeSummaryValidator,
+});
+
+const counterpartAcceptanceContextValidator = v.object({
+  expected: counterpartAcceptanceFingerprintValidator,
+  portfolioIdOverride: v.optional(v.id("portfolios")),
+});
+
+type PrepareCounterpartAcceptance =
+  | {
+      kind: "ready";
+      portfolio: {
+        evidence: {
+          groupOpeningTradeDate: number | null;
+          inheritedFromTrade: PortfolioInferenceEvidence | null;
+          openPositionSignedQuantity: number | null;
+        };
+        id: Id<"portfolios">;
+        name: string;
+        reason: "explicit_override" | "open_episode_inheritance";
+      };
+      trade: {
+        date: number;
+        direction: "long" | "short";
+        inboxTradeId: Id<"inboxTrades">;
+        price: number;
+        quantity: number;
+        side: "buy" | "sell";
+        ticker: string;
+      };
+    }
+  | {
+      kind: "needsPortfolio";
+      candidates: Array<{
+        evidence: PortfolioInferenceEvidence[];
+        evidenceCount: number;
+        mostRecentTradeDate: number;
+        portfolioId: Id<"portfolios">;
+        portfolioName: string;
+      }>;
+      reason: Extract<
+        PortfolioInferenceResult,
+        { kind: "needsPortfolio" }
+      >["reason"];
+      trade: {
+        date: number;
+        direction: "long" | "short";
+        inboxTradeId: Id<"inboxTrades">;
+        price: number;
+        quantity: number;
+        side: "buy" | "sell";
+        ticker: string;
+      };
+    }
+  | {
+      kind: "outOfOrder";
+      conflict:
+        | {
+            kind: "older_pending";
+            date: number;
+            inboxTradeId: Id<"inboxTrades">;
+            ticker: string;
+          }
+        | {
+            kind: "newer_accepted";
+            date: number;
+            ticker: string;
+            tradeId: Id<"trades">;
+          };
+      trade: {
+        date: number;
+        direction: "long" | "short";
+        inboxTradeId: Id<"inboxTrades">;
+        price: number;
+        quantity: number;
+        side: "buy" | "sell";
+        ticker: string;
+      };
+    }
+  | {
+      code: "CONFLICT" | "NOT_FOUND" | "VALIDATION";
+      error: string;
+      kind: "error";
+    };
+
+type CounterpartAcceptanceFingerprint = {
+  portfolio: {
+    groupOpeningTradeDate: number | null;
+    inheritedFromTradeId: Id<"trades"> | null;
+    openPositionSignedQuantity: number | null;
+    portfolioId: Id<"portfolios">;
+    reason: "explicit_override" | "open_episode_inheritance";
+  };
+  trade: Extract<PrepareCounterpartAcceptance, { kind: "ready" }>["trade"];
+};
+
+type CounterpartAcceptanceContext = {
+  expected: CounterpartAcceptanceFingerprint;
+  portfolioIdOverride?: Id<"portfolios">;
+};
+
+function counterpartAcceptanceFingerprint(
+  prepared: Extract<PrepareCounterpartAcceptance, { kind: "ready" }>,
+): CounterpartAcceptanceFingerprint {
+  return {
+    portfolio: {
+      groupOpeningTradeDate: prepared.portfolio.evidence.groupOpeningTradeDate,
+      inheritedFromTradeId:
+        prepared.portfolio.evidence.inheritedFromTrade?.tradeId ?? null,
+      openPositionSignedQuantity:
+        prepared.portfolio.evidence.openPositionSignedQuantity,
+      portfolioId: prepared.portfolio.id,
+      reason: prepared.portfolio.reason,
+    },
+    trade: prepared.trade,
+  };
+}
+
+function counterpartAcceptanceFingerprintsMatch(
+  left: CounterpartAcceptanceFingerprint,
+  right: CounterpartAcceptanceFingerprint,
+): boolean {
+  return (
+    left.portfolio.groupOpeningTradeDate ===
+      right.portfolio.groupOpeningTradeDate &&
+    left.portfolio.inheritedFromTradeId ===
+      right.portfolio.inheritedFromTradeId &&
+    left.portfolio.openPositionSignedQuantity ===
+      right.portfolio.openPositionSignedQuantity &&
+    left.portfolio.portfolioId === right.portfolio.portfolioId &&
+    left.portfolio.reason === right.portfolio.reason &&
+    left.trade.date === right.trade.date &&
+    left.trade.direction === right.trade.direction &&
+    left.trade.inboxTradeId === right.trade.inboxTradeId &&
+    left.trade.price === right.trade.price &&
+    left.trade.quantity === right.trade.quantity &&
+    left.trade.side === right.trade.side &&
+    left.trade.ticker === right.trade.ticker
+  );
+}
+
+function counterpartTickerKeys(ticker: string): string[] {
+  return [...new Set([ticker, ticker.toLowerCase()])];
+}
+
+function mergeChronologicalRows<
+  T extends { _creationTime: number; _id: string; date?: number },
+>(rowGroups: T[][]): T[] {
+  const rowById = new Map<string, T>();
+  for (const row of rowGroups.flat()) rowById.set(row._id, row);
+  return [...rowById.values()].sort(
+    (left, right) =>
+      (left.date ?? left._creationTime) - (right.date ?? right._creationTime) ||
+      left._creationTime - right._creationTime,
+  );
+}
+
+async function prepareCounterpartAcceptanceForOwner(
+  ctx: QueryCtx | MutationCtx,
+  args: {
+    inboxTradeId: string;
+    ownerId: string;
+    portfolioId?: string;
+  },
+): Promise<PrepareCounterpartAcceptance> {
+  const inboxTradeId = ctx.db.normalizeId("inboxTrades", args.inboxTradeId);
+  if (inboxTradeId === null) {
+    return {
+      code: "VALIDATION",
+      error: "inboxTradeId must be a valid inboxTrades document ID",
+      kind: "error",
+    };
+  }
+  const inboxTrade = await ctx.db.get(inboxTradeId);
+  if (inboxTrade === null || inboxTrade.ownerId !== args.ownerId) {
+    return {
+      code: "NOT_FOUND",
+      error: "Inbox trade not found",
+      kind: "error",
+    };
+  }
+  const validation = validateInboxTradeCandidate(inboxTrade, {
+    includeExisting: false,
+  });
+  if (validation.validationErrors.length > 0) {
+    return {
+      code: "VALIDATION",
+      error: validation.validationErrors.join("; "),
+      kind: "error",
+    };
+  }
+  const trade = {
+    date: inboxTrade.date!,
+    direction: inboxTrade.direction!,
+    inboxTradeId: inboxTrade._id,
+    price: inboxTrade.price!,
+    quantity: inboxTrade.quantity!,
+    side: inboxTrade.side!,
+    ticker: validation.normalizedTicker!,
+  };
+  let explicitPortfolio: Doc<"portfolios"> | null = null;
+  if (args.portfolioId !== undefined) {
+    const portfolioId = ctx.db.normalizeId("portfolios", args.portfolioId);
+    if (portfolioId === null) {
+      return {
+        code: "VALIDATION",
+        error: "portfolioId must be a valid portfolios document ID",
+        kind: "error",
+      };
+    }
+    explicitPortfolio = await ctx.db.get(portfolioId);
+    if (
+      explicitPortfolio === null ||
+      explicitPortfolio.ownerId !== args.ownerId
+    ) {
+      return {
+        code: "NOT_FOUND",
+        error: "Portfolio not found",
+        kind: "error",
+      };
+    }
+  }
+
+  const normalizedAccountId = normalizeBrokerageAccountId(
+    inboxTrade.source,
+    inboxTrade.brokerageAccountId,
+  );
+  const tickerKeys = counterpartTickerKeys(trade.ticker);
+  const [pendingRowGroups, historyRowGroups] = await Promise.all([
+    Promise.all(
+      tickerKeys.map((ticker) =>
+        ctx.db
+          .query("inboxTrades")
+          .withIndex("by_owner_status_ticker_date", (q) =>
+            q
+              .eq("ownerId", args.ownerId)
+              .eq("status", "pending_review")
+              .eq("ticker", ticker),
+          )
+          .order("asc")
+          .take(MAX_COUNTERPART_HISTORY_SCAN + 1),
+      ),
+    ),
+    Promise.all(
+      tickerKeys.map((ticker) =>
+        ctx.db
+          .query("trades")
+          .withIndex("by_owner_ticker_date", (q) =>
+            q.eq("ownerId", args.ownerId).eq("ticker", ticker),
+          )
+          .order("asc")
+          .take(MAX_COUNTERPART_HISTORY_SCAN + 1),
+      ),
+    ),
+  ]);
+  const pendingSameTicker = mergeChronologicalRows(pendingRowGroups).slice(
+    0,
+    MAX_COUNTERPART_HISTORY_SCAN + 1,
+  );
+  const mergedHistory = mergeChronologicalRows(historyRowGroups);
+
+  const olderTrade = pendingSameTicker.find(
+    (item) =>
+      item._id !== inboxTrade._id &&
+      item.source === inboxTrade.source &&
+      normalizeBrokerageAccountId(item.source, item.brokerageAccountId) ===
+        normalizedAccountId &&
+      item.date !== undefined &&
+      (item.date < trade.date ||
+        (item.date === trade.date &&
+          item._creationTime < inboxTrade._creationTime)),
+  );
+  if (olderTrade?.date !== undefined) {
+    return {
+      conflict: {
+        date: olderTrade.date,
+        inboxTradeId: olderTrade._id,
+        kind: "older_pending",
+        ticker: trade.ticker,
+      },
+      kind: "outOfOrder",
+      trade,
+    };
+  }
+
+  const historyWasTruncated =
+    mergedHistory.length > MAX_COUNTERPART_HISTORY_SCAN;
+  const boundedHistory = mergedHistory.slice(0, MAX_COUNTERPART_HISTORY_SCAN);
+  const newerAcceptedTrade = boundedHistory.find(
+    (acceptedTrade) => acceptedTrade.date > trade.date,
+  );
+  if (newerAcceptedTrade !== undefined) {
+    return {
+      conflict: {
+        date: newerAcceptedTrade.date,
+        kind: "newer_accepted",
+        ticker: trade.ticker,
+        tradeId: newerAcceptedTrade._id,
+      },
+      kind: "outOfOrder",
+      trade,
+    };
+  }
+  if (historyWasTruncated && args.portfolioId !== undefined) {
+    return {
+      code: "CONFLICT",
+      error: "Accepted history exceeds the safe ordering limit",
+      kind: "error",
+    };
+  }
+
+  if (explicitPortfolio !== null) {
+    return {
+      kind: "ready",
+      portfolio: {
+        evidence: {
+          groupOpeningTradeDate: null,
+          inheritedFromTrade: null,
+          openPositionSignedQuantity: null,
+        },
+        id: explicitPortfolio._id,
+        name: explicitPortfolio.name,
+        reason: "explicit_override",
+      },
+      trade,
+    };
+  }
+
+  const acceptedHistory = acceptedHistoryAtOrBeforeFill(
+    boundedHistory,
+    trade.date,
+  );
+  const portfolios = new Map<Id<"portfolios">, string>();
+  for (const item of acceptedHistory) {
+    if (item.portfolioId === undefined || portfolios.has(item.portfolioId)) {
+      continue;
+    }
+    const portfolio = await ctx.db.get(item.portfolioId);
+    if (portfolio !== null && portfolio.ownerId === args.ownerId) {
+      portfolios.set(item.portfolioId, portfolio.name);
+    }
+  }
+  const chronologicalHistory: EpisodeTradeEvidence[] = acceptedHistory
+    .filter((item) => item.direction === trade.direction)
+    .map((item) => ({
+      _creationTime: item._creationTime,
+      date: item.date,
+      direction: item.direction,
+      portfolioId: item.portfolioId,
+      portfolioName:
+        item.portfolioId === undefined
+          ? undefined
+          : portfolios.get(item.portfolioId),
+      price: item.price,
+      quantity: item.quantity,
+      side: item.side,
+      ticker: item.ticker,
+      tradeId: item._id,
+    }));
+  const inference: PortfolioInferenceResult = historyWasTruncated
+    ? { kind: "needsPortfolio", reason: "history_scan_limit" }
+    : inferPortfolioFromOpenEpisode(chronologicalHistory);
+  if (inference.kind === "needsPortfolio") {
+    const candidateEvidence = [...acceptedHistory].reverse().flatMap((item) => {
+      if (item.portfolioId === undefined) return [];
+      const portfolioName = portfolios.get(item.portfolioId);
+      if (portfolioName === undefined) return [];
+      return [
+        {
+          date: item.date,
+          portfolioId: item.portfolioId,
+          portfolioName,
+          tradeId: item._id,
+        },
+      ];
+    });
+    const byPortfolio = new Map<
+      Id<"portfolios">,
+      PortfolioInferenceEvidence[]
+    >();
+    for (const item of candidateEvidence) {
+      const items = byPortfolio.get(item.portfolioId) ?? [];
+      items.push(item);
+      byPortfolio.set(item.portfolioId, items);
+    }
+    const candidates = [...byPortfolio.entries()].map(
+      ([portfolioId, evidence]) => ({
+        evidence,
+        evidenceCount: evidence.length,
+        mostRecentTradeDate: evidence[0].date,
+        portfolioId,
+        portfolioName: evidence[0].portfolioName,
+      }),
+    );
+    return { candidates, ...inference, trade };
+  }
+  return {
+    kind: "ready",
+    portfolio: {
+      evidence: {
+        groupOpeningTradeDate: inference.groupOpeningTradeDate,
+        inheritedFromTrade: inference.inheritedFromTrade,
+        openPositionSignedQuantity: inference.openPositionSignedQuantity,
+      },
+      id: inference.portfolioId,
+      name: inference.portfolioName,
+      reason: "open_episode_inheritance",
+    },
+    trade,
+  };
+}
+
+export const prepareCounterpartAcceptance = internalQuery({
+  args: {
+    inboxTradeId: v.string(),
+    ownerId: v.string(),
+    portfolioId: v.optional(v.string()),
+  },
+  returns: prepareCounterpartAcceptanceValidator,
+  handler: prepareCounterpartAcceptanceForOwner,
+});
+
+export const commitInboxTradeAcceptanceInternal = internalMutation({
+  args: {
+    counterpartContext: v.optional(counterpartAcceptanceContextValidator),
+    inboxTradeId: v.id("inboxTrades"),
+    instrumentId: v.id("marketDataInstruments"),
+    ownerId: v.string(),
+    portfolioId: v.optional(v.id("portfolios")),
+  },
+  returns: v.object({
+    accepted: v.boolean(),
+    error: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    if (args.counterpartContext !== undefined) {
+      const prepared = await prepareCounterpartAcceptanceForOwner(ctx, {
+        inboxTradeId: args.inboxTradeId,
+        ownerId: args.ownerId,
+        portfolioId: args.counterpartContext.portfolioIdOverride,
+      });
+      if (prepared.kind !== "ready") {
+        return {
+          accepted: false,
+          error: "Acceptance context changed; refresh before retrying",
+        };
+      }
+      const actualFingerprint = counterpartAcceptanceFingerprint(prepared);
+      if (
+        !counterpartAcceptanceFingerprintsMatch(
+          actualFingerprint,
+          args.counterpartContext.expected,
+        )
+      ) {
+        return {
+          accepted: false,
+          error: "Acceptance context changed; refresh before retrying",
+        };
+      }
+    }
+
+    const checkResult = await checkInboxTradeForAcceptance(
+      ctx,
+      args.ownerId,
+      args.inboxTradeId,
+      {
+        portfolioId: args.portfolioId,
+      },
+    );
+    if (!checkResult.ok) {
+      return { accepted: false, error: checkResult.error };
+    }
+    return await commitInboxTradeAcceptance(ctx, args.ownerId, {
+      candidate: checkResult.candidate,
+      inboxTrade: checkResult.inboxTrade,
+      instrumentId: args.instrumentId,
+      portfolioId: checkResult.portfolioId,
+    });
+  },
+});
+
+export async function acceptCounterpartTradeViaAction(
+  ctx: ActionCtx,
+  ownerId: string,
+  args: {
+    inboxTradeId: string;
+    portfolioId?: string;
+  },
+) {
+  const prepared: PrepareCounterpartAcceptance = await ctx.runQuery(
+    internal.imports.prepareCounterpartAcceptance,
+    { ...args, ownerId },
+  );
+  if (prepared.kind !== "ready") return prepared;
+
+  const result = await acceptInboxTradeViaAction(
+    ctx,
+    ownerId,
+    prepared.trade.inboxTradeId,
+    {
+      counterpartContext: {
+        expected: counterpartAcceptanceFingerprint(prepared),
+        portfolioIdOverride:
+          prepared.portfolio.reason === "explicit_override"
+            ? prepared.portfolio.id
+            : undefined,
+      },
+      portfolioId: prepared.portfolio.id,
+    },
+  );
+  if (!result.accepted) {
+    return {
+      code: result.error?.startsWith("Acceptance context changed")
+        ? ("CONFLICT" as const)
+        : ("VALIDATION" as const),
+      error: result.error ?? "Trade could not be accepted",
+      kind: "error" as const,
+    };
+  }
+  return {
+    kind: "accepted" as const,
+    portfolio: prepared.portfolio,
+    trade: prepared.trade,
+  };
+}
+
+export async function acceptInboxTradeViaAction(
   ctx: import("./_generated/server").ActionCtx,
   ownerId: string,
   inboxTradeId: Id<"inboxTrades">,
   args: {
+    counterpartContext?: CounterpartAcceptanceContext;
     portfolioId?: Id<"portfolios">;
-    tradePlanId?: Id<"tradePlans">;
   },
 ): Promise<{ accepted: boolean; error?: string }> {
   const check: AcceptCheckResult = await ctx.runMutation(
@@ -1333,7 +1892,6 @@ async function acceptInboxTradeViaAction(
       inboxTradeId,
       ownerId,
       portfolioId: args.portfolioId,
-      tradePlanId: args.tradePlanId,
     },
   );
   if (!check.ok) {
@@ -1357,8 +1915,8 @@ async function acceptInboxTradeViaAction(
       inboxTradeId: check.inboxTradeId,
       instrumentId: resolution.instrument._id,
       ownerId,
+      counterpartContext: args.counterpartContext,
       portfolioId: check.portfolioId,
-      tradePlanId: check.tradePlanId,
     },
   );
   return result;
@@ -1368,7 +1926,6 @@ export const acceptTrade = action({
   args: {
     inboxTradeId: v.id("inboxTrades"),
     portfolioId: v.optional(v.id("portfolios")),
-    tradePlanId: v.optional(v.id("tradePlans")),
   },
   returns: v.object({
     accepted: v.boolean(),
@@ -1381,7 +1938,6 @@ export const acceptTrade = action({
     const ownerId = await requireUser(ctx);
     return await acceptInboxTradeViaAction(ctx, ownerId, args.inboxTradeId, {
       portfolioId: args.portfolioId,
-      tradePlanId: args.tradePlanId,
     });
   },
 });
@@ -1480,7 +2036,6 @@ export const updateInboxTrade = mutation({
     quantity: v.optional(v.union(v.number(), v.null())),
     side: v.optional(v.union(v.literal("buy"), v.literal("sell"), v.null())),
     ticker: v.optional(v.union(v.string(), v.null())),
-    tradePlanId: v.optional(v.union(v.id("tradePlans"), v.null())),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -1490,11 +2045,6 @@ export const updateInboxTrade = mutation({
     const trade = assertOwner(rawTrade, ownerId, "Inbox trade not found");
     if (trade.status !== "pending_review") {
       throw new ConvexError("Can only edit pending review trades");
-    }
-
-    if (updates.tradePlanId !== undefined && updates.tradePlanId !== null) {
-      const tradePlan = await ctx.db.get(updates.tradePlanId);
-      assertOwner(tradePlan, ownerId, "Trade plan not found");
     }
 
     if (updates.portfolioId !== undefined && updates.portfolioId !== null) {
@@ -1519,9 +2069,6 @@ export const updateInboxTrade = mutation({
       patch.ticker = updates.ticker
         ? updates.ticker.trim().toUpperCase()
         : undefined;
-    }
-    if (updates.tradePlanId !== undefined) {
-      patch.tradePlanId = updates.tradePlanId ?? undefined;
     }
 
     const merged = {

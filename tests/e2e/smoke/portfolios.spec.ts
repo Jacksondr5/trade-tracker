@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { E2E_SMOKE_FIXTURES } from "../../../shared/e2e/smokeFixtures";
 import {
   PORTFOLIO_CASH_LEDGER_TEST_IDS,
+  PORTFOLIO_CAMPAIGN_EXPOSURE_UNCOVERED_ROW_TEST_ID,
   PORTFOLIO_DETAIL_TEST_IDS,
   getPortfolioLinkTestId,
   getPortfolioOpenPositionRowTestId,
@@ -87,12 +88,10 @@ test("portfolio detail surfaces overview analytics for the seeded portfolio", as
   );
   await expect(fcxPositionRow).toBeVisible();
 
-  // Campaign exposure surface includes the seeded campaign through the trade plan
+  // Accepted trades no longer carry campaign attribution.
   await expect(
-    page.getByTestId(PORTFOLIO_DETAIL_TEST_IDS.campaignExposureSection),
-  ).toContainText(
-    E2E_SMOKE_FIXTURES.campaign.name,
-  );
+    page.getByTestId(PORTFOLIO_CAMPAIGN_EXPOSURE_UNCOVERED_ROW_TEST_ID),
+  ).toContainText("Unlinked");
 });
 
 test("portfolio detail supports rename, cancel, and delete-confirmation", async ({
@@ -120,9 +119,7 @@ test("portfolio detail supports rename, cancel, and delete-confirmation", async 
 
   // Rename flow
   await page.getByTestId(PORTFOLIO_DETAIL_TEST_IDS.editNameButton).click();
-  await page
-    .getByTestId(PORTFOLIO_DETAIL_TEST_IDS.nameInput)
-    .fill(updatedName);
+  await page.getByTestId(PORTFOLIO_DETAIL_TEST_IDS.nameInput).fill(updatedName);
   await page.getByTestId(PORTFOLIO_DETAIL_TEST_IDS.saveNameButton).click();
   await expect(
     page.getByTestId(PORTFOLIO_DETAIL_TEST_IDS.nameDisplay),
@@ -145,9 +142,7 @@ test("portfolio detail supports rename, cancel, and delete-confirmation", async 
   await expect(
     page.getByTestId(PORTFOLIO_DETAIL_TEST_IDS.confirmDeleteButton),
   ).toBeVisible();
-  await page
-    .getByTestId(PORTFOLIO_DETAIL_TEST_IDS.cancelDeleteButton)
-    .click();
+  await page.getByTestId(PORTFOLIO_DETAIL_TEST_IDS.cancelDeleteButton).click();
   await expect(
     page.getByTestId(PORTFOLIO_DETAIL_TEST_IDS.deleteButton),
   ).toBeVisible();

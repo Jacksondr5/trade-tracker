@@ -17,7 +17,7 @@ import {
 } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
-import { capitalize, formatDate } from "~/lib/format";
+import { capitalize } from "~/lib/format";
 import { buildTradePlanIndexRelationshipLabel } from "~/lib/campaign-trade-plan-navigation";
 import {
   APP_PAGE_TITLES,
@@ -49,11 +49,8 @@ const createTradePlanSchema = z.object({
 type TradePlanSummary = {
   createdAt: number;
   execution: {
-    latestTradeDate: number | null;
-    pendingAssignedCount: number;
     pendingSuggestedCount: number;
     totalPendingCount: number;
-    tradeCount: number;
   };
   id: Id<"tradePlans">;
   instrumentSymbol: string;
@@ -415,28 +412,11 @@ function TradePlanRow({ plan }: { plan: TradePlanSummary }) {
                 <span>Linked (missing campaign metadata)</span>
               </>
             ) : null}
-            {plan.execution.tradeCount > 0 && (
-              <>
-                <span className="text-olive-8">·</span>
-                <span>
-                  {plan.execution.tradeCount}{" "}
-                  {plan.execution.tradeCount === 1 ? "trade" : "trades"}
-                </span>
-              </>
-            )}
             {plan.execution.totalPendingCount > 0 && (
               <>
                 <span className="text-olive-8">·</span>
                 <span className="text-amber-11">
                   {plan.execution.totalPendingCount} pending
-                </span>
-              </>
-            )}
-            {plan.execution.latestTradeDate && (
-              <>
-                <span className="text-olive-8">·</span>
-                <span>
-                  Last trade {formatDate(plan.execution.latestTradeDate)}
                 </span>
               </>
             )}

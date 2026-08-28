@@ -890,15 +890,13 @@ export default defineSchema({
     ),
     taxes: v.optional(v.number()),
     ticker: v.string(),
-    tradePlanId: v.optional(v.id("tradePlans")),
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_date", ["ownerId", "date"])
     .index("by_owner_ticker_date", ["ownerId", "ticker", "date"])
     .index("by_source_externalId", ["source", "externalId"])
     .index("by_owner_portfolioId", ["ownerId", "portfolioId"])
-    .index("by_owner_portfolioId_date", ["ownerId", "portfolioId", "date"])
-    .index("by_owner_tradePlanId", ["ownerId", "tradePlanId"]),
+    .index("by_owner_portfolioId_date", ["ownerId", "portfolioId", "date"]),
 
   inboxTrades: defineTable({
     assetType: v.optional(v.union(v.literal("crypto"), v.literal("stock"))),
@@ -921,7 +919,6 @@ export default defineSchema({
     status: v.literal("pending_review"),
     taxes: v.optional(v.number()),
     ticker: v.optional(v.string()),
-    tradePlanId: v.optional(v.id("tradePlans")),
     validationErrors: v.array(v.string()),
     validationWarnings: v.array(v.string()),
   })
@@ -938,7 +935,6 @@ export default defineSchema({
       "ticker",
       "date",
     ])
-    .index("by_owner_status_tradePlanId", ["ownerId", "status", "tradePlanId"])
     .index("by_owner_status_ticker", ["ownerId", "status", "ticker"]),
 
   retrospectives: defineTable({

@@ -7,7 +7,6 @@ interface InboxToolbarProps {
   acceptableCount: number;
   isAccepting: boolean;
   isDeleting: boolean;
-  missingPlanCount: number;
   needsReviewCount: number;
   onAcceptAll: () => Promise<void>;
   onDeleteAll: () => void;
@@ -15,7 +14,7 @@ interface InboxToolbarProps {
   totalCount: number;
 }
 
-type StatusColor = "bg-grass-9" | "bg-amber-9" | "bg-red-9";
+type StatusColor = "bg-grass-9" | "bg-red-9";
 
 function StatSegment({
   color,
@@ -43,7 +42,6 @@ export function InboxToolbar({
   acceptableCount,
   isAccepting,
   isDeleting,
-  missingPlanCount,
   needsReviewCount,
   onAcceptAll,
   onDeleteAll,
@@ -119,14 +117,6 @@ export function InboxToolbar({
           dataTestId="inbox-summary-ready"
           label="ready"
         />
-        {missingPlanCount > 0 && (
-          <StatSegment
-            color="bg-amber-9"
-            count={missingPlanCount}
-            dataTestId="inbox-summary-missing-plan"
-            label="missing trade plan"
-          />
-        )}
         {needsReviewCount > 0 && (
           <StatSegment
             color="bg-red-9"
@@ -144,7 +134,8 @@ export function InboxToolbar({
             isLoading={isAccepting}
             onClick={() => void onAcceptAll()}
           >
-            Accept {acceptableCount} {acceptableCount === 1 ? "trade" : "trades"}
+            Accept {acceptableCount}{" "}
+            {acceptableCount === 1 ? "trade" : "trades"}
           </Button>
           <Button
             dataTestId="delete-all-trades-button"
