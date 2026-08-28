@@ -522,6 +522,20 @@ export function getNoteContentTestId(prefix: string, noteId: string): string {
   return `${prefix}-note-content-${noteId}`;
 }
 
+export function getNoteTickerBadgeTestId(
+  prefix: string,
+  noteId: string,
+): string {
+  return `${prefix}-note-ticker-badge-${noteId}`;
+}
+
+export function getNoteOriginBadgeTestId(
+  prefix: string,
+  noteId: string,
+): string {
+  return `${prefix}-note-origin-badge-${noteId}`;
+}
+
 export const PORTFOLIO_DATA_ISSUES_TEST_IDS = {
   awaitingSnapshotGroup: "portfolio-data-issues-awaiting-snapshot",
   marketDataHealthLink: "nav-market-data-health-link",

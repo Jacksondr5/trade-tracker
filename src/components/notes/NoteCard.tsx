@@ -14,10 +14,12 @@ import {
   getNoteContextLinkTestId,
   getNoteContextTextTestId,
   getNoteDateTestId,
+  getNoteOriginBadgeTestId,
   getNoteRowTestId,
   getSaveNoteButtonTestId,
+  getNoteTickerBadgeTestId,
 } from "../../../shared/e2e/testIds";
-import { Alert, ConfirmDeleteButton } from "~/components/ui";
+import { Alert, Badge, ConfirmDeleteButton } from "~/components/ui";
 import { formatDate } from "~/lib/format";
 import { parseDateTimeLocalValue, toDateTimeLocalValue } from "./date";
 import { EvidenceCarousel } from "./EvidenceCarousel";
@@ -35,6 +37,45 @@ interface NoteCardProps {
   ) => Promise<void>;
   showContext: boolean;
   testIdPrefix: string;
+}
+
+interface NoteMetadataBadgesProps {
+  note: Pick<Note, "origin" | "ticker">;
+  noteId: string;
+  testIdPrefix: string;
+}
+
+export function NoteMetadataBadges({
+  note,
+  noteId,
+  testIdPrefix,
+}: NoteMetadataBadgesProps) {
+  if (!note.ticker && note.origin !== "retrospective") {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {note.ticker ? (
+        <Badge
+          variant="info"
+          className="shrink-0 text-[10px] uppercase tracking-wide"
+          data-testid={getNoteTickerBadgeTestId(testIdPrefix, noteId)}
+        >
+          {note.ticker}
+        </Badge>
+      ) : null}
+      {note.origin === "retrospective" ? (
+        <Badge
+          variant="warning"
+          className="shrink-0 text-[10px] uppercase tracking-wide"
+          data-testid={getNoteOriginBadgeTestId(testIdPrefix, noteId)}
+        >
+          Retrospective
+        </Badge>
+      ) : null}
+    </div>
+  );
 }
 
 export function NoteCard({
@@ -135,6 +176,12 @@ export function NoteCard({
             )}
           </>
         )}
+
+        <NoteMetadataBadges
+          note={note}
+          noteId={note._id}
+          testIdPrefix={testIdPrefix}
+        />
 
         {!isEditing && (
           <div className="ml-auto flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">

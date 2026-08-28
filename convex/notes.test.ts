@@ -75,6 +75,8 @@ describe("notes contract", () => {
     }>;
     noteDate?: number;
     ownerId: string;
+    origin?: "retrospective";
+    ticker?: string;
     tradePlanId?: Id<"tradePlans">;
   }): Promise<Id<"notes">> {
     return await t.run(async (ctx) => {
@@ -85,6 +87,8 @@ describe("notes contract", () => {
         evidence: args.evidence,
         noteDate: args.noteDate ?? DEFAULT_TEST_NOTE_DATE,
         ownerId: args.ownerId,
+        origin: args.origin,
+        ticker: args.ticker,
         tradePlanId: args.tradePlanId,
       });
     });
@@ -233,6 +237,23 @@ describe("notes contract", () => {
     expect(notes.find((note) => note._id === secondCreatedId)?.noteDate).toBe(
       olderNoteDate,
     );
+  });
+
+  it("serializes ticker and origin metadata for general notes", async () => {
+    await insertNote({
+      content: "retrospective note",
+      origin: "retrospective",
+      ownerId: ownerA,
+      ticker: "GDX",
+    });
+
+    const notes = await asUser(ownerA).query(api.notes.getGeneralNotes, {});
+
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatchObject({
+      origin: "retrospective",
+      ticker: "GDX",
+    });
   });
 
   it("filters campaign, trade-plan, and general queries to the supported ownership model", async () => {
