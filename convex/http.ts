@@ -420,7 +420,7 @@ http.route({
       const args = validateFillDiscussionContextBody(body);
       const data = await ctx.runQuery(
         internal.counterpart.getFillDiscussionContext,
-        { ...args, ownerId },
+        { ...args, now: Date.now(), ownerId },
       );
       return successResponse(data);
     });

@@ -28,7 +28,10 @@ const MAX_NOTES_FOR_EXACT_COUNT = 5_000;
 const MAX_RECONCILIATION_ISSUES = 500;
 const MAX_BROKER_SNAPSHOT_ROWS = 1_000;
 const MAX_MARKET_PRICE_ROWS_TO_INSPECT = 25;
-const FILL_DISCUSSION_LOOKBACK_DAYS = 7;
+// Only timestamp-to-Eastern conversion can put a check-in before a fill, and
+// that skew is at most one calendar day. Caller-asserted check-in dates remain
+// outside this bound and are described by the evidence window itself.
+const FILL_DISCUSSION_LOOKBACK_DAYS = 1;
 const MAX_FILL_DISCUSSION_CHECK_INS = 100;
 const MAX_FILL_DISCUSSION_NOTES_PER_CHECK_IN = 100;
 
@@ -138,6 +141,7 @@ const fillDiscussionCheckInValidator = v.object({
 
 const fillDiscussionEvidenceWindowValidator = v.object({
   basis: v.union(v.literal("fill_date_to_today"), v.literal("recent_fallback")),
+  clipped: v.boolean(),
   endDate: v.string(),
   startDate: v.string(),
 });
@@ -326,6 +330,7 @@ function fillDiscussionEvidenceWindow(
     // Eastern trade date, then clamp the forward edge to today's open.
     return {
       basis: "fill_date_to_today" as const,
+      clipped: false,
       endDate,
       startDate: subtractCalendarDays(
         getEasternDateString(anchorDate),
@@ -338,6 +343,7 @@ function fillDiscussionEvidenceWindow(
   // bounded to the same recent business-day window used by daily context.
   return {
     basis: "recent_fallback" as const,
+    clipped: false,
     endDate,
     startDate: getRecentBusinessDateRange(now, RECENT_BUSINESS_DAYS).startDate,
   };
@@ -1266,9 +1272,19 @@ export const getCheckIn = internalQuery({
  * Reports durable check-in and note evidence for a fill. It must not compute
  * or imply a "confirmed" verdict: conversation confirmation remains Hermes's
  * judgment, while this endpoint only makes stored evidence available again.
+ * Dated fills scan from one Eastern calendar day before the fill through
+ * today's open; anchor-less fills use the recent business-day fallback. The
+ * fill-date scan walks forward from the fill edge, while the fallback scan is
+ * newest-first for recency. Both scans read one extra row as lookahead; the
+ * cap is clipped only when that row exists, and a boundary date is discarded
+ * only when the lookahead shares it. Otherwise the final scanned date is kept.
+ * Any clipped bound names only fully scanned dates. Responses are always
+ * chronological ascending regardless of scan direction. Caller-asserted
+ * check-in dates may be backdated beyond the one-day timestamp-conversion skew
+ * and are not bounded here.
  */
 export const getFillDiscussionContext = internalQuery({
-  args: { inboxTradeId: v.string(), ownerId: v.string() },
+  args: { inboxTradeId: v.string(), now: v.number(), ownerId: v.string() },
   returns: fillDiscussionContextValidator,
   handler: async (ctx, args) => {
     const normalizedInboxTradeId = ctx.db.normalizeId(
@@ -1288,9 +1304,9 @@ export const getFillDiscussionContext = internalQuery({
     );
     const evidenceWindow = fillDiscussionEvidenceWindow(
       ownedPendingFill?.date ?? receipt?.trade.date,
-      Date.now(),
+      args.now,
     );
-    const checkInRows = await ctx.db
+    const checkInRowsWithLookahead = await ctx.db
       .query("checkIns")
       .withIndex("by_owner_date", (q) =>
         q
@@ -1298,17 +1314,50 @@ export const getFillDiscussionContext = internalQuery({
           .gte("date", evidenceWindow.startDate)
           .lt("date", nextCalendarDate(evidenceWindow.endDate)),
       )
+      .order(evidenceWindow.basis === "fill_date_to_today" ? "asc" : "desc")
       .take(MAX_FILL_DISCUSSION_CHECK_INS + 1);
-    if (checkInRows.length > MAX_FILL_DISCUSSION_CHECK_INS) {
-      throw new Error(
-        `Fill discussion context exceeds the ${MAX_FILL_DISCUSSION_CHECK_INS}-check-in limit`,
-      );
-    }
+    const checkInRows = checkInRowsWithLookahead.slice(
+      0,
+      MAX_FILL_DISCUSSION_CHECK_INS,
+    );
+    const lookaheadRow =
+      checkInRowsWithLookahead[MAX_FILL_DISCUSSION_CHECK_INS];
+    const clipped = lookaheadRow !== undefined;
+    const partialDate = clipped
+      ? lookaheadRow.date === checkInRows[checkInRows.length - 1].date
+        ? lookaheadRow.date
+        : null
+      : null;
+    const fullyScannedCheckInRows = partialDate
+      ? checkInRows.filter((checkIn) => checkIn.date !== partialDate)
+      : checkInRows;
+    const resolvedEvidenceWindow = clipped
+      ? evidenceWindow.basis === "fill_date_to_today"
+        ? {
+            ...evidenceWindow,
+            clipped: true,
+            endDate: partialDate
+              ? subtractCalendarDays(partialDate, 1)
+              : checkInRows[checkInRows.length - 1].date,
+          }
+        : {
+            ...evidenceWindow,
+            clipped: true,
+            startDate: partialDate
+              ? nextCalendarDate(partialDate)
+              : checkInRows[checkInRows.length - 1].date,
+          }
+      : evidenceWindow;
     const surfacedTradeId = normalizedInboxTradeId ?? args.inboxTradeId;
     const checkIns = await Promise.all(
-      checkInRows
+      fullyScannedCheckInRows
         .filter((checkIn) =>
           (checkIn.surfacedTradeIds ?? []).includes(surfacedTradeId),
+        )
+        .sort(
+          (left, right) =>
+            left.date.localeCompare(right.date) ||
+            left._creationTime - right._creationTime,
         )
         .map(async (checkIn) => {
           const noteIds = checkIn.noteIds ?? [];
@@ -1347,7 +1396,7 @@ export const getFillDiscussionContext = internalQuery({
 
     return {
       checkIns,
-      evidenceWindow,
+      evidenceWindow: resolvedEvidenceWindow,
       fill: ownedPendingFill
         ? {
             assetType: ownedPendingFill.assetType ?? null,

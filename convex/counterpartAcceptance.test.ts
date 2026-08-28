@@ -1,7 +1,7 @@
 // @vitest-environment edge-runtime
 
 import { convexTest } from "convex-test";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import {
@@ -1178,162 +1178,306 @@ describe("counterpart trade acceptance", () => {
 
   it("bounds discussion evidence by the fill date through today", async () => {
     const discussionNow = Date.UTC(2026, 4, 15, 4, 0, 0);
-    vi.useFakeTimers();
-    vi.setSystemTime(discussionNow);
-    try {
-      // UTC midnight is still the prior Eastern calendar date. The boundary
-      // check-in catches accidental UTC treatment of the numeric fill date.
-      const inboxTradeId = await seedPendingTrade({
-        date: Date.UTC(2026, 4, 8, 0, 0, 0),
-        ticker: "GDX",
-      });
-      await t.run(async (ctx) => {
-        for (let index = 0; index < 101; index += 1) {
-          await ctx.db.insert("checkIns", {
-            date: new Date(Date.UTC(2025, 11, 1 + index))
-              .toISOString()
-              .slice(0, 10),
-            kind: "mirror",
-            ownerId,
-            sentAt: index,
-            surfacedTradeIds: [],
-            window: "late_morning",
-          });
-        }
+    // UTC midnight is still the prior Eastern calendar date. The boundary
+    // check-in catches accidental UTC treatment of the numeric fill date.
+    const inboxTradeId = await seedPendingTrade({
+      date: Date.UTC(2026, 4, 8, 0, 0, 0),
+      ticker: "GDX",
+    });
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 101; index += 1) {
         await ctx.db.insert("checkIns", {
-          date: "2026-04-30",
+          date: new Date(Date.UTC(2025, 11, 1 + index))
+            .toISOString()
+            .slice(0, 10),
           kind: "mirror",
           ownerId,
-          sentAt: 200,
-          surfacedTradeIds: [inboxTradeId],
+          sentAt: index,
+          surfacedTradeIds: [],
           window: "late_morning",
         });
+      }
+      await ctx.db.insert("checkIns", {
+        date: "2026-05-05",
+        kind: "mirror",
+        ownerId,
+        sentAt: 200,
+        surfacedTradeIds: [inboxTradeId],
+        window: "late_morning",
+      });
+      await ctx.db.insert("checkIns", {
+        date: "2026-05-06",
+        kind: "mirror",
+        ownerId,
+        sentAt: 201,
+        surfacedTradeIds: [inboxTradeId],
+        window: "afternoon",
+      });
+      await ctx.db.insert("checkIns", {
+        date: "2026-05-15",
+        kind: "mirror",
+        ownerId,
+        sentAt: 202,
+        surfacedTradeIds: [inboxTradeId],
+        window: "end_of_day",
+      });
+    });
+
+    const context = await t.query(
+      internal.counterpart.getFillDiscussionContext,
+      {
+        inboxTradeId,
+        now: discussionNow,
+        ownerId,
+      },
+    );
+    expect(context).toMatchObject({
+      checkIns: [
+        { date: "2026-05-06", checkInId: expect.any(String) },
+        { date: "2026-05-15", checkInId: expect.any(String) },
+      ],
+      evidenceWindow: {
+        basis: "fill_date_to_today",
+        clipped: false,
+        endDate: "2026-05-15",
+        startDate: "2026-05-06",
+      },
+      fill: { inboxTradeId, state: "pending" },
+    });
+    expect(context.checkIns.map((checkIn) => checkIn.date)).not.toContain(
+      "2026-05-05",
+    );
+  });
+
+  it("clips old-fill discussion scans without failing", async () => {
+    const discussionNow = Date.UTC(2026, 4, 15, 4, 0, 0);
+    const partialDate = "2026-04-11";
+    const inboxTradeId = await seedPendingTrade({
+      date: Date.UTC(2026, 0, 1, 0, 0, 0),
+      ticker: "GDX",
+    });
+    await t.run(async (ctx) => {
+      await ctx.db.insert("checkIns", {
+        date: "2026-01-02",
+        kind: "mirror",
+        ownerId,
+        sentAt: 0,
+        surfacedTradeIds: [inboxTradeId],
+        window: "late_morning",
+      });
+      for (let index = 0; index < 98; index += 1) {
         await ctx.db.insert("checkIns", {
-          date: "2026-05-15",
+          date: new Date(Date.UTC(2026, 0, 3 + index))
+            .toISOString()
+            .slice(0, 10),
           kind: "mirror",
           ownerId,
-          sentAt: 201,
-          surfacedTradeIds: [inboxTradeId],
-          window: "afternoon",
+          sentAt: index + 1,
+          surfacedTradeIds: [],
+          window: "late_morning",
         });
-      });
+      }
+      for (const [sentAt, surfacedTradeIds] of [
+        [99, [inboxTradeId]],
+        [100, []],
+        [101, []],
+      ] as const) {
+        await ctx.db.insert("checkIns", {
+          date: partialDate,
+          kind: "mirror",
+          ownerId,
+          sentAt,
+          surfacedTradeIds,
+          window: "late_morning",
+        });
+      }
+    });
 
-      const response = await t.fetch(
-        "/internal/counterpart/fill-discussion-context",
-        {
-          body: JSON.stringify({ inboxTradeId }),
-          headers: {
-            authorization: "Bearer counterpart-test-token",
-            "content-type": "application/json",
-          },
-          method: "POST",
-        },
-      );
-      expect(response.status).toBe(200);
-      const body = await response.json();
-      expect(body).toMatchObject({
-        data: {
-          checkIns: [
-            { date: "2026-04-30", checkInId: expect.any(String) },
-            { date: "2026-05-15", checkInId: expect.any(String) },
-          ],
-          evidenceWindow: {
-            basis: "fill_date_to_today",
-            endDate: "2026-05-15",
-            startDate: "2026-04-30",
-          },
-          fill: { inboxTradeId, state: "pending" },
-        },
-        ok: true,
-      });
-    } finally {
-      vi.useRealTimers();
-    }
+    const context = await t.query(
+      internal.counterpart.getFillDiscussionContext,
+      {
+        inboxTradeId,
+        now: discussionNow,
+        ownerId,
+      },
+    );
+    expect(context.checkIns.map((checkIn) => checkIn.date)).toEqual([
+      "2026-01-02",
+    ]);
+    expect(context.checkIns.map((checkIn) => checkIn.date)).not.toContain(
+      partialDate,
+    );
+    expect(context.evidenceWindow).toMatchObject({
+      basis: "fill_date_to_today",
+      clipped: true,
+      endDate: "2026-04-10",
+      startDate: "2025-12-30",
+    });
+    expect(context.fill).toMatchObject({
+      inboxTradeId,
+      state: "pending",
+    });
   });
 
   it("uses a bounded recent fallback for an undated pending fill", async () => {
     const discussionNow = Date.UTC(2026, 4, 15, 4, 0, 0);
-    vi.useFakeTimers();
-    vi.setSystemTime(discussionNow);
-    try {
-      const inboxTradeId = await seedPendingTrade({ ticker: "GDX" });
-      const checkIn = await t.mutation(internal.counterpart.createCheckIn, {
-        date: "2026-05-15",
+    const inboxTradeId = await seedPendingTrade({ ticker: "GDX" });
+    const checkIn = await t.mutation(internal.counterpart.createCheckIn, {
+      date: "2026-05-15",
+      kind: "mirror",
+      ownerId,
+      surfacedTradeIds: [inboxTradeId],
+      window: "late_morning",
+    });
+
+    const context = await t.query(
+      internal.counterpart.getFillDiscussionContext,
+      {
+        inboxTradeId,
+        now: discussionNow,
+        ownerId,
+      },
+    );
+    expect(context).toMatchObject({
+      checkIns: [{ checkInId: checkIn.checkInId }],
+      evidenceWindow: {
+        basis: "recent_fallback",
+        clipped: false,
+        endDate: "2026-05-15",
+        startDate: "2026-05-11",
+      },
+      fill: { inboxTradeId, state: "pending" },
+    });
+  });
+
+  it("keeps an exactly full final date with lookahead", async () => {
+    const discussionNow = Date.UTC(2026, 4, 15, 4, 0, 0);
+    const inboxTradeId = await seedPendingTrade({
+      date: Date.UTC(2026, 0, 1, 0, 0, 0),
+      ticker: "GDX",
+    });
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 50; index += 1) {
+        const date = new Date(Date.UTC(2026, 0, 2 + index))
+          .toISOString()
+          .slice(0, 10);
+        for (let row = 0; row < 2; row += 1) {
+          await ctx.db.insert("checkIns", {
+            date,
+            kind: "mirror",
+            ownerId,
+            sentAt: index * 2 + row,
+            surfacedTradeIds: index === 49 && row === 1 ? [inboxTradeId] : [],
+            window: row === 0 ? "late_morning" : "afternoon",
+          });
+        }
+      }
+    });
+
+    const context = await t.query(
+      internal.counterpart.getFillDiscussionContext,
+      {
+        inboxTradeId,
+        now: discussionNow,
+        ownerId,
+      },
+    );
+    expect(context.checkIns.map((checkIn) => checkIn.date)).toEqual([
+      "2026-02-20",
+    ]);
+    expect(context.evidenceWindow).toMatchObject({
+      basis: "fill_date_to_today",
+      clipped: false,
+      endDate: "2026-05-15",
+      startDate: "2025-12-30",
+    });
+  });
+
+  it("keeps a complete final date when a later row triggers lookahead", async () => {
+    const discussionNow = Date.UTC(2026, 4, 15, 4, 0, 0);
+    const inboxTradeId = await seedPendingTrade({
+      date: Date.UTC(2026, 0, 1, 0, 0, 0),
+      ticker: "GDX",
+    });
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 50; index += 1) {
+        const date = new Date(Date.UTC(2026, 0, 2 + index))
+          .toISOString()
+          .slice(0, 10);
+        for (let row = 0; row < 2; row += 1) {
+          await ctx.db.insert("checkIns", {
+            date,
+            kind: "mirror",
+            ownerId,
+            sentAt: index * 2 + row,
+            surfacedTradeIds: index === 49 && row === 1 ? [inboxTradeId] : [],
+            window: row === 0 ? "late_morning" : "afternoon",
+          });
+        }
+      }
+      await ctx.db.insert("checkIns", {
+        date: "2026-02-21",
         kind: "mirror",
         ownerId,
-        surfacedTradeIds: [inboxTradeId],
+        sentAt: 1000,
+        surfacedTradeIds: [],
         window: "late_morning",
       });
+    });
 
-      const response = await t.fetch(
-        "/internal/counterpart/fill-discussion-context",
-        {
-          body: JSON.stringify({ inboxTradeId }),
-          headers: {
-            authorization: "Bearer counterpart-test-token",
-            "content-type": "application/json",
-          },
-          method: "POST",
-        },
-      );
-      expect(response.status).toBe(200);
-      expect(await response.json()).toMatchObject({
-        data: {
-          checkIns: [{ checkInId: checkIn.checkInId }],
-          evidenceWindow: {
-            basis: "recent_fallback",
-            endDate: "2026-05-15",
-            startDate: "2026-05-11",
-          },
-          fill: { inboxTradeId, state: "pending" },
-        },
-        ok: true,
-      });
-    } finally {
-      vi.useRealTimers();
-    }
+    const context = await t.query(
+      internal.counterpart.getFillDiscussionContext,
+      {
+        inboxTradeId,
+        now: discussionNow,
+        ownerId,
+      },
+    );
+    expect(context.checkIns.map((checkIn) => checkIn.date)).toEqual([
+      "2026-02-20",
+    ]);
+    expect(context.evidenceWindow).toMatchObject({
+      basis: "fill_date_to_today",
+      clipped: true,
+      endDate: "2026-02-20",
+      startDate: "2025-12-30",
+    });
   });
 
   it("returns recent discussion evidence for a dismissed fill", async () => {
     const discussionNow = Date.UTC(2026, 4, 15, 4, 0, 0);
-    vi.useFakeTimers();
-    vi.setSystemTime(discussionNow);
-    try {
-      const inboxTradeId = await seedPendingTrade({ date: 1, ticker: "GDX" });
-      await t.mutation(internal.counterpart.createCheckIn, {
-        date: "2026-05-15",
-        kind: "mirror",
-        ownerId,
-        surfacedTradeIds: [inboxTradeId],
-        window: "late_morning",
-      });
-      await t.run(async (ctx) => {
-        await ctx.db.delete(inboxTradeId);
-      });
+    const inboxTradeId = await seedPendingTrade({ date: 1, ticker: "GDX" });
+    await t.mutation(internal.counterpart.createCheckIn, {
+      date: "2026-05-14",
+      kind: "mirror",
+      ownerId,
+      surfacedTradeIds: [inboxTradeId],
+      window: "late_morning",
+    });
+    await t.mutation(internal.counterpart.createCheckIn, {
+      date: "2026-05-15",
+      kind: "mirror",
+      ownerId,
+      surfacedTradeIds: [inboxTradeId],
+      window: "late_morning",
+    });
+    await t.run(async (ctx) => {
+      await ctx.db.delete(inboxTradeId);
+    });
 
-      const response = await t.fetch(
-        "/internal/counterpart/fill-discussion-context",
-        {
-          body: JSON.stringify({ inboxTradeId }),
-          headers: {
-            authorization: "Bearer counterpart-test-token",
-            "content-type": "application/json",
-          },
-          method: "POST",
-        },
-      );
-      expect(response.status).toBe(200);
-      expect(await response.json()).toMatchObject({
-        data: {
-          checkIns: [{ date: "2026-05-15" }],
-          evidenceWindow: { basis: "recent_fallback" },
-          fill: { state: "unknown" },
-        },
-        ok: true,
-      });
-    } finally {
-      vi.useRealTimers();
-    }
+    const context = await t.query(
+      internal.counterpart.getFillDiscussionContext,
+      {
+        inboxTradeId,
+        now: discussionNow,
+        ownerId,
+      },
+    );
+    expect(context).toMatchObject({
+      checkIns: [{ date: "2026-05-14" }, { date: "2026-05-15" }],
+      evidenceWindow: { basis: "recent_fallback", clipped: false },
+      fill: { state: "unknown" },
+    });
   });
 
   it("does not expose a foreign owner's accepted receipt", async () => {
