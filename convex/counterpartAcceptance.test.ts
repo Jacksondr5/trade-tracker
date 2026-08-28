@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import {
+  acceptedHistoryAtOrBeforeFill,
   inferPortfolioFromOpenEpisode,
   type EpisodeTradeEvidence,
 } from "./imports";
@@ -122,6 +123,7 @@ describe("counterpart trade acceptance", () => {
   }
 
   function evidence(args: {
+    creationTime?: number;
     date: number;
     direction: "long" | "short";
     portfolioId: Id<"portfolios">;
@@ -132,7 +134,7 @@ describe("counterpart trade acceptance", () => {
   }): EpisodeTradeEvidence {
     return {
       ...args,
-      _creationTime: args.date,
+      _creationTime: args.creationTime ?? args.date,
       portfolioName: args.portfolioName ?? "Core",
       price: 100,
       ticker: "AAPL",
@@ -285,6 +287,82 @@ describe("counterpart trade acceptance", () => {
     ).toEqual({ kind: "needsPortfolio", reason: "implausible_history" });
   });
 
+  it("orders an episode by fill date and creation time before inferring", async () => {
+    const firstPortfolioId = await seedPortfolio("First");
+    const reopenedPortfolioId = await seedPortfolio("Reopened");
+    const firstOpenId = await seedAcceptedTrade({
+      date: 1,
+      direction: "long",
+      portfolioId: firstPortfolioId,
+      quantity: 1,
+      side: "buy",
+    });
+    const firstCloseId = await seedAcceptedTrade({
+      date: 2,
+      direction: "long",
+      portfolioId: firstPortfolioId,
+      quantity: 1,
+      side: "sell",
+    });
+    const reopenedId = await seedAcceptedTrade({
+      date: 2,
+      direction: "long",
+      portfolioId: reopenedPortfolioId,
+      quantity: 1,
+      side: "buy",
+    });
+
+    const inferred = inferPortfolioFromOpenEpisode([
+      evidence({
+        creationTime: 3,
+        date: 2,
+        direction: "long",
+        portfolioId: reopenedPortfolioId,
+        portfolioName: "Reopened",
+        quantity: 1,
+        side: "buy",
+        tradeId: reopenedId,
+      }),
+      evidence({
+        creationTime: 2,
+        date: 2,
+        direction: "long",
+        portfolioId: firstPortfolioId,
+        portfolioName: "First",
+        quantity: 1,
+        side: "sell",
+        tradeId: firstCloseId,
+      }),
+      evidence({
+        creationTime: 1,
+        date: 1,
+        direction: "long",
+        portfolioId: firstPortfolioId,
+        portfolioName: "First",
+        quantity: 1,
+        side: "buy",
+        tradeId: firstOpenId,
+      }),
+    ]);
+
+    expect(inferred).toMatchObject({
+      groupOpeningTradeDate: 2,
+      inheritedFromTrade: { tradeId: reopenedId },
+      kind: "inferred",
+      portfolioId: reopenedPortfolioId,
+      portfolioName: "Reopened",
+    });
+  });
+
+  it("clamps accepted episode history at the fill date", () => {
+    const history = [{ date: 1 }, { date: 2 }, { date: 3 }];
+
+    expect(acceptedHistoryAtOrBeforeFill(history, 2)).toEqual([
+      { date: 1 },
+      { date: 2 },
+    ]);
+  });
+
   it("inherits a short episode for a buy-to-cover and an exact closing fill", async () => {
     const portfolioId = await seedPortfolio();
     await seedAcceptedTrade({
@@ -314,6 +392,52 @@ describe("counterpart trade acceptance", () => {
         id: portfolioId,
         reason: "open_episode_inheritance",
       },
+    });
+  });
+
+  it("accepts two same-date fills sequentially without treating accept time as fill order", async () => {
+    const portfolioId = await seedPortfolio();
+    await seedResolvedInstrument();
+    const firstInboxTradeId = await seedPendingTrade({ date: 10 });
+    const secondInboxTradeId = await seedPendingTrade({ date: 10 });
+
+    const firstResponse = await t.fetch("/internal/counterpart/accept-trade", {
+      body: JSON.stringify({
+        inboxTradeId: firstInboxTradeId,
+        ownerId,
+        portfolioId,
+      }),
+      headers: {
+        authorization: "Bearer counterpart-test-token",
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+    expect(firstResponse.status).toBe(200);
+    expect(await firstResponse.json()).toMatchObject({
+      data: { kind: "accepted", portfolio: { id: portfolioId } },
+      ok: true,
+    });
+
+    const secondResponse = await t.fetch("/internal/counterpart/accept-trade", {
+      body: JSON.stringify({ inboxTradeId: secondInboxTradeId, ownerId }),
+      headers: {
+        authorization: "Bearer counterpart-test-token",
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+    expect(secondResponse.status).toBe(200);
+    expect(await secondResponse.json()).toMatchObject({
+      data: {
+        kind: "accepted",
+        portfolio: {
+          evidence: { groupOpeningTradeDate: 10 },
+          id: portfolioId,
+          reason: "open_episode_inheritance",
+        },
+      },
+      ok: true,
     });
   });
 

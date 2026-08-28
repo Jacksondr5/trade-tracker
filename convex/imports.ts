@@ -69,6 +69,13 @@ export type EpisodeTradeEvidence = {
   tradeId: Id<"trades">;
 };
 
+export function acceptedHistoryAtOrBeforeFill<T extends { date: number }>(
+  history: T[],
+  fillDate: number,
+): T[] {
+  return history.filter((trade) => trade.date <= fillDate);
+}
+
 type PortfolioInferenceEvidence = {
   date: number;
   portfolioId: Id<"portfolios">;
@@ -1604,10 +1611,7 @@ async function prepareCounterpartAcceptanceForOwner(
     .slice(0, MAX_COUNTERPART_HISTORY_SCAN)
     .filter((item) => item.ticker.toUpperCase() === trade.ticker);
   const newerAcceptedTrade = boundedHistory.find(
-    (acceptedTrade) =>
-      acceptedTrade.date > trade.date ||
-      (acceptedTrade.date === trade.date &&
-        acceptedTrade._creationTime > inboxTrade._creationTime),
+    (acceptedTrade) => acceptedTrade.date > trade.date,
   );
   if (newerAcceptedTrade !== undefined) {
     return {
@@ -1646,8 +1650,9 @@ async function prepareCounterpartAcceptanceForOwner(
     };
   }
 
-  const acceptedHistory = boundedHistory.filter(
-    (acceptedTrade) => acceptedTrade.date <= trade.date,
+  const acceptedHistory = acceptedHistoryAtOrBeforeFill(
+    boundedHistory,
+    trade.date,
   );
   const portfolios = new Map<Id<"portfolios">, string>();
   for (const item of acceptedHistory) {
