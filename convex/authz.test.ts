@@ -45,7 +45,6 @@ describe("cross-owner authorization boundaries", () => {
     ownerId: string,
     args: {
       portfolioId?: Id<"portfolios">;
-      tradePlanId?: Id<"tradePlans">;
     } = {},
   ): Promise<Id<"inboxTrades">> {
     return await t.run(async (ctx) => {
@@ -61,7 +60,6 @@ describe("cross-owner authorization boundaries", () => {
         source: "manual",
         status: "pending_review",
         ticker: "AAPL",
-        tradePlanId: args.tradePlanId,
         validationErrors: [],
         validationWarnings: [],
       });
@@ -95,7 +93,6 @@ describe("cross-owner authorization boundaries", () => {
   async function insertTrade(args: {
     ownerId: string;
     portfolioId?: Id<"portfolios">;
-    tradePlanId?: Id<"tradePlans">;
   }): Promise<Id<"trades">> {
     return await t.run(async (ctx) => {
       return await ctx.db.insert("trades", {
@@ -109,7 +106,6 @@ describe("cross-owner authorization boundaries", () => {
         side: "buy",
         source: "manual",
         ticker: "AAPL",
-        tradePlanId: args.tradePlanId,
       });
     });
   }

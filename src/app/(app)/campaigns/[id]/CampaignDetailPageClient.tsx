@@ -23,7 +23,7 @@ import { NotesSection } from "~/components/notes";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { buildHierarchyBreadcrumbs } from "~/lib/campaign-trade-plan-navigation";
-import { capitalize, formatCurrency, formatDate } from "~/lib/format";
+import { capitalize, formatDate } from "~/lib/format";
 import { getTradePlanLinkTestId } from "../../../../../shared/e2e/testIds";
 
 type CampaignStatus = "planning" | "active" | "closed";
@@ -91,28 +91,20 @@ const validateWithSchema = <TSchema extends z.ZodTypeAny>(
 
 export default function CampaignDetailPageClient({
   campaignId,
-  preloadedAccountMappings,
-  preloadedCampaignTrades,
   preloadedCampaign,
   preloadedCampaignWorkspace,
   preloadedCampaignNotes,
 }: {
   campaignId: Id<"campaigns">;
-  preloadedAccountMappings: Preloaded<
-    typeof api.accountMappings.listAccountMappings
-  >;
-  preloadedCampaignTrades: Preloaded<typeof api.trades.listTradesByCampaign>;
   preloadedCampaign: Preloaded<typeof api.campaigns.getCampaign>;
   preloadedCampaignWorkspace: Preloaded<
     typeof api.campaigns.getCampaignWorkspace
   >;
   preloadedCampaignNotes: Preloaded<typeof api.notes.getNotesByCampaign>;
 }) {
-  const accountMappings = usePreloadedQuery(preloadedAccountMappings);
   const campaign = usePreloadedQuery(preloadedCampaign);
   const campaignWorkspace = usePreloadedQuery(preloadedCampaignWorkspace);
   const campaignNotes = usePreloadedQuery(preloadedCampaignNotes);
-  const trades = usePreloadedQuery(preloadedCampaignTrades);
   const { hierarchy } = useNavigationData();
   const linkedTradePlans = useMemo(
     () => campaignWorkspace?.linkedTradePlans ?? [],
@@ -131,26 +123,6 @@ export default function CampaignDetailPageClient({
   const updateCampaignStatus = useMutation(api.campaigns.updateCampaignStatus);
   const watchItem = useMutation(api.watchlist.watchItem);
   const unwatchItem = useMutation(api.watchlist.unwatchItem);
-
-  const accountNameByAccountId = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const mapping of accountMappings) {
-      map.set(mapping.accountId, mapping.friendlyName);
-    }
-    return map;
-  }, [accountMappings]);
-
-  const executionStats = useMemo(() => {
-    if (trades.length === 0) return null;
-    const uniqueInstruments = new Set(trades.map((t) => t.ticker));
-    const dates = trades.map((t) => t.date).sort((a, b) => a - b);
-    return {
-      totalCount: trades.length,
-      uniqueInstruments: uniqueInstruments.size,
-      earliestDate: dates[0]!,
-      latestDate: dates[dates.length - 1]!,
-    };
-  }, [trades]);
 
   const [statusChangeError, setStatusChangeError] = useState<string | null>(
     null,
@@ -557,7 +529,6 @@ export default function CampaignDetailPageClient({
             {workspaceSummary.linkedTradePlans.totalCount} trade plans
           </span>
           <span className="text-olive-6">&middot;</span>
-          <span>{workspaceSummary.linkedTrades.totalCount} trades</span>
           {campaign.status === "closed" && campaign.closedAt && (
             <>
               <span className="text-olive-6">&middot;</span>
@@ -763,12 +734,6 @@ export default function CampaignDetailPageClient({
                       <span className="font-medium text-olive-12">
                         {plan.instrumentSymbol}
                       </span>
-                      <span className="text-olive-11">
-                        {" \u00b7 "}
-                        {plan.tradeCount > 0
-                          ? `${plan.tradeCount} trade${plan.tradeCount !== 1 ? "s" : ""}`
-                          : "No trades yet"}
-                      </span>
                       {plan.closedAt !== null && (
                         <span className="text-olive-10">
                           {" \u00b7 Closed "}
@@ -891,75 +856,6 @@ export default function CampaignDetailPageClient({
         parentKind="campaign"
         testIdPrefix="campaign"
       />
-
-      <section className="rounded-lg border border-olive-6 bg-olive-2 p-4">
-        <h2 className="mb-3 text-lg font-semibold text-olive-12">Execution</h2>
-
-        {executionStats && (
-          <div className="mb-3 flex flex-wrap items-center gap-3 text-sm text-olive-11">
-            <span>
-              {executionStats.totalCount} trade
-              {executionStats.totalCount !== 1 ? "s" : ""}
-            </span>
-            <span className="text-olive-6">&middot;</span>
-            <span>
-              {executionStats.uniqueInstruments} instrument
-              {executionStats.uniqueInstruments !== 1 ? "s" : ""}
-            </span>
-            <span className="text-olive-6">&middot;</span>
-            <span>
-              {formatDate(executionStats.earliestDate)} &mdash;{" "}
-              {formatDate(executionStats.latestDate)}
-            </span>
-          </div>
-        )}
-
-        {trades.length === 0 ? (
-          <p className="text-sm text-olive-11">
-            No trades recorded yet. Trades appear here as they are linked
-            through this campaign&apos;s trade plans.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-olive-6 text-left text-olive-11">
-                  <th className="px-2 py-2">Date</th>
-                  <th className="px-2 py-2">Ticker</th>
-                  <th className="px-2 py-2">Account</th>
-                  <th className="px-2 py-2">Side</th>
-                  <th className="px-2 py-2">Qty</th>
-                  <th className="px-2 py-2">Price</th>
-                </tr>
-              </thead>
-              <tbody>
-                {trades.map((trade) => (
-                  <tr key={trade._id} className="border-b border-olive-6/60">
-                    <td className="px-2 py-2 text-olive-11">
-                      {new Date(trade.date).toLocaleDateString("en-US")}
-                    </td>
-                    <td className="px-2 py-2 text-olive-12">{trade.ticker}</td>
-                    <td className="px-2 py-2 text-olive-11">
-                      {trade.brokerageAccountId
-                        ? (accountNameByAccountId.get(
-                            trade.brokerageAccountId,
-                          ) ?? trade.brokerageAccountId)
-                        : "\u2014"}
-                    </td>
-                    <td className="px-2 py-2 text-olive-11">{trade.side}</td>
-                    <td className="px-2 py-2 text-olive-11">
-                      {trade.quantity}
-                    </td>
-                    <td className="px-2 py-2 text-olive-11">
-                      {formatCurrency(trade.price)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
     </div>
   );
 }

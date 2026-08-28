@@ -1,7 +1,6 @@
 import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
 import { acceptCounterpartTradeViaAction } from "./imports";
 
 type JsonObject = Record<string, unknown>;
@@ -10,6 +9,7 @@ type CounterpartErrorCode =
   | "FORBIDDEN"
   | "VALIDATION"
   | "NOT_FOUND"
+  | "CONFLICT"
   | "RATE_LIMITED"
   | "INTERNAL";
 
@@ -346,11 +346,9 @@ export function validateRecordCheckInResponseBody(body: JsonObject) {
 export function validateAcceptTradeBody(body: JsonObject) {
   assertExactKeys(body, ["ownerId", "inboxTradeId", "portfolioId"]);
   return {
-    inboxTradeId: requireString(body, "inboxTradeId") as Id<"inboxTrades">,
+    inboxTradeId: requireString(body, "inboxTradeId"),
     ownerId: requireString(body, "ownerId"),
-    portfolioId: optionalString(body, "portfolioId") as
-      | Id<"portfolios">
-      | undefined,
+    portfolioId: optionalString(body, "portfolioId"),
   };
 }
 
@@ -399,6 +397,20 @@ http.route({
         configuredOwnerId,
         args,
       );
+      if (data.kind === "error") {
+        const status =
+          data.code === "NOT_FOUND"
+            ? 404
+            : data.code === "CONFLICT"
+              ? 409
+              : 400;
+        throw new HttpRequestError(
+          data.code,
+          data.error,
+          status,
+          data.code === "CONFLICT",
+        );
+      }
       return successResponse(data);
     });
   }),

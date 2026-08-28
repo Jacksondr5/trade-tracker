@@ -1,13 +1,16 @@
 "use client";
 
 import { Preloaded, usePreloadedQuery } from "convex/react";
-import { FileText, Star, TrendingUp } from "lucide-react";
+import { FileText, Star } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Badge, Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import { capitalize, formatDate } from "~/lib/format";
-import { APP_PAGE_TITLES, getCampaignRowTestId } from "../../../../shared/e2e/testIds";
+import {
+  APP_PAGE_TITLES,
+  getCampaignRowTestId,
+} from "../../../../shared/e2e/testIds";
 
 type CampaignStatus = "planning" | "active" | "closed";
 type StatusFilter = "all" | CampaignStatus;
@@ -92,12 +95,6 @@ function CampaignCard({ campaign }: { campaign: CampaignSummary }) {
           ) : (
             "No plans"
           )}
-        </span>
-
-        <span className="inline-flex items-center gap-1">
-          <TrendingUp className="size-3" />
-          {campaign.linkedTrades.totalCount}{" "}
-          {campaign.linkedTrades.totalCount === 1 ? "trade" : "trades"}
         </span>
 
         <span className="ml-auto text-slate-11/70">

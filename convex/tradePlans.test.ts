@@ -255,11 +255,8 @@ describe("trade plan workspace queries", () => {
         parentCampaign: null,
       },
       execution: {
-        latestTradeDate: null,
-        pendingAssignedCount: 0,
         pendingSuggestedCount: 0,
         totalPendingCount: 0,
-        tradeCount: 0,
       },
       lifecycle: {
         closedAt: null,
@@ -276,11 +273,8 @@ describe("trade plan workspace queries", () => {
         parentCampaign: null,
       },
       execution: {
-        latestTradeDate: null,
-        pendingAssignedCount: 0,
         pendingSuggestedCount: 2,
         totalPendingCount: 2,
-        tradeCount: 0,
       },
       lifecycle: {
         closedAt: null,
@@ -299,11 +293,8 @@ describe("trade plan workspace queries", () => {
         },
       },
       execution: {
-        latestTradeDate: null,
-        pendingAssignedCount: 0,
         pendingSuggestedCount: 0,
         totalPendingCount: 0,
-        tradeCount: 0,
       },
       isWatched: false,
       status: "active",
@@ -416,11 +407,8 @@ describe("trade plan workspace queries", () => {
         },
       },
       execution: {
-        latestTradeDate: null,
-        pendingAssignedCount: 0,
         pendingSuggestedCount: 2,
         totalPendingCount: 2,
-        tradeCount: 0,
       },
     });
     expect(detail?.tradePlan).toEqual({
@@ -461,7 +449,6 @@ describe("trade plan workspace queries", () => {
         },
       ],
     });
-    expect(detail?.trades).toEqual([]);
     expect(detail?.accountMappings).toHaveLength(1);
     expect(detail?.accountMappings[0].friendlyName).toBe("Primary IBKR");
     expect(detail?.portfolios).toHaveLength(1);
@@ -535,11 +522,8 @@ describe("trade plan workspace queries", () => {
     expect(detail?.summary).toMatchObject({
       id: requestedPlanId,
       execution: {
-        latestTradeDate: null,
-        pendingAssignedCount: 0,
         pendingSuggestedCount: 2,
         totalPendingCount: 2,
-        tradeCount: 0,
       },
       isWatched: true,
       relationship: {

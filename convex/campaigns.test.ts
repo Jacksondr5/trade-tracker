@@ -89,27 +89,6 @@ describe("campaign workspace queries", () => {
     });
   }
 
-  async function insertTrade(args: {
-    date: number;
-    ownerId: string;
-    ticker: string;
-    tradePlanId?: Id<"tradePlans">;
-  }): Promise<Id<"trades">> {
-    return await t.run(async (ctx) => {
-      return await ctx.db.insert("trades", {
-        assetType: "stock",
-        date: args.date,
-        direction: "long",
-        ownerId: args.ownerId,
-        price: 100,
-        quantity: 1,
-        side: "buy",
-        source: "manual",
-        ticker: args.ticker,
-      });
-    });
-  }
-
   it("returns an empty list when the user has no campaigns", async () => {
     const user = asUser(ownerA);
 
@@ -154,10 +133,6 @@ describe("campaign workspace queries", () => {
         totalCount: 0,
         watchingCount: 0,
       },
-      linkedTrades: {
-        latestTradeDate: null,
-        totalCount: 0,
-      },
       name: "Fresh Campaign",
       status: "planning",
     });
@@ -170,7 +145,6 @@ describe("campaign workspace queries", () => {
 
   it("surfaces closed-campaign lifecycle metadata and watched state", async () => {
     const closedAt = Date.UTC(2026, 2, 11);
-    const tradeDate = Date.UTC(2026, 2, 10);
     const openCampaignId = await insertCampaign({
       name: "Still Open Campaign",
       ownerId: ownerA,
@@ -196,13 +170,6 @@ describe("campaign workspace queries", () => {
       ownerId: ownerA,
       status: "closed",
     });
-    await insertTrade({
-      date: tradeDate,
-      ownerId: ownerA,
-      ticker: "NVDA",
-      tradePlanId: linkedTradePlanId,
-    });
-
     const user = asUser(ownerA);
     await user.mutation(api.watchlist.watchItem, {
       item: { campaignId, itemType: "campaign" },
@@ -247,10 +214,6 @@ describe("campaign workspace queries", () => {
         totalCount: 1,
         watchingCount: 0,
       },
-      linkedTrades: {
-        latestTradeDate: null,
-        totalCount: 0,
-      },
       status: "closed",
     });
 
@@ -264,10 +227,8 @@ describe("campaign workspace queries", () => {
           instrumentSymbol: "NVDA",
           invalidatedAt: null,
           isWatched: false,
-          latestTradeDate: null,
           name: "Closed Linked Plan",
           status: "closed",
-          tradeCount: 0,
         },
       ],
       summary: summaries[0],
@@ -344,44 +305,18 @@ describe("campaign workspace queries", () => {
       status: "closed",
     });
 
-    await insertTrade({
-      date: Date.UTC(2026, 2, 7),
-      ownerId: ownerA,
-      ticker: "TSLA",
-      tradePlanId: activePlanId,
-    });
-    await insertTrade({
-      date: Date.UTC(2026, 2, 12),
-      ownerId: ownerA,
-      ticker: "TSLA",
-      tradePlanId: activePlanId,
-    });
-    await insertTrade({
-      date: Date.UTC(2026, 2, 8),
-      ownerId: ownerA,
-      ticker: "AMD",
-      tradePlanId: closedPlanId,
-    });
-
     const foreignCampaignId = await insertCampaign({
       name: "Foreign Campaign",
       ownerId: ownerB,
       status: "active",
     });
-    const foreignPlanId = await insertTradePlan({
+    await insertTradePlan({
       campaignId: foreignCampaignId,
       instrumentSymbol: "META",
       name: "Foreign Plan",
       ownerId: ownerB,
       status: "active",
     });
-    await insertTrade({
-      date: Date.UTC(2026, 2, 13),
-      ownerId: ownerB,
-      ticker: "META",
-      tradePlanId: foreignPlanId,
-    });
-
     const user = asUser(ownerA);
     await user.mutation(api.watchlist.watchItem, {
       item: { itemType: "tradePlan", tradePlanId: watchingPlanId },
@@ -415,10 +350,6 @@ describe("campaign workspace queries", () => {
         totalCount: 4,
         watchingCount: 1,
       },
-      linkedTrades: {
-        latestTradeDate: null,
-        totalCount: 0,
-      },
       name: "Mixed Campaign",
       status: "active",
     });
@@ -430,30 +361,24 @@ describe("campaign workspace queries", () => {
           isWatched: false,
           name: "Idea Plan",
           status: "idea",
-          tradeCount: 0,
         },
         {
           id: watchingPlanId,
           isWatched: true,
           name: "Watching Plan",
           status: "watching",
-          tradeCount: 0,
         },
         {
           id: activePlanId,
           isWatched: false,
-          latestTradeDate: null,
           name: "Active Plan",
           status: "active",
-          tradeCount: 0,
         },
         {
           id: closedPlanId,
           isWatched: false,
-          latestTradeDate: null,
           name: "Closed Plan",
           status: "closed",
-          tradeCount: 0,
         },
       ],
       summary: summaries[0],
@@ -478,33 +403,20 @@ describe("campaign workspace queries", () => {
       status: "closed",
     });
 
-    const activeTradePlanId = await insertTradePlan({
+    await insertTradePlan({
       campaignId: activeCampaignId,
       instrumentSymbol: "QQQ",
       name: "Active Campaign Plan",
       ownerId: ownerA,
       status: "watching",
     });
-    const closedTradePlanId = await insertTradePlan({
+    await insertTradePlan({
       campaignId: closedCampaignId,
       closedAt: Date.UTC(2026, 2, 14),
       instrumentSymbol: "XLE",
       name: "Closed Campaign Plan",
       ownerId: ownerA,
       status: "closed",
-    });
-
-    await insertTrade({
-      date: Date.UTC(2026, 2, 13),
-      ownerId: ownerA,
-      ticker: "QQQ",
-      tradePlanId: activeTradePlanId,
-    });
-    await insertTrade({
-      date: Date.UTC(2026, 2, 12),
-      ownerId: ownerA,
-      ticker: "XLE",
-      tradePlanId: closedTradePlanId,
     });
 
     const user = asUser(ownerA);
@@ -517,9 +429,6 @@ describe("campaign workspace queries", () => {
       {
         id: planningCampaignId,
         linkedTradePlans: {
-          totalCount: 0,
-        },
-        linkedTrades: {
           totalCount: 0,
         },
         status: "planning",
@@ -537,10 +446,6 @@ describe("campaign workspace queries", () => {
           openCount: 1,
           totalCount: 1,
           watchingCount: 1,
-        },
-        linkedTrades: {
-          latestTradeDate: null,
-          totalCount: 0,
         },
         status: "active",
       },
@@ -561,10 +466,6 @@ describe("campaign workspace queries", () => {
           closedCount: 1,
           openCount: 0,
           totalCount: 1,
-        },
-        linkedTrades: {
-          latestTradeDate: null,
-          totalCount: 0,
         },
         status: "closed",
       },

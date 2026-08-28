@@ -11,12 +11,14 @@ import {
   getEasternDateString,
   getRecentBusinessDateRange,
 } from "./lib/ibkrSchedule";
-import { deriveOpenPositions } from "./lib/openPositions";
+import {
+  deriveOpenPositions,
+  MAX_DERIVED_POSITION_TRADES,
+} from "./lib/openPositions";
 import { parseIbkrEasternTimestamp } from "../shared/brokerage/ibkr-flex/time";
 
 const RECENT_BUSINESS_DAYS = 5;
 const MAX_RECENT_FILLS_PER_TABLE = 250;
-const MAX_POSITION_TRADES = 5_000;
 const MAX_PENDING_FILLS = 100;
 const MAX_RECENT_ACCEPTED_FILLS = 25;
 const MAX_CHECK_INS_IN_RECENT_WINDOW = 100;
@@ -339,10 +341,10 @@ async function getPositionTradesOrThrow(ctx: QueryCtx, ownerId: string) {
   const trades = await ctx.db
     .query("trades")
     .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-    .take(MAX_POSITION_TRADES + 1);
-  if (trades.length > MAX_POSITION_TRADES) {
+    .take(MAX_DERIVED_POSITION_TRADES + 1);
+  if (trades.length > MAX_DERIVED_POSITION_TRADES) {
     throw new Error(
-      `Counterpart position calculation exceeds the ${MAX_POSITION_TRADES}-trade limit`,
+      `Counterpart position calculation exceeds the ${MAX_DERIVED_POSITION_TRADES}-trade limit`,
     );
   }
   return trades;
@@ -1050,14 +1052,14 @@ export const getPortfolioContext = internalQuery({
         .withIndex("by_owner_status", (q) =>
           q.eq("ownerId", args.ownerId).eq("status", "pending_review"),
         )
-        .take(MAX_POSITION_TRADES + 1),
+        .take(MAX_DERIVED_POSITION_TRADES + 1),
       getOpenReconciliationIssuesOrThrow(ctx, args.ownerId),
       getLatestActivityRun(ctx, args.ownerId),
       getLatestSuccessfulActivityRun(ctx, args.ownerId),
     ]);
-    if (pendingRows.length > MAX_POSITION_TRADES) {
+    if (pendingRows.length > MAX_DERIVED_POSITION_TRADES) {
       throw new Error(
-        `Counterpart pending inbox count exceeds the ${MAX_POSITION_TRADES}-row limit`,
+        `Counterpart pending inbox count exceeds the ${MAX_DERIVED_POSITION_TRADES}-row limit`,
       );
     }
 

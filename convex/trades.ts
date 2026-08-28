@@ -454,38 +454,6 @@ export const listTrades = query({
   },
 });
 
-export const listTradesByTradePlan = query({
-  args: {
-    tradePlanId: v.id("tradePlans"),
-  },
-  returns: v.array(tradeValidator),
-  handler: async (ctx, args): Promise<Doc<"trades">[]> => {
-    const ownerId = await requireUser(ctx);
-    const tradePlan = await ctx.db.get(args.tradePlanId);
-    if (!tradePlan || tradePlan.ownerId !== ownerId) {
-      return [];
-    }
-
-    return [];
-  },
-});
-
-export const listTradesByCampaign = query({
-  args: {
-    campaignId: v.id("campaigns"),
-  },
-  returns: v.array(tradeValidator),
-  handler: async (ctx, args): Promise<Doc<"trades">[]> => {
-    const ownerId = await requireUser(ctx);
-    const campaign = await ctx.db.get(args.campaignId);
-    if (!campaign || campaign.ownerId !== ownerId) {
-      return [];
-    }
-
-    return [];
-  },
-});
-
 const paginatedTradesValidator = v.object({
   continueCursor: v.string(),
   isDone: v.boolean(),

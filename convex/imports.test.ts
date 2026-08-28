@@ -633,7 +633,6 @@ describe("imports review workspace", () => {
 
     expect(workspace.summary).toEqual({
       ambiguousCount: 0,
-      assignedCount: 0,
       errorCount: 0,
       needsReviewCount: 0,
       readyCount: 2,
@@ -668,7 +667,6 @@ describe("imports review workspace", () => {
     ).toContain(assignedPlanId);
     expect(workspace.rows[0]).toMatchObject({
       matchContext: {
-        assignedTradePlan: null,
         candidateCount: 1,
         ticker: "NVDA",
       },
@@ -682,7 +680,6 @@ describe("imports review workspace", () => {
     });
     expect(workspace.rows[1]).toMatchObject({
       matchContext: {
-        assignedTradePlan: null,
         candidateCount: 0,
         ticker: "MSFT",
       },
@@ -754,7 +751,6 @@ describe("imports review workspace", () => {
 
     expect(workspace.summary).toEqual({
       ambiguousCount: 1,
-      assignedCount: 0,
       errorCount: 1,
       needsReviewCount: 1,
       readyCount: 1,
@@ -767,7 +763,6 @@ describe("imports review workspace", () => {
     expect(workspace.rows[0]).toMatchObject({
       matchState: "ambiguous",
       matchContext: {
-        assignedTradePlan: null,
         candidateCount: 2,
       },
       readiness: {

@@ -17,22 +17,15 @@ export default async function CampaignDetailPage({
     preloadedCampaign,
     preloadedCampaignWorkspace,
     preloadedCampaignNotes,
-    preloadedCampaignTrades,
-    preloadedAccountMappings,
-  ] =
-    await Promise.all([
-      preloadQuery(api.campaigns.getCampaign, { campaignId }, { token }),
-      preloadQuery(api.campaigns.getCampaignWorkspace, { campaignId }, { token }),
-      preloadQuery(api.notes.getNotesByCampaign, { campaignId }, { token }),
-      preloadQuery(api.trades.listTradesByCampaign, { campaignId }, { token }),
-      preloadQuery(api.accountMappings.listAccountMappings, {}, { token }),
-    ]);
+  ] = await Promise.all([
+    preloadQuery(api.campaigns.getCampaign, { campaignId }, { token }),
+    preloadQuery(api.campaigns.getCampaignWorkspace, { campaignId }, { token }),
+    preloadQuery(api.notes.getNotesByCampaign, { campaignId }, { token }),
+  ]);
 
   return (
     <CampaignDetailPageClient
       campaignId={campaignId}
-      preloadedAccountMappings={preloadedAccountMappings}
-      preloadedCampaignTrades={preloadedCampaignTrades}
       preloadedCampaign={preloadedCampaign}
       preloadedCampaignWorkspace={preloadedCampaignWorkspace}
       preloadedCampaignNotes={preloadedCampaignNotes}

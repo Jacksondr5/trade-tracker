@@ -47,64 +47,75 @@ describe("counterpart trade acceptance", () => {
   }
 
   async function seedAcceptedTrade(args: {
+    brokerageAccountId?: string | null;
     date: number;
     direction: "long" | "short";
     portfolioId?: Id<"portfolios">;
+    price?: number;
     quantity: number;
     side: "buy" | "sell";
+    source?: "ibkr" | "kraken" | "manual";
+    ticker?: string;
   }) {
     return await t.run(async (ctx) => {
       return await ctx.db.insert("trades", {
         assetType: "stock",
-        brokerageAccountId: "acct-1",
+        brokerageAccountId:
+          args.brokerageAccountId === null
+            ? undefined
+            : (args.brokerageAccountId ?? "acct-1"),
         date: args.date,
         direction: args.direction,
         ownerId,
         portfolioId: args.portfolioId,
-        price: 100,
+        price: args.price ?? 100,
         quantity: args.quantity,
         side: args.side,
-        source: "ibkr",
-        ticker: "AAPL",
+        source: args.source ?? "ibkr",
+        ticker: args.ticker ?? "AAPL",
       });
     });
   }
 
   async function seedPendingTrade(args: {
+    brokerageAccountId?: string;
     date: number;
     direction?: "long" | "short";
+    price?: number;
     quantity?: number;
     side?: "buy" | "sell";
+    source?: "ibkr" | "kraken" | "manual";
+    ticker?: string;
   }) {
     return await t.run(async (ctx) => {
       return await ctx.db.insert("inboxTrades", {
         assetType: "stock",
-        brokerageAccountId: "acct-1",
+        brokerageAccountId: args.brokerageAccountId ?? "acct-1",
         date: args.date,
         direction: args.direction ?? "long",
         ownerId,
-        price: 101,
+        price: args.price ?? 101,
         quantity: args.quantity ?? 1,
         side: args.side ?? "buy",
-        source: "ibkr",
+        source: args.source ?? "ibkr",
         status: "pending_review",
-        ticker: "AAPL",
+        ticker: args.ticker ?? "AAPL",
         validationErrors: [],
         validationWarnings: [],
       });
     });
   }
 
-  async function seedResolvedInstrument() {
-    await t.run(async (ctx) => {
-      await ctx.db.insert("marketDataInstruments", {
+  async function seedResolvedInstrument(ticker = "AAPL") {
+    return await t.run(async (ctx) => {
+      return await ctx.db.insert("marketDataInstruments", {
         assetType: "stock",
         createdAt: 1,
         ownerId,
         provider: "twelve_data",
-        providerSymbol: "AAPL",
+        providerSymbol: ticker,
         resolutionStatus: "resolved",
-        symbol: "AAPL",
+        symbol: ticker,
         updatedAt: 1,
       });
     });
@@ -121,6 +132,7 @@ describe("counterpart trade acceptance", () => {
   }): EpisodeTradeEvidence {
     return {
       ...args,
+      _creationTime: args.date,
       portfolioName: args.portfolioName ?? "Core",
       price: 100,
       ticker: "AAPL",
@@ -345,7 +357,7 @@ describe("counterpart trade acceptance", () => {
   it("refuses to infer when accepted history exceeds the bounded scan", async () => {
     const portfolioId = await seedPortfolio();
     await t.run(async (ctx) => {
-      for (let date = 1; date <= 1_001; date += 1) {
+      for (let date = 1; date <= 5_001; date += 1) {
         await ctx.db.insert("trades", {
           assetType: "stock",
           brokerageAccountId: "acct-1",
@@ -361,7 +373,7 @@ describe("counterpart trade acceptance", () => {
         });
       }
     });
-    const inboxTradeId = await seedPendingTrade({ date: 1_002 });
+    const inboxTradeId = await seedPendingTrade({ date: 5_002 });
 
     const prepared = await t.query(
       internal.imports.prepareCounterpartAcceptance,
@@ -387,7 +399,253 @@ describe("counterpart trade acceptance", () => {
     );
     expect(prepared).toMatchObject({
       kind: "outOfOrder",
-      olderTrade: { date: 1, inboxTradeId: older, ticker: "AAPL" },
+      conflict: {
+        kind: "older_pending",
+        date: 1,
+        inboxTradeId: older,
+        ticker: "AAPL",
+      },
+    });
+  });
+
+  it("refuses a fill backdated before accepted ticker history", async () => {
+    const portfolioId = await seedPortfolio();
+    const acceptedTradeId = await seedAcceptedTrade({
+      date: 10,
+      direction: "long",
+      portfolioId,
+      quantity: 1,
+      side: "buy",
+    });
+    const inboxTradeId = await seedPendingTrade({ date: 5 });
+
+    const prepared = await t.query(
+      internal.imports.prepareCounterpartAcceptance,
+      { inboxTradeId, ownerId, portfolioId },
+    );
+
+    expect(prepared).toMatchObject({
+      conflict: {
+        date: 10,
+        kind: "newer_accepted",
+        ticker: "AAPL",
+        tradeId: acceptedTradeId,
+      },
+      kind: "outOfOrder",
+    });
+  });
+
+  it("shares daily-context episode state when a manual trade closes the position", async () => {
+    const portfolioId = await seedPortfolio();
+    await seedAcceptedTrade({
+      date: 1,
+      direction: "long",
+      portfolioId,
+      quantity: 2,
+      side: "buy",
+    });
+    await seedAcceptedTrade({
+      brokerageAccountId: null,
+      date: 2,
+      direction: "long",
+      portfolioId,
+      quantity: 2,
+      side: "sell",
+      source: "manual",
+    });
+    const inboxTradeId = await seedPendingTrade({ date: 3 });
+
+    const [dailyContext, prepared] = await Promise.all([
+      t.query(internal.counterpart.getDailyContext, {
+        now: Date.now(),
+        ownerId,
+      }),
+      t.query(internal.imports.prepareCounterpartAcceptance, {
+        inboxTradeId,
+        ownerId,
+      }),
+    ]);
+
+    expect(dailyContext.openPositions).toEqual([]);
+    expect(prepared).toMatchObject({
+      kind: "needsPortfolio",
+      reason: "opening_trade",
+    });
+  });
+
+  it("keeps fractional exact-close and next-opener boundaries stable through HTTP", async () => {
+    const portfolioId = await seedPortfolio();
+    await seedAcceptedTrade({
+      date: 1,
+      direction: "long",
+      portfolioId,
+      quantity: 1_000.1,
+      side: "buy",
+    });
+    await seedAcceptedTrade({
+      date: 2,
+      direction: "long",
+      portfolioId,
+      quantity: 0.2,
+      side: "buy",
+    });
+    await seedResolvedInstrument();
+    const closeId = await seedPendingTrade({
+      date: 3,
+      quantity: 1_000.3,
+      side: "sell",
+    });
+
+    const closeResponse = await t.fetch("/internal/counterpart/accept-trade", {
+      body: JSON.stringify({ inboxTradeId: closeId, ownerId }),
+      headers: {
+        authorization: "Bearer counterpart-test-token",
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+    expect(closeResponse.status).toBe(200);
+    expect(await closeResponse.json()).toMatchObject({
+      data: {
+        kind: "accepted",
+        portfolio: {
+          id: portfolioId,
+          reason: "open_episode_inheritance",
+        },
+      },
+      ok: true,
+    });
+
+    const openerId = await seedPendingTrade({ date: 4 });
+    const openerResponse = await t.fetch("/internal/counterpart/accept-trade", {
+      body: JSON.stringify({ inboxTradeId: openerId, ownerId }),
+      headers: {
+        authorization: "Bearer counterpart-test-token",
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+    expect(openerResponse.status).toBe(200);
+    expect(await openerResponse.json()).toMatchObject({
+      data: { kind: "needsPortfolio", reason: "opening_trade" },
+      ok: true,
+    });
+  });
+
+  it("inherits from the reopened episode rather than the prior closed one", async () => {
+    const firstPortfolioId = await seedPortfolio("First");
+    const reopenedPortfolioId = await seedPortfolio("Reopened");
+    await seedAcceptedTrade({
+      date: 1,
+      direction: "long",
+      portfolioId: firstPortfolioId,
+      quantity: 1,
+      side: "buy",
+    });
+    await seedAcceptedTrade({
+      date: 2,
+      direction: "long",
+      portfolioId: firstPortfolioId,
+      quantity: 1,
+      side: "sell",
+    });
+    const reopenedTradeId = await seedAcceptedTrade({
+      date: 3,
+      direction: "long",
+      portfolioId: reopenedPortfolioId,
+      quantity: 2,
+      side: "buy",
+    });
+    await seedResolvedInstrument();
+    const inboxTradeId = await seedPendingTrade({
+      date: 4,
+      quantity: 0.5,
+      side: "sell",
+    });
+
+    const response = await t.fetch("/internal/counterpart/accept-trade", {
+      body: JSON.stringify({ inboxTradeId, ownerId }),
+      headers: {
+        authorization: "Bearer counterpart-test-token",
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      data: {
+        kind: "accepted",
+        portfolio: {
+          evidence: {
+            groupOpeningTradeDate: 3,
+            inheritedFromTrade: { tradeId: reopenedTradeId },
+            openPositionSignedQuantity: 2,
+          },
+          id: reopenedPortfolioId,
+          name: "Reopened",
+        },
+      },
+      ok: true,
+    });
+  });
+
+  it("fails closed when accepted history changes between prepare and commit", async () => {
+    const portfolioId = await seedPortfolio();
+    await seedAcceptedTrade({
+      date: 1,
+      direction: "long",
+      portfolioId,
+      quantity: 1,
+      side: "buy",
+    });
+    const instrumentId = await seedResolvedInstrument();
+    const inboxTradeId = await seedPendingTrade({ date: 3 });
+    const prepared = await t.query(
+      internal.imports.prepareCounterpartAcceptance,
+      { inboxTradeId, ownerId },
+    );
+    expect(prepared.kind).toBe("ready");
+    if (prepared.kind !== "ready") throw new Error("Expected ready context");
+
+    await seedAcceptedTrade({
+      date: 2,
+      direction: "long",
+      portfolioId,
+      quantity: 1,
+      side: "buy",
+    });
+    const result = await t.mutation(
+      internal.imports.commitInboxTradeAcceptanceInternal,
+      {
+        counterpartContext: {
+          expected: {
+            portfolio: {
+              groupOpeningTradeDate:
+                prepared.portfolio.evidence.groupOpeningTradeDate,
+              inheritedFromTradeId:
+                prepared.portfolio.evidence.inheritedFromTrade?.tradeId ?? null,
+              openPositionSignedQuantity:
+                prepared.portfolio.evidence.openPositionSignedQuantity,
+              portfolioId: prepared.portfolio.id,
+              reason: prepared.portfolio.reason,
+            },
+            trade: prepared.trade,
+          },
+        },
+        inboxTradeId,
+        instrumentId,
+        ownerId,
+        portfolioId,
+      },
+    );
+
+    expect(result).toEqual({
+      accepted: false,
+      error: "Acceptance context changed; refresh before retrying",
+    });
+    await t.run(async (ctx) => {
+      expect(await ctx.db.get(inboxTradeId)).not.toBeNull();
     });
   });
 
@@ -410,6 +668,106 @@ describe("counterpart trade acceptance", () => {
         message: "ownerId does not match the configured counterpart owner",
         retryable: false,
       },
+      ok: false,
+    });
+  });
+
+  it("returns non-retryable 400 for a malformed inbox trade ID", async () => {
+    const response = await t.fetch("/internal/counterpart/accept-trade", {
+      body: JSON.stringify({ inboxTradeId: "malformed", ownerId }),
+      headers: {
+        authorization: "Bearer counterpart-test-token",
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "VALIDATION",
+        message: "inboxTradeId must be a valid inboxTrades document ID",
+        retryable: false,
+      },
+      ok: false,
+    });
+  });
+
+  it("returns non-retryable 404 for a missing valid inbox trade ID", async () => {
+    const inboxTradeId = await seedPendingTrade({ date: 1 });
+    await t.run(async (ctx) => {
+      await ctx.db.delete(inboxTradeId);
+    });
+
+    const response = await t.fetch("/internal/counterpart/accept-trade", {
+      body: JSON.stringify({ inboxTradeId, ownerId }),
+      headers: {
+        authorization: "Bearer counterpart-test-token",
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "NOT_FOUND",
+        message: "Inbox trade not found",
+        retryable: false,
+      },
+      ok: false,
+    });
+  });
+
+  it("returns non-retryable 400 for a malformed portfolio ID", async () => {
+    const inboxTradeId = await seedPendingTrade({ date: 1 });
+    const response = await t.fetch("/internal/counterpart/accept-trade", {
+      body: JSON.stringify({
+        inboxTradeId,
+        ownerId,
+        portfolioId: "malformed",
+      }),
+      headers: {
+        authorization: "Bearer counterpart-test-token",
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "VALIDATION",
+        message: "portfolioId must be a valid portfolios document ID",
+        retryable: false,
+      },
+      ok: false,
+    });
+  });
+
+  it("maps a structured acceptance error to the HTTP error envelope", async () => {
+    const inboxTradeId = await t.run(async (ctx) => {
+      return await ctx.db.insert("inboxTrades", {
+        ownerId,
+        source: "ibkr",
+        status: "pending_review",
+        ticker: "AAPL",
+        validationErrors: [],
+        validationWarnings: [],
+      });
+    });
+    const response = await t.fetch("/internal/counterpart/accept-trade", {
+      body: JSON.stringify({ inboxTradeId, ownerId }),
+      headers: {
+        authorization: "Bearer counterpart-test-token",
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "VALIDATION", retryable: false },
       ok: false,
     });
   });

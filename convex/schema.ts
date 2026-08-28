@@ -896,14 +896,7 @@ export default defineSchema({
     .index("by_owner_ticker_date", ["ownerId", "ticker", "date"])
     .index("by_source_externalId", ["source", "externalId"])
     .index("by_owner_portfolioId", ["ownerId", "portfolioId"])
-    .index("by_owner_portfolioId_date", ["ownerId", "portfolioId", "date"])
-    .index("by_owner_ticker_source_brokerageAccountId_date", [
-      "ownerId",
-      "ticker",
-      "source",
-      "brokerageAccountId",
-      "date",
-    ]),
+    .index("by_owner_portfolioId_date", ["ownerId", "portfolioId", "date"]),
 
   inboxTrades: defineTable({
     assetType: v.optional(v.union(v.literal("crypto"), v.literal("stock"))),

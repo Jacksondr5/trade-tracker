@@ -33,11 +33,6 @@ const linkedTradePlanRollupValidator = v.object({
   watchingCount: v.number(),
 });
 
-const linkedTradeRollupValidator = v.object({
-  latestTradeDate: nullableNumberValidator,
-  totalCount: v.number(),
-});
-
 const campaignLifecycleMetadataValidator = v.object({
   closedAt: nullableNumberValidator,
   hasClosedTradePlans: v.boolean(),
@@ -53,7 +48,6 @@ const campaignWorkspaceSummaryValidator = v.object({
   isWatched: v.boolean(),
   lifecycle: campaignLifecycleMetadataValidator,
   linkedTradePlans: linkedTradePlanRollupValidator,
-  linkedTrades: linkedTradeRollupValidator,
   name: v.string(),
   status: campaignStatusValidator,
   thesis: v.string(),
@@ -65,10 +59,8 @@ const campaignWorkspaceTradePlanSummaryValidator = v.object({
   instrumentSymbol: v.string(),
   invalidatedAt: nullableNumberValidator,
   isWatched: v.boolean(),
-  latestTradeDate: nullableNumberValidator,
   name: v.string(),
   status: tradePlanStatusValidator,
-  tradeCount: v.number(),
 });
 
 const campaignWorkspaceDetailValidator = v.object({
@@ -134,37 +126,6 @@ function buildTradePlanRollup(tradePlans: Array<Pick<TradePlanDoc, "status">>) {
   return rollup;
 }
 
-function buildTradeRollup(
-  tradePlanIds: Set<Id<"tradePlans">>,
-  tradeStatsByPlanId: Map<
-    Id<"tradePlans">,
-    { latestTradeDate: number | null; totalCount: number }
-  >,
-) {
-  let totalCount = 0;
-  let latestTradeDate: number | null = null;
-
-  for (const tradePlanId of tradePlanIds) {
-    const tradeStats = tradeStatsByPlanId.get(tradePlanId);
-    if (!tradeStats) {
-      continue;
-    }
-
-    totalCount += tradeStats.totalCount;
-    if (
-      tradeStats.latestTradeDate !== null &&
-      (latestTradeDate === null || tradeStats.latestTradeDate > latestTradeDate)
-    ) {
-      latestTradeDate = tradeStats.latestTradeDate;
-    }
-  }
-
-  return {
-    latestTradeDate,
-    totalCount,
-  };
-}
-
 async function loadCampaignWorkspaceSourceData(ctx: QueryCtx, ownerId: string) {
   const [tradePlans, watchedItems, retrospectives] = await Promise.all([
     ctx.db
@@ -209,11 +170,6 @@ async function loadCampaignWorkspaceSourceData(ctx: QueryCtx, ownerId: string) {
     tradePlansByCampaignId.set(tradePlan.campaignId, existing);
   }
 
-  const tradeStatsByPlanId = new Map<
-    Id<"tradePlans">,
-    { latestTradeDate: number | null; totalCount: number }
-  >();
-
   const retrospectiveParentIds = new Set(
     retrospectives
       .filter((retrospective) => retrospective.content.trim().length > 0)
@@ -223,7 +179,6 @@ async function loadCampaignWorkspaceSourceData(ctx: QueryCtx, ownerId: string) {
   return {
     retrospectiveParentIds,
     tradePlansByCampaignId,
-    tradeStatsByPlanId,
     watchedCampaignIds,
     watchedTradePlanIds,
   };
@@ -262,11 +217,6 @@ async function loadCampaignWorkspaceDetailSourceData(
   }
 
   const watchedTradePlanIds = new Set<Id<"tradePlans">>();
-  const tradeStatsByPlanId = new Map<
-    Id<"tradePlans">,
-    { latestTradeDate: number | null; totalCount: number }
-  >();
-
   for (let i = 0; i < tradePlans.length; i += DETAIL_SOURCE_DATA_CONCURRENCY) {
     const tradePlanChunk = tradePlans.slice(
       i,
@@ -288,11 +238,6 @@ async function loadCampaignWorkspaceDetailSourceData(
         ) {
           watchedTradePlanIds.add(watchedTradePlan.tradePlanId);
         }
-
-        tradeStatsByPlanId.set(tradePlan._id, {
-          latestTradeDate: null,
-          totalCount: 0,
-        });
       }),
     );
   }
@@ -305,7 +250,6 @@ async function loadCampaignWorkspaceDetailSourceData(
   return {
     retrospectiveParentIds,
     tradePlansByCampaignId: new Map([[campaignId, tradePlans]]),
-    tradeStatsByPlanId,
     watchedCampaignIds,
     watchedTradePlanIds,
   };
@@ -323,14 +267,6 @@ function buildCampaignWorkspaceSummary(
       ?.sort(sortTradePlansByOrderThenNewest) ??
     [];
   const linkedTradePlanRollup = buildTradePlanRollup(linkedTradePlans);
-  const linkedTradePlanIds = new Set(
-    linkedTradePlans.map((tradePlan) => tradePlan._id),
-  );
-  const linkedTradeRollup = buildTradeRollup(
-    linkedTradePlanIds,
-    sourceData.tradeStatsByPlanId,
-  );
-
   return {
     createdAt: campaign._creationTime,
     id: campaign._id,
@@ -344,7 +280,6 @@ function buildCampaignWorkspaceSummary(
       isClosed: campaign.status === "closed",
     },
     linkedTradePlans: linkedTradePlanRollup,
-    linkedTrades: linkedTradeRollup,
     name: campaign.name,
     status: campaign.status,
     thesis: campaign.thesis,
@@ -539,21 +474,14 @@ export const getCampaignWorkspace = query({
 
     return {
       linkedTradePlans: linkedTradePlans.map((tradePlan) => {
-        const tradeStats = sourceData.tradeStatsByPlanId.get(tradePlan._id) ?? {
-          latestTradeDate: null,
-          totalCount: 0,
-        };
-
         return {
           closedAt: tradePlan.closedAt ?? null,
           id: tradePlan._id,
           instrumentSymbol: tradePlan.instrumentSymbol,
           invalidatedAt: tradePlan.invalidatedAt ?? null,
           isWatched: sourceData.watchedTradePlanIds.has(tradePlan._id),
-          latestTradeDate: tradeStats.latestTradeDate,
           name: tradePlan.name,
           status: tradePlan.status,
-          tradeCount: tradeStats.totalCount,
         };
       }),
       summary: buildCampaignWorkspaceSummary(
