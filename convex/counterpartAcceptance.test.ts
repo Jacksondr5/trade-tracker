@@ -22,7 +22,6 @@ const modules = (import.meta as ImportMetaWithGlob).glob([
 ]);
 
 const ownerId = "counterpart-owner";
-const otherOwnerId = "other-owner";
 
 describe("counterpart trade acceptance", () => {
   let t: ReturnType<typeof convexTest>;
@@ -404,7 +403,6 @@ describe("counterpart trade acceptance", () => {
     const firstResponse = await t.fetch("/internal/counterpart/accept-trade", {
       body: JSON.stringify({
         inboxTradeId: firstInboxTradeId,
-        ownerId,
         portfolioId,
       }),
       headers: {
@@ -420,7 +418,7 @@ describe("counterpart trade acceptance", () => {
     });
 
     const secondResponse = await t.fetch("/internal/counterpart/accept-trade", {
-      body: JSON.stringify({ inboxTradeId: secondInboxTradeId, ownerId }),
+      body: JSON.stringify({ inboxTradeId: secondInboxTradeId }),
       headers: {
         authorization: "Bearer counterpart-test-token",
         "content-type": "application/json",
@@ -719,7 +717,7 @@ describe("counterpart trade acceptance", () => {
     });
 
     const closeResponse = await t.fetch("/internal/counterpart/accept-trade", {
-      body: JSON.stringify({ inboxTradeId: closeId, ownerId }),
+      body: JSON.stringify({ inboxTradeId: closeId }),
       headers: {
         authorization: "Bearer counterpart-test-token",
         "content-type": "application/json",
@@ -740,7 +738,7 @@ describe("counterpart trade acceptance", () => {
 
     const openerId = await seedPendingTrade({ date: 4 });
     const openerResponse = await t.fetch("/internal/counterpart/accept-trade", {
-      body: JSON.stringify({ inboxTradeId: openerId, ownerId }),
+      body: JSON.stringify({ inboxTradeId: openerId }),
       headers: {
         authorization: "Bearer counterpart-test-token",
         "content-type": "application/json",
@@ -786,7 +784,7 @@ describe("counterpart trade acceptance", () => {
     });
 
     const response = await t.fetch("/internal/counterpart/accept-trade", {
-      body: JSON.stringify({ inboxTradeId, ownerId }),
+      body: JSON.stringify({ inboxTradeId }),
       headers: {
         authorization: "Bearer counterpart-test-token",
         "content-type": "application/json",
@@ -871,11 +869,11 @@ describe("counterpart trade acceptance", () => {
     });
   });
 
-  it("returns 403 for an owner echo mismatch", async () => {
+  it("rejects an ownerId field as an unknown request field", async () => {
     const response = await t.fetch("/internal/counterpart/accept-trade", {
       body: JSON.stringify({
         inboxTradeId: "not-used",
-        ownerId: otherOwnerId,
+        ownerId,
       }),
       headers: {
         authorization: "Bearer counterpart-test-token",
@@ -883,11 +881,11 @@ describe("counterpart trade acceptance", () => {
       },
       method: "POST",
     });
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
       error: {
-        code: "FORBIDDEN",
-        message: "ownerId does not match the configured counterpart owner",
+        code: "VALIDATION",
+        message: "Unknown field: ownerId",
         retryable: false,
       },
       ok: false,
@@ -896,7 +894,7 @@ describe("counterpart trade acceptance", () => {
 
   it("returns non-retryable 400 for a malformed inbox trade ID", async () => {
     const response = await t.fetch("/internal/counterpart/accept-trade", {
-      body: JSON.stringify({ inboxTradeId: "malformed", ownerId }),
+      body: JSON.stringify({ inboxTradeId: "malformed" }),
       headers: {
         authorization: "Bearer counterpart-test-token",
         "content-type": "application/json",
@@ -922,7 +920,7 @@ describe("counterpart trade acceptance", () => {
     });
 
     const response = await t.fetch("/internal/counterpart/accept-trade", {
-      body: JSON.stringify({ inboxTradeId, ownerId }),
+      body: JSON.stringify({ inboxTradeId }),
       headers: {
         authorization: "Bearer counterpart-test-token",
         "content-type": "application/json",
@@ -946,7 +944,6 @@ describe("counterpart trade acceptance", () => {
     const response = await t.fetch("/internal/counterpart/accept-trade", {
       body: JSON.stringify({
         inboxTradeId,
-        ownerId,
         portfolioId: "malformed",
       }),
       headers: {
@@ -979,7 +976,7 @@ describe("counterpart trade acceptance", () => {
       });
     });
     const response = await t.fetch("/internal/counterpart/accept-trade", {
-      body: JSON.stringify({ inboxTradeId, ownerId }),
+      body: JSON.stringify({ inboxTradeId }),
       headers: {
         authorization: "Bearer counterpart-test-token",
         "content-type": "application/json",
@@ -1007,7 +1004,7 @@ describe("counterpart trade acceptance", () => {
     const inboxTradeId = await seedPendingTrade({ date: 2, quantity: 1 });
 
     const response = await t.fetch("/internal/counterpart/accept-trade", {
-      body: JSON.stringify({ inboxTradeId, ownerId }),
+      body: JSON.stringify({ inboxTradeId }),
       headers: {
         authorization: "Bearer counterpart-test-token",
         "content-type": "application/json",

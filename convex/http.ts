@@ -344,10 +344,9 @@ export function validateRecordCheckInResponseBody(body: JsonObject) {
 }
 
 export function validateAcceptTradeBody(body: JsonObject) {
-  assertExactKeys(body, ["ownerId", "inboxTradeId", "portfolioId"]);
+  assertExactKeys(body, ["inboxTradeId", "portfolioId"]);
   return {
     inboxTradeId: requireString(body, "inboxTradeId"),
-    ownerId: requireString(body, "ownerId"),
     portfolioId: optionalString(body, "portfolioId"),
   };
 }
@@ -384,14 +383,6 @@ http.route({
   handler: httpAction(async (ctx, req) => {
     return await authorizedJson(req, async (body, configuredOwnerId) => {
       const args = validateAcceptTradeBody(body);
-      if (args.ownerId !== configuredOwnerId) {
-        throw new HttpRequestError(
-          "FORBIDDEN",
-          "ownerId does not match the configured counterpart owner",
-          403,
-          false,
-        );
-      }
       const data = await acceptCounterpartTradeViaAction(
         ctx,
         configuredOwnerId,
