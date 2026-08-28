@@ -603,6 +603,60 @@ describe("counterpart trade acceptance", () => {
     });
   });
 
+  it("includes a legacy lowercase accepted close in episode inference", async () => {
+    const portfolioId = await seedPortfolio();
+    await seedAcceptedTrade({
+      date: 1,
+      direction: "long",
+      portfolioId,
+      quantity: 2,
+      side: "buy",
+    });
+    await seedAcceptedTrade({
+      date: 2,
+      direction: "long",
+      portfolioId,
+      quantity: 2,
+      side: "sell",
+      ticker: "aapl",
+    });
+    const inboxTradeId = await seedPendingTrade({ date: 3 });
+
+    const prepared = await t.query(
+      internal.imports.prepareCounterpartAcceptance,
+      { inboxTradeId, ownerId },
+    );
+
+    expect(prepared).toMatchObject({
+      kind: "needsPortfolio",
+      reason: "opening_trade",
+    });
+  });
+
+  it("includes a legacy lowercase pending fill in oldest-first ordering", async () => {
+    const portfolioId = await seedPortfolio();
+    const olderInboxTradeId = await seedPendingTrade({
+      date: 1,
+      ticker: "aapl",
+    });
+    const inboxTradeId = await seedPendingTrade({ date: 2 });
+
+    const prepared = await t.query(
+      internal.imports.prepareCounterpartAcceptance,
+      { inboxTradeId, ownerId, portfolioId },
+    );
+
+    expect(prepared).toMatchObject({
+      conflict: {
+        date: 1,
+        inboxTradeId: olderInboxTradeId,
+        kind: "older_pending",
+        ticker: "AAPL",
+      },
+      kind: "outOfOrder",
+    });
+  });
+
   it("shares daily-context episode state when a manual trade closes the position", async () => {
     const portfolioId = await seedPortfolio();
     await seedAcceptedTrade({

@@ -1492,6 +1492,22 @@ function counterpartAcceptanceFingerprintsMatch(
   );
 }
 
+function counterpartTickerKeys(ticker: string): string[] {
+  return [...new Set([ticker, ticker.toLowerCase()])];
+}
+
+function mergeChronologicalRows<
+  T extends { _creationTime: number; _id: string; date?: number },
+>(rowGroups: T[][]): T[] {
+  const rowById = new Map<string, T>();
+  for (const row of rowGroups.flat()) rowById.set(row._id, row);
+  return [...rowById.values()].sort(
+    (left, right) =>
+      (left.date ?? left._creationTime) - (right.date ?? right._creationTime) ||
+      left._creationTime - right._creationTime,
+  );
+}
+
 async function prepareCounterpartAcceptanceForOwner(
   ctx: QueryCtx | MutationCtx,
   args: {
@@ -1562,25 +1578,39 @@ async function prepareCounterpartAcceptanceForOwner(
     inboxTrade.source,
     inboxTrade.brokerageAccountId,
   );
-  const [pendingSameTicker, history] = await Promise.all([
-    ctx.db
-      .query("inboxTrades")
-      .withIndex("by_owner_status_ticker_date", (q) =>
-        q
-          .eq("ownerId", args.ownerId)
-          .eq("status", "pending_review")
-          .eq("ticker", trade.ticker),
-      )
-      .order("asc")
-      .take(MAX_COUNTERPART_HISTORY_SCAN + 1),
-    ctx.db
-      .query("trades")
-      .withIndex("by_owner_ticker_date", (q) =>
-        q.eq("ownerId", args.ownerId).eq("ticker", trade.ticker),
-      )
-      .order("asc")
-      .take(MAX_COUNTERPART_HISTORY_SCAN + 1),
+  const tickerKeys = counterpartTickerKeys(trade.ticker);
+  const [pendingRowGroups, historyRowGroups] = await Promise.all([
+    Promise.all(
+      tickerKeys.map((ticker) =>
+        ctx.db
+          .query("inboxTrades")
+          .withIndex("by_owner_status_ticker_date", (q) =>
+            q
+              .eq("ownerId", args.ownerId)
+              .eq("status", "pending_review")
+              .eq("ticker", ticker),
+          )
+          .order("asc")
+          .take(MAX_COUNTERPART_HISTORY_SCAN + 1),
+      ),
+    ),
+    Promise.all(
+      tickerKeys.map((ticker) =>
+        ctx.db
+          .query("trades")
+          .withIndex("by_owner_ticker_date", (q) =>
+            q.eq("ownerId", args.ownerId).eq("ticker", ticker),
+          )
+          .order("asc")
+          .take(MAX_COUNTERPART_HISTORY_SCAN + 1),
+      ),
+    ),
   ]);
+  const pendingSameTicker = mergeChronologicalRows(pendingRowGroups).slice(
+    0,
+    MAX_COUNTERPART_HISTORY_SCAN + 1,
+  );
+  const mergedHistory = mergeChronologicalRows(historyRowGroups);
 
   const olderTrade = pendingSameTicker.find(
     (item) =>
@@ -1606,10 +1636,9 @@ async function prepareCounterpartAcceptanceForOwner(
     };
   }
 
-  const historyWasTruncated = history.length > MAX_COUNTERPART_HISTORY_SCAN;
-  const boundedHistory = history
-    .slice(0, MAX_COUNTERPART_HISTORY_SCAN)
-    .filter((item) => item.ticker.toUpperCase() === trade.ticker);
+  const historyWasTruncated =
+    mergedHistory.length > MAX_COUNTERPART_HISTORY_SCAN;
+  const boundedHistory = mergedHistory.slice(0, MAX_COUNTERPART_HISTORY_SCAN);
   const newerAcceptedTrade = boundedHistory.find(
     (acceptedTrade) => acceptedTrade.date > trade.date,
   );
