@@ -7,6 +7,8 @@ export interface Note {
   contextKind?: "campaign" | "general" | "tradePlan";
   contextLabel?: string;
   noteDate: number;
+  origin?: "retrospective";
+  ticker?: string;
 }
 
 export interface NotesSectionProps {

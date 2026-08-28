@@ -1,6 +1,8 @@
 import { defineConfig } from "vitest/config";
+import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
+  plugins: [tsconfigPaths()],
   test: {
     environment: "node",
     // Existing Convex tests use owner-a and owner-b as authenticated mock
@@ -11,6 +13,7 @@ export default defineConfig({
     },
     include: [
       "src/**/*.test.ts",
+      "src/**/*.test.tsx",
       "shared/**/*.test.ts",
       "convex/**/*.test.ts",
       "scripts/**/*.test.mjs",

@@ -75,6 +75,8 @@ describe("notes contract", () => {
     }>;
     noteDate?: number;
     ownerId: string;
+    origin?: "retrospective";
+    ticker?: string;
     tradePlanId?: Id<"tradePlans">;
   }): Promise<Id<"notes">> {
     return await t.run(async (ctx) => {
@@ -85,6 +87,8 @@ describe("notes contract", () => {
         evidence: args.evidence,
         noteDate: args.noteDate ?? DEFAULT_TEST_NOTE_DATE,
         ownerId: args.ownerId,
+        origin: args.origin,
+        ticker: args.ticker,
         tradePlanId: args.tradePlanId,
       });
     });
@@ -233,6 +237,57 @@ describe("notes contract", () => {
     expect(notes.find((note) => note._id === secondCreatedId)?.noteDate).toBe(
       olderNoteDate,
     );
+  });
+
+  it("serializes ticker and origin metadata across note contexts", async () => {
+    const campaignId = await insertCampaign({
+      name: "Retrospective campaign",
+      ownerId: ownerA,
+    });
+    const tradePlanId = await insertTradePlan({
+      campaignId,
+      name: "Retrospective trade plan",
+      ownerId: ownerA,
+    });
+
+    await insertNote({
+      content: "retrospective note",
+      origin: "retrospective",
+      ownerId: ownerA,
+      ticker: "GDX",
+    });
+    await insertNote({
+      campaignId,
+      content: "campaign ticker note",
+      ownerId: ownerA,
+      ticker: "FCX",
+    });
+    await insertNote({
+      content: "trade plan ticker note",
+      ownerId: ownerA,
+      ticker: "NVDA",
+      tradePlanId,
+    });
+
+    const notes = await asUser(ownerA).query(api.notes.getNotesFeed, {});
+
+    expect(notes).toHaveLength(3);
+    expect(
+      notes.find((note) => note.content === "retrospective note"),
+    ).toMatchObject({
+      origin: "retrospective",
+      ticker: "GDX",
+    });
+    expect(
+      notes.find((note) => note.content === "campaign ticker note"),
+    ).toMatchObject({
+      ticker: "FCX",
+    });
+    expect(
+      notes.find((note) => note.content === "trade plan ticker note"),
+    ).toMatchObject({
+      ticker: "NVDA",
+    });
   });
 
   it("filters campaign, trade-plan, and general queries to the supported ownership model", async () => {

@@ -27,11 +27,13 @@ import {
   getNoteComposerSubmitButtonTestId,
   getNoteRowTestId,
   getNoteContentTestId,
+  getNoteOriginBadgeTestId,
   getDeleteNoteButtonTestId,
   getDeleteNoteButtonTooltipTestId,
   getEditNoteButtonTestId,
   getEditNoteTextareaTestId,
   getSaveNoteButtonTestId,
+  getNoteTickerBadgeTestId,
 } from "../../../shared/e2e/testIds";
 
 export { APP_PAGE_TITLES, NAVIGATION_SECTION_TEST_IDS, NAVIGATION_TEST_IDS };
@@ -415,6 +417,10 @@ export const NOTES_SELECTORS = {
   addNoteButton: getNoteComposerSubmitButtonTestId("notes"),
   noteRow: (noteId: string) => getNoteRowTestId("notes", noteId),
   noteContent: (noteId: string) => getNoteContentTestId("notes", noteId),
+  noteTickerBadge: (noteId: string) =>
+    getNoteTickerBadgeTestId("notes", noteId),
+  noteOriginBadge: (noteId: string) =>
+    getNoteOriginBadgeTestId("notes", noteId),
   deleteNoteButton: (noteId: string) =>
     getDeleteNoteButtonTestId("notes", noteId),
   deleteNoteTooltip: (noteId: string) =>
