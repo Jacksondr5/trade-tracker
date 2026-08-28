@@ -14,7 +14,7 @@ describe("NoteMetadataBadges", () => {
 
     expect(markup).toContain('data-testid="notes-note-ticker-badge-note-1"');
     expect(markup).toContain(">GDX</span>");
-    expect(markup).not.toContain("RETROSPECTIVE");
+    expect(markup).not.toContain("note-origin-badge");
   });
 
   it("renders no badges when note metadata is absent", () => {

@@ -1,6 +1,11 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      "~": new URL("./src", import.meta.url).pathname,
+    },
+  },
   test: {
     environment: "node",
     // Existing Convex tests use owner-a and owner-b as authenticated mock
@@ -11,6 +16,7 @@ export default defineConfig({
     },
     include: [
       "src/**/*.test.ts",
+      "src/**/*.test.tsx",
       "shared/**/*.test.ts",
       "convex/**/*.test.ts",
       "scripts/**/*.test.mjs",
