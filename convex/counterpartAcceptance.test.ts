@@ -1,7 +1,7 @@
 // @vitest-environment edge-runtime
 
 import { convexTest } from "convex-test";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import {
@@ -79,7 +79,7 @@ describe("counterpart trade acceptance", () => {
 
   async function seedPendingTrade(args: {
     brokerageAccountId?: string;
-    date: number;
+    date?: number;
     direction?: "long" | "short";
     price?: number;
     quantity?: number;
@@ -91,7 +91,7 @@ describe("counterpart trade acceptance", () => {
       return await ctx.db.insert("inboxTrades", {
         assetType: "stock",
         brokerageAccountId: args.brokerageAccountId ?? "acct-1",
-        date: args.date,
+        ...(args.date === undefined ? {} : { date: args.date }),
         direction: args.direction ?? "long",
         ownerId,
         price: args.price ?? 101,
@@ -1173,6 +1173,237 @@ describe("counterpart trade acceptance", () => {
     await t.run(async (ctx) => {
       const acceptedTrade = await ctx.db.get(firstBody.data.tradeId);
       expect(acceptedTrade?.sourceInboxTradeId).toBe(inboxTradeId);
+    });
+  });
+
+  it("bounds discussion evidence by the fill date through today", async () => {
+    const discussionNow = Date.UTC(2026, 4, 15, 4, 0, 0);
+    vi.useFakeTimers();
+    vi.setSystemTime(discussionNow);
+    try {
+      // UTC midnight is still the prior Eastern calendar date. The boundary
+      // check-in catches accidental UTC treatment of the numeric fill date.
+      const inboxTradeId = await seedPendingTrade({
+        date: Date.UTC(2026, 4, 8, 0, 0, 0),
+        ticker: "GDX",
+      });
+      await t.run(async (ctx) => {
+        for (let index = 0; index < 101; index += 1) {
+          await ctx.db.insert("checkIns", {
+            date: new Date(Date.UTC(2025, 11, 1 + index))
+              .toISOString()
+              .slice(0, 10),
+            kind: "mirror",
+            ownerId,
+            sentAt: index,
+            surfacedTradeIds: [],
+            window: "late_morning",
+          });
+        }
+        await ctx.db.insert("checkIns", {
+          date: "2026-04-30",
+          kind: "mirror",
+          ownerId,
+          sentAt: 200,
+          surfacedTradeIds: [inboxTradeId],
+          window: "late_morning",
+        });
+        await ctx.db.insert("checkIns", {
+          date: "2026-05-15",
+          kind: "mirror",
+          ownerId,
+          sentAt: 201,
+          surfacedTradeIds: [inboxTradeId],
+          window: "afternoon",
+        });
+      });
+
+      const response = await t.fetch(
+        "/internal/counterpart/fill-discussion-context",
+        {
+          body: JSON.stringify({ inboxTradeId }),
+          headers: {
+            authorization: "Bearer counterpart-test-token",
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body).toMatchObject({
+        data: {
+          checkIns: [
+            { date: "2026-04-30", checkInId: expect.any(String) },
+            { date: "2026-05-15", checkInId: expect.any(String) },
+          ],
+          evidenceWindow: {
+            basis: "fill_date_to_today",
+            endDate: "2026-05-15",
+            startDate: "2026-04-30",
+          },
+          fill: { inboxTradeId, state: "pending" },
+        },
+        ok: true,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("uses a bounded recent fallback for an undated pending fill", async () => {
+    const discussionNow = Date.UTC(2026, 4, 15, 4, 0, 0);
+    vi.useFakeTimers();
+    vi.setSystemTime(discussionNow);
+    try {
+      const inboxTradeId = await seedPendingTrade({ ticker: "GDX" });
+      const checkIn = await t.mutation(internal.counterpart.createCheckIn, {
+        date: "2026-05-15",
+        kind: "mirror",
+        ownerId,
+        surfacedTradeIds: [inboxTradeId],
+        window: "late_morning",
+      });
+
+      const response = await t.fetch(
+        "/internal/counterpart/fill-discussion-context",
+        {
+          body: JSON.stringify({ inboxTradeId }),
+          headers: {
+            authorization: "Bearer counterpart-test-token",
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        data: {
+          checkIns: [{ checkInId: checkIn.checkInId }],
+          evidenceWindow: {
+            basis: "recent_fallback",
+            endDate: "2026-05-15",
+            startDate: "2026-05-11",
+          },
+          fill: { inboxTradeId, state: "pending" },
+        },
+        ok: true,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("returns recent discussion evidence for a dismissed fill", async () => {
+    const discussionNow = Date.UTC(2026, 4, 15, 4, 0, 0);
+    vi.useFakeTimers();
+    vi.setSystemTime(discussionNow);
+    try {
+      const inboxTradeId = await seedPendingTrade({ date: 1, ticker: "GDX" });
+      await t.mutation(internal.counterpart.createCheckIn, {
+        date: "2026-05-15",
+        kind: "mirror",
+        ownerId,
+        surfacedTradeIds: [inboxTradeId],
+        window: "late_morning",
+      });
+      await t.run(async (ctx) => {
+        await ctx.db.delete(inboxTradeId);
+      });
+
+      const response = await t.fetch(
+        "/internal/counterpart/fill-discussion-context",
+        {
+          body: JSON.stringify({ inboxTradeId }),
+          headers: {
+            authorization: "Bearer counterpart-test-token",
+            "content-type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        data: {
+          checkIns: [{ date: "2026-05-15" }],
+          evidenceWindow: { basis: "recent_fallback" },
+          fill: { state: "unknown" },
+        },
+        ok: true,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not expose a foreign owner's accepted receipt", async () => {
+    const { foreignInboxTradeId, foreignTradeId } = await t.run(async (ctx) => {
+      const foreignInboxTradeId = await ctx.db.insert("inboxTrades", {
+        assetType: "stock",
+        brokerageAccountId: "foreign-acct",
+        date: 123,
+        direction: "long",
+        ownerId: "foreign-owner",
+        price: 999,
+        quantity: 77,
+        side: "buy",
+        source: "ibkr",
+        status: "pending_review",
+        ticker: "FOREIGN",
+        validationErrors: [],
+        validationWarnings: [],
+      });
+      const foreignTradeId = await ctx.db.insert("trades", {
+        assetType: "stock",
+        brokerageAccountId: "foreign-acct",
+        date: 123,
+        direction: "long",
+        ownerId: "foreign-owner",
+        price: 999,
+        quantity: 77,
+        side: "buy",
+        source: "ibkr",
+        sourceInboxTradeId: foreignInboxTradeId,
+        ticker: "FOREIGN",
+      });
+      return { foreignInboxTradeId, foreignTradeId };
+    });
+
+    const response = await t.fetch("/internal/counterpart/accept-trade", {
+      body: JSON.stringify({ inboxTradeId: foreignInboxTradeId }),
+      headers: {
+        authorization: "Bearer counterpart-test-token",
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+    expect(response.status).toBe(404);
+    const body = await response.json();
+    expect(body).toEqual({
+      error: {
+        code: "NOT_FOUND",
+        message: "Inbox trade not found",
+        retryable: false,
+      },
+      ok: false,
+    });
+    expect(JSON.stringify(body)).not.toContain("FOREIGN");
+    expect(JSON.stringify(body)).not.toContain(foreignTradeId);
+
+    const discussion = await t.fetch(
+      "/internal/counterpart/fill-discussion-context",
+      {
+        body: JSON.stringify({ inboxTradeId: foreignInboxTradeId }),
+        headers: {
+          authorization: "Bearer counterpart-test-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      },
+    );
+    expect(await discussion.json()).toMatchObject({
+      data: { fill: { state: "unknown" } },
+      ok: true,
     });
   });
 

@@ -28,6 +28,7 @@ const MAX_NOTES_FOR_EXACT_COUNT = 5_000;
 const MAX_RECONCILIATION_ISSUES = 500;
 const MAX_BROKER_SNAPSHOT_ROWS = 1_000;
 const MAX_MARKET_PRICE_ROWS_TO_INSPECT = 25;
+const FILL_DISCUSSION_LOOKBACK_DAYS = 7;
 const MAX_FILL_DISCUSSION_CHECK_INS = 100;
 const MAX_FILL_DISCUSSION_NOTES_PER_CHECK_IN = 100;
 
@@ -135,8 +136,15 @@ const fillDiscussionCheckInValidator = v.object({
   window: checkInWindowValidator,
 });
 
+const fillDiscussionEvidenceWindowValidator = v.object({
+  basis: v.union(v.literal("fill_date_to_today"), v.literal("recent_fallback")),
+  endDate: v.string(),
+  startDate: v.string(),
+});
+
 const fillDiscussionContextValidator = v.object({
   checkIns: v.array(fillDiscussionCheckInValidator),
+  evidenceWindow: fillDiscussionEvidenceWindowValidator,
   fill: v.union(
     v.object({
       assetType: v.union(assetTypeValidator, v.null()),
@@ -299,6 +307,39 @@ function fillDiscussionNoteFromDocument(note: Doc<"notes">) {
     noteDate: note.noteDate,
     noteId: note._id,
     ticker: note.ticker?.toUpperCase() ?? null,
+  };
+}
+
+function subtractCalendarDays(date: string, days: number): string {
+  const cursor = new Date(`${date}T12:00:00.000Z`);
+  cursor.setUTCDate(cursor.getUTCDate() - days);
+  return cursor.toISOString().slice(0, 10);
+}
+
+function fillDiscussionEvidenceWindow(
+  anchorDate: number | undefined,
+  now: number,
+) {
+  const endDate = getEasternDateString(now);
+  if (anchorDate !== undefined && Number.isFinite(anchorDate)) {
+    // A fill may be resurfaced any time after it exists. Reach back from its
+    // Eastern trade date, then clamp the forward edge to today's open.
+    return {
+      basis: "fill_date_to_today" as const,
+      endDate,
+      startDate: subtractCalendarDays(
+        getEasternDateString(anchorDate),
+        FILL_DISCUSSION_LOOKBACK_DAYS,
+      ),
+    };
+  }
+
+  // Undated or dismissed fills have no safe anchor; keep their evidence lookup
+  // bounded to the same recent business-day window used by daily context.
+  return {
+    basis: "recent_fallback" as const,
+    endDate,
+    startDate: getRecentBusinessDateRange(now, RECENT_BUSINESS_DAYS).startDate,
   };
 }
 
@@ -1245,9 +1286,18 @@ export const getFillDiscussionContext = internalQuery({
       args.ownerId,
       args.inboxTradeId,
     );
+    const evidenceWindow = fillDiscussionEvidenceWindow(
+      ownedPendingFill?.date ?? receipt?.trade.date,
+      Date.now(),
+    );
     const checkInRows = await ctx.db
       .query("checkIns")
-      .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
+      .withIndex("by_owner_date", (q) =>
+        q
+          .eq("ownerId", args.ownerId)
+          .gte("date", evidenceWindow.startDate)
+          .lt("date", nextCalendarDate(evidenceWindow.endDate)),
+      )
       .take(MAX_FILL_DISCUSSION_CHECK_INS + 1);
     if (checkInRows.length > MAX_FILL_DISCUSSION_CHECK_INS) {
       throw new Error(
@@ -1297,6 +1347,7 @@ export const getFillDiscussionContext = internalQuery({
 
     return {
       checkIns,
+      evidenceWindow,
       fill: ownedPendingFill
         ? {
             assetType: ownedPendingFill.assetType ?? null,
