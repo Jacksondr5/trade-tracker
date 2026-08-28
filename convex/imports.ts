@@ -55,6 +55,7 @@ const sourceValidator = v.union(
 );
 
 const MAX_COUNTERPART_HISTORY_SCAN = MAX_DERIVED_POSITION_TRADES;
+const MAX_COUNTERPART_PORTFOLIOS = 100;
 
 export type EpisodeTradeEvidence = {
   _creationTime: number;
@@ -460,7 +461,7 @@ async function commitInboxTradeAcceptance(
     instrumentId: Id<"marketDataInstruments">;
     portfolioId: Id<"portfolios"> | undefined;
   },
-): Promise<{ accepted: boolean; error?: string }> {
+): Promise<{ accepted: boolean; error?: string; tradeId?: Id<"trades"> }> {
   const instrument = assertOwner(
     await ctx.db.get(args.instrumentId),
     ownerId,
@@ -485,7 +486,7 @@ async function commitInboxTradeAcceptance(
     };
   }
 
-  await ctx.db.insert("trades", {
+  const tradeId = await ctx.db.insert("trades", {
     assetType: args.candidate.assetType,
     brokerageAccountId: normalizeBrokerageAccountId(
       args.inboxTrade.source,
@@ -501,6 +502,7 @@ async function commitInboxTradeAcceptance(
     price: args.candidate.price,
     quantity: args.candidate.quantity,
     side: args.candidate.side,
+    sourceInboxTradeId: args.inboxTrade._id,
     source: args.inboxTrade.source,
     taxes: args.inboxTrade.taxes,
     ticker: args.candidate.ticker,
@@ -508,7 +510,7 @@ async function commitInboxTradeAcceptance(
 
   await ctx.db.delete(args.inboxTrade._id);
 
-  return { accepted: true };
+  return { accepted: true, tradeId };
 }
 
 export async function stageInboxTradesForOwner(
@@ -1270,6 +1272,43 @@ const counterpartTradeSummaryValidator = v.object({
   ticker: v.string(),
 });
 
+const counterpartReceiptPortfolioValidator = v.object({
+  evidence: v.object({
+    groupOpeningTradeDate: v.union(v.number(), v.null()),
+    inheritedFromTrade: v.union(portfolioInferenceEvidenceValidator, v.null()),
+    openPositionSignedQuantity: v.union(v.number(), v.null()),
+  }),
+  id: v.union(v.id("portfolios"), v.null()),
+  name: v.union(v.string(), v.null()),
+  reason: v.literal("receipt_replay"),
+});
+
+const counterpartAcceptedReceiptValidator = v.object({
+  alreadyAccepted: v.boolean(),
+  kind: v.literal("accepted"),
+  portfolio: v.union(
+    v.object({
+      evidence: v.object({
+        groupOpeningTradeDate: v.union(v.number(), v.null()),
+        inheritedFromTrade: v.union(
+          portfolioInferenceEvidenceValidator,
+          v.null(),
+        ),
+        openPositionSignedQuantity: v.union(v.number(), v.null()),
+      }),
+      id: v.id("portfolios"),
+      name: v.string(),
+      reason: v.union(
+        v.literal("explicit_override"),
+        v.literal("open_episode_inheritance"),
+      ),
+    }),
+    counterpartReceiptPortfolioValidator,
+  ),
+  trade: counterpartTradeSummaryValidator,
+  tradeId: v.id("trades"),
+});
+
 const prepareCounterpartAcceptanceValidator = v.union(
   v.object({
     kind: v.literal("ready"),
@@ -1297,7 +1336,7 @@ const prepareCounterpartAcceptanceValidator = v.union(
       v.object({
         evidence: v.array(portfolioInferenceEvidenceValidator),
         evidenceCount: v.number(),
-        mostRecentTradeDate: v.number(),
+        mostRecentTradeDate: v.union(v.number(), v.null()),
         portfolioId: v.id("portfolios"),
         portfolioName: v.string(),
       }),
@@ -1387,7 +1426,7 @@ type PrepareCounterpartAcceptance =
       candidates: Array<{
         evidence: PortfolioInferenceEvidence[];
         evidenceCount: number;
-        mostRecentTradeDate: number;
+        mostRecentTradeDate: number | null;
         portfolioId: Id<"portfolios">;
         portfolioName: string;
       }>;
@@ -1507,6 +1546,95 @@ function mergeChronologicalRows<
       left._creationTime - right._creationTime,
   );
 }
+
+export type CounterpartAcceptedReceipt = {
+  alreadyAccepted: boolean;
+  kind: "accepted";
+  portfolio:
+    | {
+        evidence: {
+          groupOpeningTradeDate: number | null;
+          inheritedFromTrade: PortfolioInferenceEvidence | null;
+          openPositionSignedQuantity: number | null;
+        };
+        id: Id<"portfolios">;
+        name: string;
+        reason: "explicit_override" | "open_episode_inheritance";
+      }
+    | {
+        evidence: {
+          groupOpeningTradeDate: null;
+          inheritedFromTrade: null;
+          openPositionSignedQuantity: null;
+        };
+        id: Id<"portfolios"> | null;
+        name: string | null;
+        reason: "receipt_replay";
+      };
+  trade: Extract<PrepareCounterpartAcceptance, { kind: "ready" }>["trade"];
+  tradeId: Id<"trades">;
+};
+
+/** Returns the durable counterpart receipt for an already-accepted inbox row. */
+export async function getCounterpartAcceptanceReceiptForOwner(
+  ctx: QueryCtx,
+  ownerId: string,
+  inboxTradeId: string,
+): Promise<CounterpartAcceptedReceipt | null> {
+  const normalizedInboxTradeId = ctx.db.normalizeId(
+    "inboxTrades",
+    inboxTradeId,
+  );
+  if (normalizedInboxTradeId === null) return null;
+  const acceptedTrade = await ctx.db
+    .query("trades")
+    .withIndex("by_owner_sourceInboxTradeId", (q) =>
+      q.eq("ownerId", ownerId).eq("sourceInboxTradeId", normalizedInboxTradeId),
+    )
+    .first();
+  if (acceptedTrade === null) return null;
+
+  const portfolio =
+    acceptedTrade.portfolioId === undefined
+      ? null
+      : await ctx.db.get(acceptedTrade.portfolioId);
+  const ownedPortfolio = portfolio?.ownerId === ownerId ? portfolio : null;
+  return {
+    alreadyAccepted: true,
+    kind: "accepted",
+    portfolio: {
+      evidence: {
+        groupOpeningTradeDate: null,
+        inheritedFromTrade: null,
+        openPositionSignedQuantity: null,
+      },
+      id: ownedPortfolio?._id ?? null,
+      name: ownedPortfolio?.name ?? null,
+      reason: "receipt_replay",
+    },
+    trade: {
+      date: acceptedTrade.date,
+      direction: acceptedTrade.direction,
+      inboxTradeId: normalizedInboxTradeId,
+      price: acceptedTrade.price,
+      quantity: acceptedTrade.quantity,
+      side: acceptedTrade.side,
+      ticker: acceptedTrade.ticker,
+    },
+    tradeId: acceptedTrade._id,
+  };
+}
+
+export const getCounterpartAcceptanceReceipt = internalQuery({
+  args: { inboxTradeId: v.string(), ownerId: v.string() },
+  returns: v.union(counterpartAcceptedReceiptValidator, v.null()),
+  handler: async (ctx, args) =>
+    await getCounterpartAcceptanceReceiptForOwner(
+      ctx,
+      args.ownerId,
+      args.inboxTradeId,
+    ),
+});
 
 async function prepareCounterpartAcceptanceForOwner(
   ctx: QueryCtx | MutationCtx,
@@ -1683,15 +1811,34 @@ async function prepareCounterpartAcceptanceForOwner(
     boundedHistory,
     trade.date,
   );
-  const portfolios = new Map<Id<"portfolios">, string>();
-  for (const item of acceptedHistory) {
-    if (item.portfolioId === undefined || portfolios.has(item.portfolioId)) {
-      continue;
-    }
-    const portfolio = await ctx.db.get(item.portfolioId);
-    if (portfolio !== null && portfolio.ownerId === args.ownerId) {
-      portfolios.set(item.portfolioId, portfolio.name);
-    }
+  const [ownerPortfolios, portfolios] = await Promise.all([
+    ctx.db
+      .query("portfolios")
+      .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
+      .take(MAX_COUNTERPART_PORTFOLIOS + 1),
+    (async () => {
+      const portfolioNames = new Map<Id<"portfolios">, string>();
+      for (const item of acceptedHistory) {
+        if (
+          item.portfolioId === undefined ||
+          portfolioNames.has(item.portfolioId)
+        ) {
+          continue;
+        }
+        const portfolio = await ctx.db.get(item.portfolioId);
+        if (portfolio !== null && portfolio.ownerId === args.ownerId) {
+          portfolioNames.set(item.portfolioId, portfolio.name);
+        }
+      }
+      return portfolioNames;
+    })(),
+  ]);
+  if (ownerPortfolios.length > MAX_COUNTERPART_PORTFOLIOS) {
+    return {
+      code: "CONFLICT",
+      error: "Portfolio menu exceeds the safe counterpart limit",
+      kind: "error",
+    };
   }
   const chronologicalHistory: EpisodeTradeEvidence[] = acceptedHistory
     .filter((item) => item.direction === trade.direction)
@@ -1736,15 +1883,24 @@ async function prepareCounterpartAcceptanceForOwner(
       items.push(item);
       byPortfolio.set(item.portfolioId, items);
     }
-    const candidates = [...byPortfolio.entries()].map(
-      ([portfolioId, evidence]) => ({
-        evidence,
-        evidenceCount: evidence.length,
-        mostRecentTradeDate: evidence[0].date,
-        portfolioId,
-        portfolioName: evidence[0].portfolioName,
-      }),
-    );
+    const candidates = ownerPortfolios
+      .map((portfolio) => {
+        const evidence = byPortfolio.get(portfolio._id) ?? [];
+        return {
+          evidence,
+          evidenceCount: evidence.length,
+          mostRecentTradeDate: evidence[0]?.date ?? null,
+          portfolioId: portfolio._id,
+          portfolioName: portfolio.name,
+        };
+      })
+      .sort(
+        (left, right) =>
+          Number(right.mostRecentTradeDate !== null) -
+            Number(left.mostRecentTradeDate !== null) ||
+          (right.mostRecentTradeDate ?? 0) - (left.mostRecentTradeDate ?? 0) ||
+          left.portfolioName.localeCompare(right.portfolioName),
+      );
     return { candidates, ...inference, trade };
   }
   return {
@@ -1784,6 +1940,7 @@ export const commitInboxTradeAcceptanceInternal = internalMutation({
   returns: v.object({
     accepted: v.boolean(),
     error: v.optional(v.string()),
+    tradeId: v.optional(v.id("trades")),
   }),
   handler: async (ctx, args) => {
     if (args.counterpartContext !== undefined) {
@@ -1840,6 +1997,14 @@ export async function acceptCounterpartTradeViaAction(
     portfolioId?: string;
   },
 ) {
+  const receipt = await ctx.runQuery(
+    internal.imports.getCounterpartAcceptanceReceipt,
+    {
+      inboxTradeId: args.inboxTradeId,
+      ownerId,
+    },
+  );
+  if (receipt !== null) return receipt;
   const prepared: PrepareCounterpartAcceptance = await ctx.runQuery(
     internal.imports.prepareCounterpartAcceptance,
     { ...args, ownerId },
@@ -1870,10 +2035,19 @@ export async function acceptCounterpartTradeViaAction(
       kind: "error" as const,
     };
   }
+  if (result.tradeId === undefined) {
+    return {
+      code: "CONFLICT" as const,
+      error: "Accepted trade receipt was not recorded",
+      kind: "error" as const,
+    };
+  }
   return {
+    alreadyAccepted: false,
     kind: "accepted" as const,
     portfolio: prepared.portfolio,
     trade: prepared.trade,
+    tradeId: result.tradeId,
   };
 }
 
@@ -1885,7 +2059,7 @@ export async function acceptInboxTradeViaAction(
     counterpartContext?: CounterpartAcceptanceContext;
     portfolioId?: Id<"portfolios">;
   },
-): Promise<{ accepted: boolean; error?: string }> {
+): Promise<{ accepted: boolean; error?: string; tradeId?: Id<"trades"> }> {
   const check: AcceptCheckResult = await ctx.runMutation(
     internal.imports.checkInboxTradeForAcceptanceInternal,
     {
@@ -1909,16 +2083,14 @@ export async function acceptInboxTradeViaAction(
     };
   }
 
-  const result: { accepted: boolean; error?: string } = await ctx.runMutation(
-    internal.imports.commitInboxTradeAcceptanceInternal,
-    {
+  const result: { accepted: boolean; error?: string; tradeId?: Id<"trades"> } =
+    await ctx.runMutation(internal.imports.commitInboxTradeAcceptanceInternal, {
       inboxTradeId: check.inboxTradeId,
       instrumentId: resolution.instrument._id,
       ownerId,
       counterpartContext: args.counterpartContext,
       portfolioId: check.portfolioId,
-    },
-  );
+    });
   return result;
 }
 
@@ -1936,9 +2108,17 @@ export const acceptTrade = action({
     args,
   ): Promise<{ accepted: boolean; error?: string }> => {
     const ownerId = await requireUser(ctx);
-    return await acceptInboxTradeViaAction(ctx, ownerId, args.inboxTradeId, {
-      portfolioId: args.portfolioId,
-    });
+    const result = await acceptInboxTradeViaAction(
+      ctx,
+      ownerId,
+      args.inboxTradeId,
+      {
+        portfolioId: args.portfolioId,
+      },
+    );
+    return result.accepted
+      ? { accepted: true }
+      : { accepted: false, error: result.error };
   },
 });
 

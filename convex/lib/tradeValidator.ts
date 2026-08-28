@@ -15,6 +15,7 @@ export const tradeValidator = v.object({
   price: v.number(),
   quantity: v.number(),
   side: v.union(v.literal("buy"), v.literal("sell")),
+  sourceInboxTradeId: v.optional(v.id("inboxTrades")),
   source: v.optional(
     v.union(v.literal("manual"), v.literal("ibkr"), v.literal("kraken")),
   ),

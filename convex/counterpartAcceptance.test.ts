@@ -476,6 +476,83 @@ describe("counterpart trade acceptance", () => {
     });
   });
 
+  it("returns every owned portfolio for a zero-history opening fill", async () => {
+    const alpha = await seedPortfolio("Alpha");
+    const swing = await seedPortfolio("Swing");
+    const inboxTradeId = await seedPendingTrade({ date: 1, ticker: "GDX" });
+
+    const prepared = await t.query(
+      internal.imports.prepareCounterpartAcceptance,
+      { inboxTradeId, ownerId },
+    );
+
+    if (prepared.kind !== "needsPortfolio") throw new Error("Expected menu");
+    expect(prepared).toMatchObject({ reason: "opening_trade" });
+    expect(prepared.candidates).toEqual([
+      {
+        evidence: [],
+        evidenceCount: 0,
+        mostRecentTradeDate: null,
+        portfolioId: alpha,
+        portfolioName: "Alpha",
+      },
+      {
+        evidence: [],
+        evidenceCount: 0,
+        mostRecentTradeDate: null,
+        portfolioId: swing,
+        portfolioName: "Swing",
+      },
+    ]);
+  });
+
+  it("orders evidenced portfolio candidates by recency before the full menu", async () => {
+    const alpha = await seedPortfolio("Alpha");
+    const core = await seedPortfolio("Core");
+    const swing = await seedPortfolio("Swing");
+    for (const [date, portfolioId, side] of [
+      [1, core, "buy"],
+      [2, core, "sell"],
+      [3, swing, "buy"],
+      [4, swing, "sell"],
+    ] as const) {
+      await seedAcceptedTrade({
+        date,
+        direction: "long",
+        portfolioId,
+        quantity: 1,
+        side,
+        ticker: "GDX",
+      });
+    }
+    const inboxTradeId = await seedPendingTrade({ date: 5, ticker: "GDX" });
+
+    const prepared = await t.query(
+      internal.imports.prepareCounterpartAcceptance,
+      { inboxTradeId, ownerId },
+    );
+
+    if (prepared.kind !== "needsPortfolio") throw new Error("Expected menu");
+    expect(
+      prepared.candidates.map((candidate) => candidate.portfolioId),
+    ).toEqual([swing, core, alpha]);
+    expect(prepared.candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          evidenceCount: 2,
+          mostRecentTradeDate: 4,
+          portfolioId: swing,
+        }),
+        expect.objectContaining({
+          evidence: [],
+          evidenceCount: 0,
+          mostRecentTradeDate: null,
+          portfolioId: alpha,
+        }),
+      ]),
+    );
+  });
+
   it("refuses to infer when accepted history exceeds the bounded scan", async () => {
     const portfolioId = await seedPortfolio();
     await t.run(async (ctx) => {
@@ -1039,6 +1116,215 @@ describe("counterpart trade acceptance", () => {
       expect(trades).toHaveLength(2);
       expect(trades[1]).toMatchObject({ portfolioId, ticker: "AAPL" });
       expect(trades[1]).not.toHaveProperty("tradePlanId");
+    });
+  });
+
+  it("replays a durable accepted receipt after a lost accept response", async () => {
+    const portfolioId = await seedPortfolio();
+    await seedResolvedInstrument();
+    const inboxTradeId = await seedPendingTrade({ date: 1 });
+    const first = await t.fetch("/internal/counterpart/accept-trade", {
+      body: JSON.stringify({ inboxTradeId, portfolioId }),
+      headers: {
+        authorization: "Bearer counterpart-test-token",
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+    expect(first.status).toBe(200);
+    const firstBody = (await first.json()) as {
+      data: { alreadyAccepted: boolean; tradeId: Id<"trades"> };
+    };
+    expect(firstBody.data.alreadyAccepted).toBe(false);
+
+    const retry = await t.fetch("/internal/counterpart/accept-trade", {
+      body: JSON.stringify({ inboxTradeId }),
+      headers: {
+        authorization: "Bearer counterpart-test-token",
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toMatchObject({
+      data: {
+        alreadyAccepted: true,
+        kind: "accepted",
+        trade: { inboxTradeId },
+        tradeId: firstBody.data.tradeId,
+      },
+      ok: true,
+    });
+    const discussion = await t.fetch(
+      "/internal/counterpart/fill-discussion-context",
+      {
+        body: JSON.stringify({ inboxTradeId }),
+        headers: {
+          authorization: "Bearer counterpart-test-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      },
+    );
+    expect(await discussion.json()).toMatchObject({
+      data: { fill: { state: "accepted", tradeId: firstBody.data.tradeId } },
+      ok: true,
+    });
+    await t.run(async (ctx) => {
+      const acceptedTrade = await ctx.db.get(firstBody.data.tradeId);
+      expect(acceptedTrade?.sourceInboxTradeId).toBe(inboxTradeId);
+    });
+  });
+
+  it("does not false-match an accepted trade that predates receipt storage", async () => {
+    const inboxTradeId = await seedPendingTrade({ date: 1 });
+    await seedAcceptedTrade({
+      date: 1,
+      direction: "long",
+      quantity: 1,
+      side: "buy",
+    });
+    await t.run(async (ctx) => {
+      await ctx.db.delete(inboxTradeId);
+    });
+
+    const response = await t.fetch("/internal/counterpart/accept-trade", {
+      body: JSON.stringify({ inboxTradeId }),
+      headers: {
+        authorization: "Bearer counterpart-test-token",
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({
+      error: { code: "NOT_FOUND" },
+      ok: false,
+    });
+    const context = await t.fetch(
+      "/internal/counterpart/fill-discussion-context",
+      {
+        body: JSON.stringify({ inboxTradeId }),
+        headers: {
+          authorization: "Bearer counterpart-test-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      },
+    );
+    expect(await context.json()).toMatchObject({
+      data: { checkIns: [], fill: { state: "unknown" } },
+      ok: true,
+    });
+  });
+
+  it("reports surfaced check-in evidence without deciding confirmation", async () => {
+    const inboxTradeId = await seedPendingTrade({ date: 1, ticker: "GDX" });
+    const noteId = await t.run(async (ctx) => {
+      return await ctx.db.insert("notes", {
+        content: "Confirmed after discussing position sizing for GDX.",
+        noteDate: 20,
+        ownerId,
+        ticker: "GDX",
+      });
+    });
+    const answered = await t.mutation(internal.counterpart.createCheckIn, {
+      date: "2026-05-15",
+      kind: "mirror",
+      ownerId,
+      surfacedTradeIds: [inboxTradeId],
+      window: "late_morning",
+    });
+    await t.mutation(internal.counterpart.confirmCheckInDelivery, {
+      checkInId: answered.checkInId,
+      deliveredAt: 30,
+      ownerId,
+    });
+    await t.mutation(internal.counterpart.recordCheckInResponse, {
+      checkInId: answered.checkInId,
+      noteIds: [noteId],
+      ownerId,
+      respondedAt: 40,
+    });
+    const unanswered = await t.mutation(internal.counterpart.createCheckIn, {
+      date: "2026-05-15",
+      kind: "mirror",
+      ownerId,
+      surfacedTradeIds: [inboxTradeId],
+      window: "afternoon",
+    });
+    await t.mutation(internal.counterpart.createCheckIn, {
+      date: "2026-05-15",
+      kind: "briefing",
+      ownerId,
+      surfacedTradeIds: ["never-surfaced"],
+      window: "end_of_day",
+    });
+
+    const response = await t.fetch(
+      "/internal/counterpart/fill-discussion-context",
+      {
+        body: JSON.stringify({ inboxTradeId }),
+        headers: {
+          authorization: "Bearer counterpart-test-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      },
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      data: {
+        checkIns: [
+          {
+            checkInId: answered.checkInId,
+            deliveredAt: 30,
+            notes: [
+              {
+                contentPreview:
+                  "Confirmed after discussing position sizing for GDX.",
+                noteId,
+                ticker: "GDX",
+              },
+            ],
+            respondedAt: 40,
+          },
+          {
+            checkInId: unanswered.checkInId,
+            notes: [],
+            respondedAt: null,
+          },
+        ],
+        fill: { inboxTradeId, state: "pending", ticker: "GDX" },
+      },
+      ok: true,
+    });
+    expect(
+      (body as { data: { checkIns: unknown[] } }).data.checkIns,
+    ).toHaveLength(2);
+  });
+
+  it("rejects ownerId from the fill discussion request body", async () => {
+    const response = await t.fetch(
+      "/internal/counterpart/fill-discussion-context",
+      {
+        body: JSON.stringify({ inboxTradeId: "not-used", ownerId }),
+        headers: {
+          authorization: "Bearer counterpart-test-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      },
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "VALIDATION",
+        message: "Unknown field: ownerId",
+        retryable: false,
+      },
+      ok: false,
     });
   });
 });

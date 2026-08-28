@@ -7,6 +7,7 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
+import { getCounterpartAcceptanceReceiptForOwner } from "./imports";
 import {
   getEasternDateString,
   getRecentBusinessDateRange,
@@ -27,6 +28,8 @@ const MAX_NOTES_FOR_EXACT_COUNT = 5_000;
 const MAX_RECONCILIATION_ISSUES = 500;
 const MAX_BROKER_SNAPSHOT_ROWS = 1_000;
 const MAX_MARKET_PRICE_ROWS_TO_INSPECT = 25;
+const MAX_FILL_DISCUSSION_CHECK_INS = 100;
+const MAX_FILL_DISCUSSION_NOTES_PER_CHECK_IN = 100;
 
 const checkInWindowValidator = v.union(
   v.literal("late_morning"),
@@ -113,6 +116,43 @@ const checkInValidator = checkInHistoryValidator.extend({
   date: v.string(),
   noteIds: v.array(v.id("notes")),
   surfacedTradeIds: v.array(v.string()),
+});
+
+const fillDiscussionNoteValidator = v.object({
+  contentPreview: v.string(),
+  noteDate: v.number(),
+  noteId: v.id("notes"),
+  ticker: v.union(v.string(), v.null()),
+});
+
+const fillDiscussionCheckInValidator = v.object({
+  checkInId: v.id("checkIns"),
+  date: v.string(),
+  deliveredAt: v.union(v.number(), v.null()),
+  kind: checkInKindValidator,
+  notes: v.array(fillDiscussionNoteValidator),
+  respondedAt: v.union(v.number(), v.null()),
+  window: checkInWindowValidator,
+});
+
+const fillDiscussionContextValidator = v.object({
+  checkIns: v.array(fillDiscussionCheckInValidator),
+  fill: v.union(
+    v.object({
+      assetType: v.union(assetTypeValidator, v.null()),
+      date: v.union(v.number(), v.null()),
+      direction: v.union(directionValidator, v.null()),
+      inboxTradeId: v.id("inboxTrades"),
+      price: v.union(v.number(), v.null()),
+      quantity: v.union(v.number(), v.null()),
+      side: v.union(sideValidator, v.null()),
+      source: sourceValidator,
+      state: v.literal("pending"),
+      ticker: v.union(v.string(), v.null()),
+    }),
+    v.object({ state: v.literal("accepted"), tradeId: v.id("trades") }),
+    v.object({ state: v.literal("unknown") }),
+  ),
 });
 
 const skippedOrderValidator = v.object({
@@ -249,6 +289,15 @@ function noteFromDocument(note: Doc<"notes">) {
     id: note._id,
     noteDate: note.noteDate,
     origin: note.origin ?? null,
+    ticker: note.ticker?.toUpperCase() ?? null,
+  };
+}
+
+function fillDiscussionNoteFromDocument(note: Doc<"notes">) {
+  return {
+    contentPreview: note.content.slice(0, 200),
+    noteDate: note.noteDate,
+    noteId: note._id,
     ticker: note.ticker?.toUpperCase() ?? null,
   };
 }
@@ -1169,6 +1218,102 @@ export const getCheckIn = internalQuery({
   handler: async (ctx, args) => {
     const checkIn = await getOwnedCheckIn(ctx, args.ownerId, args.checkInId);
     return checkIn ? checkInFromDocument(checkIn) : null;
+  },
+});
+
+/**
+ * Reports durable check-in and note evidence for a fill. It must not compute
+ * or imply a "confirmed" verdict: conversation confirmation remains Hermes's
+ * judgment, while this endpoint only makes stored evidence available again.
+ */
+export const getFillDiscussionContext = internalQuery({
+  args: { inboxTradeId: v.string(), ownerId: v.string() },
+  returns: fillDiscussionContextValidator,
+  handler: async (ctx, args) => {
+    const normalizedInboxTradeId = ctx.db.normalizeId(
+      "inboxTrades",
+      args.inboxTradeId,
+    );
+    const pendingFill =
+      normalizedInboxTradeId === null
+        ? null
+        : await ctx.db.get(normalizedInboxTradeId);
+    const ownedPendingFill =
+      pendingFill?.ownerId === args.ownerId ? pendingFill : null;
+    const receipt = await getCounterpartAcceptanceReceiptForOwner(
+      ctx,
+      args.ownerId,
+      args.inboxTradeId,
+    );
+    const checkInRows = await ctx.db
+      .query("checkIns")
+      .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
+      .take(MAX_FILL_DISCUSSION_CHECK_INS + 1);
+    if (checkInRows.length > MAX_FILL_DISCUSSION_CHECK_INS) {
+      throw new Error(
+        `Fill discussion context exceeds the ${MAX_FILL_DISCUSSION_CHECK_INS}-check-in limit`,
+      );
+    }
+    const surfacedTradeId = normalizedInboxTradeId ?? args.inboxTradeId;
+    const checkIns = await Promise.all(
+      checkInRows
+        .filter((checkIn) =>
+          (checkIn.surfacedTradeIds ?? []).includes(surfacedTradeId),
+        )
+        .map(async (checkIn) => {
+          const noteIds = checkIn.noteIds ?? [];
+          if (
+            checkIn.respondedAt !== undefined &&
+            noteIds.length > MAX_FILL_DISCUSSION_NOTES_PER_CHECK_IN
+          ) {
+            throw new Error(
+              `Fill discussion context exceeds the ${MAX_FILL_DISCUSSION_NOTES_PER_CHECK_IN}-note limit`,
+            );
+          }
+          const notes =
+            checkIn.respondedAt === undefined
+              ? []
+              : await Promise.all(
+                  noteIds.map(async (noteId) => {
+                    const note = await ctx.db.get(noteId);
+                    return note?.ownerId === args.ownerId
+                      ? fillDiscussionNoteFromDocument(note)
+                      : null;
+                  }),
+                );
+          return {
+            checkInId: checkIn._id,
+            date: checkIn.date,
+            deliveredAt: checkIn.deliveredAt ?? null,
+            kind: checkIn.kind,
+            notes: notes.filter(
+              (note): note is NonNullable<typeof note> => note !== null,
+            ),
+            respondedAt: checkIn.respondedAt ?? null,
+            window: checkIn.window,
+          };
+        }),
+    );
+
+    return {
+      checkIns,
+      fill: ownedPendingFill
+        ? {
+            assetType: ownedPendingFill.assetType ?? null,
+            date: ownedPendingFill.date ?? null,
+            direction: ownedPendingFill.direction ?? null,
+            inboxTradeId: ownedPendingFill._id,
+            price: ownedPendingFill.price ?? null,
+            quantity: ownedPendingFill.quantity ?? null,
+            side: ownedPendingFill.side ?? null,
+            source: ownedPendingFill.source,
+            state: "pending" as const,
+            ticker: ownedPendingFill.ticker?.toUpperCase() ?? null,
+          }
+        : receipt
+          ? { state: "accepted" as const, tradeId: receipt.tradeId }
+          : { state: "unknown" as const },
+    };
   },
 });
 
