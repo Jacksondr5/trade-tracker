@@ -1568,7 +1568,10 @@ async function prepareCounterpartAcceptanceForOwner(
       .take(MAX_COUNTERPART_HISTORY_SCAN + 1),
     ctx.db
       .query("trades")
-      .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
+      .withIndex("by_owner_ticker_date", (q) =>
+        q.eq("ownerId", args.ownerId).eq("ticker", trade.ticker),
+      )
+      .order("asc")
       .take(MAX_COUNTERPART_HISTORY_SCAN + 1),
   ]);
 

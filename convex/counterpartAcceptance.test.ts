@@ -435,6 +435,50 @@ describe("counterpart trade acceptance", () => {
     });
   });
 
+  it("bounds accepted history per ticker before enforcing accepted ordering", async () => {
+    const portfolioId = await seedPortfolio();
+    await t.run(async (ctx) => {
+      for (let date = 1; date <= 5_001; date += 1) {
+        await ctx.db.insert("trades", {
+          assetType: "stock",
+          brokerageAccountId: "acct-1",
+          date,
+          direction: "long",
+          ownerId,
+          portfolioId,
+          price: 100,
+          quantity: 1,
+          side: "buy",
+          source: "ibkr",
+          ticker: "MSFT",
+        });
+      }
+    });
+    const acceptedTradeId = await seedAcceptedTrade({
+      date: 10_000,
+      direction: "long",
+      portfolioId,
+      quantity: 1,
+      side: "buy",
+    });
+    const inboxTradeId = await seedPendingTrade({ date: 9_999 });
+
+    const prepared = await t.query(
+      internal.imports.prepareCounterpartAcceptance,
+      { inboxTradeId, ownerId },
+    );
+
+    expect(prepared).toMatchObject({
+      conflict: {
+        date: 10_000,
+        kind: "newer_accepted",
+        ticker: "AAPL",
+        tradeId: acceptedTradeId,
+      },
+      kind: "outOfOrder",
+    });
+  });
+
   it("shares daily-context episode state when a manual trade closes the position", async () => {
     const portfolioId = await seedPortfolio();
     await seedAcceptedTrade({
