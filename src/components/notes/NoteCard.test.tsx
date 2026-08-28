@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { api } from "~/convex/_generated/api";
 import { NoteMetadataBadges } from "./NoteCard";
 
 function renderBadges(note: { origin?: "retrospective"; ticker?: string }) {
@@ -9,6 +10,10 @@ function renderBadges(note: { origin?: "retrospective"; ticker?: string }) {
 }
 
 describe("NoteMetadataBadges", () => {
+  it("resolves Convex imports through the tsconfig path aliases", () => {
+    expect(api.notes.getGeneralNotes).toBeDefined();
+  });
+
   it("renders an uppercase ticker badge when a ticker is present", () => {
     const markup = renderBadges({ ticker: "GDX" });
 

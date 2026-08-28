@@ -1,11 +1,8 @@
 import { defineConfig } from "vitest/config";
+import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
-  resolve: {
-    alias: {
-      "~": new URL("./src", import.meta.url).pathname,
-    },
-  },
+  plugins: [tsconfigPaths()],
   test: {
     environment: "node",
     // Existing Convex tests use owner-a and owner-b as authenticated mock
