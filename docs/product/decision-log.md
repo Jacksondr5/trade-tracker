@@ -6,6 +6,211 @@ This document records settled product decisions: what was decided, when, and why
 
 Add an entry when a decision is genuinely settled. Do not record open questions or proposals here.
 
+## 2026-09-22 — Counterpart review: plans are checkpoints, dropping needs evidence
+
+The Discord counterpart reviewed the Phase 3 draft and Jackson answered it
+directly; the record is in the QA workspace as
+`requirements/phase-3-counterpart-design-review.md`. Settled there and carried
+into the design:
+
+- A plan is an agreed checkpoint, not an always-current view. Subsequent
+  observations, decisions, and fills stay as items after it in order. A
+  reported fill price or a chart observation does not regenerate the plan; a
+  new checkpoint is written when the condensed view would itself be meaningful.
+- The drafting moment is a clear "this is what we will do next," including a
+  deliberate wait or conditional step, not only execution. The counterpart may
+  ask one decision-critical question there and may steer back to an instrument
+  that needs its checkpoint. No queue, no reminders.
+- Endorsing a plan is substantive agreement with its decisions, not
+  confirmation of summary accuracy, which holds because illustrative analysis
+  never enters the plan.
+- `dropped` requires evidence of withdrawal. Nonmention is never evidence.
+  This corrects the earlier "silently withdrawn" wording.
+- Ordering and linking use revision identifiers, not date arithmetic. Jackson:
+  "let's make sure we have a proper linking that doesn't need date
+  arithmetic."
+- Campaign membership is explicit per episode; thread linkage alone applies
+  nothing. Versioned campaign rules stay deferred with campaigns.
+- Reported versus verified execution stays a user-attributed element plus the
+  imported trade, with no validation machinery. Jackson: "I just don't want to
+  get too deep into validating all these things. We aren't building an
+  accounting platform."
+- Numeric values carry unit, scope, and provenance semantics; a naked number
+  is not enough. Reads return resolved context and expose truncation; writes
+  are idempotent and revision-aware.
+- The risk the counterpart named (a larger event stream to reconstruct from)
+  is checked the way this design was made: export the transcript after a few
+  weeks of use, verify checkpoints are being written unprompted, and tune.
+  Jackson: "do what we did this time around."
+
+## 2026-09-22 — Plans are authored, versioned snapshots; elements are the event stream
+
+Reviewing the rendered model against the real September conversations, Jackson
+saw the gap: "we're doing a great job of capturing a lot of different facts,
+ideas, and small components of the trade... the biggest problem is that we
+aren't converting that into a useful distilled plan." Deriving the current plan
+from elements on every read was rejected: "We don't want to derive it all the
+time... at some point we need to draw a line, distill all the previous facts
+into a solid plan, and then use that as the starting point." His analogy was
+compressing a long run of database migrations into a snapshot.
+
+Resolution: elements remain the cheap, uncurated event stream under an
+episode. A plan is a separate, versioned child record of the episode, drafted
+by the counterpart and endorsed by the user, with a compiled-through timestamp
+so later elements are the delta. The desk and thread page render the current
+plan plus its delta, never the raw element stream. The counterpart drafts a
+version unprompted when the user says they will execute, on the mirror of a
+first fill with no plan, and when the delta has visibly drifted the plan. An
+unendorsed draft is not owed work. Endorsement is the one deliberate "yes" in
+the model, accepted because Jackson had already been asking the counterpart for
+this summary by hand.
+
+## 2026-09-22 — Plans are technical; thesis lives on campaigns and thread notes
+
+Jackson: "Thesis might be too broad a word. I think a thesis applies more to a
+campaign. We also already have notes on a thread that would really capture a
+lot of the thesis data." The plan therefore holds only entry, stop (backstop
+versus discretionary), targets, scenarios, structure with as-of dates, and
+size. Fundamental and behavioral context about an instrument stays in thread
+notes; thematic thesis stays on the campaign.
+
+## 2026-09-22 — Campaigns stay light and get no plan snapshots yet
+
+Asked whether campaigns should get the same snapshot treatment, Jackson
+declined: "we haven't really done too much iteration on this directly, and I
+also struggled to put meaningful information in those in the original Trade
+Tracker." Campaigns keep name, thesis, benchmark link, linked threads, campaign
+elements, and notes. Campaign plan snapshots are revisited once a few campaigns
+have been worked for real with the counterpart.
+
+## 2026-09-21 — Campaign elements, episode exemptions, and a benchmark link
+
+Replaying the September history showed the semiconductor campaign's rules, not
+the instruments' own stops, drove the MU and SNDK exits, and that BE was
+explicitly exempted from the SMH gate. Elements therefore attach to campaigns
+as well as episodes, and an episode can opt out of specific campaign elements.
+Product initially framed SMH as campaign-only; Jackson corrected it: "saying
+SMH is just a campaign and not an instrument is not always true. We happen to
+be using it as a benchmark here, but it could be traded on its own." The
+campaign gets an optional benchmark link to an ordinary instrument thread, and
+SMH-tagged probe notes split by content between the campaign and the SMH
+thread.
+
+## 2026-09-21 — Four element statuses, including `dropped`; numbers carry as-of dates
+
+The counterpart's history used many hedge states ("leaning", "provisional",
+"illustrative", "under evaluation", "would consider"). All mapped onto
+proposed, agreed, or superseded except silently withdrawn items with no
+replacement (a pattern target both sides stopped citing; a sector cap deferred
+and never set), which get `dropped`. Numeric elements require an as-of date
+because sloped-line levels and the equity denominator drifted visibly across
+the month. Lifecycle transitions are inferred from fills and elements, never
+set by the user; a live position with a fully proposed plan is a fact the desk
+shows without a warning.
+
+## 2026-09-21 — Test the model against real history, not invented examples
+
+Product had walked an invented NVDA sequence through the model. Jackson: "this
+would be a great opportunity to grab some real data from the Discord bot rather
+than coming up with ideas on our own." He had the counterpart's full Discord
+history exported for the coding agents, and four instruments plus the
+cross-cutting workflow were reconstructed from it. Every model change recorded
+above came from that replay. The rendered exhibit is kept as a project
+artifact, not in the repository, because it carries real prices and positions.
+
+## 2026-09-21 — Phase 2 probe judged successful; Phase 3 planning begins
+
+Jackson reported the check-in ritual has stuck across real workweeks and that
+more than 80% of counterpart interactions pay off immediately. The reason he
+gave is that planning now happens with the counterpart before execution, so
+fill bookkeeping is trivial: "most of the trade bookkeeping work is easy for it
+to do because we already talked about the trade that it sees." The remaining
+cost is time per trade, with the per-trade workflow still converging. On that
+evidence the behavioral hypothesis from 2026-08-04 is treated as confirmed and
+Phase 3 design starts. See
+[2026-09-21-phase-3-instrument-thread-model-design.md](../plans/2026-09-21-phase-3-instrument-thread-model-design.md).
+
+## 2026-09-21 — The app is the read surface; the conversation is the capture surface
+
+Jackson's most pressing probe problem: "it's becoming really easy to lose track
+of the finer details of a particular plan," and he wants to prioritize being
+able to use the Trade Tracker interface again. Product's reading, which he
+accepted: the app lost as a capture surface, the conversation is winning as
+one, so what remains for the app is reading — the current plan per instrument
+and every live plan at once. Opening the app should be a withdrawal.
+
+This reverses the roadmap's deferral of UI work, but only for thread and
+episode surfaces, which do not exist yet and have a concrete reason to be
+opened. Existing campaign and trade-plan surfaces stay untouched. Editing plan
+data in the app is allowed; Jackson: "that's a small thing, and it doesn't turn
+the app into a capture surface." Edits are attributed and supersede rather than
+overwrite so the counterpart sees the change and its history.
+
+## 2026-09-21 — Structure is allowed when the counterpart populates it
+
+Jackson was hesitant about structured data: "I kind of feel like that is what
+made things fail the first time." He then corrected himself: the failure was
+retroactive bookkeeping and documenting as extra work, whereas now the agent
+does the bookkeeping. That became the rule: a field is out if it requires the
+user to open a form, and in if the counterpart can populate it from what was
+already said. The test of the structure is whether the counterpart has friction
+using it, which also makes it cheap to adjust. Counterpart over-asking on fields
+is handled by prompting ("use its judgment ... only ask me if it really feels
+that it needs an answer"), not by removing structure.
+
+## 2026-09-21 — Episodes are plan-element sets; trade plans are replaced, not migrated
+
+The counterpart's own feedback: successive proposals, corrections, and
+decisions on one instrument "shouldn't all look equally final," and answering
+"what is the current plan" requires rereading history. Resolution: an episode's
+plan is a set of elements, each with a status (proposed, agreed, superseded),
+an author (user or counterpart, so unendorsed analysis never reads as the
+user's plan), and a link to its source note. The current plan is derived from
+agreed, unsuperseded elements. Element kinds are deliberately left open until
+the per-trade workflow settles.
+
+Because the old trade plan's fixed text fields do not map onto this and the
+clean slate already emptied the layer, trade plans are replaced rather than
+migrated. This closes the migrate-or-replace question deferred on 2026-08-04.
+
+## 2026-09-21 — Episode boundary: one position lifecycle in one portfolio
+
+Prompted by the NVDA case (an existing position plus a possible breakout
+entry), the boundary was set: an episode runs from first intent or entry to
+flat, in one portfolio. Adds, trims, and alternative entry scenarios are
+elements inside it. Concurrent episodes on a thread are reserved for genuinely
+separate engagements such as the same ticker in two portfolios.
+
+## 2026-09-21 — Migration is lazy and squadron-driven, not batch
+
+Jackson no longer wants to discard prior data, but the data worth migrating is
+from when the counterpart started being used. Threads are created
+automatically from tickers across all history. Episodes for counterpart-era
+instruments are drafted lazily when the instrument next comes up in a check-in,
+so no migration backlog exists. For unclear history, Jackson pointed out that
+agents in the squadron already talk to the counterpart, so an agent can read or
+interview it and write through the counterpart's own write surface: "we
+wouldn't have to put a ton of extra logic in the app to guess how the data
+should migrate."
+
+## 2026-09-21 — Light campaigns ship in Phase 3
+
+Campaign-shaped thinking is happening in the probe (a semiconductor list worked
+as a group) but the counterpart has no campaign object, so it is invisible.
+Phase 3 gives the counterpart a deliberately light campaign: name, thesis,
+linked threads. Nothing more until a real theme needs it.
+
+## 2026-09-21 — Valuation snapshot and reconciliation state are Phase 3 prerequisites
+
+The counterpart could not obtain a clean, current equity denominator when asked
+to size positions, and its planning responses carried resolved reconciliation
+issues as if current. Both are Phase 1 deposit-engine debt, but sizing inside
+an episode and a clean briefing depend on them, so they are pulled into Phase 3
+and sequenced first. The Google Doc the counterpart had been appending
+per-instrument summaries to is retired in favor of the app read surface rather
+than given a publishing step; Trade Tracker stays authoritative. The chart
+tool stays out of Phase 3.
+
 ## 2026-08-16 — Trade Tracker is single-user by application policy
 
 Jackson uses one Clerk instance across several apps, so disabling signups in
