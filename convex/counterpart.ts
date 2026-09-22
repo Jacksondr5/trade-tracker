@@ -16,6 +16,10 @@ import {
   deriveOpenPositions,
   MAX_DERIVED_POSITION_TRADES,
 } from "./lib/openPositions";
+import {
+  buildValuationSnapshot,
+  valuationSnapshotValidator,
+} from "./lib/valuationSnapshot";
 import { parseIbkrEasternTimestamp } from "../shared/brokerage/ibkr-flex/time";
 
 const RECENT_BUSINESS_DAYS = 5;
@@ -205,10 +209,41 @@ const reconciliationIssueTypeValidator = v.union(
 
 const instrumentReconciliationIssueValidator = v.object({
   actualQuantity: v.union(v.number(), v.null()),
+  detectedAt: v.number(),
   expectedQuantity: v.union(v.number(), v.null()),
+  issueId: v.id("brokerageReconciliationIssues"),
   issueType: reconciliationIssueTypeValidator,
+  lastRecheckedAt: v.union(v.number(), v.null()),
   message: v.string(),
   reportDate: v.string(),
+  resolvedAt: v.union(v.number(), v.null()),
+  state: v.union(v.literal("active"), v.literal("resolved")),
+});
+
+// The latest attempted import and the latest successful statement are
+// reported separately so a failed attempt never hides the last good data.
+const syncSummaryValidator = v.object({
+  latestAttempt: v.union(
+    v.null(),
+    v.object({
+      completedAt: v.union(v.number(), v.null()),
+      failure: v.union(
+        v.null(),
+        v.object({ retryable: v.boolean(), summary: v.string() }),
+      ),
+      reportDate: v.string(),
+      startedAt: v.union(v.number(), v.null()),
+      status: v.string(),
+    }),
+  ),
+  latestSuccessfulStatement: v.union(
+    v.null(),
+    v.object({
+      completedAt: v.union(v.number(), v.null()),
+      importedTrades: v.number(),
+      reportDate: v.string(),
+    }),
+  ),
 });
 
 const reconciliationIssueValidator =
@@ -363,11 +398,76 @@ function instrumentReconciliationIssueFromDocument(
 ) {
   return {
     actualQuantity: issue.actualQuantity ?? null,
+    detectedAt: issue.createdAt,
     expectedQuantity: issue.expectedQuantity ?? null,
+    issueId: issue._id,
     issueType: issue.issueType,
+    lastRecheckedAt: issue.lastRecheckedAt ?? null,
     message: issue.message,
     reportDate: issue.reportDate,
+    resolvedAt: issue.resolvedAt ?? null,
+    state: issue.status === "open" ? ("active" as const) : ("resolved" as const),
   };
+}
+
+const MAX_FAILURE_SUMMARY_LENGTH = 200;
+const MAX_RECENTLY_RESOLVED_ISSUES = 25;
+const RECENTLY_RESOLVED_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+function conciseFailure(run: Doc<"brokerageSyncRuns">) {
+  if (run.status !== "failed_retryable" && run.status !== "failed_terminal") {
+    return null;
+  }
+  const firstLine = (run.errorMessage ?? "Sync failed").split("\n")[0]!.trim();
+  return {
+    retryable: run.status === "failed_retryable",
+    summary:
+      firstLine.length > MAX_FAILURE_SUMMARY_LENGTH
+        ? `${firstLine.slice(0, MAX_FAILURE_SUMMARY_LENGTH - 1)}…`
+        : firstLine,
+  };
+}
+
+function syncSummaryFromRuns(
+  latestAttempt: Doc<"brokerageSyncRuns"> | null,
+  latestSuccess: Doc<"brokerageSyncRuns"> | null,
+) {
+  return {
+    latestAttempt: latestAttempt
+      ? {
+          completedAt: latestAttempt.completedAt ?? null,
+          failure: conciseFailure(latestAttempt),
+          reportDate: latestAttempt.reportDate,
+          startedAt: latestAttempt.startedAt ?? null,
+          status: latestAttempt.status,
+        }
+      : null,
+    latestSuccessfulStatement: latestSuccess
+      ? {
+          completedAt: latestSuccess.completedAt ?? null,
+          importedTrades: latestSuccess.importedTrades,
+          reportDate: latestSuccess.reportDate,
+        }
+      : null,
+  };
+}
+
+async function getRecentlyResolvedReconciliationIssues(
+  ctx: QueryCtx,
+  ownerId: string,
+  now: number,
+) {
+  const rows = await ctx.db
+    .query("brokerageReconciliationIssues")
+    .withIndex("by_ownerId_and_status_and_updatedAt", (q) =>
+      q
+        .eq("ownerId", ownerId)
+        .eq("status", "resolved")
+        .gte("updatedAt", now - RECENTLY_RESOLVED_WINDOW_MS),
+    )
+    .order("desc")
+    .take(MAX_RECENTLY_RESOLVED_ISSUES);
+  return rows.map(reconciliationIssueFromDocument);
 }
 
 function partitionSyncWarnings(warnings: string[]) {
@@ -605,6 +705,7 @@ export const getDailyContext = internalQuery({
       }),
     ),
     openPositions: v.array(positionValidator),
+    sync: syncSummaryValidator,
     syncStatus: syncStatusValidator,
     todayCheckIns: v.array(checkInHistoryValidator),
     undiscussedFills: v.array(fillValidator),
@@ -703,6 +804,10 @@ export const getDailyContext = internalQuery({
         a.ticker.localeCompare(b.ticker),
       ),
       openPositions,
+      sync: syncSummaryFromRuns(
+        latestActivityRun,
+        await getLatestSuccessfulActivityRun(ctx, args.ownerId),
+      ),
       syncStatus: syncStatusFromRun(latestActivityRun ?? undefined),
       todayCheckIns: todayCheckIns.map((checkIn) => ({
         checkInId: checkIn._id,
@@ -1132,7 +1237,10 @@ export const getPortfolioContext = internalQuery({
       total: v.number(),
     }),
     reconciliation: v.array(reconciliationIssueValidator),
+    recentlyResolvedReconciliation: v.array(reconciliationIssueValidator),
+    sync: syncSummaryValidator,
     syncStatus: syncStatusValidator,
+    valuation: valuationSnapshotValidator,
   }),
   handler: async (ctx, args) => {
     const [
@@ -1141,6 +1249,8 @@ export const getPortfolioContext = internalQuery({
       openIssues,
       latestActivityRun,
       latestSuccessfulActivityRun,
+      recentlyResolved,
+      valuation,
     ] = await Promise.all([
       getPositionTradesOrThrow(ctx, args.ownerId),
       ctx.db
@@ -1152,6 +1262,11 @@ export const getPortfolioContext = internalQuery({
       getOpenReconciliationIssuesOrThrow(ctx, args.ownerId),
       getLatestActivityRun(ctx, args.ownerId),
       getLatestSuccessfulActivityRun(ctx, args.ownerId),
+      getRecentlyResolvedReconciliationIssues(ctx, args.ownerId, args.now),
+      buildValuationSnapshot(ctx, {
+        ownerId: args.ownerId,
+        todayDate: getEasternDateString(args.now),
+      }),
     ]);
     if (pendingRows.length > MAX_DERIVED_POSITION_TRADES) {
       throw new Error(
@@ -1236,7 +1351,13 @@ export const getPortfolioContext = internalQuery({
         total: pendingRows.length,
       },
       reconciliation: openIssues.map(reconciliationIssueFromDocument),
+      recentlyResolvedReconciliation: recentlyResolved,
+      sync: syncSummaryFromRuns(
+        latestActivityRun,
+        latestSuccessfulActivityRun,
+      ),
       syncStatus: syncStatusFromRun(latestActivityRun ?? undefined),
+      valuation,
     };
   },
 });

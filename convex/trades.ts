@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { assertOwner, requireUser } from "./lib/auth";
+import { syncTradeEpisodeLink } from "./lib/planWrites";
 import { ensureMarketDataInstrumentReviewRecord } from "./lib/marketDataInstruments";
 import { resolveInstrumentForOwner } from "./marketData";
 import { tradeValidator } from "./lib/tradeValidator";
@@ -264,7 +265,7 @@ export const createTradeInternal = internalMutation({
       throw new ConvexError("Market data instrument does not match trade");
     }
 
-    return await ctx.db.insert("trades", {
+    const tradeId = await ctx.db.insert("trades", {
       assetType: args.assetType,
       date: args.date,
       direction: args.direction,
@@ -276,6 +277,8 @@ export const createTradeInternal = internalMutation({
       source: "manual",
       ticker: args.ticker,
     });
+    await syncTradeEpisodeLink(ctx, tradeId);
+    return tradeId;
   },
 });
 
@@ -379,6 +382,7 @@ export const updateTrade = mutation({
     patch.ownerId = ownerId;
 
     await ctx.db.patch(tradeId, patch);
+    await syncTradeEpisodeLink(ctx, tradeId);
 
     return null;
   },
@@ -429,6 +433,7 @@ export const bulkUpdateTrades = mutation({
         const trade = await ctx.db.get(tradeId);
         assertOwner(trade, ownerId, "Trade not found");
         await ctx.db.patch(tradeId, { ...patch, ownerId });
+        await syncTradeEpisodeLink(ctx, tradeId);
         updated++;
       } catch (error) {
         const message =

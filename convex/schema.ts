@@ -4,6 +4,16 @@ import {
   campaignStatusValidator,
   tradePlanStatusValidator,
 } from "./lib/statuses";
+import {
+  actorValidator,
+  elementAuthorValidator,
+  elementStatusValidator,
+  elementValueValidator,
+  episodeLifecycleValidator,
+  episodeSourceValidator,
+  planSectionsValidator,
+  writeSourceValidator,
+} from "./lib/planModel";
 
 const importTaskStatusValidator = v.union(
   v.literal("pending"),
@@ -330,16 +340,22 @@ export default defineSchema({
         }),
       ),
     ),
+    episodeId: v.optional(v.id("episodes")),
     noteDate: v.number(),
     ownerId: v.string(),
     origin: v.optional(v.literal("retrospective")),
+    threadId: v.optional(v.id("instrumentThreads")),
     ticker: v.optional(v.string()),
+    // Legacy attachment retained for dormant trade plans; new notes attach to
+    // a campaign, thread, or episode instead.
     tradePlanId: v.optional(v.id("tradePlans")),
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_ticker_noteDate", ["ownerId", "ticker", "noteDate"])
     .index("by_owner_noteDate", ["ownerId", "noteDate"])
     .index("by_owner_campaignId", ["ownerId", "campaignId"])
+    .index("by_owner_threadId_noteDate", ["ownerId", "threadId", "noteDate"])
+    .index("by_owner_episodeId_noteDate", ["ownerId", "episodeId", "noteDate"])
     .index("by_owner_tradePlanId", ["ownerId", "tradePlanId"]),
 
   checkIns: defineTable({
@@ -424,7 +440,9 @@ export default defineSchema({
     .index("by_owner_createdAt", ["ownerId", "createdAt"]),
 
   campaigns: defineTable({
+    benchmarkThreadId: v.optional(v.id("instrumentThreads")),
     closedAt: v.optional(v.number()),
+    linkedThreadIds: v.optional(v.array(v.id("instrumentThreads"))),
     name: v.string(),
     ownerId: v.string(),
     status: campaignStatusValidator,
@@ -433,16 +451,127 @@ export default defineSchema({
     .index("by_owner", ["ownerId"])
     .index("by_owner_status", ["ownerId", "status"]),
 
+  instrumentThreads: defineTable({
+    createdAt: v.number(),
+    createdBy: actorValidator,
+    ownerId: v.string(),
+    ticker: v.string(),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_ticker", ["ownerId", "ticker"]),
+
+  episodes: defineTable({
+    campaignElementExemptions: v.array(v.id("planElements")),
+    campaignId: v.optional(v.id("campaigns")),
+    closedAt: v.optional(v.number()),
+    createdBy: actorValidator,
+    currentPlanVersionId: v.optional(v.id("planVersions")),
+    direction: v.optional(v.union(v.literal("long"), v.literal("short"))),
+    lifecycle: episodeLifecycleValidator,
+    openedAt: v.number(),
+    ownerId: v.string(),
+    portfolioId: v.optional(v.id("portfolios")),
+    // Reserved for Phase 4 retrospective drafting.
+    retrospective: v.optional(v.string()),
+    revision: v.number(),
+    shelvedAt: v.optional(v.number()),
+    shelvedBy: v.optional(actorValidator),
+    shelvedSource: v.optional(writeSourceValidator),
+    source: episodeSourceValidator,
+    threadId: v.id("instrumentThreads"),
+    ticker: v.string(),
+    updatedAt: v.number(),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_threadId", ["ownerId", "threadId"])
+    .index("by_owner_lifecycle", ["ownerId", "lifecycle"])
+    .index("by_owner_campaignId", ["ownerId", "campaignId"]),
+
+  planElements: defineTable({
+    actor: actorValidator,
+    asOf: v.optional(v.string()),
+    author: elementAuthorValidator,
+    campaignId: v.optional(v.id("campaigns")),
+    createdAt: v.number(),
+    episodeId: v.optional(v.id("episodes")),
+    kind: v.optional(v.string()),
+    noteId: v.optional(v.id("notes")),
+    operationId: v.optional(v.string()),
+    ownerId: v.string(),
+    revision: v.number(),
+    source: writeSourceValidator,
+    statement: v.string(),
+    status: elementStatusValidator,
+    statusChangedAt: v.number(),
+    statusChangedBy: v.optional(actorValidator),
+    // Required when dropped: the user said so, or a checkpoint omitted it.
+    statusEvidence: v.optional(v.string()),
+    statusRevision: v.number(),
+    supersededById: v.optional(v.id("planElements")),
+    value: v.optional(elementValueValidator),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_episodeId_revision", ["ownerId", "episodeId", "revision"])
+    .index("by_owner_campaignId_revision", [
+      "ownerId",
+      "campaignId",
+      "revision",
+    ])
+    .index("by_owner_noteId", ["ownerId", "noteId"]),
+
+  planVersions: defineTable({
+    compiledThroughRevision: v.number(),
+    createdAt: v.number(),
+    draftedBy: actorValidator,
+    endorsed: v.boolean(),
+    endorsedAt: v.optional(v.number()),
+    endorsedBy: v.optional(actorValidator),
+    episodeId: v.id("episodes"),
+    operationId: v.optional(v.string()),
+    ownerId: v.string(),
+    revision: v.number(),
+    sections: planSectionsValidator,
+    source: writeSourceValidator,
+    versionNumber: v.number(),
+  })
+    .index("by_owner_episodeId_versionNumber", [
+      "ownerId",
+      "episodeId",
+      "versionNumber",
+    ]),
+
+  revisionCounters: defineTable({
+    next: v.number(),
+    ownerId: v.string(),
+  }).index("by_owner", ["ownerId"]),
+
+  counterpartOperations: defineTable({
+    createdAt: v.number(),
+    kind: v.string(),
+    operationId: v.string(),
+    ownerId: v.string(),
+    resultJson: v.string(),
+  }).index("by_owner_operationId", ["ownerId", "operationId"]),
+
   watchlist: defineTable({
     campaignId: v.optional(v.id("campaigns")),
-    itemType: v.union(v.literal("campaign"), v.literal("tradePlan")),
+    episodeId: v.optional(v.id("episodes")),
+    itemType: v.union(
+      v.literal("campaign"),
+      v.literal("episode"),
+      v.literal("thread"),
+      v.literal("tradePlan"),
+    ),
     ownerId: v.string(),
+    threadId: v.optional(v.id("instrumentThreads")),
     tradePlanId: v.optional(v.id("tradePlans")),
     watchedAt: v.number(),
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_watchedAt", ["ownerId", "watchedAt"])
     .index("by_owner_campaignId", ["ownerId", "campaignId"])
+    .index("by_owner_episodeId", ["ownerId", "episodeId"])
+    .index("by_owner_threadId", ["ownerId", "threadId"])
     .index("by_owner_tradePlanId", ["ownerId", "tradePlanId"]),
 
   portfolios: defineTable({
@@ -801,6 +930,9 @@ export default defineSchema({
     currency: v.optional(v.string()),
     expectedQuantity: v.optional(v.number()),
     issueType: brokerageReconciliationIssueTypeValidator,
+    // Set every time a sync re-evaluates the issue, whether it stays open or
+    // resolves. createdAt remains the first detection.
+    lastRecheckedAt: v.optional(v.number()),
     message: v.string(),
     ownerId: v.string(),
     reportDate: v.string(),
@@ -877,6 +1009,9 @@ export default defineSchema({
     brokerageAccountId: v.optional(v.string()),
     date: v.number(),
     direction: v.union(v.literal("long"), v.literal("short")),
+    // Episode linkage is derived from ticker, portfolio, and direction and is
+    // maintained by the episodes module whenever a trade is written.
+    episodeId: v.optional(v.id("episodes")),
     externalId: v.optional(v.string()),
     fees: v.optional(v.number()),
     orderType: v.optional(v.string()),
@@ -900,7 +1035,8 @@ export default defineSchema({
     .index("by_source_externalId", ["source", "externalId"])
     .index("by_owner_sourceInboxTradeId", ["ownerId", "sourceInboxTradeId"])
     .index("by_owner_portfolioId", ["ownerId", "portfolioId"])
-    .index("by_owner_portfolioId_date", ["ownerId", "portfolioId", "date"]),
+    .index("by_owner_portfolioId_date", ["ownerId", "portfolioId", "date"])
+    .index("by_owner_episodeId", ["ownerId", "episodeId"]),
 
   inboxTrades: defineTable({
     assetType: v.optional(v.union(v.literal("crypto"), v.literal("stock"))),

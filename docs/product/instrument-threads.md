@@ -6,7 +6,7 @@ This document defines the target data model direction: instrument threads, episo
 
 Use it when designing or changing how ideas, setups, trades, notes, and lessons relate to each other.
 
-This is a direction document. The current implemented model is described in [information-architecture.md](information-architecture.md); this document describes where that model is intended to go and why. Migration should follow evidence from the flywheel probe (see [roadmap.md](roadmap.md)), not precede it.
+This model is implemented as of Phase 3 (2026-09-22). [information-architecture.md](information-architecture.md) describes the object relationships as built; this document keeps the reasoning and the parts of the direction that later phases still owe (retrospectives and endorsed lessons). The Phase 3 design that refined it lives in [2026-09-21-phase-3-instrument-thread-model-design.md](../plans/2026-09-21-phase-3-instrument-thread-model-design.md).
 
 Use [glossary.md](glossary.md) for term definitions and [ai-counterpart.md](ai-counterpart.md) for the conversational layer that reads and writes this model.
 
@@ -62,11 +62,13 @@ A bounded engagement with an instrument, created under a thread.
 
 An episode holds:
 
-- setup conditions: entry, target, stop, required macro conditions
-- lifecycle: `Idea` → `Watching` → `Active` → `Closed`
+- elements: the event stream of proposals, decisions, observations, and rules, each with an author and a status
+- plan versions: distilled checkpoints of the technical plan (entry, stop, targets, scenarios, structure, size), drafted by the counterpart and endorsed by the user
+- lifecycle: `Idea` → `Watching` → `Active` → `Closed`, inferred from elements, checkpoints, and fills
+- campaign membership and exemptions from specific campaign elements
 - the notes captured while it was live
 - linked trades
-- a retrospective when it closes
+- a retrospective when it closes (slot reserved; drafting is Phase 4)
 
 Rules:
 
@@ -112,7 +114,7 @@ The withdrawal for doing a retro is a smarter counterpart at the next decision. 
 ## Relationship To The Current Model
 
 - Trades are unchanged: trustworthy execution records, linked to episodes instead of trade plans.
-- Trade plans map conceptually to episodes. Whether the object is migrated or replaced is an implementation decision, made after the flywheel probe provides evidence.
+- Trade plans were replaced, not migrated. The table is dormant.
 - Portfolios remain overlays, attached through trades. Concurrent episodes on one thread will often correspond to different portfolios.
 - Watchlist remains a cross-cutting focus layer, separate from lifecycle, and should apply to threads, episodes, and campaigns alike.
 - Bare records stay tolerated data. A trade with no episode, a thread with no campaign, and an episode with no retro are all valid. Nothing in this model may become a pile of owed assignment work.

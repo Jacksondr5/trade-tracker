@@ -4,7 +4,7 @@ export interface Note {
   chartUrls?: string[];
   content: string;
   contextHref?: string | null;
-  contextKind?: "campaign" | "general" | "tradePlan";
+  contextKind?: "campaign" | "episode" | "general" | "thread" | "tradePlan";
   contextLabel?: string;
   noteDate: number;
   origin?: "retrospective";

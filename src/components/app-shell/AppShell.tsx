@@ -106,7 +106,7 @@ function NavigationSections({
 function ShellBrand({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <Link
-      href="/dashboard"
+      href="/desk"
       onClick={onNavigate}
       className="flex items-center gap-2.5 text-lg font-semibold tracking-tight text-olive-12"
     >

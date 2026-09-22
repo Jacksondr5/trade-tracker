@@ -246,7 +246,6 @@ async function upsertPendingImportReviewIssue(
     syncRunId: Id<"brokerageSyncRuns">;
   },
 ): Promise<number> {
-  if (args.count === 0) return 0;
   const now = Date.now();
   const existing = await ctx.db
     .query("brokerageReconciliationIssues")
@@ -259,10 +258,25 @@ async function upsertPendingImportReviewIssue(
         .eq("status", "open"),
     )
     .unique();
+  if (args.count === 0) {
+    // A re-sync that finds nothing pending resolves the earlier issue instead
+    // of leaving stale evidence presented as current.
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        lastRecheckedAt: now,
+        resolvedAt: now,
+        status: "resolved",
+        syncRunId: args.syncRunId,
+        updatedAt: now,
+      });
+    }
+    return 0;
+  }
 
   const message = `${args.count} imported IBKR trade${args.count === 1 ? "" : "s"} pending review`;
   if (existing) {
     await ctx.db.patch(existing._id, {
+      lastRecheckedAt: now,
       message,
       syncRunId: args.syncRunId,
       updatedAt: now,
@@ -274,6 +288,7 @@ async function upsertPendingImportReviewIssue(
     connectionId: args.connectionId,
     createdAt: now,
     issueType: "pending_import_review",
+    lastRecheckedAt: now,
     message,
     ownerId: args.ownerId,
     reportDate: args.reportDate,
@@ -402,6 +417,7 @@ async function upsertPositionReconciliationIssue(
     brokerageAccountId: args.position.brokerageAccountId,
     direction: args.position.direction,
     expectedQuantity: args.expectedQuantity,
+    lastRecheckedAt: now,
     message,
     reportDate: args.reportDate,
     syncRunId: args.syncRunId,
@@ -522,6 +538,7 @@ async function reconcilePositionsForSyncRun(
   for (const issue of positionOpenIssues) {
     if (!activeIssueIds.has(issue._id)) {
       await ctx.db.patch(issue._id, {
+        lastRecheckedAt: now,
         resolvedAt: now,
         status: "resolved",
         syncRunId: args.syncRunId,

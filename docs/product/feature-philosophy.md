@@ -35,34 +35,19 @@ What campaigns are for:
 
 - defining why an idea matters
 - tracking whether a broad thesis is still valid
-- grouping related trade plans into a coherent strategic idea
+- grouping related instrument threads and episodes into a coherent strategic idea, with a benchmark thread and campaign-level rules
 - eventually supporting campaign-level retrospective review
 
 What campaigns are not for:
 
 - direct trade execution
-- being required for every trade plan
-- replacing the detailed tactical logic of trade plans
+- being required for every episode
+- replacing the detailed tactical logic of an episode's checkpoint
+- holding plan snapshots of their own (campaigns stay light until real use shows what they need)
 
 ### Trade Plans
 
-Primary job:
-
-- turn ideas into executable tactical setups
-
-What trade plans should optimize for:
-
-- clarity of setup
-- entry/exit logic
-- tactical reference during live trades
-- preserving the reasoning behind execution
-
-What trade plans are for:
-
-- expressing a concrete instrument-level opportunity
-- linking thesis to execution
-- holding the plan that live trade decisions should refer back to
-- supporting both campaign-linked and standalone workflows
+Retired in Phase 3. Their job (turning ideas into executable tactical setups) is carried by episodes and checkpoints under instrument threads. The routes stay reachable by URL for old records only.
 
 ### Trades
 
@@ -86,7 +71,7 @@ What trades are for:
 What trades are not for:
 
 - being the main place where thesis is developed
-- replacing trade plans as the place for ongoing tactical reasoning
+- replacing episodes as the place for ongoing tactical reasoning
 
 ### Notes
 
@@ -252,7 +237,7 @@ What accounts are not for:
 
 ### AI Counterpart
 
-Status: planned, not yet implemented. See [roadmap.md](roadmap.md) phase 2 and [ai-counterpart.md](ai-counterpart.md).
+See [ai-counterpart.md](ai-counterpart.md).
 
 Primary job:
 
@@ -283,7 +268,7 @@ See [ai-counterpart.md](ai-counterpart.md) for the full model.
 
 ### Instrument Threads And Episodes
 
-Status: planned, not yet implemented. See [roadmap.md](roadmap.md) phase 3 and [instrument-threads.md](instrument-threads.md); [information-architecture.md](information-architecture.md) remains authoritative for the implemented model.
+Implemented in Phase 3. See [instrument-threads.md](instrument-threads.md).
 
 Primary job:
 
@@ -307,6 +292,29 @@ What this area is not for:
 - forcing every thought into a setup before it can be recorded
 
 See [instrument-threads.md](instrument-threads.md) for the full model.
+
+### Desk And Thread Page
+
+Primary job:
+
+- let the target user read the current plan without rereading the conversation
+
+What these surfaces should optimize for:
+
+- answering "what is the current plan" for one instrument and for every live episode at once
+- showing the latest checkpoint first and the items since it in order, with attribution and status
+- making the counterpart's proposals visibly distinct from the user's decisions
+
+What they are for:
+
+- the desk: every live episode in one view, grouped by campaign
+- the thread page: one instrument's live episodes, history, and notes, and the place for attributed element and plan edits
+
+What they are not for:
+
+- capture; the conversation is the capture surface
+- to-do lists, warning badges, or counts of episodes that need a plan
+- a "stale plan" indicator; a checkpoint is a baseline, not current state
 
 ### Navigation / Watchlist
 

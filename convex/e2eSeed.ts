@@ -2,6 +2,7 @@ import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import { E2E_SMOKE_FIXTURES } from "../shared/e2e/smokeFixtures";
+import { syncTradeEpisodeLink } from "./lib/planWrites";
 
 type SmokeTradePlanFixture = (typeof E2E_SMOKE_FIXTURES)[
   | "linkedTradePlan"
@@ -302,10 +303,12 @@ async function upsertTrade(
 
   if (existingTrade) {
     await ctx.db.patch(existingTrade._id, patch);
+    await syncTradeEpisodeLink(ctx, existingTrade._id);
     return (await ctx.db.get(existingTrade._id))!;
   }
 
   const tradeId = await ctx.db.insert("trades", patch);
+  await syncTradeEpisodeLink(ctx, tradeId);
   return (await ctx.db.get(tradeId))!;
 }
 
