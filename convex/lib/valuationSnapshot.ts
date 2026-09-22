@@ -262,10 +262,8 @@ export async function buildValuationSnapshot(
 
   let reconstructed: ValuationSnapshot["reconstructed"] = null;
   if (portfolioValuations.length > 0) {
-    const newestDate = portfolioValuations
-      .map((row) => row.asOfDate)
-      .sort()
-      .at(-1)!;
+    const sortedDates = portfolioValuations.map((row) => row.asOfDate).sort();
+    const newestDate = sortedDates[sortedDates.length - 1]!;
     const missingMarks = [
       ...new Set(portfolioValuations.flatMap((row) => row.missingMarks)),
     ].sort((a, b) => a.localeCompare(b));

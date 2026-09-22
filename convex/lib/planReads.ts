@@ -452,7 +452,7 @@ export async function resolveEpisode(
 
   const checkpoint =
     [...versions].reverse().find((version) => version.endorsed) ?? null;
-  const latest = versions.at(-1) ?? null;
+  const latest = versions[versions.length - 1] ?? null;
   const draft =
     latest && !latest.endorsed && latest._id !== checkpoint?._id ? latest : null;
 

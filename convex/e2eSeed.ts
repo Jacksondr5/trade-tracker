@@ -463,11 +463,17 @@ export const resetPlaywrightData = internalMutation({
     brokerageConnectionSecretsDeleted: v.number(),
     brokerageConnectionsDeleted: v.number(),
     campaignsDeleted: v.number(),
+    counterpartOperationsDeleted: v.number(),
+    episodesDeleted: v.number(),
     inboxTradesDeleted: v.number(),
+    instrumentThreadsDeleted: v.number(),
     marketDataInstrumentsDeleted: v.number(),
     retrospectivesDeleted: v.number(),
     notesDeleted: v.number(),
+    planElementsDeleted: v.number(),
+    planVersionsDeleted: v.number(),
     portfoliosDeleted: v.number(),
+    revisionCountersDeleted: v.number(),
     strategyDocsDeleted: v.number(),
     tradePlansDeleted: v.number(),
     tradesDeleted: v.number(),
@@ -539,7 +545,49 @@ export const resetPlaywrightData = internalMutation({
       .query("strategyDoc")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
       .collect();
+    const planElements = await ctx.db
+      .query("planElements")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
+    const episodes = await ctx.db
+      .query("episodes")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
+    const planVersions = (
+      await Promise.all(
+        episodes.map((episode) =>
+          ctx.db
+            .query("planVersions")
+            .withIndex("by_owner_episodeId_versionNumber", (q) =>
+              q.eq("ownerId", ownerId).eq("episodeId", episode._id),
+            )
+            .collect(),
+        ),
+      )
+    ).flat();
+    const instrumentThreads = await ctx.db
+      .query("instrumentThreads")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
+    const counterpartOperations = await ctx.db
+      .query("counterpartOperations")
+      .withIndex("by_owner_operationId", (q) => q.eq("ownerId", ownerId))
+      .collect();
+    const revisionCounters = await ctx.db
+      .query("revisionCounters")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
 
+    for (const doc of [
+      ...planVersions,
+      ...planElements,
+      ...episodes,
+      ...instrumentThreads,
+      ...counterpartOperations,
+      ...revisionCounters,
+    ]) {
+      await ctx.db.delete(doc._id);
+    }
     for (const doc of brokerageConnectionSecrets) {
       await ctx.db.delete(doc._id);
     }
@@ -585,6 +633,12 @@ export const resetPlaywrightData = internalMutation({
       brokerageConnectionSecretsDeleted: brokerageConnectionSecrets.length,
       brokerageConnectionsDeleted: brokerageConnections.length,
       campaignsDeleted: campaigns.length,
+      counterpartOperationsDeleted: counterpartOperations.length,
+      episodesDeleted: episodes.length,
+      instrumentThreadsDeleted: instrumentThreads.length,
+      planElementsDeleted: planElements.length,
+      planVersionsDeleted: planVersions.length,
+      revisionCountersDeleted: revisionCounters.length,
       inboxTradesDeleted: inboxTrades.length,
       marketDataInstrumentsDeleted: marketDataInstruments.length,
       notesDeleted: notes.length,
