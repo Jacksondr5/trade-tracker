@@ -24,17 +24,25 @@ import {
 } from "../../../../shared/e2e/testIds";
 
 const CHECKPOINT_COLUMNS = ["entry", "stop", "targets", "scenarios"] as const;
+// Width goes to the columns the desk exists to answer: stop, targets, and
+// what has moved since the checkpoint. Identity columns stay as narrow as
+// their content.
 const COLUMNS: Array<{ label: string; width: string }> = [
   { label: "Ticker", width: "6%" },
-  { label: "Portfolio", width: "11%" },
-  { label: "Lifecycle", width: "6%" },
-  { label: "Position", width: "15%" },
-  { label: "Entry", width: "14%" },
-  { label: "Stop", width: "14%" },
-  { label: "Targets", width: "10%" },
-  { label: "Scenarios", width: "10%" },
-  { label: "Since checkpoint", width: "14%" },
+  { label: "Portfolio", width: "6%" },
+  { label: "State", width: "7%" },
+  { label: "Position", width: "14%" },
+  { label: "Entry", width: "9%" },
+  { label: "Stop", width: "20%" },
+  { label: "Targets", width: "12%" },
+  { label: "Scenarios", width: "9%" },
+  { label: "Since checkpoint", width: "17%" },
 ];
+
+/** First word of the portfolio name; the full name is on hover. */
+function shortPortfolioLabel(name: string): string {
+  return name.trim().split(/\s+/)[0] ?? name;
+}
 
 type DeskLine = NonNullable<DeskRow["checkpoint"]>["entry"][number];
 
@@ -137,7 +145,7 @@ function DeskEpisodeRow({ row }: { row: DeskRow }) {
         className="truncate px-3 py-2 text-sm whitespace-nowrap text-olive-11"
         title={episode.portfolioName ?? undefined}
       >
-        {episode.portfolioName ?? "—"}
+        {episode.portfolioName ? shortPortfolioLabel(episode.portfolioName) : "—"}
       </td>
       <td className="px-3 py-2">
         <Badge variant={lifecycleBadgeVariant(episode.lifecycle)}>
@@ -160,16 +168,28 @@ function DeskEpisodeRow({ row }: { row: DeskRow }) {
         )}
       </td>
       {row.checkpoint ? (
-        CHECKPOINT_COLUMNS.map((key) => (
-          <CheckpointCell
-            key={key}
-            lines={row.checkpoint![key]}
-            leadWithValue={key === "stop" || key === "targets"}
-            exempt={
-              key === "scenarios" && episode.campaignElementExemptions.length > 0
-            }
-          />
-        ))
+        CHECKPOINT_COLUMNS.map((key) =>
+          key === "entry" && episode.lifecycle === "active" ? (
+            // The position already says what filled; the entry reasoning
+            // lives on the thread page.
+            <td
+              key={key}
+              className="px-3 py-2 text-sm whitespace-nowrap text-slate-11"
+              title={row.checkpoint!.entry.map((line) => line.text).join("\n")}
+            >
+              {row.checkpoint!.entry.length > 0 ? "Filled" : "—"}
+            </td>
+          ) : (
+            <CheckpointCell
+              key={key}
+              lines={row.checkpoint![key]}
+              leadWithValue={key === "stop" || key === "targets"}
+              exempt={
+                key === "scenarios" && episode.campaignElementExemptions.length > 0
+              }
+            />
+          ),
+        )
       ) : (
         <td
           colSpan={CHECKPOINT_COLUMNS.length}
