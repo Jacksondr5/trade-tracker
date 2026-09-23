@@ -31,12 +31,12 @@ const COLUMNS: Array<{ label: string; width: string }> = [
   { label: "Ticker", width: "6%" },
   { label: "Portfolio", width: "6%" },
   { label: "State", width: "7%" },
-  { label: "Position", width: "14%" },
+  { label: "Position", width: "15%" },
   { label: "Entry", width: "9%" },
   { label: "Stop", width: "20%" },
   { label: "Targets", width: "12%" },
   { label: "Scenarios", width: "9%" },
-  { label: "Since checkpoint", width: "17%" },
+  { label: "Since checkpoint", width: "16%" },
 ];
 
 /** First word of the portfolio name; the full name is on hover. */
