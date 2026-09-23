@@ -11,15 +11,10 @@ Read `docs/product/README.md` in full first, then use your judgment to open only
 
 Use `docs/plans/` for dated feature plans, redesign proposals, implementation plans, and historical context.
 
-## Linear Workflow
+## Branching
 
-When an agent starts work on a Linear ticket in this repo:
-
-- Move the ticket to `In Progress` when the work is picked up.
-- Do not manually move the ticket to `In Review` or `Done`.
-- ALWAYS do ticket work on a new git worktree, EXCEPT when the session is already running inside a `t3code` worktree (paths under `~/.t3/worktrees/`). In that case the t3code worktree itself is the dedicated worktree for the task — create a new branch inside it instead of nesting another worktree under it. Run `git worktree list` and compare it to the current working directory before deciding.
-- Open the pull request and let the GitHub integration move the ticket to `In Review` when appropriate.
-- Let the GitHub integration move the ticket to `Done` after the PR is merged or otherwise completes the configured workflow.
+- Do task work on a new git worktree, EXCEPT when the session is already running inside a `t3code` worktree (paths under `~/.t3/worktrees/`). In that case the t3code worktree itself is the dedicated worktree for the task — create a new branch inside it instead of nesting another worktree under it. Run `git worktree list` and compare it to the current working directory before deciding.
+- Open a pull request against `main` when the work is ready for review.
 
 ## Commands
 
