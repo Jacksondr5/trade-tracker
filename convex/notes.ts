@@ -560,7 +560,13 @@ export const getGeneralNotes = query({
     return await serializeNotes(
       ctx,
       notes
-        .filter((note) => !note.campaignId && !note.tradePlanId)
+        .filter(
+          (note) =>
+            !note.campaignId &&
+            !note.episodeId &&
+            !note.threadId &&
+            !note.tradePlanId,
+        )
         .sort(sortNotesDesc),
     );
   },

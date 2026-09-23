@@ -715,6 +715,10 @@ export function getEpisodeHistoryToggleTestId(episodeId: string): string {
   return `episode-history-toggle-${episodeId}`;
 }
 
+export function getEpisodeAddElementToggleTestId(episodeId: string): string {
+  return `episode-add-element-toggle-${episodeId}`;
+}
+
 export function getEpisodeAddElementFormTestId(episodeId: string): string {
   return `episode-add-element-form-${episodeId}`;
 }

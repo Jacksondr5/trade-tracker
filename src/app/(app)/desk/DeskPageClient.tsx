@@ -99,7 +99,7 @@ function DeskEpisodeRow({ row }: { row: DeskRow }) {
         {row.itemsSinceCheckpoint.length === 0 ? (
           <span className="text-sm text-slate-11">—</span>
         ) : (
-          <div className="flex max-w-md flex-wrap gap-1">
+          <div className="flex flex-col items-start gap-1">
             {row.itemsSinceCheckpoint.map((element) => (
               <ElementChip key={element.id} element={element} />
             ))}
@@ -124,7 +124,7 @@ function CampaignGroupHeader({ campaign }: { campaign: DeskGroup["campaign"] }) 
     (rule) => rule.status === "agreed" || rule.status === "proposed",
   );
   return (
-    <div className="space-y-2 border-b border-slate-6 bg-slate-2 px-3 py-2">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-slate-6 bg-slate-2 px-3 py-2">
       <div className="flex flex-wrap items-center gap-3">
         <Link
           href={`/campaigns/${campaign.id}`}
@@ -148,7 +148,7 @@ function CampaignGroupHeader({ campaign }: { campaign: DeskGroup["campaign"] }) 
         ) : null}
       </div>
       {rules.length > 0 ? (
-        <div className="flex flex-wrap gap-1">
+        <div className="flex min-w-0 flex-wrap gap-1">
           {rules.map((rule) => (
             <ElementChip key={rule.id} element={rule} />
           ))}

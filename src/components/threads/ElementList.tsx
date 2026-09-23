@@ -16,14 +16,14 @@ export function ElementChip({ element }: { element: ElementView }) {
   return (
     <span
       className={cn(
-        "inline-flex max-w-full items-center gap-1.5 rounded border px-2 py-0.5 text-xs",
+        "inline-flex max-w-[22rem] items-center gap-1.5 rounded border px-2 py-0.5 text-xs",
         isCounterpart
           ? "border-dashed border-blue-7 bg-blue-2 text-blue-12"
           : "border-olive-7 bg-olive-3 text-olive-12",
       )}
-      title={`${ELEMENT_AUTHOR_LABELS[element.author]} · ${ELEMENT_STATUS_LABELS[element.status]}`}
+      title={`${element.statement} — ${ELEMENT_AUTHOR_LABELS[element.author]}, ${ELEMENT_STATUS_LABELS[element.status]}`}
     >
-      <span className="truncate">{element.statement}</span>
+      <span className="min-w-0 truncate">{element.statement}</span>
       <span className="shrink-0 text-[10px] font-medium tracking-wide uppercase opacity-80">
         {ELEMENT_AUTHOR_LABELS[element.author]} · {ELEMENT_STATUS_LABELS[element.status]}
       </span>

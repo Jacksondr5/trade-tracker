@@ -31,6 +31,7 @@ import {
   getElementStatementInputTestId,
   getElementStatusSelectTestId,
   getElementSubmitButtonTestId,
+  getEpisodeAddElementToggleTestId,
   getEpisodeCardTestId,
   getThreadRowTestId,
   getNoteComposerTextareaTestId,
@@ -737,4 +738,15 @@ export async function readEpisodeIdFromCard(card: Locator): Promise<string> {
     throw new Error(`Locator is not an episode card: ${testId ?? "(none)"}`);
   }
   return testId.slice("episode-card-".length);
+}
+
+export function getEpisodeAddElementToggle(
+  page: Page,
+  episodeId: string,
+): Locator {
+  return page.getByTestId(getEpisodeAddElementToggleTestId(episodeId));
+}
+
+export function getAnyDeskCampaignGroup(page: Page): Locator {
+  return page.getByTestId(/^desk-campaign-group-/);
 }

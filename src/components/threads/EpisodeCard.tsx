@@ -11,6 +11,7 @@ import {
   getElementAgreeTestId,
   getElementDropTestId,
   getElementSupersedeTestId,
+  getEpisodeAddElementToggleTestId,
   getEpisodeCardTestId,
   getEpisodeEditPlanTestId,
   getEpisodeEndorseDraftTestId,
@@ -76,6 +77,7 @@ export function EpisodeCard({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState(false);
   const [supersedes, setSupersedes] = useState<ElementView | null>(null);
+  const [addingElement, setAddingElement] = useState(false);
   const [droppingId, setDroppingId] = useState<Id<"planElements"> | null>(
     null,
   );
@@ -113,7 +115,8 @@ export function EpisodeCard({
     !isShelved &&
     (episode.lifecycle === "idea" || episode.lifecycle === "watching") &&
     resolved.trades.length === 0;
-  const isLive = episode.lifecycle !== "closed" && !isShelved;
+  // Closed episodes are read-only; shelved ones keep their controls.
+  const isEditable = episode.lifecycle !== "closed";
 
   async function run(action: () => Promise<unknown>, fallback: string) {
     setError(null);
@@ -125,7 +128,11 @@ export function EpisodeCard({
   }
 
   const renderElementActions = (element: ElementView) => {
-    if (element.status === "superseded" || element.status === "dropped") {
+    if (
+      !isEditable ||
+      element.status === "superseded" ||
+      element.status === "dropped"
+    ) {
       return null;
     }
     return (
@@ -149,7 +156,10 @@ export function EpisodeCard({
           size="sm"
           variant="ghost"
           dataTestId={getElementSupersedeTestId(element.id)}
-          onClick={() => setSupersedes(element)}
+          onClick={() => {
+            setSupersedes(element);
+            setAddingElement(true);
+          }}
         >
           Supersede
         </Button>
@@ -253,7 +263,7 @@ export function EpisodeCard({
               Shelve
             </Button>
           ) : null}
-          {!editingPlan ? (
+          {isEditable && !editingPlan ? (
             <Button
               size="sm"
               variant="secondary"
@@ -263,7 +273,7 @@ export function EpisodeCard({
                 setCollapsed(false);
               }}
             >
-              Edit plan
+              {resolved.checkpoint ? "Edit plan" : "Draft checkpoint"}
             </Button>
           ) : null}
           {defaultCollapsed ? (
@@ -348,11 +358,17 @@ export function EpisodeCard({
           ) : null}
 
           <section>
-            <SectionHeading>Since checkpoint</SectionHeading>
+            <SectionHeading>
+              {resolved.checkpoint ? "Since checkpoint" : "Items"}
+            </SectionHeading>
             <ElementList
               dataTestId={`episode-since-checkpoint-${episodeId}`}
               elements={resolved.itemsSinceCheckpoint}
-              emptyLabel="No items since the checkpoint."
+              emptyLabel={
+                resolved.checkpoint
+                  ? "No items since the checkpoint."
+                  : "Nothing recorded yet."
+              }
               renderActions={renderActionsWithDrop}
             />
           </section>
@@ -380,16 +396,6 @@ export function EpisodeCard({
                 elements={campaignRules}
                 emptyLabel="No campaign rules."
                 exemptedIds={exemptedIds}
-              />
-            </section>
-          ) : null}
-
-          {isLive ? (
-            <section className="rounded-md border border-olive-6 bg-olive-1 p-3">
-              <AddElementForm
-                episodeId={episodeId}
-                supersedes={supersedes}
-                onClearSupersedes={() => setSupersedes(null)}
               />
             </section>
           ) : null}
@@ -502,6 +508,41 @@ export function EpisodeCard({
               <p className="mt-2 text-xs text-slate-11">Older notes not shown.</p>
             ) : null}
           </section>
+
+          {isEditable ? (
+            <section>
+              {addingElement ? (
+                <div className="rounded-md border border-olive-6 bg-olive-1 p-3">
+                  <AddElementForm
+                    episodeId={episodeId}
+                    supersedes={supersedes}
+                    onClearSupersedes={() => setSupersedes(null)}
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="mt-2"
+                    dataTestId={`episode-add-element-close-${episodeId}`}
+                    onClick={() => {
+                      setAddingElement(false);
+                      setSupersedes(null);
+                    }}
+                  >
+                    Close
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  dataTestId={getEpisodeAddElementToggleTestId(episodeId)}
+                  onClick={() => setAddingElement(true)}
+                >
+                  Add element
+                </Button>
+              )}
+            </section>
+          ) : null}
         </div>
       )}
     </article>

@@ -2,7 +2,17 @@ import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import { E2E_SMOKE_FIXTURES } from "../shared/e2e/smokeFixtures";
-import { syncTradeEpisodeLink } from "./lib/planWrites";
+import { emptyPlanSections } from "./lib/planModel";
+import {
+  draftPlanVersion,
+  endorsePlanVersion,
+  ensureThread,
+  openEpisode,
+  recordElements,
+  setCampaignLinks,
+  setEpisodeCampaign,
+  syncTradeEpisodeLink,
+} from "./lib/planWrites";
 
 type SmokeTradePlanFixture = (typeof E2E_SMOKE_FIXTURES)[
   | "linkedTradePlan"
@@ -395,6 +405,321 @@ async function upsertBrokerageConnection(ctx: MutationCtx, ownerId: string) {
   return (await ctx.db.get(connectionId))!;
 }
 
+/**
+ * One realistic instrument thread modeled on the September BE case: a closed
+ * prior episode, a live campaign episode with an endorsed checkpoint,
+ * superseded history, agreed and proposed items after the checkpoint, an open
+ * counterpart proposal from before it, and one campaign exemption.
+ */
+async function seedInstrumentThreadFixture(
+  ctx: MutationCtx,
+  args: { ownerId: string; portfolioId: Id<"portfolios"> },
+) {
+  const fixture = E2E_SMOKE_FIXTURES.instrumentThread;
+  const { ownerId } = args;
+  const thread = await ensureThread(ctx, ownerId, fixture.ticker, "system");
+  const existingEpisodes = await ctx.db
+    .query("episodes")
+    .withIndex("by_owner_threadId", (q) =>
+      q.eq("ownerId", ownerId).eq("threadId", thread._id),
+    )
+    .collect();
+  if (existingEpisodes.length > 0) return;
+
+  const campaignId = await ctx.db.insert("campaigns", {
+    name: fixture.campaignName,
+    ownerId,
+    status: "active",
+    thesis: fixture.campaignThesis,
+  });
+  await setCampaignLinks(ctx, {
+    actor: "counterpart",
+    benchmarkTicker: fixture.benchmarkTicker,
+    campaignId,
+    linkedTickers: [fixture.ticker],
+    ownerId,
+  });
+  const [gateId] = await recordElements(ctx, {
+    actor: "counterpart",
+    elements: [
+      {
+        asOf: "2026-09-08",
+        author: "user",
+        kind: "rule",
+        statement:
+          "Adds require sector confirmation on E2ESMH and a credible higher support",
+        status: "agreed",
+      },
+      {
+        asOf: "2026-09-04",
+        author: "user",
+        kind: "scenario",
+        statement:
+          "S4: E2ESMH breaks the weekly channel, exit anticipatory positions first",
+        status: "agreed",
+      },
+    ],
+    ownerId,
+    scope: { campaignId, kind: "campaign" },
+    source: "conversation",
+  });
+  await ctx.db.insert("notes", {
+    campaignId,
+    content: "E2E campaign note: the three largest names are 38% of the benchmark.",
+    noteDate: Date.parse("2026-09-06T15:00:00.000Z"),
+    ownerId,
+  });
+  await ctx.db.insert("notes", {
+    content:
+      "E2EBE is a data center energy play; price has never fought around the long-term channel line.",
+    noteDate: Date.parse("2026-09-09T14:10:00.000Z"),
+    ownerId,
+    threadId: thread._id,
+    ticker: fixture.ticker,
+  });
+
+  const seedTrade = async (trade: {
+    date: number;
+    price: number;
+    quantity: number;
+    side: "buy" | "sell";
+  }) =>
+    upsertTrade(ctx, {
+      ownerId,
+      portfolioId: args.portfolioId,
+      trade: {
+        assetType: "stock",
+        date: trade.date,
+        direction: "long",
+        fixtureKey: `instrument-thread-${trade.date}`,
+        portfolio: "shared",
+        price: trade.price,
+        quantity: trade.quantity,
+        side: trade.side,
+        ticker: fixture.ticker,
+        tradePlan: "standalone",
+      },
+    });
+
+  // Closed prior episode: opened and flattened by fills alone.
+  await seedTrade({
+    date: fixture.closedEpisode.entryDate,
+    price: 180,
+    quantity: 20,
+    side: "buy",
+  });
+  await seedTrade({
+    date: fixture.closedEpisode.exitDate,
+    price: 195,
+    quantity: 20,
+    side: "sell",
+  });
+
+  const episode = await openEpisode(ctx, {
+    actor: "counterpart",
+    openedAt: fixture.liveEpisode.openedAt,
+    ownerId,
+    portfolioId: args.portfolioId,
+    source: "user",
+    threadId: thread._id,
+    ticker: fixture.ticker,
+  });
+  await setEpisodeCampaign(ctx, {
+    campaignId,
+    episodeId: episode._id,
+    exemptedCampaignElementIds: [gateId!],
+    ownerId,
+  });
+  const usd = (amount: number) =>
+    ({
+      amount,
+      provenance: "user_reported" as const,
+      scope: "per_share" as const,
+      unit: "usd" as const,
+    });
+  const [entryId] = await recordElements(ctx, {
+    actor: "counterpart",
+    elements: [
+      {
+        author: "user",
+        kind: "entry",
+        statement:
+          "Continuation after reclaiming the long-term channel ceiling (Top LT)",
+        status: "agreed",
+      },
+    ],
+    ownerId,
+    scope: { episodeId: episode._id, kind: "episode" },
+    source: "conversation",
+  });
+  const [firstStopId] = await recordElements(ctx, {
+    actor: "counterpart",
+    elements: [
+      {
+        asOf: "2026-09-09",
+        author: "user",
+        kind: "stop",
+        statement: "Broker backstop $240, without thinking about it much yet",
+        status: "proposed",
+        value: { ...usd(240), stopKind: "broker_order" },
+      },
+    ],
+    ownerId,
+    scope: { episodeId: episode._id, kind: "episode" },
+    source: "conversation",
+  });
+  const [stopId, targetId, sizeId] = await recordElements(ctx, {
+    actor: "counterpart",
+    elements: [
+      {
+        asOf: "2026-09-09",
+        author: "user",
+        kind: "stop",
+        statement:
+          "Immediate exit on a touch of the 4h line near $240; Top LT near $255 is discretionary",
+        status: "agreed",
+        supersedes: firstStopId!,
+        value: { ...usd(240), stopKind: "planned_exit" },
+      },
+      {
+        asOf: "2026-09-09",
+        author: "user",
+        kind: "target",
+        statement: "$346 prior all-time high as the reference target",
+        status: "agreed",
+        value: usd(346),
+      },
+      {
+        asOf: "2026-09-09",
+        author: "user",
+        kind: "size",
+        statement: "Take the 3% size: 17 shares",
+        status: "agreed",
+        value: {
+          amount: 17,
+          provenance: "user_reported",
+          scope: "position",
+          unit: "shares",
+        },
+      },
+      {
+        asOf: "2026-09-09",
+        author: "counterpart",
+        kind: "analysis",
+        statement: "2.16R to $346 from $273.51 with a $240 stop (illustrative)",
+        status: "proposed",
+        value: {
+          amount: 2.16,
+          provenance: "hypothetical",
+          scope: "position",
+          unit: "ratio",
+        },
+      },
+    ],
+    ownerId,
+    scope: { episodeId: episode._id, kind: "episode" },
+    source: "conversation",
+  });
+  await seedTrade({
+    date: fixture.liveEpisode.fillDate,
+    price: 273.355,
+    quantity: fixture.liveEpisode.quantity,
+    side: "buy",
+  });
+  await draftPlanVersion(ctx, {
+    actor: "counterpart",
+    endorsed: false,
+    episodeId: episode._id,
+    ownerId,
+    sections: {
+      ...emptyPlanSections(),
+      entry: [
+        {
+          asOf: "2026-09-09",
+          elementId: entryId!,
+          text: "Filled 17 @ 273.36 after the Top LT reclaim",
+        },
+      ],
+      scenarios: [
+        { text: "Exempt from the E2ESMH gate; has its own breakout confirmation" },
+        { text: "S4 on E2ESMH applies: exit first if the weekly channel breaks" },
+      ],
+      size: [{ asOf: "2026-09-09", elementId: sizeId!, text: "3% allocation, 17 shares" }],
+      stop: [
+        {
+          asOf: "2026-09-09",
+          elementId: stopId!,
+          text: "$240 hard exit; Top LT ~$255 discretionary",
+          value: { ...usd(240), stopKind: "planned_exit" },
+        },
+      ],
+      structure: [
+        { asOf: "2026-09-09", text: "Long-term channel ceiling (Top LT) ~$255" },
+      ],
+      targets: [
+        { asOf: "2026-09-09", elementId: targetId!, text: "$346 prior ATH", value: usd(346) },
+      ],
+    },
+    source: "conversation",
+  });
+  await endorsePlanVersion(ctx, {
+    actor: "counterpart",
+    episodeId: episode._id,
+    ownerId,
+    versionNumber: 1,
+  });
+  await recordElements(ctx, {
+    actor: "counterpart",
+    elements: [
+      {
+        asOf: "2026-09-14",
+        author: "user",
+        kind: "state",
+        statement:
+          "Sep 14 intraday undercut of Top LT then reclaim; within tolerance, hold",
+        status: "agreed",
+      },
+      {
+        asOf: "2026-09-18",
+        author: "counterpart",
+        kind: "analysis",
+        statement:
+          "Breakout and retest confirmed; R/R 3.10 using Top LT vs 1.65 using $240",
+        status: "proposed",
+        value: {
+          amount: 3.1,
+          provenance: "hypothetical",
+          scope: "position",
+          unit: "ratio",
+        },
+      },
+      {
+        asOf: "2026-09-18",
+        author: "user",
+        kind: "decision",
+        statement: "No 100% add; a 100% add feels too high risk here",
+        status: "agreed",
+      },
+      {
+        asOf: "2026-09-18",
+        author: "user",
+        kind: "add",
+        statement: "50% add (8 to 9 shares) remains possible, lower on the list",
+        status: "proposed",
+        value: {
+          amount: 8,
+          provenance: "hypothetical",
+          scope: "position",
+          unit: "shares",
+        },
+      },
+    ],
+    ownerId,
+    scope: { episodeId: episode._id, kind: "episode" },
+    source: "conversation",
+  });
+}
+
 export const setupPreviewData = internalMutation({
   args: {},
   returns: v.object({
@@ -445,6 +770,10 @@ export const setupPreviewData = internalMutation({
         trade,
       });
     }
+    await seedInstrumentThreadFixture(ctx, {
+      ownerId,
+      portfolioId: portfolio._id,
+    });
 
     return {
       brokerageConnectionId: brokerageConnection._id,

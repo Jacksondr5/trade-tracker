@@ -52,7 +52,7 @@ function OpenThreadForm() {
 
   return (
     <form
-      className="flex flex-wrap items-end gap-3"
+      className="ml-auto flex flex-wrap items-end justify-end gap-3"
       data-testid="thread-open-form"
       onSubmit={(event) => {
         event.preventDefault();
@@ -73,6 +73,7 @@ function OpenThreadForm() {
       </form.AppField>
       <form.AppForm>
         <form.SubmitButton
+          variant="secondary"
           label="Open thread"
           dataTestId={THREADS_INDEX_TEST_IDS.openSubmitButton}
         />

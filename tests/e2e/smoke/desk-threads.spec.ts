@@ -5,6 +5,7 @@ import {
   getAnyElementRow,
   getAnyEpisodeCard,
   getElementKindInput,
+  getEpisodeAddElementToggle,
   getElementStatementInput,
   getElementStatusSelect,
   getElementSubmitButton,
@@ -45,6 +46,7 @@ test("open thread, start an episode, and add an element", async ({ page }) => {
   await expect(card).toBeVisible();
   const episodeId = await readEpisodeIdFromCard(card);
 
+  await getEpisodeAddElementToggle(page, episodeId).click();
   await getElementStatementInput(page, episodeId).fill("Enter on a breakout");
   await getElementStatusSelect(page, episodeId).selectOption("agreed");
   await getElementKindInput(page, episodeId).fill("entry");
