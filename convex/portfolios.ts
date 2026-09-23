@@ -1,6 +1,7 @@
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
 import { assertOwner, requireUser } from "./lib/auth";
+import { planModelError } from "./lib/planWrites";
 import { computeBrokerageFreshnessStatus } from "./lib/brokerageFreshness";
 import { tradeValidator } from "./lib/tradeValidator";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -105,8 +106,27 @@ export const deletePortfolio = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
-    const portfolio = await ctx.db.get(args.portfolioId);
-    assertOwner(portfolio, ownerId, "Portfolio not found");
+    const portfolio = assertOwner(
+      await ctx.db.get(args.portfolioId),
+      ownerId,
+      "Portfolio not found",
+    );
+
+    // Episodes are one position lifecycle in one portfolio; deleting the
+    // portfolio under them would strand their fills. Refuse until the
+    // episodes are relinked or the fills reassigned.
+    const referencingEpisode = await ctx.db
+      .query("episodes")
+      .withIndex("by_owner_portfolioId", (q) =>
+        q.eq("ownerId", ownerId).eq("portfolioId", args.portfolioId),
+      )
+      .first();
+    if (referencingEpisode) {
+      throw planModelError(
+        "CONFLICT",
+        `Portfolio "${portfolio.name}" still has episodes (${referencingEpisode.ticker}); reassign its trades before deleting it`,
+      );
+    }
 
     // Unlink all trades with this portfolioId
     const trades = await ctx.db

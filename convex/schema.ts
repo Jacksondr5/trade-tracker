@@ -485,7 +485,8 @@ export default defineSchema({
     .index("by_owner", ["ownerId"])
     .index("by_owner_threadId", ["ownerId", "threadId"])
     .index("by_owner_lifecycle", ["ownerId", "lifecycle"])
-    .index("by_owner_campaignId", ["ownerId", "campaignId"]),
+    .index("by_owner_campaignId", ["ownerId", "campaignId"])
+    .index("by_owner_portfolioId", ["ownerId", "portfolioId"]),
 
   planElements: defineTable({
     actor: actorValidator,

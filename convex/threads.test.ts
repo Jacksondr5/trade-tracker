@@ -846,4 +846,36 @@ describe("instrument threads and episodes", () => {
     expect(page.notes.truncated).toBe(true);
     expect(page.notes.items.map((note) => note.content)).toEqual(["old thread note"]);
   });
+
+  it("refuses portfolio deletion under episodes and re-applies date rules to corrected fills", async () => {
+    const swing = await insertPortfolio();
+    const buy = await insertTrade({ date: 10, portfolioId: swing, quantity: 10, side: "buy", ticker: "CF" });
+    const sell = await insertTrade({ date: 20, portfolioId: swing, quantity: 10, side: "sell", ticker: "CF" });
+    await t.run((ctx) => syncTradeEpisodeLink(ctx, buy));
+    await t.run((ctx) => syncTradeEpisodeLink(ctx, sell));
+    const later = await insertTrade({ date: 30, portfolioId: swing, quantity: 10, side: "buy", ticker: "CF" });
+    await t.run((ctx) => syncTradeEpisodeLink(ctx, later));
+    const activeEpisodeId = (await t.run((ctx) => ctx.db.get(later)))!.episodeId!;
+    expect((await t.run((ctx) => ctx.db.get(activeEpisodeId)))!.lifecycle).toBe("active");
+
+    // A portfolio with live or closed episodes cannot be deleted from under them.
+    await expect(
+      asOwner(t).mutation(api.portfolios.deletePortfolio, { portfolioId: swing }),
+    ).rejects.toMatchObject({ data: { code: "CONFLICT" } });
+    expect(await t.run((ctx) => ctx.db.get(swing))).not.toBeNull();
+
+    // Correcting the active fill's date into the closed span unlinks it.
+    await asOwner(t).mutation(api.trades.updateTrade, { date: 15, tradeId: later });
+    expect((await t.run((ctx) => ctx.db.get(later)))!.episodeId).toBeUndefined();
+    const formerlyActive = (await t.run((ctx) => ctx.db.get(activeEpisodeId)))!;
+    expect(formerlyActive.lifecycle).not.toBe("active");
+    expect(formerlyActive.openedAt).toBe(30);
+
+    // A correction that stays after the closed span keeps its link.
+    const again = await insertTrade({ date: 40, portfolioId: swing, quantity: 1, side: "buy", ticker: "CF" });
+    await t.run((ctx) => syncTradeEpisodeLink(ctx, again));
+    const againEpisode = (await t.run((ctx) => ctx.db.get(again)))!.episodeId!;
+    await asOwner(t).mutation(api.trades.updateTrade, { date: 45, tradeId: again });
+    expect((await t.run((ctx) => ctx.db.get(again)))!.episodeId).toBe(againEpisode);
+  });
 });

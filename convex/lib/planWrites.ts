@@ -372,14 +372,31 @@ export async function syncTradeEpisodeLink(
       });
       return previousEpisode._id;
     }
-    if (stillFits) {
+    // The execution-date rules apply to every placement, including a fill
+    // that is already linked and is being corrected: a fill inside a closed
+    // episode's span belongs to that history and is left unlinked rather
+    // than attached anywhere, and a fill dated before its open episode began
+    // is left for the conversation to sort.
+    const threadEpisodes = await listThreadEpisodesForLinking(
+      ctx,
+      trade.ownerId,
+      thread._id,
+    );
+    const insideClosedSpan = threadEpisodes.some(
+      (episode) =>
+        episode.lifecycle === "closed" &&
+        episode.portfolioId === trade.portfolioId &&
+        (episode.direction === undefined ||
+          episode.direction === trade.direction) &&
+        trade.date >= episode.openedAt &&
+        episode.closedAt !== undefined &&
+        trade.date <= episode.closedAt,
+    );
+    if (insideClosedSpan) {
+      targetEpisodeId = undefined;
+    } else if (stillFits && trade.date >= previousEpisode.openedAt) {
       targetEpisodeId = previousEpisode._id;
     } else {
-      const threadEpisodes = await listThreadEpisodesForLinking(
-        ctx,
-        trade.ownerId,
-        thread._id,
-      );
       const accepting = threadEpisodes.filter((episode) =>
         episodeAcceptsTrade(episode, trade),
       );
@@ -395,20 +412,10 @@ export async function syncTradeEpisodeLink(
       // An open episode that began after this fill means the fill belongs to
       // neither it nor whatever closed before it.
       const predatesOpenEpisode = accepting.length > candidates.length;
-      const insideClosedSpan = threadEpisodes.some(
-        (episode) =>
-          episode.lifecycle === "closed" &&
-          episode.portfolioId === trade.portfolioId &&
-          (episode.direction === undefined ||
-            episode.direction === trade.direction) &&
-          trade.date >= episode.openedAt &&
-          episode.closedAt !== undefined &&
-          trade.date <= episode.closedAt,
-      );
       const target =
         exactMatch ??
         adoptable ??
-        (insideClosedSpan || predatesOpenEpisode
+        (predatesOpenEpisode
           ? null
           : await openEpisode(ctx, {
               actor: "system",
