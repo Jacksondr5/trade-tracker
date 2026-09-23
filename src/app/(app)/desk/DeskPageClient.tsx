@@ -4,9 +4,11 @@ import { Preloaded, usePreloadedQuery } from "convex/react";
 import Link from "next/link";
 import { Alert, Badge, EmptyState } from "~/components/ui";
 import {
+  ELEMENT_AUTHOR_LABELS,
+  ELEMENT_STATUS_LABELS,
   ElementChip,
   LIFECYCLE_LABELS,
-  PlanLineText,
+  formatCompactValue,
   formatPosition,
   lifecycleBadgeVariant,
   type DeskGroup,
@@ -34,15 +36,80 @@ const COLUMN_LABELS = [
   "Since checkpoint",
 ];
 
+type DeskLine = NonNullable<DeskRow["checkpoint"]>["entry"][number];
+
+function deskLineText(line: DeskLine, leadWithValue: boolean): string {
+  if (leadWithValue && line.value) {
+    return `${formatCompactValue(line.value)} · ${line.text}`;
+  }
+  return line.text;
+}
+
 function CheckpointCell({
+  exempt = false,
+  leadWithValue = false,
   lines,
 }: {
-  lines: NonNullable<DeskRow["checkpoint"]>["entry"];
+  exempt?: boolean;
+  leadWithValue?: boolean;
+  lines: DeskLine[];
 }) {
   const line = lines[0];
+  const text = line ? deskLineText(line, leadWithValue) : null;
   return (
-    <td className="max-w-xs px-3 py-2 align-top text-sm text-olive-12">
-      {line ? <PlanLineText line={line} /> : <span className="text-slate-11">—</span>}
+    <td className="max-w-[16rem] px-3 py-2 text-sm whitespace-nowrap text-olive-12">
+      <span className="flex items-center gap-1.5">
+        {exempt ? (
+          <span className="shrink-0 rounded border border-amber-7 bg-amber-2 px-1 text-[10px] font-medium tracking-wide text-amber-11 uppercase">
+            exempt
+          </span>
+        ) : null}
+        {text ? (
+          <span className="min-w-0 truncate" title={text}>
+            {text}
+          </span>
+        ) : (
+          <span className="text-slate-11">—</span>
+        )}
+      </span>
+    </td>
+  );
+}
+
+function SinceCheckpointCell({ items }: { items: DeskRow["itemsSinceCheckpoint"] }) {
+  const latest = items[items.length - 1];
+  if (!latest) {
+    return (
+      <td className="px-3 py-2 text-sm whitespace-nowrap text-slate-11">—</td>
+    );
+  }
+  const more = items.length - 1;
+  const isCounterpart = latest.author === "counterpart";
+  const statusClass =
+    latest.status === "agreed" ? "text-grass-11" : "text-amber-11";
+  return (
+    <td className="max-w-[20rem] px-3 py-2 text-sm whitespace-nowrap text-olive-12">
+      <span
+        className={`flex items-center gap-1.5 ${
+          isCounterpart ? "rounded border border-dashed border-blue-7 px-1.5" : ""
+        }`}
+        title={`${latest.statement} — ${ELEMENT_AUTHOR_LABELS[latest.author]}, ${ELEMENT_STATUS_LABELS[latest.status]}`}
+      >
+        <span className={`shrink-0 text-[10px] font-medium tracking-wide uppercase ${statusClass}`}>
+          {ELEMENT_STATUS_LABELS[latest.status]}
+        </span>
+        {isCounterpart ? (
+          <span className="shrink-0 text-[10px] font-semibold text-blue-11" aria-label="Counterpart">
+            C
+          </span>
+        ) : null}
+        <span className="min-w-0 truncate">{latest.statement}</span>
+        {more > 0 ? (
+          <span className="shrink-0 rounded-full border border-slate-7 bg-slate-3 px-1.5 text-[10px] text-slate-11">
+            +{more}
+          </span>
+        ) : null}
+      </span>
     </td>
   );
 }
@@ -54,7 +121,7 @@ function DeskEpisodeRow({ row }: { row: DeskRow }) {
       className="hover:bg-slate-3/40"
       data-testid={getDeskEpisodeRowTestId(episode.id)}
     >
-      <td className="px-3 py-2 align-top whitespace-nowrap">
+      <td className="px-3 py-2 whitespace-nowrap">
         <Link
           href={`/threads/${encodeURIComponent(episode.ticker)}`}
           className="text-sm font-medium text-slate-12 hover:underline"
@@ -63,15 +130,15 @@ function DeskEpisodeRow({ row }: { row: DeskRow }) {
           {episode.ticker}
         </Link>
       </td>
-      <td className="px-3 py-2 align-top text-sm whitespace-nowrap text-olive-11">
+      <td className="px-3 py-2 text-sm whitespace-nowrap text-olive-11">
         {episode.portfolioName ?? "—"}
       </td>
-      <td className="px-3 py-2 align-top">
+      <td className="px-3 py-2">
         <Badge variant={lifecycleBadgeVariant(episode.lifecycle)}>
           {LIFECYCLE_LABELS[episode.lifecycle]}
         </Badge>
       </td>
-      <td className="px-3 py-2 align-top text-sm whitespace-nowrap text-slate-12 tabular-nums">
+      <td className="px-3 py-2 text-sm whitespace-nowrap text-slate-12 tabular-nums">
         {row.position ? (
           <>
             <Badge
@@ -88,24 +155,26 @@ function DeskEpisodeRow({ row }: { row: DeskRow }) {
       </td>
       {row.checkpoint ? (
         CHECKPOINT_COLUMNS.map((key) => (
-          <CheckpointCell key={key} lines={row.checkpoint![key]} />
+          <CheckpointCell
+            key={key}
+            lines={row.checkpoint![key]}
+            leadWithValue={key === "stop" || key === "targets"}
+            exempt={
+              key === "scenarios" && episode.campaignElementExemptions.length > 0
+            }
+          />
         ))
       ) : (
-        <td colSpan={CHECKPOINT_COLUMNS.length} className="px-3 py-2 align-top text-sm text-slate-11">
-          {row.draftVersionNumber !== null ? `Draft v${row.draftVersionNumber} awaiting endorsement` : ""}
+        <td
+          colSpan={CHECKPOINT_COLUMNS.length}
+          className="px-3 py-2 text-sm whitespace-nowrap text-slate-11"
+        >
+          {row.draftVersionNumber !== null
+            ? `Draft v${row.draftVersionNumber} awaiting endorsement`
+            : ""}
         </td>
       )}
-      <td className="px-3 py-2 align-top">
-        {row.itemsSinceCheckpoint.length === 0 ? (
-          <span className="text-sm text-slate-11">—</span>
-        ) : (
-          <div className="flex flex-col items-start gap-1">
-            {row.itemsSinceCheckpoint.map((element) => (
-              <ElementChip key={element.id} element={element} />
-            ))}
-          </div>
-        )}
-      </td>
+      <SinceCheckpointCell items={row.itemsSinceCheckpoint} />
     </tr>
   );
 }

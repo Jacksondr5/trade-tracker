@@ -92,16 +92,16 @@ describe("isIsoDate", () => {
 
 describe("partitionElementsAroundCheckpoint", () => {
   const elements = [
-    { _id: "a", revision: 1, status: "agreed" as const },
-    { _id: "b", revision: 2, status: "proposed" as const },
-    { _id: "c", revision: 5, status: "agreed" as const },
-    { _id: "d", revision: 3, status: "dropped" as const },
+    { _id: "a", revision: 1, status: "agreed" as const, statusRevision: 1 },
+    { _id: "b", revision: 2, status: "proposed" as const, statusRevision: 2 },
+    { _id: "c", revision: 5, status: "agreed" as const, statusRevision: 5 },
+    { _id: "d", revision: 3, status: "dropped" as const, statusRevision: 3 },
   ];
 
   it("orders by revision and keeps every open proposal visible", () => {
     const withLateProposal = [
       ...elements,
-      { _id: "e", revision: 6, status: "proposed" as const },
+      { _id: "e", revision: 6, status: "proposed" as const, statusRevision: 6 },
     ];
     const result = partitionElementsAroundCheckpoint(withLateProposal, 3);
     expect(result.history.map((e) => e._id)).toEqual(["a", "b", "d"]);
@@ -112,6 +112,19 @@ describe("partitionElementsAroundCheckpoint", () => {
       ["b", true],
       ["e", false],
     ]);
+  });
+
+  it("shows a status change after the checkpoint as a delta item", () => {
+    // "b" was proposed before the checkpoint and agreed after it.
+    const agreedLater = elements.map((element) =>
+      element._id === "b"
+        ? { ...element, status: "agreed" as const, statusRevision: 7 }
+        : element,
+    );
+    const result = partitionElementsAroundCheckpoint(agreedLater, 3);
+    expect(result.history.map((e) => e._id)).toEqual(["a", "b", "d"]);
+    expect(result.itemsSinceCheckpoint.map((e) => e._id)).toEqual(["c", "b"]);
+    expect(result.openProposals).toEqual([]);
   });
 
   it("treats everything as the delta when there is no checkpoint", () => {
@@ -130,9 +143,9 @@ describe("resolveCampaignRules", () => {
   it("drops closed elements and separates exemptions", () => {
     const result = resolveCampaignRules(
       [
-        { _id: "gate", revision: 1, status: "agreed" },
-        { _id: "old", revision: 2, status: "superseded" },
-        { _id: "cap", revision: 3, status: "proposed" },
+        { _id: "gate", revision: 1, status: "agreed", statusRevision: 1 },
+        { _id: "old", revision: 2, status: "superseded", statusRevision: 4 },
+        { _id: "cap", revision: 3, status: "proposed", statusRevision: 3 },
       ],
       new Set(["gate"]),
     );

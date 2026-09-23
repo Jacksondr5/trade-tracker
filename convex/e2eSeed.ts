@@ -1,6 +1,10 @@
 import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-import { internalMutation, type MutationCtx } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  type MutationCtx,
+} from "./_generated/server";
 import { E2E_SMOKE_FIXTURES } from "../shared/e2e/smokeFixtures";
 import { emptyPlanSections } from "./lib/planModel";
 import {
@@ -719,6 +723,86 @@ async function seedInstrumentThreadFixture(
     source: "conversation",
   });
 }
+
+export const getInstrumentThreadFixtureIds = internalQuery({
+  args: {},
+  returns: v.union(
+    v.null(),
+    v.object({
+      campaignId: v.id("campaigns"),
+      checkpointVersionNumber: v.number(),
+      closedEpisodeId: v.id("episodes"),
+      liveEpisodeId: v.id("episodes"),
+      ticker: v.string(),
+    }),
+  ),
+  handler: async (ctx) => {
+    const ownerId = getPlaywrightOwnerId();
+    const fixture = E2E_SMOKE_FIXTURES.instrumentThread;
+    const thread = await ctx.db
+      .query("instrumentThreads")
+      .withIndex("by_owner_ticker", (q) =>
+        q.eq("ownerId", ownerId).eq("ticker", fixture.ticker),
+      )
+      .unique();
+    if (!thread) return null;
+    const episodes = await ctx.db
+      .query("episodes")
+      .withIndex("by_owner_threadId", (q) =>
+        q.eq("ownerId", ownerId).eq("threadId", thread._id),
+      )
+      .collect();
+    const live = episodes.find((episode) => episode.lifecycle !== "closed");
+    const closed = episodes.find((episode) => episode.lifecycle === "closed");
+    if (!live?.campaignId || !closed || !live.currentPlanVersionId) return null;
+    const checkpoint = await ctx.db.get(live.currentPlanVersionId);
+    if (!checkpoint) return null;
+    return {
+      campaignId: live.campaignId,
+      checkpointVersionNumber: checkpoint.versionNumber,
+      closedEpisodeId: closed._id,
+      liveEpisodeId: live._id,
+      ticker: fixture.ticker,
+    };
+  },
+});
+
+export const getThreadEpisodeIds = internalQuery({
+  args: { ticker: v.string() },
+  returns: v.object({ episodeIds: v.array(v.id("episodes")) }),
+  handler: async (ctx, args) => {
+    const ownerId = getPlaywrightOwnerId();
+    const thread = await ctx.db
+      .query("instrumentThreads")
+      .withIndex("by_owner_ticker", (q) =>
+        q.eq("ownerId", ownerId).eq("ticker", args.ticker.trim().toUpperCase()),
+      )
+      .unique();
+    if (!thread) return { episodeIds: [] };
+    const episodes = await ctx.db
+      .query("episodes")
+      .withIndex("by_owner_threadId", (q) =>
+        q.eq("ownerId", ownerId).eq("threadId", thread._id),
+      )
+      .collect();
+    return { episodeIds: episodes.map((episode) => episode._id) };
+  },
+});
+
+export const getEpisodeElementIds = internalQuery({
+  args: { episodeId: v.id("episodes") },
+  returns: v.object({ elementIds: v.array(v.id("planElements")) }),
+  handler: async (ctx, args) => {
+    const ownerId = getPlaywrightOwnerId();
+    const elements = await ctx.db
+      .query("planElements")
+      .withIndex("by_owner_episodeId_revision", (q) =>
+        q.eq("ownerId", ownerId).eq("episodeId", args.episodeId),
+      )
+      .collect();
+    return { elementIds: elements.map((element) => element._id) };
+  },
+});
 
 export const setupPreviewData = internalMutation({
   args: {},

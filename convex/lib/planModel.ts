@@ -220,13 +220,24 @@ export type ResolvableElement = {
   _id: string;
   revision: number;
   status: ElementStatus;
+  statusRevision: number;
 };
 
+/** The revision at which the element last changed: creation or status move. */
+export function effectiveRevision(element: {
+  revision: number;
+  statusRevision: number;
+}): number {
+  return Math.max(element.revision, element.statusRevision);
+}
+
 /**
- * Splits an episode's elements around its checkpoint. Elements after the
- * compiled-through revision are the delta; open proposals before it stay
- * visible regardless of age because nonmention is never evidence of
- * withdrawal.
+ * Splits an episode's elements around its checkpoint. An element belongs to
+ * the delta when it was created or changed status after the compiled-through
+ * revision, so agreeing or dropping an older proposal is visible as a change
+ * rather than vanishing into history. History keeps everything created at or
+ * before the checkpoint. Open proposals stay visible regardless of age
+ * because nonmention is never evidence of withdrawal.
  */
 export function partitionElementsAroundCheckpoint<T extends ResolvableElement>(
   elements: T[],
@@ -237,16 +248,26 @@ export function partitionElementsAroundCheckpoint<T extends ResolvableElement>(
   /** Everything still on the table, before and after the checkpoint. */
   openProposals: Array<T & { beforeCheckpoint: boolean }>;
 } {
-  const ordered = [...elements].sort((a, b) => a.revision - b.revision);
-  const isBefore = (element: T) =>
+  const byEffective = [...elements].sort(
+    (a, b) => effectiveRevision(a) - effectiveRevision(b),
+  );
+  const createdBefore = (element: T) =>
     compiledThroughRevision !== null &&
     element.revision <= compiledThroughRevision;
+  const changedAfter = (element: T) =>
+    compiledThroughRevision === null ||
+    effectiveRevision(element) > compiledThroughRevision;
   return {
-    history: ordered.filter(isBefore),
-    itemsSinceCheckpoint: ordered.filter((element) => !isBefore(element)),
-    openProposals: ordered
+    history: [...elements]
+      .filter(createdBefore)
+      .sort((a, b) => a.revision - b.revision),
+    itemsSinceCheckpoint: byEffective.filter(changedAfter),
+    openProposals: byEffective
       .filter((element) => element.status === "proposed")
-      .map((element) => ({ ...element, beforeCheckpoint: isBefore(element) })),
+      .map((element) => ({
+        ...element,
+        beforeCheckpoint: createdBefore(element),
+      })),
   };
 }
 

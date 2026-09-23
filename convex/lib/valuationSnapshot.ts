@@ -16,7 +16,6 @@ import { v } from "convex/values";
 
 const MAX_SNAPSHOT_ROWS = 1_000;
 const MAX_PORTFOLIOS = 100;
-const MAX_VALUATION_ROWS_PER_PORTFOLIO = 5;
 
 const completenessValidator = v.union(
   v.literal("complete"),
@@ -36,9 +35,11 @@ export const valuationSnapshotValidator = v.object({
       currency: v.union(v.string(), v.null()),
       equity: v.number(),
       marketValue: v.number(),
+      missingCash: v.boolean(),
       missingMarks: v.array(v.string()),
       pricedPositions: v.number(),
       totalPositions: v.number(),
+      unsupportedCurrencyMarks: v.array(v.string()),
       valuationTimestamp: v.union(v.number(), v.null()),
     }),
   ),
@@ -63,6 +64,7 @@ export const valuationSnapshotValidator = v.object({
       equity: v.number(),
       marketValue: v.number(),
       missingMarks: v.array(v.string()),
+      missingPortfolios: v.array(v.string()),
       portfolios: v.array(
         v.object({
           asOfDate: v.string(),
@@ -93,9 +95,11 @@ export type ValuationSnapshot = {
     currency: string | null;
     equity: number;
     marketValue: number;
+    missingCash: boolean;
     missingMarks: string[];
     pricedPositions: number;
     totalPositions: number;
+    unsupportedCurrencyMarks: string[];
     valuationTimestamp: number | null;
   } | null;
   freshness: {
@@ -113,6 +117,7 @@ export type ValuationSnapshot = {
     equity: number;
     marketValue: number;
     missingMarks: string[];
+    missingPortfolios: string[];
     portfolios: Array<{
       asOfDate: string;
       cash: number;
@@ -197,18 +202,43 @@ export async function buildValuationSnapshot(
         "Broker cash snapshot",
       ),
     ]);
+    // The Flex parser labels the account's base-currency total rows
+    // "BASE_SUMMARY", so the base currency itself comes from the per-currency
+    // rows: it is known only when the account holds a single currency.
     const baseCashRows = cashRows.filter((row) => row.rowKind === "base_summary");
+    const currencyRows = cashRows.filter((row) => row.rowKind === "currency");
+    const currencies = [
+      ...new Set(currencyRows.map((row) => row.currency.toUpperCase())),
+    ];
+    const baseCurrency = currencies.length === 1 ? currencies[0]! : null;
     const cash = baseCashRows.reduce((total, row) => total + row.cash, 0);
-    const currencies = [...new Set(baseCashRows.map((row) => row.currency))];
-    const missingMarks = positionRows
-      .filter((row) => row.marketValue === undefined)
-      .map((row) => row.ticker.toUpperCase())
-      .sort((a, b) => a.localeCompare(b));
-    const pricedPositions = positionRows.length - missingMarks.length;
-    const marketValue = positionRows.reduce(
-      (total, row) => total + (row.marketValue ?? 0),
-      0,
-    );
+    const missingCash = baseCashRows.length === 0;
+    const missingMarks: string[] = [];
+    const unsupportedCurrencyMarks: string[] = [];
+    let marketValue = 0;
+    let pricedPositions = 0;
+    for (const row of positionRows) {
+      const ticker = row.ticker.toUpperCase();
+      if (row.marketValue === undefined) {
+        missingMarks.push(ticker);
+        continue;
+      }
+      const rowCurrency = row.currency?.toUpperCase();
+      if (
+        rowCurrency !== undefined &&
+        baseCurrency !== null &&
+        rowCurrency !== baseCurrency
+      ) {
+        unsupportedCurrencyMarks.push(ticker);
+        continue;
+      }
+      marketValue += row.marketValue;
+      pricedPositions += 1;
+    }
+    const complete =
+      !missingCash &&
+      missingMarks.length === 0 &&
+      unsupportedCurrencyMarks.length === 0;
     brokerReported = {
       accounts: [...new Set(positionRows.map((row) => row.brokerageAccountId))]
         .concat(baseCashRows.map((row) => row.brokerageAccountId))
@@ -217,18 +247,21 @@ export async function buildValuationSnapshot(
       asOfDate: latestSuccess.reportDate,
       basis: "broker_reported",
       cash,
-      completeness:
-        positionRows.length === pricedPositions
-          ? "complete"
-          : pricedPositions === 0
-            ? "missing"
-            : "partial",
-      currency: currencies.length === 1 ? currencies[0]! : null,
+      completeness: complete
+        ? "complete"
+        : pricedPositions === 0 && missingCash
+          ? "missing"
+          : "partial",
+      currency: baseCurrency,
       equity: cash + marketValue,
       marketValue,
-      missingMarks: [...new Set(missingMarks)],
+      missingCash,
+      missingMarks: [...new Set(missingMarks)].sort((a, b) => a.localeCompare(b)),
       pricedPositions,
       totalPositions: positionRows.length,
+      unsupportedCurrencyMarks: [...new Set(unsupportedCurrencyMarks)].sort(
+        (a, b) => a.localeCompare(b),
+      ),
       valuationTimestamp: latestSuccess.completedAt ?? null,
     };
   }
@@ -237,16 +270,19 @@ export async function buildValuationSnapshot(
     ValuationSnapshot["reconstructed"]
   >["portfolios"] = [];
   let latestComputedAt = 0;
+  const missingPortfolios: string[] = [];
   for (const portfolio of portfolios) {
-    const rows = await ctx.db
+    const latest = await ctx.db
       .query("portfolioDailyValuations")
       .withIndex("by_ownerId_and_portfolioId_and_date", (q) =>
         q.eq("ownerId", args.ownerId).eq("portfolioId", portfolio._id),
       )
       .order("desc")
-      .take(MAX_VALUATION_ROWS_PER_PORTFOLIO);
-    const latest = rows[0];
-    if (!latest) continue;
+      .first();
+    if (!latest) {
+      missingPortfolios.push(portfolio.name);
+      continue;
+    }
     latestComputedAt = Math.max(latestComputedAt, latest.computedAt);
     portfolioValuations.push({
       asOfDate: latest.date,
@@ -267,9 +303,9 @@ export async function buildValuationSnapshot(
     const missingMarks = [
       ...new Set(portfolioValuations.flatMap((row) => row.missingMarks)),
     ].sort((a, b) => a.localeCompare(b));
-    const allComplete = portfolioValuations.every(
-      (row) => row.completeness === "complete",
-    );
+    const allComplete =
+      missingPortfolios.length === 0 &&
+      portfolioValuations.every((row) => row.completeness === "complete");
     const allMissing = portfolioValuations.every(
       (row) => row.completeness === "missing",
     );
@@ -285,6 +321,7 @@ export async function buildValuationSnapshot(
         0,
       ),
       missingMarks,
+      missingPortfolios: missingPortfolios.sort((a, b) => a.localeCompare(b)),
       portfolios: portfolioValuations,
       staleDates: portfolioValuations
         .filter((row) => row.asOfDate !== newestDate)

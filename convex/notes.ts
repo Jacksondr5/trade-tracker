@@ -59,6 +59,9 @@ type NoteEvidenceInput = {
 
 type NotesCtx = QueryCtx | MutationCtx;
 
+// Thread and episode note lists are bounded; the newest notes win.
+const MAX_SCOPED_NOTES = 500;
+
 function trimNoteContent(content: string): string {
   const trimmed = content.trim();
   if (!trimmed) {
@@ -513,13 +516,15 @@ export const getNotesByThread = query({
         .withIndex("by_owner_ticker_noteDate", (q) =>
           q.eq("ownerId", ownerId).eq("ticker", thread.ticker),
         )
-        .collect(),
+        .order("desc")
+        .take(MAX_SCOPED_NOTES),
       ctx.db
         .query("notes")
         .withIndex("by_owner_threadId_noteDate", (q) =>
           q.eq("ownerId", ownerId).eq("threadId", thread._id),
         )
-        .collect(),
+        .order("desc")
+        .take(MAX_SCOPED_NOTES),
     ]);
     const seen = new Set<Id<"notes">>();
     const notes = [...byTicker, ...byThread].filter((note) => {
@@ -542,7 +547,8 @@ export const getNotesByEpisode = query({
       .withIndex("by_owner_episodeId_noteDate", (q) =>
         q.eq("ownerId", ownerId).eq("episodeId", args.episodeId),
       )
-      .collect();
+      .order("desc")
+      .take(MAX_SCOPED_NOTES);
     return await serializeNotes(ctx, notes.sort(sortNotesDesc));
   },
 });

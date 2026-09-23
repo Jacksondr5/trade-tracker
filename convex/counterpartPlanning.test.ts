@@ -251,6 +251,23 @@ describe("counterpart planning surface", () => {
 
     const campaigns = await post("list-campaigns", {});
     expect(campaigns.json.data.campaigns[0].elements).toHaveLength(1);
+
+    const history = await post("episode-elements", { episodeId, numItems: 1 });
+    expect(history.status).toBe(200);
+    expect(history.json.data.items).toHaveLength(1);
+    expect(history.json.data.hasMore).toBe(true);
+    const rest = await post("episode-elements", {
+      cursor: history.json.data.nextCursor,
+      episodeId,
+      numItems: 50,
+    });
+    expect(rest.json.data.hasMore).toBe(false);
+    expect(rest.json.data.items).toHaveLength(1);
+
+    const version = await post("plan-version", { episodeId, versionNumber: 1 });
+    expect(version.status).toBe(200);
+    expect(version.json.data.version.sections.stop[0].text).toBe("$240 broker backstop");
+    expect((await post("plan-version", { episodeId, versionNumber: 9 })).status).toBe(404);
   });
 
   it("reports reconciliation issue state, sync summary, and valuation in portfolio context", async () => {
@@ -322,6 +339,19 @@ describe("counterpart planning surface", () => {
         syncRunId: successRun,
         ticker: "TSM",
       });
+      // The Flex parser labels base totals BASE_SUMMARY; the account's
+      // currency comes from the per-currency rows.
+      await ctx.db.insert("brokerageCashSnapshots", {
+        brokerageAccountId: "U1",
+        cash: 1_000,
+        connectionId,
+        createdAt: now,
+        currency: "BASE_SUMMARY",
+        ownerId,
+        reportDate: "2026-09-21",
+        rowKind: "base_summary",
+        syncRunId: successRun,
+      });
       await ctx.db.insert("brokerageCashSnapshots", {
         brokerageAccountId: "U1",
         cash: 1_000,
@@ -330,9 +360,23 @@ describe("counterpart planning surface", () => {
         currency: "USD",
         ownerId,
         reportDate: "2026-09-21",
-        rowKind: "base_summary",
+        rowKind: "currency",
         syncRunId: successRun,
       });
+      await ctx.db.insert("brokeragePositionSnapshots", {
+        assetType: "stock",
+        brokerageAccountId: "U1",
+        connectionId,
+        createdAt: now,
+        currency: "JPY",
+        marketValue: 9_999,
+        ownerId,
+        quantity: 3,
+        reportDate: "2026-09-21",
+        syncRunId: successRun,
+        ticker: "SONY",
+      });
+      await ctx.db.insert("portfolios", { name: "Unvalued", ownerId });
       await ctx.db.insert("brokerageReconciliationIssues", {
         connectionId,
         createdAt: now - 200_000,
@@ -408,9 +452,11 @@ describe("counterpart planning surface", () => {
       currency: "USD",
       equity: 5_000,
       marketValue: 4_000,
+      missingCash: false,
       missingMarks: ["TSM"],
       pricedPositions: 1,
-      totalPositions: 2,
+      totalPositions: 3,
+      unsupportedCurrencyMarks: ["SONY"],
     });
     expect(context.valuation.reconstructed).toMatchObject({
       asOfDate: "2026-09-19",
@@ -418,7 +464,11 @@ describe("counterpart planning surface", () => {
       completeness: "partial",
       equity: 4_400,
       missingMarks: ["TSM"],
+      missingPortfolios: ["Unvalued"],
     });
+    const daily = await t.query(internal.counterpart.getDailyContext, { now, ownerId });
+    expect(daily.valuation.brokerReported?.equity).toBe(5_000);
+    expect(daily.recentlyResolvedReconciliation).toHaveLength(1);
     expect(context.valuation.freshness).toEqual({
       ageDays: 1,
       latestAttemptStatus: "failed_retryable",

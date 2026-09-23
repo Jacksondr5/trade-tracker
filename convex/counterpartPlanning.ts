@@ -141,6 +141,67 @@ export const getEpisodeContext = internalQuery({
   },
 });
 
+const MAX_ELEMENT_PAGE = 200;
+
+/** Cursor-paginated element history for one episode, oldest first. */
+export const listEpisodeElementsForCounterpart = internalQuery({
+  args: {
+    cursor: v.union(v.string(), v.null()),
+    episodeId: v.string(),
+    numItems: v.number(),
+    ownerId: v.string(),
+  },
+  returns: v.union(
+    v.null(),
+    v.object({
+      hasMore: v.boolean(),
+      items: v.array(elementViewValidator),
+      nextCursor: v.union(v.string(), v.null()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const episodeId = ctx.db.normalizeId("episodes", args.episodeId);
+    if (!episodeId) return null;
+    const episode = await ctx.db.get(episodeId);
+    if (!episode || episode.ownerId !== args.ownerId) return null;
+    const page = await ctx.db
+      .query("planElements")
+      .withIndex("by_owner_episodeId_revision", (q) =>
+        q.eq("ownerId", args.ownerId).eq("episodeId", episodeId),
+      )
+      .order("asc")
+      .paginate({
+        cursor: args.cursor,
+        numItems: Math.min(Math.max(args.numItems, 1), MAX_ELEMENT_PAGE),
+      });
+    return {
+      hasMore: !page.isDone,
+      items: page.page.map(elementView),
+      nextCursor: page.isDone ? null : page.continueCursor,
+    };
+  },
+});
+
+/** One historical plan version with its sections. */
+export const getPlanVersionForCounterpart = internalQuery({
+  args: { episodeId: v.string(), ownerId: v.string(), versionNumber: v.number() },
+  returns: v.union(v.null(), planVersionViewValidator),
+  handler: async (ctx, args) => {
+    const episodeId = ctx.db.normalizeId("episodes", args.episodeId);
+    if (!episodeId) return null;
+    const version = await ctx.db
+      .query("planVersions")
+      .withIndex("by_owner_episodeId_versionNumber", (q) =>
+        q
+          .eq("ownerId", args.ownerId)
+          .eq("episodeId", episodeId)
+          .eq("versionNumber", args.versionNumber),
+      )
+      .unique();
+    return version ? planVersionView(version) : null;
+  },
+});
+
 export const getDeskContext = internalQuery({
   args: { ownerId: v.string() },
   returns: deskValidator,

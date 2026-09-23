@@ -31,6 +31,8 @@ import {
   getElementStatementInputTestId,
   getElementStatusSelectTestId,
   getElementSubmitButtonTestId,
+  getDeskCampaignGroupTestId,
+  getDeskEpisodeRowTestId,
   getEpisodeAddElementToggleTestId,
   getEpisodeCardTestId,
   getThreadRowTestId,
@@ -692,10 +694,6 @@ export function getThreadOpenEpisodeButton(page: Page): Locator {
   return page.getByTestId(THREAD_PAGE_TEST_IDS.openEpisodeButton);
 }
 
-export function getAnyEpisodeCard(page: Page): Locator {
-  return page.getByTestId(/^episode-card-/);
-}
-
 export function getEpisodeCard(page: Page, episodeId: string): Locator {
   return page.getByTestId(getEpisodeCardTestId(episodeId));
 }
@@ -723,21 +721,8 @@ export function getElementSubmitButton(page: Page, episodeId: string): Locator {
   return page.getByTestId(getElementSubmitButtonTestId(episodeId));
 }
 
-export function getAnyElementRow(page: Page): Locator {
-  return page.getByTestId(/^element-row-/);
-}
-
 export function getElementRow(page: Page, elementId: string): Locator {
   return page.getByTestId(getElementRowTestId(elementId));
-}
-
-/** Reads the episode id out of an `episode-card-<id>` test id. */
-export async function readEpisodeIdFromCard(card: Locator): Promise<string> {
-  const testId = await card.getAttribute("data-testid");
-  if (!testId?.startsWith("episode-card-")) {
-    throw new Error(`Locator is not an episode card: ${testId ?? "(none)"}`);
-  }
-  return testId.slice("episode-card-".length);
 }
 
 export function getEpisodeAddElementToggle(
@@ -747,6 +732,21 @@ export function getEpisodeAddElementToggle(
   return page.getByTestId(getEpisodeAddElementToggleTestId(episodeId));
 }
 
-export function getAnyDeskCampaignGroup(page: Page): Locator {
-  return page.getByTestId(/^desk-campaign-group-/);
+export function getEpisodeCheckpoint(page: Page, episodeId: string): Locator {
+  return page.getByTestId(`episode-checkpoint-${episodeId}`);
+}
+
+export function getEpisodeSinceCheckpoint(
+  page: Page,
+  episodeId: string,
+): Locator {
+  return page.getByTestId(`episode-since-checkpoint-${episodeId}`);
+}
+
+export function getDeskCampaignGroup(page: Page, campaignId: string): Locator {
+  return page.getByTestId(getDeskCampaignGroupTestId(campaignId));
+}
+
+export function getDeskEpisodeRow(page: Page, episodeId: string): Locator {
+  return page.getByTestId(getDeskEpisodeRowTestId(episodeId));
 }

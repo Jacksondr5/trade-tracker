@@ -3,6 +3,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { derivePositionEpisodeState } from "./openPositions";
 import {
+  effectiveRevision,
   MAX_ELEMENT_STATEMENT_LENGTH,
   MAX_PLAN_LINES_PER_SECTION,
   MAX_PLAN_LINE_LENGTH,
@@ -173,6 +174,9 @@ export async function recomputeEpisodeLifecycle(
 ): Promise<Doc<"episodes">> {
   const episode = await ctx.db.get(episodeId);
   if (!episode) throw planModelError("NOT_FOUND", "Episode not found");
+  // Closed is terminal. A corrected or moved fill never reopens history; a
+  // later fill opens a new episode instead.
+  if (episode.lifecycle === "closed") return episode;
   const [trades, elements] = await Promise.all([
     listEpisodeTrades(ctx, episode.ownerId, episodeId),
     listEpisodeElements(ctx, episode.ownerId, episodeId),
@@ -298,14 +302,10 @@ export async function syncTradeEpisodeLink(
     ? await ctx.db.get(previousEpisodeId)
     : null;
 
+  // Every traded ticker gets a thread, even when the fill cannot be placed.
+  const thread = await ensureThread(ctx, trade.ownerId, trade.ticker, "system");
   let targetEpisodeId: Id<"episodes"> | undefined;
   if (trade.portfolioId !== undefined) {
-    const thread = await ensureThread(
-      ctx,
-      trade.ownerId,
-      trade.ticker,
-      "system",
-    );
     const stillFits =
       previousEpisode !== null &&
       previousEpisode.ownerId === trade.ownerId &&
@@ -375,16 +375,6 @@ export async function syncTradeEpisodeLink(
     await recomputeEpisodeLifecycle(ctx, previousEpisode._id);
   }
   return targetEpisodeId ?? null;
-}
-
-export async function unlinkTradeFromEpisode(
-  ctx: MutationCtx,
-  trade: Pick<Doc<"trades">, "_id" | "episodeId">,
-): Promise<void> {
-  if (!trade.episodeId) return;
-  await ctx.db.patch(trade._id, { episodeId: undefined });
-  const episode = await ctx.db.get(trade.episodeId);
-  if (episode) await recomputeEpisodeLifecycle(ctx, episode._id);
 }
 
 function validateAsOf(asOf: string | undefined, label: string): void {
@@ -640,9 +630,16 @@ export async function draftPlanVersion(
   ctx: MutationCtx,
   args: {
     actor: Actor;
+    /**
+     * The version the editor was opened from (null when there was none).
+     * When given, a newer version is a conflict.
+     */
+    baseVersionNumber?: number | null;
     compiledThroughRevision?: number;
     endorsed: boolean;
     episodeId: Id<"episodes">;
+    /** The latest revision the editor had seen; later changes are a conflict. */
+    observedRevision?: number;
     operationId?: string;
     ownerId: string;
     sections: PlanSections;
@@ -675,8 +672,43 @@ export async function draftPlanVersion(
   }
 
   const previous = await latestPlanVersion(ctx, args.ownerId, episode._id);
+  if (
+    args.baseVersionNumber !== undefined &&
+    (previous?.versionNumber ?? null) !== args.baseVersionNumber
+  ) {
+    throw planModelError(
+      "CONFLICT",
+      `The plan changed: version ${previous?.versionNumber ?? "none"} is now the latest`,
+    );
+  }
+  if (args.observedRevision !== undefined) {
+    const elements = await listEpisodeElements(ctx, args.ownerId, episode._id);
+    const unseen = elements
+      .filter((element) => effectiveRevision(element) > args.observedRevision!)
+      .map((element) => element._id);
+    if (previous && previous.revision > args.observedRevision) {
+      throw planModelError("CONFLICT", "A newer plan version exists");
+    }
+    if (unseen.length > 0) {
+      throw planModelError(
+        "CONFLICT",
+        "Elements changed after the plan was opened; reload before saving",
+        { staleAgreedElementIds: unseen },
+      );
+    }
+  }
   const revision = await allocateRevision(ctx, args.ownerId);
   const compiledThroughRevision = args.compiledThroughRevision ?? revision - 1;
+  if (
+    !Number.isSafeInteger(compiledThroughRevision) ||
+    compiledThroughRevision < 0 ||
+    compiledThroughRevision > revision - 1
+  ) {
+    throw planModelError(
+      "VALIDATION",
+      `compiledThroughRevision must be an integer from 0 to ${revision - 1}`,
+    );
+  }
   if (
     previous &&
     compiledThroughRevision < previous.compiledThroughRevision
@@ -694,6 +726,7 @@ export async function draftPlanVersion(
     endorsed: args.endorsed,
     endorsedAt: args.endorsed ? now : undefined,
     endorsedBy: args.endorsed ? "user" : undefined,
+    endorsementActor: args.endorsed ? args.actor : undefined,
     episodeId: episode._id,
     operationId: args.operationId,
     ownerId: args.ownerId,
@@ -725,6 +758,14 @@ export async function endorsePlanVersion(
     versionNumber: number;
   },
 ): Promise<Doc<"planVersions">> {
+  // Only the user (in the app) or the counterpart (relaying the user's words
+  // in conversation) can record endorsement. A migration agent never can.
+  if (args.actor !== "user" && args.actor !== "counterpart") {
+    throw planModelError(
+      "VALIDATION",
+      `Actor ${args.actor} cannot endorse a plan version`,
+    );
+  }
   const episode = await getOwnedEpisode(ctx, args.ownerId, args.episodeId);
   const latest = await latestPlanVersion(ctx, args.ownerId, episode._id);
   if (!latest) throw planModelError("NOT_FOUND", "No plan version to endorse");
@@ -740,8 +781,7 @@ export async function endorsePlanVersion(
   ).filter(
     (element) =>
       element.status === "agreed" &&
-      Math.max(element.revision, element.statusRevision) >
-        latest.compiledThroughRevision,
+      effectiveRevision(element) > latest.compiledThroughRevision,
   );
   if (agreedAfterDraft.length > 0) {
     const ids = agreedAfterDraft.map((element) => element._id);
@@ -757,6 +797,7 @@ export async function endorsePlanVersion(
     endorsed: true,
     endorsedAt: now,
     endorsedBy: "user",
+    endorsementActor: args.actor,
   });
   await ctx.db.patch(episode._id, {
     currentPlanVersionId: latest._id,

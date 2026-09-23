@@ -101,6 +101,7 @@ export default function ThreadPageClient({
           </div>
         </div>
         <Button
+          variant="secondary"
           dataTestId={THREAD_PAGE_TEST_IDS.openEpisodeButton}
           isLoading={isOpening}
           onClick={() => void handleOpenEpisode()}

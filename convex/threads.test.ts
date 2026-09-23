@@ -14,6 +14,7 @@ import {
   recordElements,
   setElementStatus,
   shelveEpisode,
+  syncTradeEpisodeLink,
   withOperation,
 } from "./lib/planWrites";
 import { resolveEpisode } from "./lib/planReads";
@@ -187,6 +188,16 @@ describe("instrument threads and episodes", () => {
     const closed = (await t.run((ctx) => ctx.db.get(episodeId)))!;
     expect(closed.lifecycle).toBe("closed");
     expect(closed.closedAt).toBe(11);
+
+    // Correcting the closing fill never reopens the closed episode.
+    const closingSell = (await t.run((ctx) => ctx.db.query("trades").collect())).find(
+      (trade) => trade.episodeId === episodeId && trade.side === "sell",
+    )!;
+    await asOwner(t).mutation(api.trades.updateTrade, {
+      quantity: 19,
+      tradeId: closingSell._id,
+    });
+    expect((await t.run((ctx) => ctx.db.get(episodeId)))!.lifecycle).toBe("closed");
 
     // A late fill dated inside the closed episode's span stays unlinked.
     const backdated = await insertTrade({ date: 10, quantity: 1, side: "buy", ticker: "NVDA" });
@@ -510,6 +521,24 @@ describe("instrument threads and episodes", () => {
         }),
       ),
     ).rejects.toMatchObject({ data: { code: "CONFLICT" } });
+    await expect(
+      t.run((ctx) =>
+        endorsePlanVersion(ctx, { actor: "agent", episodeId, ownerId, versionNumber: 1 }),
+      ),
+    ).rejects.toMatchObject({ data: { code: "VALIDATION" } });
+    await expect(
+      t.run((ctx) =>
+        draftPlanVersion(ctx, {
+          actor: "counterpart",
+          compiledThroughRevision: 1_000_000,
+          endorsed: false,
+          episodeId,
+          ownerId,
+          sections: emptyPlanSections(),
+          source: "conversation",
+        }),
+      ),
+    ).rejects.toMatchObject({ data: { code: "VALIDATION" } });
     const endorsed = await t.run((ctx) =>
       endorsePlanVersion(ctx, {
         actor: "counterpart",
@@ -519,6 +548,7 @@ describe("instrument threads and episodes", () => {
       }),
     );
     expect(endorsed.endorsedBy).toBe("user");
+    expect(endorsed.endorsementActor).toBe("counterpart");
     expect((await t.run((ctx) => ctx.db.get(episodeId)))!.lifecycle).toBe(
       "watching",
     );
@@ -577,14 +607,35 @@ describe("instrument threads and episodes", () => {
       data: { code: "CONFLICT", details: { staleAgreedElementIds: expect.any(Array) } },
     });
 
-    // A user edit in the app becomes a new endorsed version.
-    const edited = await asOwner(t).mutation(api.threads.savePlanVersionFromApp, {
+    // A user edit in the app becomes a new endorsed version, but only when
+    // it was opened from the latest version and has seen every change.
+    resolved = await t.run(async (ctx) =>
+      resolveEpisode(ctx, (await ctx.db.get(episodeId))!),
+    );
+    const stale = asOwner(t).mutation(api.threads.savePlanVersionFromApp, {
+      baseVersionNumber: 1,
       episodeId,
+      observedRevision: resolved.latestRevision,
+      sections: emptyPlanSections(),
+    });
+    await expect(stale).rejects.toMatchObject({ data: { code: "CONFLICT" } });
+    const unseen = asOwner(t).mutation(api.threads.savePlanVersionFromApp, {
+      baseVersionNumber: 2,
+      episodeId,
+      observedRevision: 1,
+      sections: emptyPlanSections(),
+    });
+    await expect(unseen).rejects.toMatchObject({ data: { code: "CONFLICT" } });
+    const edited = await asOwner(t).mutation(api.threads.savePlanVersionFromApp, {
+      baseVersionNumber: 2,
+      episodeId,
+      observedRevision: resolved.latestRevision,
       sections: { ...emptyPlanSections(), stop: [{ text: "Stop moved to $1,430", asOf: "2026-09-15" }] },
     });
     expect(edited.versionNumber).toBe(3);
     expect(edited.endorsed).toBe(true);
     expect(edited.draftedBy).toBe("user");
+    expect(edited.endorsementActor).toBe("user");
     resolved = await t.run(async (ctx) =>
       resolveEpisode(ctx, (await ctx.db.get(episodeId))!),
     );
@@ -666,5 +717,42 @@ describe("instrument threads and episodes", () => {
     expect(resolved.campaignRules.exempted.map((rule) => rule.statement)).toEqual([
       "Adds require SMH confirmation",
     ]);
+  });
+
+  it("keeps deliberately unlinked fills unlinked on backfill reruns and orders bulk links by date", async () => {
+    const swing = await insertPortfolio();
+    const buy = await insertTrade({ date: 100, portfolioId: swing, quantity: 5, side: "buy", ticker: "TSM" });
+    const sell = await insertTrade({ date: 200, portfolioId: swing, quantity: 5, side: "sell", ticker: "TSM" });
+    await t.run((ctx) => syncTradeEpisodeLink(ctx, buy));
+    await t.run((ctx) => syncTradeEpisodeLink(ctx, sell));
+    // A late fill inside the closed span stays unlinked...
+    const late = await insertTrade({ date: 150, portfolioId: swing, quantity: 1, side: "buy", ticker: "TSM" });
+    await t.run((ctx) => syncTradeEpisodeLink(ctx, late));
+    expect((await t.run((ctx) => ctx.db.get(late)))!.episodeId).toBeUndefined();
+    // ...and a backfill rerun does not turn it into a phantom episode.
+    const rerun = await t.mutation(internal.threads.backfillThreadsAndEpisodes, { ownerId });
+    expect(rerun.episodesCreated).toBe(0);
+    expect((await t.run((ctx) => ctx.db.get(late)))!.episodeId).toBeUndefined();
+
+    // Bulk assignment links oldest fills first regardless of selection order.
+    const laterBuy = await insertTrade({ date: 300, quantity: 2, side: "buy", ticker: "AMD" });
+    const laterSell = await insertTrade({ date: 400, quantity: 2, side: "sell", ticker: "AMD" });
+    const result = await asOwner(t).mutation(api.trades.bulkUpdateTrades, {
+      portfolioId: swing,
+      tradeIds: [laterSell, laterBuy],
+    });
+    expect(result).toEqual({ errors: [], updated: 2 });
+    const amdBuy = (await t.run((ctx) => ctx.db.get(laterBuy)))!;
+    const amdSell = (await t.run((ctx) => ctx.db.get(laterSell)))!;
+    expect(amdBuy.episodeId).toBeDefined();
+    expect(amdSell.episodeId).toBe(amdBuy.episodeId);
+    expect((await t.run((ctx) => ctx.db.get(amdBuy.episodeId!)))!.lifecycle).toBe("closed");
+
+    // Every traded ticker has a thread, even one whose fills stay unlinked.
+    const orphan = await insertTrade({ date: 500, quantity: 1, side: "buy", ticker: "ORPH" });
+    await t.run((ctx) => syncTradeEpisodeLink(ctx, orphan));
+    expect(
+      await asOwner(t).query(api.threads.getThreadPage, { ticker: "ORPH" }),
+    ).not.toBeNull();
   });
 });

@@ -22,7 +22,7 @@ Existing tables gained: `campaigns.benchmarkThreadId` and `campaigns.linkedThrea
 
 ### Actor, author, source, endorser
 
-Every write records who authored the statement (`author`: user or counterpart), who performed the write (`actor`: user, counterpart, agent, system), and which channel produced it (`source`: conversation, app, migration, trade_history). Endorsement is recorded only on plan versions and is always `endorsedBy: "user"`; the actor who relayed it is separate. A migration agent's writes carry `actor: "agent"` and can never endorse.
+Every write records who authored the statement (`author`: user or counterpart), who performed the write (`actor`: user, counterpart, agent, system), and which channel produced it (`source`: conversation, app, migration, trade_history). Endorsement is recorded only on plan versions and is always `endorsedBy: "user"`; `endorsementActor` records who relayed it (the user in the app, the counterpart in conversation). Only those two actors may endorse; a migration agent's writes carry `actor: "agent"` and are refused as endorsements.
 
 ### Element value shape
 
@@ -51,13 +51,15 @@ Status moves are one-way: `proposed → agreed`, `proposed → dropped`, and `ag
 - otherwise, an endorsed plan version or an agreed level-bearing element (`kind: "entry"`, a stop, or a per-share dollar value): `watching`
 - otherwise: `idea`
 
-Fills win. A closed episode never reopens; a later fill opens a new episode. Shelving (`shelvedAt`, with `shelvedBy` and `shelvedSource`) is a disposition, not a lifecycle state, allowed only on open episodes with no fills, and cleared automatically if a fill arrives.
+Fills win. Closed is terminal: a corrected or moved fill never reopens a closed episode, and a later fill opens a new episode. Shelving (`shelvedAt`, with `shelvedBy` and `shelvedSource`) is a disposition, not a lifecycle state, allowed only on open episodes with no fills, and cleared automatically if a fill arrives.
 
 ### Trade linking
 
 `syncTradeEpisodeLink` runs after every trade insert or update (manual creation, inbox acceptance, bulk portfolio assignment, seed). A trade with a portfolio attaches to the open episode on its thread that matches the portfolio (an episode with no portfolio yet is adopted) when its execution date is at or after that episode's opened date, or opens a bare episode. Two cases stay unlinked rather than fabricating history: trades without a portfolio, and late fills dated before the open episode began or inside a closed episode's span. The counterpart sorts those in conversation.
 
-`internal.threads.backfillThreadsAndEpisodes` (also exposed as `api.threads.backfillThreadsAndEpisodesForCurrentUser`) creates threads for every traded or note-tagged ticker and one bare episode per flat-to-flat run per portfolio and direction. An open run with no flat point, such as a position held for two years, becomes one active bare episode. It is idempotent. Run it once after deploy.
+`internal.threads.backfillThreadsAndEpisodes` (also exposed as `api.threads.backfillThreadsAndEpisodesForCurrentUser`) creates threads for every traded or note-tagged ticker and one bare episode per flat-to-flat run per portfolio and direction. An open run with no flat point, such as a position held for two years, becomes one active bare episode. It is idempotent, and it skips any ticker, portfolio, and direction group that already has linked fills, so a fill deliberately left unlinked by live linking is never turned into a phantom episode on a rerun. Run it once after deploy.
+
+Every trade write also ensures the ticker's thread exists, whether or not the fill can be placed in an episode, and the counterpart's ticker-tagged note capture does the same.
 
 ## Counterpart Tool Contract
 
@@ -72,9 +74,14 @@ All routes live under `/internal/counterpart/` in `convex/http.ts`, use the exis
 | `desk-context` | `{}` | every live episode grouped by campaign, with checkpoint key lines and agreed or proposed items since the checkpoint; episodes outside any campaign appear in a final "Not in a campaign" group; bare episodes appear with position only and no counts of anything owed |
 | `list-campaigns` | `{}` | campaigns with benchmark ticker, linked tickers, and campaign elements |
 
-A resolved episode contains: `episode` (summary with lifecycle, portfolio, campaign, exemptions), `checkpoint` (latest endorsed version or null), `draft` (latest unendorsed version newer than the checkpoint or null), `itemsSinceCheckpoint` (all elements after `compiledThroughRevision`, in revision order, with status and author), `openProposals` (every proposed element, before and after the checkpoint, in revision order, each with `beforeCheckpoint`), `history` (elements at or before the checkpoint, last 50, with `total` and `truncated`), `campaignRules` (`applicable` and `exempted`), `trades`, `position` (derived from linked fills), `notes`, and `planVersions`.
+A resolved episode contains: `episode` (summary with lifecycle, portfolio, campaign, exemptions), `checkpoint` (latest endorsed version or null), `draft` (latest unendorsed version newer than the checkpoint or null), `itemsSinceCheckpoint` (every element created or changed after `compiledThroughRevision`, ordered by the revision of its last change, so agreeing or dropping an older proposal shows as a delta item), `openProposals` (every proposed element, before and after the checkpoint, each with `beforeCheckpoint`), `history` (elements created at or before the checkpoint, last 50, with `total` and `truncated`), `campaignRules` (`applicable` and `exempted`), `trades`, `position` (derived from linked fills), `notes`, `planVersions` (newest 200, with `planVersionsTruncated`), and `latestRevision` (the highest revision touching the episode, for edit conflict checks).
 
-Every bounded list carries an explicit `truncated` flag so an omitted item can never be mistaken for a dropped one.
+Every bounded list carries an explicit `truncated` flag so an omitted item can never be mistaken for a dropped one. Two continuation reads exist for what the bounded episode read leaves out:
+
+| Route | Body | Returns |
+| --- | --- | --- |
+| `episode-elements` | `{ episodeId, cursor?, numItems? }` | one page of the episode's elements, oldest first, with `nextCursor` and `hasMore` |
+| `plan-version` | `{ episodeId, versionNumber }` | one historical version with its sections |
 
 ### Writes
 
@@ -85,8 +92,8 @@ All writes accept an optional `operationId`. A retry with the same id returns th
 | `open-episode` | `{ ticker, portfolioId?, campaignId?, actor, source?, operationId? }` | creates the thread if needed |
 | `record-elements` | `{ episodeId \| campaignId, elements: [{ statement, status: proposed \| agreed, author, kind?, asOf?, noteId?, supersedes?, value? }], actor, source?, operationId? }` | up to 50 per call; `supersedes` marks the older element `superseded`, and superseding an element that is no longer open is a `CONFLICT` |
 | `set-element-status` | `{ elementId, status: agreed \| dropped, evidence?, actor, operationId? }` | only `proposed → agreed`, `proposed → dropped`, `agreed → dropped`; anything else is a `CONFLICT`; `dropped` requires `evidence` |
-| `draft-plan-version` | `{ episodeId, sections, compiledThroughRevision?, actor, source?, operationId? }` | `compiledThroughRevision` defaults to the latest revision; moving it backwards is a `CONFLICT` |
-| `endorse-plan-version` | `{ episodeId, versionNumber, actor, operationId? }` | only the latest version can be endorsed, and only if no element was agreed after its `compiledThroughRevision`; otherwise `CONFLICT` with `details.staleAgreedElementIds` so the counterpart can redraft |
+| `draft-plan-version` | `{ episodeId, sections, compiledThroughRevision?, actor, source?, operationId? }` | `compiledThroughRevision` defaults to the latest revision and must be between 0 and that revision; moving it backwards from the previous version is a `CONFLICT` |
+| `endorse-plan-version` | `{ episodeId, versionNumber, actor, operationId? }` | actor must be `user` or `counterpart`; only the latest version can be endorsed, and only if no element was agreed after its `compiledThroughRevision`; otherwise `CONFLICT` with `details.staleAgreedElementIds` so the counterpart can redraft |
 | `set-episode-campaign` | `{ episodeId, campaignId \| null, exemptedCampaignElementIds?, operationId? }` | links the thread to the campaign as a side effect |
 | `shelve-episode` | `{ episodeId, shelved?, actor, source?, operationId? }` | refused on closed episodes and on episodes with fills |
 | `upsert-campaign` | `{ campaignId?, name?, thesis?, benchmarkTicker?, linkedTickers?, actor, operationId? }` | light campaigns only; no plan snapshots |
@@ -103,13 +110,19 @@ valuation: {
 }
 ```
 
-The two bases are never blended. Positions the broker statement did not price appear in `missingMarks` instead of being valued at zero.
+The two bases are never blended. Positions the broker statement did not price appear in `missingMarks` instead of being valued at zero; positions in a currency other than the account's base currency are listed in `unsupportedCurrencyMarks` and left out of the sum; a statement with no base cash row reports `missingCash: true`; portfolios with no valuation row are listed in `missingPortfolios`. Any of these makes `completeness` partial. The broker `currency` is the account's single cash currency, or null when the account holds several.
 
 ## App Surface
 
 - `/desk`: every live episode, grouped by campaign, one row each with position, checkpoint key lines, and items since. Default landing page for a signed-in user.
 - `/threads` and `/threads/<ticker>`: thread index and the thread page with live episodes, checkpoint and draft, items since the checkpoint, open proposals, campaign rules, history, trades, and thread notes. Element and plan edits are made here, attributed to the user; a plan edit creates a new endorsed version.
 - Trade Plans left the sidebar. The routes remain reachable by URL.
+- App edits (elements, statuses, plan saves, endorsements) are refused on closed episodes. A plan save sends the version it was opened from and the latest revision it saw; a save over decisions recorded in the meantime is a `CONFLICT` rather than a silent overwrite.
+
+## Follow-ups
+
+- Shared notes component: existing notes should render before the composer, with the composer collapsed behind a button, consistent with the add-element treatment on the thread page. Out of scope here because the component is shared by campaigns and trade plans.
+- `tests/e2e/smoke/trade-plans.spec.ts` "accepts seeded inbox trades locally" fails on `main` as well: the trade plan detail page never rendered accepted trade rows. Retire or rewrite it with the trade plan routes.
 
 ## Out Of This Change
 

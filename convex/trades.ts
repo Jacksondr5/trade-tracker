@@ -425,24 +425,26 @@ export const bulkUpdateTrades = mutation({
         args.portfolioId === null ? undefined : args.portfolioId;
     }
 
-    let updated = 0;
+    // Validate first, then write. A failure while writing aborts the whole
+    // mutation so no trade is left patched but unlinked. Fills are processed
+    // oldest first so an entry never trails its own exit into a new episode.
     const errors: string[] = [];
-
+    const owned: Doc<"trades">[] = [];
     for (const tradeId of args.tradeIds) {
-      try {
-        const trade = await ctx.db.get(tradeId);
-        assertOwner(trade, ownerId, "Trade not found");
-        await ctx.db.patch(tradeId, { ...patch, ownerId });
-        await syncTradeEpisodeLink(ctx, tradeId);
-        updated++;
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Unknown error";
-        errors.push(`${tradeId}: ${message}`);
+      const trade = await ctx.db.get(tradeId);
+      if (!trade || trade.ownerId !== ownerId) {
+        errors.push(`${tradeId}: Trade not found`);
+        continue;
       }
+      owned.push(trade);
+    }
+    owned.sort((a, b) => a.date - b.date || a._creationTime - b._creationTime);
+    for (const trade of owned) {
+      await ctx.db.patch(trade._id, { ...patch, ownerId });
+      await syncTradeEpisodeLink(ctx, trade._id);
     }
 
-    return { updated, errors };
+    return { updated: owned.length, errors };
   },
 });
 

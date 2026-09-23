@@ -20,6 +20,7 @@ import {
   buildValuationSnapshot,
   valuationSnapshotValidator,
 } from "./lib/valuationSnapshot";
+import { ensureThread } from "./lib/planWrites";
 import { parseIbkrEasternTimestamp } from "../shared/brokerage/ibkr-flex/time";
 
 const RECENT_BUSINESS_DAYS = 5;
@@ -705,10 +706,12 @@ export const getDailyContext = internalQuery({
       }),
     ),
     openPositions: v.array(positionValidator),
+    recentlyResolvedReconciliation: v.array(reconciliationIssueValidator),
     sync: syncSummaryValidator,
     syncStatus: syncStatusValidator,
     todayCheckIns: v.array(checkInHistoryValidator),
     undiscussedFills: v.array(fillValidator),
+    valuation: valuationSnapshotValidator,
   }),
   handler: async (ctx, args) => {
     const { endDate, startDate } = getRecentBusinessDateRange(
@@ -804,11 +807,21 @@ export const getDailyContext = internalQuery({
         a.ticker.localeCompare(b.ticker),
       ),
       openPositions,
+      recentlyResolvedReconciliation:
+        await getRecentlyResolvedReconciliationIssues(
+          ctx,
+          args.ownerId,
+          args.now,
+        ),
       sync: syncSummaryFromRuns(
         latestActivityRun,
         await getLatestSuccessfulActivityRun(ctx, args.ownerId),
       ),
       syncStatus: syncStatusFromRun(latestActivityRun ?? undefined),
+      valuation: await buildValuationSnapshot(ctx, {
+        ownerId: args.ownerId,
+        todayDate: today,
+      }),
       todayCheckIns: todayCheckIns.map((checkIn) => ({
         checkInId: checkIn._id,
         deliveredAt: checkIn.deliveredAt ?? null,
@@ -1371,11 +1384,14 @@ export const addNote = internalMutation({
   },
   returns: v.id("notes"),
   handler: async (ctx, args) => {
+    const ticker = normalizeOptionalTicker(args.ticker);
+    // A ticker-tagged note is a thread note; make sure the thread exists.
+    if (ticker) await ensureThread(ctx, args.ownerId, ticker, "counterpart");
     return await ctx.db.insert("notes", {
       content: trimRequiredContent(args.content),
       noteDate: args.noteDate,
       ownerId: args.ownerId,
-      ticker: normalizeOptionalTicker(args.ticker),
+      ticker,
     });
   },
 });

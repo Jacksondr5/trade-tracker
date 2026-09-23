@@ -496,6 +496,24 @@ export function validateEpisodeContextBody(body: JsonObject) {
   return { episodeId: requireString(body, "episodeId") };
 }
 
+export function validateEpisodeElementsBody(body: JsonObject) {
+  assertExactKeys(body, ["episodeId", "cursor", "numItems"]);
+  return {
+    cursor: optionalCursor(body),
+    episodeId: requireString(body, "episodeId"),
+    numItems: optionalInteger(body, "numItems", 1, 200, 50),
+  };
+}
+
+export function validatePlanVersionBody(body: JsonObject) {
+  assertExactKeys(body, ["episodeId", "versionNumber"]);
+  const versionNumber = requireNumber(body, "versionNumber");
+  if (!Number.isInteger(versionNumber) || versionNumber < 1) {
+    throw new JsonValidationError("versionNumber must be a positive integer");
+  }
+  return { episodeId: requireString(body, "episodeId"), versionNumber };
+}
+
 export function validateOpenEpisodeBody(body: JsonObject) {
   assertExactKeys(body, [
     "ticker",
@@ -1010,6 +1028,47 @@ http.route({
   }),
   method: "POST",
   path: "/internal/counterpart/desk-context",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
+      const args = validateEpisodeElementsBody(body);
+      const data = await ctx.runQuery(
+        internal.counterpartPlanning.listEpisodeElementsForCounterpart,
+        { ...args, ownerId },
+      );
+      if (!data) {
+        throw new HttpRequestError("NOT_FOUND", "Episode not found", 404, false);
+      }
+      return successResponse(data);
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/episode-elements",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
+      const args = validatePlanVersionBody(body);
+      const version = await ctx.runQuery(
+        internal.counterpartPlanning.getPlanVersionForCounterpart,
+        { ...args, ownerId },
+      );
+      if (!version) {
+        throw new HttpRequestError(
+          "NOT_FOUND",
+          "Plan version not found",
+          404,
+          false,
+        );
+      }
+      return successResponse({ version });
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/plan-version",
 });
 
 http.route({

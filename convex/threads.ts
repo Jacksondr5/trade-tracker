@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   internalMutation,
   mutation,
@@ -35,12 +35,30 @@ import {
   draftPlanVersion,
   endorsePlanVersion,
   ensureThread,
+  getOwnedEpisode,
+  MAX_THREAD_EPISODES,
   openEpisode,
+  planModelError,
   recordElements,
   recomputeEpisodeLifecycle,
   setElementStatus,
   shelveEpisode,
 } from "./lib/planWrites";
+
+const MAX_BACKFILL_NOTES = 20_000;
+
+/** App edits stop when an episode closes; closed history is read-only. */
+async function assertEpisodeEditableFromApp(
+  ctx: MutationCtx,
+  ownerId: string,
+  episodeId: Id<"episodes">,
+) {
+  const episode = await getOwnedEpisode(ctx, ownerId, episodeId);
+  if (episode.lifecycle === "closed") {
+    throw planModelError("CONFLICT", "A closed episode is read-only");
+  }
+  return episode;
+}
 
 const threadListItemValidator = threadSummaryValidator.extend({
   activeEpisodeCount: v.number(),
@@ -68,7 +86,12 @@ export const listThreads = query({
           .withIndex("by_owner_threadId", (q) =>
             q.eq("ownerId", ownerId).eq("threadId", thread._id),
           )
-          .collect();
+          .take(MAX_THREAD_EPISODES + 1);
+        if (episodes.length > MAX_THREAD_EPISODES) {
+          throw new Error(
+            `Thread episode count exceeds the ${MAX_THREAD_EPISODES}-episode limit`,
+          );
+        }
         return {
           activeEpisodeCount: episodes.filter(
             (episode) => episode.lifecycle === "active",
@@ -131,6 +154,7 @@ export const recordElementFromApp = mutation({
   returns: elementViewValidator,
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
+    await assertEpisodeEditableFromApp(ctx, ownerId, args.episodeId);
     const [elementId] = await recordElements(ctx, {
       actor: "user",
       elements: [
@@ -161,6 +185,13 @@ export const setElementStatusFromApp = mutation({
   returns: elementViewValidator,
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
+    const element = await ctx.db.get(args.elementId);
+    if (!element || element.ownerId !== ownerId) {
+      throw planModelError("NOT_FOUND", "Element not found");
+    }
+    if (element.episodeId) {
+      await assertEpisodeEditableFromApp(ctx, ownerId, element.episodeId);
+    }
     return elementView(
       await setElementStatus(ctx, {
         actor: "user",
@@ -173,19 +204,28 @@ export const setElementStatusFromApp = mutation({
   },
 });
 
-/** A user edit to a plan produces a new endorsed version. */
+/**
+ * A user edit to a plan produces a new endorsed version. The editor sends the
+ * version it opened from and the latest revision it saw, so a save over
+ * decisions recorded in the meantime is refused instead of overwriting them.
+ */
 export const savePlanVersionFromApp = mutation({
   args: {
+    baseVersionNumber: v.union(v.number(), v.null()),
     episodeId: v.id("episodes"),
+    observedRevision: v.number(),
     sections: planSectionsValidator,
   },
   returns: planVersionViewValidator,
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
+    await assertEpisodeEditableFromApp(ctx, ownerId, args.episodeId);
     const version = await draftPlanVersion(ctx, {
       actor: "user",
+      baseVersionNumber: args.baseVersionNumber,
       endorsed: true,
       episodeId: args.episodeId,
+      observedRevision: args.observedRevision,
       ownerId,
       sections: args.sections,
       source: "app",
@@ -199,6 +239,7 @@ export const endorsePlanVersionFromApp = mutation({
   returns: planVersionViewValidator,
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
+    await assertEpisodeEditableFromApp(ctx, ownerId, args.episodeId);
     return planVersionView(
       await endorsePlanVersion(ctx, {
         actor: "user",
@@ -287,7 +328,12 @@ export async function backfillThreadsAndEpisodesForOwner(
   const notes = await ctx.db
     .query("notes")
     .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-    .collect();
+    .take(MAX_BACKFILL_NOTES + 1);
+  if (notes.length > MAX_BACKFILL_NOTES) {
+    throw new ConvexError(
+      `Backfill exceeds the ${MAX_BACKFILL_NOTES}-note limit`,
+    );
+  }
 
   const countThreads = async () =>
     (
@@ -312,11 +358,29 @@ export async function backfillThreadsAndEpisodesForOwner(
   let episodesCreated = 0;
   let tradesLinked = 0;
   let tradesWithoutPortfolio = 0;
+  // Groups that already have an episode were handled by live linking; any
+  // fill still unlinked there was left unlinked on purpose (late or ambiguous)
+  // and must not be turned into a phantom episode on a rerun.
+  const linkedGroups = new Set(
+    trades
+      .filter((trade) => trade.episodeId !== undefined)
+      .map(
+        (trade) =>
+          `${trade.portfolioId}:${trade.ticker.toUpperCase()}:${trade.direction}`,
+      ),
+  );
   const unlinked = trades.filter((trade) => trade.episodeId === undefined);
   const byPortfolio = new Map<string, Doc<"trades">[]>();
   for (const trade of unlinked) {
     if (trade.portfolioId === undefined) {
       tradesWithoutPortfolio += 1;
+      continue;
+    }
+    if (
+      linkedGroups.has(
+        `${trade.portfolioId}:${trade.ticker.toUpperCase()}:${trade.direction}`,
+      )
+    ) {
       continue;
     }
     const key = `${trade.portfolioId}`;

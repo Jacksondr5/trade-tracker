@@ -91,6 +91,27 @@ export function formatElementValue(value: ElementValue): string {
   return `${amount} (${scope}, ${provenance}${stopKind})`;
 }
 
+const compactUsdFormatter = new Intl.NumberFormat("en-US", {
+  currency: "USD",
+  maximumFractionDigits: 2,
+  minimumFractionDigits: 0,
+  style: "currency",
+});
+
+/** Number only, no scope or provenance: "$240", "17 sh", "3%", "2.16x". */
+export function formatCompactValue(value: ElementValue): string {
+  switch (value.unit) {
+    case "usd":
+      return compactUsdFormatter.format(value.amount);
+    case "shares":
+      return `${numberFormatter.format(value.amount)} sh`;
+    case "percent":
+      return `${numberFormatter.format(value.amount)}%`;
+    case "ratio":
+      return `${numberFormatter.format(value.amount)}x`;
+  }
+}
+
 export function formatPosition(position: EpisodePosition): string {
   if (!position) return "Flat";
   return `${numberFormatter.format(position.netQuantity)} @ ${formatCurrency(position.averageCost)}`;

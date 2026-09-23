@@ -28,7 +28,10 @@ type Ctx = QueryCtx | MutationCtx;
 
 export const MAX_HISTORY_ELEMENTS = 50;
 export const MAX_NOTES_PER_SCOPE = 50;
+export const MAX_NOTES_SCAN = 500;
 export const MAX_LIVE_EPISODES = 300;
+export const MAX_EPISODE_SCAN = 1_000;
+export const MAX_PLAN_VERSIONS = 200;
 export const MAX_CAMPAIGN_ELEMENTS = 500;
 export const MAX_THREADS = 2_000;
 
@@ -107,6 +110,7 @@ export const planVersionViewValidator = v.object({
   endorsed: v.boolean(),
   endorsedAt: nullableNumber,
   endorsedBy: v.union(actorValidator, v.null()),
+  endorsementActor: v.union(actorValidator, v.null()),
   episodeId: v.id("episodes"),
   id: v.id("planVersions"),
   revision: v.number(),
@@ -122,6 +126,7 @@ export type PlanVersionView = {
   endorsed: boolean;
   endorsedAt: number | null;
   endorsedBy: Actor | null;
+  endorsementActor: Actor | null;
   episodeId: Id<"episodes">;
   id: Id<"planVersions">;
   revision: number;
@@ -138,6 +143,7 @@ export function planVersionView(version: Doc<"planVersions">): PlanVersionView {
     endorsed: version.endorsed,
     endorsedAt: version.endorsedAt ?? null,
     endorsedBy: version.endorsedBy ?? null,
+    endorsementActor: version.endorsementActor ?? null,
     episodeId: version.episodeId,
     id: version._id,
     revision: version.revision,
@@ -234,6 +240,8 @@ export const resolvedEpisodeValidator = v.object({
   episode: episodeSummaryValidator,
   history: boundedElementsValidator,
   itemsSinceCheckpoint: v.array(elementViewValidator),
+  /** Highest revision touching this episode; pass back as observedRevision. */
+  latestRevision: v.number(),
   notes: v.object({
     items: v.array(noteSummaryValidator),
     truncated: v.boolean(),
@@ -250,6 +258,7 @@ export const resolvedEpisodeValidator = v.object({
       versionNumber: v.number(),
     }),
   ),
+  planVersionsTruncated: v.boolean(),
   position: positionViewValidator,
   trades: v.array(linkedTradeViewValidator),
 });
@@ -261,6 +270,7 @@ export type ResolvedEpisode = {
   episode: EpisodeSummary;
   history: { items: ElementView[]; total: number; truncated: boolean };
   itemsSinceCheckpoint: ElementView[];
+  latestRevision: number;
   notes: {
     items: Array<{
       content: string;
@@ -278,6 +288,7 @@ export type ResolvedEpisode = {
     id: Id<"planVersions">;
     versionNumber: number;
   }>;
+  planVersionsTruncated: boolean;
   position: {
     averageCost: number;
     direction: "long" | "short";
@@ -430,8 +441,8 @@ export async function resolveEpisode(
       .withIndex("by_owner_episodeId_versionNumber", (q) =>
         q.eq("ownerId", ownerId).eq("episodeId", episode._id),
       )
-      .order("asc")
-      .collect(),
+      .order("desc")
+      .take(MAX_PLAN_VERSIONS + 1),
     takeBounded(
       ctx.db
         .query("trades")
@@ -450,9 +461,18 @@ export async function resolveEpisode(
       .take(MAX_NOTES_PER_SCOPE + 1),
   ]);
 
-  const checkpoint =
-    [...versions].reverse().find((version) => version.endorsed) ?? null;
-  const latest = versions[versions.length - 1] ?? null;
+  // Newest first from the index; the current checkpoint and draft are always
+  // within the bounded window because they are the newest versions.
+  const planVersionsTruncated = versions.length > MAX_PLAN_VERSIONS;
+  const newestFirst = versions.slice(0, MAX_PLAN_VERSIONS);
+  const checkpoint = newestFirst.find((version) => version.endorsed) ?? null;
+  const latest = newestFirst[0] ?? null;
+  const oldestFirst = [...newestFirst].reverse();
+  const latestRevision = Math.max(
+    0,
+    ...elements.map((element) => Math.max(element.revision, element.statusRevision)),
+    ...newestFirst.map((version) => version.revision),
+  );
   const draft =
     latest && !latest.endorsed && latest._id !== checkpoint?._id ? latest : null;
 
@@ -493,6 +513,7 @@ export async function resolveEpisode(
       truncated: partition.history.length > historyItems.length,
     },
     itemsSinceCheckpoint: partition.itemsSinceCheckpoint.map(elementView),
+    latestRevision,
     notes: {
       items: notes.slice(0, MAX_NOTES_PER_SCOPE).map((note) => ({
         content: note.content,
@@ -506,13 +527,14 @@ export async function resolveEpisode(
       ...elementView(element),
       beforeCheckpoint: element.beforeCheckpoint,
     })),
-    planVersions: versions.map((version) => ({
+    planVersions: oldestFirst.map((version) => ({
       compiledThroughRevision: version.compiledThroughRevision,
       createdAt: version.createdAt,
       endorsed: version.endorsed,
       id: version._id,
       versionNumber: version.versionNumber,
     })),
+    planVersionsTruncated,
     position: positionFromTrades(trades),
     trades: [...trades]
       .sort((a, b) => a.date - b.date || a._creationTime - b._creationTime)
@@ -611,6 +633,8 @@ export async function listThreadNotes(
 ): Promise<{ items: Doc<"notes">[]; truncated: boolean }> {
   // The probe's ticker tag remains the thread key, so ticker-tagged notes
   // and explicitly thread-attached notes both belong here.
+  // Episode and campaign notes also carry the ticker, so scan a wider window
+  // before filtering and report truncation whenever the scan hit its cap.
   const [byTicker, byThread] = await Promise.all([
     ctx.db
       .query("notes")
@@ -618,15 +642,17 @@ export async function listThreadNotes(
         q.eq("ownerId", thread.ownerId).eq("ticker", thread.ticker),
       )
       .order("desc")
-      .take(MAX_NOTES_PER_SCOPE + 1),
+      .take(MAX_NOTES_SCAN + 1),
     ctx.db
       .query("notes")
       .withIndex("by_owner_threadId_noteDate", (q) =>
         q.eq("ownerId", thread.ownerId).eq("threadId", thread._id),
       )
       .order("desc")
-      .take(MAX_NOTES_PER_SCOPE + 1),
+      .take(MAX_NOTES_SCAN + 1),
   ]);
+  const scanHitCap =
+    byTicker.length > MAX_NOTES_SCAN || byThread.length > MAX_NOTES_SCAN;
   const seen = new Set<Id<"notes">>();
   const merged: Doc<"notes">[] = [];
   for (const note of [...byTicker, ...byThread]) {
@@ -638,7 +664,7 @@ export async function listThreadNotes(
   merged.sort((a, b) => b.noteDate - a.noteDate || b._creationTime - a._creationTime);
   return {
     items: merged.slice(0, MAX_NOTES_PER_SCOPE),
-    truncated: merged.length > MAX_NOTES_PER_SCOPE,
+    truncated: scanHitCap || merged.length > MAX_NOTES_PER_SCOPE,
   };
 }
 
@@ -780,17 +806,19 @@ async function latestCloseForTicker(ctx: Ctx, ownerId: string, ticker: string) {
 
 export async function buildDesk(ctx: Ctx, ownerId: string) {
   const episodes: Doc<"episodes">[] = [];
+  let scanHitCap = false;
   for (const lifecycle of ["active", "watching", "idea"] as const) {
     const rows = await ctx.db
       .query("episodes")
       .withIndex("by_owner_lifecycle", (q) =>
         q.eq("ownerId", ownerId).eq("lifecycle", lifecycle),
       )
-      .take(MAX_LIVE_EPISODES + 1);
-    episodes.push(...rows);
+      .take(MAX_EPISODE_SCAN + 1);
+    if (rows.length > MAX_EPISODE_SCAN) scanHitCap = true;
+    episodes.push(...rows.slice(0, MAX_EPISODE_SCAN));
   }
   const live = episodes.filter((episode) => episode.shelvedAt === undefined);
-  const truncated = live.length > MAX_LIVE_EPISODES;
+  const truncated = scanHitCap || live.length > MAX_LIVE_EPISODES;
   const bounded = live.slice(0, MAX_LIVE_EPISODES);
 
   const campaignIds = [
@@ -800,21 +828,9 @@ export async function buildDesk(ctx: Ctx, ownerId: string) {
         .filter((id): id is Id<"campaigns"> => id !== undefined),
     ),
   ];
-  const portfolioIds = [
-    ...new Set(
-      bounded
-        .map((episode) => episode.portfolioId)
-        .filter((id): id is Id<"portfolios"> => id !== undefined),
-    ),
-  ];
   const campaigns = new Map(
     await Promise.all(
       campaignIds.map(async (id) => [id, await ctx.db.get(id)] as const),
-    ),
-  );
-  const portfolios = new Map(
-    await Promise.all(
-      portfolioIds.map(async (id) => [id, await ctx.db.get(id)] as const),
     ),
   );
 
@@ -833,7 +849,7 @@ export async function buildDesk(ctx: Ctx, ownerId: string) {
             }
           : null,
         draftVersionNumber: resolved.draft?.versionNumber ?? null,
-        episode: await episodeSummary(ctx, episode, { campaigns, portfolios }),
+        episode: resolved.episode,
         itemsSinceCheckpoint: resolved.itemsSinceCheckpoint.filter(
           (item) => item.status === "agreed" || item.status === "proposed",
         ),

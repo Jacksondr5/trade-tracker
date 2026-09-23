@@ -525,7 +525,10 @@ export default defineSchema({
     draftedBy: actorValidator,
     endorsed: v.boolean(),
     endorsedAt: v.optional(v.number()),
+    // The endorser is always the user; the endorsement actor records who
+    // relayed it (the user in the app, the counterpart in conversation).
     endorsedBy: v.optional(actorValidator),
+    endorsementActor: v.optional(actorValidator),
     episodeId: v.id("episodes"),
     operationId: v.optional(v.string()),
     ownerId: v.string(),

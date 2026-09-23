@@ -1,19 +1,19 @@
 import { expect, test } from "@playwright/test";
 import { waitForAuthenticatedApp } from "../helpers/app";
+import { runConvexFunction } from "../helpers/convex";
 import {
   APP_PAGE_TITLES,
-  getAnyElementRow,
-  getAnyEpisodeCard,
   getElementKindInput,
-  getEpisodeAddElementToggle,
+  getElementRow,
   getElementStatementInput,
   getElementStatusSelect,
   getElementSubmitButton,
+  getEpisodeAddElementToggle,
+  getEpisodeCard,
   getPageTitle,
   getThreadOpenEpisodeButton,
   getThreadOpenSubmitButton,
   getThreadOpenTickerInput,
-  readEpisodeIdFromCard,
 } from "../helpers/selectors";
 
 const OPEN_THREAD_TICKER = "E2ETHRD";
@@ -42,9 +42,22 @@ test("open thread, start an episode, and add an element", async ({ page }) => {
   await expect(getPageTitle(page, "thread")).toHaveText(OPEN_THREAD_TICKER);
 
   await getThreadOpenEpisodeButton(page).click();
-  const card = getAnyEpisodeCard(page).first();
-  await expect(card).toBeVisible();
-  const episodeId = await readEpisodeIdFromCard(card);
+  await expect
+    .poll(
+      () =>
+        runConvexFunction<{ episodeIds: string[] }>(
+          "e2eSeed:getThreadEpisodeIds",
+          { ticker: OPEN_THREAD_TICKER },
+        ).episodeIds.length,
+    )
+    .toBe(1);
+  const { episodeIds } = runConvexFunction<{ episodeIds: string[] }>(
+    "e2eSeed:getThreadEpisodeIds",
+    { ticker: OPEN_THREAD_TICKER },
+  );
+  const [episodeId] = episodeIds;
+  if (!episodeId) throw new Error("Expected one episode on the new thread");
+  await expect(getEpisodeCard(page, episodeId)).toBeVisible();
 
   await getEpisodeAddElementToggle(page, episodeId).click();
   await getElementStatementInput(page, episodeId).fill("Enter on a breakout");
@@ -52,5 +65,20 @@ test("open thread, start an episode, and add an element", async ({ page }) => {
   await getElementKindInput(page, episodeId).fill("entry");
   await getElementSubmitButton(page, episodeId).click();
 
-  await expect(getAnyElementRow(page).first()).toBeVisible();
+  await expect
+    .poll(
+      () =>
+        runConvexFunction<{ elementIds: string[] }>(
+          "e2eSeed:getEpisodeElementIds",
+          { episodeId },
+        ).elementIds.length,
+    )
+    .toBe(1);
+  const { elementIds } = runConvexFunction<{ elementIds: string[] }>(
+    "e2eSeed:getEpisodeElementIds",
+    { episodeId },
+  );
+  const [elementId] = elementIds;
+  if (!elementId) throw new Error("Expected one element on the new episode");
+  await expect(getElementRow(page, elementId)).toBeVisible();
 });

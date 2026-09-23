@@ -1,7 +1,9 @@
 "use client";
 
 import { useMutation } from "convex/react";
+import { ConvexError } from "convex/values";
 import { useState } from "react";
+import { z } from "zod";
 import { Alert, Button, useAppForm } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
@@ -16,6 +18,35 @@ import {
 
 type SectionKey = keyof PlanSections;
 type PlanFormValues = Record<SectionKey, string>;
+
+const MAX_LINES_PER_SECTION = 25;
+const MAX_LINE_LENGTH = 1000;
+
+function nonEmptyLines(value: string): string[] {
+  return value
+    .split("\n")
+    .map((text) => text.trim())
+    .filter((text) => text.length > 0);
+}
+
+const sectionTextSchema = z
+  .string()
+  .refine((value) => nonEmptyLines(value).length <= MAX_LINES_PER_SECTION, {
+    message: `At most ${MAX_LINES_PER_SECTION} lines`,
+  })
+  .refine(
+    (value) => nonEmptyLines(value).every((line) => line.length <= MAX_LINE_LENGTH),
+    { message: `Each line must be ${MAX_LINE_LENGTH} characters or fewer` },
+  );
+
+const planFormSchema = z.object({
+  entry: sectionTextSchema,
+  stop: sectionTextSchema,
+  targets: sectionTextSchema,
+  scenarios: sectionTextSchema,
+  structure: sectionTextSchema,
+  size: sectionTextSchema,
+});
 
 function toFormValues(sections: PlanSections | null): PlanFormValues {
   const values = {} as PlanFormValues;
@@ -33,11 +64,7 @@ export function toPlanSections(
   const sections = {} as PlanSections;
   for (const key of PLAN_SECTION_ORDER) {
     const existing = checkpoint?.[key] ?? [];
-    sections[key] = values[key]
-      .split("\n")
-      .map((text) => text.trim())
-      .filter((text) => text.length > 0)
-      .map((text): PlanLine => {
+    sections[key] = nonEmptyLines(values[key]).map((text): PlanLine => {
         const match = existing.find((line) => line.text === text);
         if (!match) return { text };
         const line: PlanLine = { text };
@@ -51,14 +78,29 @@ export function toPlanSections(
   return sections;
 }
 
+function isConflictError(error: unknown): boolean {
+  if (!(error instanceof ConvexError)) return false;
+  const data: unknown = error.data;
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "code" in data &&
+    data.code === "CONFLICT"
+  );
+}
+
 export function PlanEditForm({
+  baseVersionNumber,
   checkpoint,
   episodeId,
+  observedRevision,
   onCancel,
   onSaved,
 }: {
+  baseVersionNumber: number | null;
   checkpoint: PlanSections | null;
   episodeId: Id<"episodes">;
+  observedRevision: number;
   onCancel: () => void;
   onSaved: () => void;
 }) {
@@ -67,16 +109,37 @@ export function PlanEditForm({
 
   const form = useAppForm({
     defaultValues: toFormValues(checkpoint),
+    validators: {
+      onChange: ({ value }) => {
+        const result = planFormSchema.safeParse(value);
+        if (!result.success) {
+          return result.error.flatten().fieldErrors;
+        }
+        return undefined;
+      },
+    },
     onSubmit: async ({ value }) => {
       setError(null);
+      const parsed = planFormSchema.safeParse(value);
+      if (!parsed.success) return;
       try {
         await savePlanVersion({
+          baseVersionNumber,
           episodeId,
-          sections: toPlanSections(value, checkpoint),
+          observedRevision,
+          sections: toPlanSections(parsed.data, checkpoint),
         });
         onSaved();
       } catch (caught) {
-        setError(getMutationErrorMessage(caught, "Failed to save checkpoint"));
+        const message = getMutationErrorMessage(
+          caught,
+          "Failed to save checkpoint",
+        );
+        setError(
+          isConflictError(caught)
+            ? `${message} Reload the page to see the latest checkpoint.`
+            : message,
+        );
       }
     },
   });
@@ -95,7 +158,11 @@ export function PlanEditForm({
       <p className="text-sm text-olive-11">
         One line per row. Saving creates a new endorsed version.
       </p>
-      {error ? <Alert variant="error">{error}</Alert> : null}
+      {error ? (
+        <Alert variant="error" data-testid={`episode-plan-error-${episodeId}`}>
+          {error}
+        </Alert>
+      ) : null}
       <div className="grid gap-3 md:grid-cols-2">
         {PLAN_SECTION_ORDER.map((key) => (
           <form.AppField key={key} name={key}>

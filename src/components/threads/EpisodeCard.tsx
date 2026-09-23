@@ -2,7 +2,7 @@
 
 import { useMutation } from "convex/react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert, Badge, Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
@@ -117,6 +117,15 @@ export function EpisodeCard({
     resolved.trades.length === 0;
   // Closed episodes are read-only; shelved ones keep their controls.
   const isEditable = episode.lifecycle !== "closed";
+
+  // If the episode closes while an editor is open, close the editor.
+  useEffect(() => {
+    if (isEditable) return;
+    setEditingPlan(false);
+    setAddingElement(false);
+    setDroppingId(null);
+    setSupersedes(null);
+  }, [isEditable]);
 
   async function run(action: () => Promise<unknown>, fallback: string) {
     setError(null);
@@ -305,6 +314,8 @@ export function EpisodeCard({
           {editingPlan ? (
             <PlanEditForm
               episodeId={episodeId}
+              baseVersionNumber={resolved.checkpoint?.versionNumber ?? null}
+              observedRevision={resolved.latestRevision}
               checkpoint={resolved.checkpoint?.sections ?? null}
               onCancel={() => setEditingPlan(false)}
               onSaved={() => setEditingPlan(false)}
@@ -333,6 +344,7 @@ export function EpisodeCard({
                 <SectionHeading>
                   Draft v{resolved.draft.versionNumber} (not endorsed)
                 </SectionHeading>
+                {isEditable ? (
                 <Button
                   size="sm"
                   dataTestId={getEpisodeEndorseDraftTestId(episodeId)}
@@ -349,6 +361,7 @@ export function EpisodeCard({
                 >
                   Endorse v{resolved.draft.versionNumber}
                 </Button>
+                ) : null}
               </div>
               <PlanVersionSections
                 version={resolved.draft}
