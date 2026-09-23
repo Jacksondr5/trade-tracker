@@ -59,8 +59,10 @@ type NoteEvidenceInput = {
 
 type NotesCtx = QueryCtx | MutationCtx;
 
-// Thread and episode note lists are bounded; the newest notes win.
-const MAX_SCOPED_NOTES = 500;
+// Thread and episode note lists are bounded; the newest notes win. The scan
+// is wider than the list because filtering happens after the index read.
+const MAX_SCOPED_NOTES = 200;
+const MAX_SCOPED_NOTES_SCAN = 1_000;
 
 function trimNoteContent(content: string): string {
   const trimmed = content.trim();
@@ -500,9 +502,14 @@ export const getNotesByTradePlan = query({
   },
 });
 
+const boundedNotesValidator = v.object({
+  items: v.array(noteValidator),
+  truncated: v.boolean(),
+});
+
 export const getNotesByThread = query({
   args: { threadId: v.id("instrumentThreads") },
-  returns: v.array(noteValidator),
+  returns: boundedNotesValidator,
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
     const thread = assertOwner(
@@ -517,39 +524,54 @@ export const getNotesByThread = query({
           q.eq("ownerId", ownerId).eq("ticker", thread.ticker),
         )
         .order("desc")
-        .take(MAX_SCOPED_NOTES),
+        .take(MAX_SCOPED_NOTES_SCAN + 1),
       ctx.db
         .query("notes")
         .withIndex("by_owner_threadId_noteDate", (q) =>
           q.eq("ownerId", ownerId).eq("threadId", thread._id),
         )
         .order("desc")
-        .take(MAX_SCOPED_NOTES),
+        .take(MAX_SCOPED_NOTES_SCAN + 1),
     ]);
+    // Episode and campaign notes share the ticker index, so the scan is wider
+    // than the list and any capped scan is reported as truncation.
+    const scanHitCap =
+      byTicker.length > MAX_SCOPED_NOTES_SCAN ||
+      byThread.length > MAX_SCOPED_NOTES_SCAN;
     const seen = new Set<Id<"notes">>();
     const notes = [...byTicker, ...byThread].filter((note) => {
       if (seen.has(note._id) || note.campaignId || note.episodeId) return false;
       seen.add(note._id);
       return true;
     });
-    return await serializeNotes(ctx, notes.sort(sortNotesDesc));
+    notes.sort(sortNotesDesc);
+    return {
+      items: await serializeNotes(ctx, notes.slice(0, MAX_SCOPED_NOTES)),
+      truncated: scanHitCap || notes.length > MAX_SCOPED_NOTES,
+    };
   },
 });
 
 export const getNotesByEpisode = query({
   args: { episodeId: v.id("episodes") },
-  returns: v.array(noteValidator),
+  returns: boundedNotesValidator,
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
     assertOwner(await ctx.db.get(args.episodeId), ownerId, "Episode not found");
-    const notes = await ctx.db
+    const rows = await ctx.db
       .query("notes")
       .withIndex("by_owner_episodeId_noteDate", (q) =>
         q.eq("ownerId", ownerId).eq("episodeId", args.episodeId),
       )
       .order("desc")
-      .take(MAX_SCOPED_NOTES);
-    return await serializeNotes(ctx, notes.sort(sortNotesDesc));
+      .take(MAX_SCOPED_NOTES + 1);
+    return {
+      items: await serializeNotes(
+        ctx,
+        rows.slice(0, MAX_SCOPED_NOTES).sort(sortNotesDesc),
+      ),
+      truncated: rows.length > MAX_SCOPED_NOTES,
+    };
   },
 });
 

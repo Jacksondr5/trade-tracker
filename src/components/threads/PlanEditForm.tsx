@@ -9,6 +9,7 @@ import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
 import { getEpisodePlanSaveTestId } from "../../../shared/e2e/testIds";
 import { getMutationErrorMessage } from "./format";
+import type { PlanEditSession } from "./planEditSession";
 import {
   PLAN_SECTION_LABELS,
   PLAN_SECTION_ORDER,
@@ -90,22 +91,23 @@ function isConflictError(error: unknown): boolean {
 }
 
 export function PlanEditForm({
-  baseVersionNumber,
-  checkpoint,
   episodeId,
-  observedRevision,
   onCancel,
+  onReload,
   onSaved,
+  session,
 }: {
-  baseVersionNumber: number | null;
-  checkpoint: PlanSections | null;
   episodeId: Id<"episodes">;
-  observedRevision: number;
   onCancel: () => void;
+  onReload: () => void;
   onSaved: () => void;
+  session: PlanEditSession;
 }) {
   const savePlanVersion = useMutation(api.threads.savePlanVersionFromApp);
   const [error, setError] = useState<string | null>(null);
+  // Snapshot taken when the session opened; live query updates do not touch it.
+  const { baseVersionNumber, baselineSections: checkpoint, observedRevision } =
+    session;
 
   const form = useAppForm({
     defaultValues: toFormValues(checkpoint),
@@ -158,6 +160,15 @@ export function PlanEditForm({
       <p className="text-sm text-olive-11">
         One line per row. Saving creates a new endorsed version.
       </p>
+      {session.draftVersionNumber !== null ? (
+        <p
+          className="text-sm text-amber-11"
+          data-testid={`episode-plan-draft-note-${episodeId}`}
+        >
+          An unendorsed draft v{session.draftVersionNumber} exists; saving
+          creates a new endorsed version after it.
+        </p>
+      ) : null}
       {error ? (
         <Alert variant="error" data-testid={`episode-plan-error-${episodeId}`}>
           {error}
@@ -184,6 +195,15 @@ export function PlanEditForm({
             dataTestId={getEpisodePlanSaveTestId(episodeId)}
           />
         </form.AppForm>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          dataTestId={`episode-plan-reload-${episodeId}`}
+          onClick={onReload}
+        >
+          Reload
+        </Button>
         <Button
           type="button"
           size="sm"

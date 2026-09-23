@@ -176,7 +176,7 @@ export default function ThreadPageClient({
         <NotesSection
           defaultShowEvidence
           testIdPrefix="thread"
-          notes={threadNotes ?? []}
+          notes={threadNotes?.items ?? []}
           onAddNote={async (content, noteDate, chartUrls) => {
             await addNote({ threadId: thread.id, content, noteDate, chartUrls });
           }}
@@ -192,6 +192,14 @@ export default function ThreadPageClient({
             });
           }}
         />
+        {threadNotes?.truncated ? (
+          <p
+            className="mt-2 text-xs text-slate-11"
+            data-testid="thread-notes-truncated"
+          >
+            Older notes are not shown.
+          </p>
+        ) : null}
       </section>
     </div>
   );

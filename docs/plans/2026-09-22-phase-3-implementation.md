@@ -51,13 +51,15 @@ Status moves are one-way: `proposed → agreed`, `proposed → dropped`, and `ag
 - otherwise, an endorsed plan version or an agreed level-bearing element (`kind: "entry"`, a stop, or a per-share dollar value): `watching`
 - otherwise: `idea`
 
-Fills win. Closed is terminal: a corrected or moved fill never reopens a closed episode, and a later fill opens a new episode. Shelving (`shelvedAt`, with `shelvedBy` and `shelvedSource`) is a disposition, not a lifecycle state, allowed only on open episodes with no fills, and cleared automatically if a fill arrives.
+Fills win. Closed is terminal: a later fill opens a new episode, and an edit to a fill inside a closed episode is accepted only while the episode stays flat (a price or date correction); an edit that would reopen it or move the fill to another portfolio is refused with a `CONFLICT` so the correction is recorded deliberately as a new fill instead. Shelving (`shelvedAt`, with `shelvedBy` and `shelvedSource`) is a disposition, not a lifecycle state, allowed only on open episodes with no fills, and cleared automatically if a fill arrives.
 
 ### Trade linking
 
 `syncTradeEpisodeLink` runs after every trade insert or update (manual creation, inbox acceptance, bulk portfolio assignment, seed). A trade with a portfolio attaches to the open episode on its thread that matches the portfolio (an episode with no portfolio yet is adopted) when its execution date is at or after that episode's opened date, or opens a bare episode. Two cases stay unlinked rather than fabricating history: trades without a portfolio, and late fills dated before the open episode began or inside a closed episode's span. The counterpart sorts those in conversation.
 
-`internal.threads.backfillThreadsAndEpisodes` (also exposed as `api.threads.backfillThreadsAndEpisodesForCurrentUser`) creates threads for every traded or note-tagged ticker and one bare episode per flat-to-flat run per portfolio and direction. An open run with no flat point, such as a position held for two years, becomes one active bare episode. It is idempotent, and it skips any ticker, portfolio, and direction group that already has linked fills, so a fill deliberately left unlinked by live linking is never turned into a phantom episode on a rerun. Run it once after deploy.
+`internal.threads.backfillThreadsAndEpisodes` (also exposed as `api.threads.backfillThreadsAndEpisodesForCurrentUser`) creates threads for every traded or note-tagged ticker and one bare episode per flat-to-flat run per portfolio and direction. An open run with no flat point, such as a position held for two years, becomes one active bare episode. It is idempotent, and it skips any ticker, portfolio, and direction group that already has linked fills, so a fill deliberately left unlinked by live linking is never turned into a phantom episode on a rerun.
+
+Deployment order matters because of that skip: run the backfill immediately after deploying and before the next brokerage sync or inbox acceptance. Once a group has a live-linked fill, older unlinked history in that group is left as it is; it can still be linked deliberately through the counterpart, but the backfill will not guess at it.
 
 Every trade write also ensures the ticker's thread exists, whether or not the fill can be placed in an episode, and the counterpart's ticker-tagged note capture does the same.
 
@@ -76,7 +78,7 @@ All routes live under `/internal/counterpart/` in `convex/http.ts`, use the exis
 
 A resolved episode contains: `episode` (summary with lifecycle, portfolio, campaign, exemptions), `checkpoint` (latest endorsed version or null), `draft` (latest unendorsed version newer than the checkpoint or null), `itemsSinceCheckpoint` (every element created or changed after `compiledThroughRevision`, ordered by the revision of its last change, so agreeing or dropping an older proposal shows as a delta item), `openProposals` (every proposed element, before and after the checkpoint, each with `beforeCheckpoint`), `history` (elements created at or before the checkpoint, last 50, with `total` and `truncated`), `campaignRules` (`applicable` and `exempted`), `trades`, `position` (derived from linked fills), `notes`, `planVersions` (newest 200, with `planVersionsTruncated`), and `latestRevision` (the highest revision touching the episode, for edit conflict checks).
 
-Every bounded list carries an explicit `truncated` flag so an omitted item can never be mistaken for a dropped one. Two continuation reads exist for what the bounded episode read leaves out:
+Every bounded list carries an explicit `truncated` flag so an omitted item can never be mistaken for a dropped one: `elementsTruncated`, `campaignRules.truncated`, `planVersionsTruncated`, `history.truncated`, `notes.truncated` on an episode, `episodesTruncated` on a thread, and `truncated` on the desk. The same numbers are enforced as write ceilings (2,000 elements per episode, 500 per campaign, 500 episodes per thread), so a read never has to throw on a record it cannot bound; a write past a ceiling is refused with `VALIDATION`. The checkpoint is loaded directly from the episode's current-version pointer, so a long run of drafts can never push it out of the bounded version listing. Two continuation reads exist for what the bounded episode read leaves out:
 
 | Route | Body | Returns |
 | --- | --- | --- |
@@ -110,13 +112,14 @@ valuation: {
 }
 ```
 
-The two bases are never blended. Positions the broker statement did not price appear in `missingMarks` instead of being valued at zero; positions in a currency other than the account's base currency are listed in `unsupportedCurrencyMarks` and left out of the sum; a statement with no base cash row reports `missingCash: true`; portfolios with no valuation row are listed in `missingPortfolios`. Any of these makes `completeness` partial. The broker `currency` is the account's single cash currency, or null when the account holds several.
+The two bases are never blended. Positions the broker statement did not price appear in `missingMarks` instead of being valued at zero. Amounts are summed only when every one of them is known to share the account's single cash currency: when the statement holds several currencies, or a mark carries no currency or a different one, that mark is left out and listed in `unsupportedCurrencyMarks`. A statement with no base cash row reports `missingCash: true`; portfolios with no valuation row are listed in `missingPortfolios`. Any of these makes `completeness` partial. The broker `currency` is the account's single cash currency, or null when the denomination is unknown.
 
 ## App Surface
 
 - `/desk`: every live episode, grouped by campaign, one row each with position, checkpoint key lines, and items since. Default landing page for a signed-in user.
 - `/threads` and `/threads/<ticker>`: thread index and the thread page with live episodes, checkpoint and draft, items since the checkpoint, open proposals, campaign rules, history, trades, and thread notes. Element and plan edits are made here, attributed to the user; a plan edit creates a new endorsed version.
 - Trade Plans left the sidebar. The routes remain reachable by URL.
+- Thread and episode note queries return `{ items, truncated }` envelopes; the thread page shows a line when older notes are not shown.
 - App edits (elements, statuses, plan saves, endorsements) are refused on closed episodes. A plan save sends the version it was opened from and the latest revision it saw; a save over decisions recorded in the meantime is a `CONFLICT` rather than a silent overwrite.
 
 ## Follow-ups

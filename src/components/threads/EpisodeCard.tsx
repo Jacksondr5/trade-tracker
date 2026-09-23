@@ -2,7 +2,7 @@
 
 import { useMutation } from "convex/react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Badge, Button } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
 import type { Id } from "~/convex/_generated/dataModel";
@@ -28,6 +28,7 @@ import {
   lifecycleBadgeVariant,
 } from "./format";
 import { PlanEditForm } from "./PlanEditForm";
+import { createPlanEditSession, type PlanEditSession } from "./planEditSession";
 import { PlanSectionList } from "./PlanSectionList";
 import {
   PLAN_SECTION_LABELS,
@@ -75,7 +76,13 @@ export function EpisodeCard({
   const episodeId = episode.id;
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [editingPlan, setEditingPlan] = useState(false);
+  // Frozen when Edit plan / Draft checkpoint is clicked; only Cancel or Reload re-snapshots.
+  const [planSession, setPlanSession] = useState<PlanEditSession | null>(null);
+  const planSessionCounter = useRef(0);
+  const openPlanSession = () => {
+    planSessionCounter.current += 1;
+    setPlanSession(createPlanEditSession(resolved, planSessionCounter.current));
+  };
   const [supersedes, setSupersedes] = useState<ElementView | null>(null);
   const [addingElement, setAddingElement] = useState(false);
   const [droppingId, setDroppingId] = useState<Id<"planElements"> | null>(
@@ -121,7 +128,7 @@ export function EpisodeCard({
   // If the episode closes while an editor is open, close the editor.
   useEffect(() => {
     if (isEditable) return;
-    setEditingPlan(false);
+    setPlanSession(null);
     setAddingElement(false);
     setDroppingId(null);
     setSupersedes(null);
@@ -272,13 +279,13 @@ export function EpisodeCard({
               Shelve
             </Button>
           ) : null}
-          {isEditable && !editingPlan ? (
+          {isEditable && !planSession ? (
             <Button
               size="sm"
               variant="secondary"
               dataTestId={getEpisodeEditPlanTestId(episodeId)}
               onClick={() => {
-                setEditingPlan(true);
+                openPlanSession();
                 setCollapsed(false);
               }}
             >
@@ -311,14 +318,14 @@ export function EpisodeCard({
 
       {collapsed ? null : (
         <div className="mt-4 space-y-5">
-          {editingPlan ? (
+          {planSession ? (
             <PlanEditForm
+              key={planSession.sessionId}
               episodeId={episodeId}
-              baseVersionNumber={resolved.checkpoint?.versionNumber ?? null}
-              observedRevision={resolved.latestRevision}
-              checkpoint={resolved.checkpoint?.sections ?? null}
-              onCancel={() => setEditingPlan(false)}
-              onSaved={() => setEditingPlan(false)}
+              session={planSession}
+              onCancel={() => setPlanSession(null)}
+              onReload={openPlanSession}
+              onSaved={() => setPlanSession(null)}
             />
           ) : null}
 

@@ -35,6 +35,7 @@ import {
   draftPlanVersion,
   endorsePlanVersion,
   ensureThread,
+  ensureThreadWithStatus,
   getOwnedEpisode,
   MAX_THREAD_EPISODES,
   openEpisode,
@@ -63,6 +64,7 @@ async function assertEpisodeEditableFromApp(
 const threadListItemValidator = threadSummaryValidator.extend({
   activeEpisodeCount: v.number(),
   episodeCount: v.number(),
+  episodesTruncated: v.boolean(),
   liveEpisodeCount: v.number(),
 });
 
@@ -81,17 +83,13 @@ export const listThreads = query({
     const campaignLinks = await listThreadCampaignLinks(ctx, ownerId);
     const items = await Promise.all(
       threads.map(async (thread) => {
-        const episodes = await ctx.db
+        const rows = await ctx.db
           .query("episodes")
           .withIndex("by_owner_threadId", (q) =>
             q.eq("ownerId", ownerId).eq("threadId", thread._id),
           )
           .take(MAX_THREAD_EPISODES + 1);
-        if (episodes.length > MAX_THREAD_EPISODES) {
-          throw new Error(
-            `Thread episode count exceeds the ${MAX_THREAD_EPISODES}-episode limit`,
-          );
-        }
+        const episodes = rows.slice(0, MAX_THREAD_EPISODES);
         return {
           activeEpisodeCount: episodes.filter(
             (episode) => episode.lifecycle === "active",
@@ -99,6 +97,7 @@ export const listThreads = query({
           campaigns: campaignLinks.get(thread._id) ?? [],
           createdAt: thread.createdAt,
           episodeCount: episodes.length,
+          episodesTruncated: rows.length > MAX_THREAD_EPISODES,
           id: thread._id,
           liveEpisodeCount: episodes.filter(
             (episode) =>
@@ -335,25 +334,18 @@ export async function backfillThreadsAndEpisodesForOwner(
     );
   }
 
-  const countThreads = async () =>
-    (
-      await ctx.db
-        .query("instrumentThreads")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-        .collect()
-    ).length;
-  const existingThreadCount = await countThreads();
-
   const tickers = new Set<string>();
   for (const trade of trades) tickers.add(trade.ticker.toUpperCase());
   for (const note of notes) {
     if (note.ticker) tickers.add(note.ticker.toUpperCase());
   }
   const threadsByTicker = new Map<string, Doc<"instrumentThreads">>();
+  let threadsCreated = 0;
   for (const ticker of tickers) {
-    threadsByTicker.set(ticker, await ensureThread(ctx, ownerId, ticker, "system"));
+    const result = await ensureThreadWithStatus(ctx, ownerId, ticker, "system");
+    if (result.created) threadsCreated += 1;
+    threadsByTicker.set(ticker, result.thread);
   }
-  const threadsCreated = (await countThreads()) - existingThreadCount;
 
   let episodesCreated = 0;
   let tradesLinked = 0;

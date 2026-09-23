@@ -56,7 +56,10 @@ export function isPlanModelError(
   );
 }
 
+// Write ceilings. Reads stay bounded to the same numbers and flag truncation,
+// so no single record can grow past what a resolved read can return.
 export const MAX_EPISODE_ELEMENTS = 2_000;
+export const MAX_CAMPAIGN_ELEMENTS = 500;
 export const MAX_EPISODE_TRADES = 5_000;
 export const MAX_THREAD_EPISODES = 500;
 
@@ -78,12 +81,12 @@ export async function allocateRevision(
   return counter.next;
 }
 
-export async function ensureThread(
+export async function ensureThreadWithStatus(
   ctx: MutationCtx,
   ownerId: string,
   rawTicker: string,
   actor: Actor,
-): Promise<Doc<"instrumentThreads">> {
+): Promise<{ created: boolean; thread: Doc<"instrumentThreads"> }> {
   const ticker = normalizeTicker(rawTicker);
   if (!ticker) throw planModelError("VALIDATION", "ticker is required");
   const existing = await ctx.db
@@ -92,14 +95,23 @@ export async function ensureThread(
       q.eq("ownerId", ownerId).eq("ticker", ticker),
     )
     .unique();
-  if (existing) return existing;
+  if (existing) return { created: false, thread: existing };
   const threadId = await ctx.db.insert("instrumentThreads", {
     createdAt: Date.now(),
     createdBy: actor,
     ownerId,
     ticker,
   });
-  return (await ctx.db.get(threadId))!;
+  return { created: true, thread: (await ctx.db.get(threadId))! };
+}
+
+export async function ensureThread(
+  ctx: MutationCtx,
+  ownerId: string,
+  rawTicker: string,
+  actor: Actor,
+): Promise<Doc<"instrumentThreads">> {
+  return (await ensureThreadWithStatus(ctx, ownerId, rawTicker, actor)).thread;
 }
 
 export async function getOwnedEpisode(
@@ -131,18 +143,35 @@ export async function listEpisodeElements(
   ownerId: string,
   episodeId: Id<"episodes">,
 ): Promise<Doc<"planElements">[]> {
-  const elements = await ctx.db
+  // The write ceiling in recordElements keeps this within one bounded read.
+  return await ctx.db
     .query("planElements")
     .withIndex("by_owner_episodeId_revision", (q) =>
       q.eq("ownerId", ownerId).eq("episodeId", episodeId),
     )
-    .take(MAX_EPISODE_ELEMENTS + 1);
-  if (elements.length > MAX_EPISODE_ELEMENTS) {
-    throw new Error(
-      `Episode element count exceeds the ${MAX_EPISODE_ELEMENTS}-element limit`,
-    );
-  }
-  return elements;
+    .take(MAX_EPISODE_ELEMENTS);
+}
+
+async function countScopeElements(
+  ctx: MutationCtx,
+  ownerId: string,
+  scope: ElementScope,
+): Promise<number> {
+  const rows =
+    scope.kind === "episode"
+      ? await ctx.db
+          .query("planElements")
+          .withIndex("by_owner_episodeId_revision", (q) =>
+            q.eq("ownerId", ownerId).eq("episodeId", scope.episodeId),
+          )
+          .take(MAX_EPISODE_ELEMENTS + 1)
+      : await ctx.db
+          .query("planElements")
+          .withIndex("by_owner_campaignId_revision", (q) =>
+            q.eq("ownerId", ownerId).eq("campaignId", scope.campaignId),
+          )
+          .take(MAX_CAMPAIGN_ELEMENTS + 1);
+  return rows.length;
 }
 
 export async function listEpisodeTrades(
@@ -232,6 +261,18 @@ export async function openEpisode(
     ticker: string;
   },
 ): Promise<Doc<"episodes">> {
+  const existing = await ctx.db
+    .query("episodes")
+    .withIndex("by_owner_threadId", (q) =>
+      q.eq("ownerId", args.ownerId).eq("threadId", args.threadId),
+    )
+    .take(MAX_THREAD_EPISODES);
+  if (existing.length >= MAX_THREAD_EPISODES) {
+    throw planModelError(
+      "VALIDATION",
+      `A thread may hold at most ${MAX_THREAD_EPISODES} episodes`,
+    );
+  }
   const now = Date.now();
   const episodeId = await ctx.db.insert("episodes", {
     campaignElementExemptions: [],
@@ -270,18 +311,13 @@ async function listThreadEpisodesForLinking(
   ownerId: string,
   threadId: Id<"instrumentThreads">,
 ): Promise<Doc<"episodes">[]> {
-  const episodes = await ctx.db
+  // The write ceiling in openEpisode keeps this within one bounded read.
+  return await ctx.db
     .query("episodes")
     .withIndex("by_owner_threadId", (q) =>
       q.eq("ownerId", ownerId).eq("threadId", threadId),
     )
-    .take(MAX_THREAD_EPISODES + 1);
-  if (episodes.length > MAX_THREAD_EPISODES) {
-    throw new Error(
-      `Thread episode count exceeds the ${MAX_THREAD_EPISODES}-episode limit`,
-    );
-  }
-  return episodes;
+    .take(MAX_THREAD_EPISODES);
 }
 
 /**
@@ -313,6 +349,29 @@ export async function syncTradeEpisodeLink(
       previousEpisode.portfolioId === trade.portfolioId &&
       (previousEpisode.direction === undefined ||
         previousEpisode.direction === trade.direction);
+    if (previousEpisode?.lifecycle === "closed") {
+      // Closed history is terminal. A correction is accepted only while it
+      // leaves the episode flat; anything else needs a deliberate relink.
+      const remainingTrades = await listEpisodeTrades(
+        ctx,
+        trade.ownerId,
+        previousEpisode._id,
+      );
+      const stillFlat =
+        stillFits &&
+        derivePositionEpisodeState(remainingTrades).netQuantity === 0;
+      if (!stillFlat) {
+        throw planModelError(
+          "CONFLICT",
+          `Trade ${trade._id} belongs to a closed episode; the change would reopen or move it. Record the correction as a new fill instead.`,
+        );
+      }
+      await ctx.db.patch(previousEpisode._id, {
+        closedAt: Math.max(...remainingTrades.map((row) => row.date)),
+        updatedAt: Date.now(),
+      });
+      return previousEpisode._id;
+    }
     if (stillFits) {
       targetEpisodeId = previousEpisode._id;
     } else {
@@ -366,6 +425,12 @@ export async function syncTradeEpisodeLink(
   }
 
   if (previousEpisodeId !== targetEpisodeId) {
+    if (previousEpisode?.lifecycle === "closed") {
+      throw planModelError(
+        "CONFLICT",
+        `Trade ${trade._id} belongs to a closed episode and cannot be moved out of it`,
+      );
+    }
     await ctx.db.patch(tradeId, { episodeId: targetEpisodeId });
   }
   if (targetEpisodeId) {
@@ -430,6 +495,16 @@ export async function recordElements(
     await getOwnedEpisode(ctx, args.ownerId, args.scope.episodeId);
   } else {
     await getOwnedCampaign(ctx, args.ownerId, args.scope.campaignId);
+  }
+
+  const ceiling =
+    args.scope.kind === "episode" ? MAX_EPISODE_ELEMENTS : MAX_CAMPAIGN_ELEMENTS;
+  const existingCount = await countScopeElements(ctx, args.ownerId, args.scope);
+  if (existingCount + args.elements.length > ceiling) {
+    throw planModelError(
+      "VALIDATION",
+      `This ${args.scope.kind} may hold at most ${ceiling} elements`,
+    );
   }
 
   const now = Date.now();

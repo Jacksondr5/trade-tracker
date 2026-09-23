@@ -217,6 +217,9 @@ export async function buildValuationSnapshot(
     const unsupportedCurrencyMarks: string[] = [];
     let marketValue = 0;
     let pricedPositions = 0;
+    // Amounts are summed only when every one of them is known to share the
+    // account's single cash currency. An unknown denomination, on the
+    // statement or on a mark, is excluded and reported rather than added.
     for (const row of positionRows) {
       const ticker = row.ticker.toUpperCase();
       if (row.marketValue === undefined) {
@@ -225,8 +228,8 @@ export async function buildValuationSnapshot(
       }
       const rowCurrency = row.currency?.toUpperCase();
       if (
-        rowCurrency !== undefined &&
-        baseCurrency !== null &&
+        baseCurrency === null ||
+        rowCurrency === undefined ||
         rowCurrency !== baseCurrency
       ) {
         unsupportedCurrencyMarks.push(ticker);

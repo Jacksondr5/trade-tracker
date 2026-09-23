@@ -189,15 +189,22 @@ describe("instrument threads and episodes", () => {
     expect(closed.lifecycle).toBe("closed");
     expect(closed.closedAt).toBe(11);
 
-    // Correcting the closing fill never reopens the closed episode.
+    // A correction that would reopen or move a closed episode is refused;
+    // one that leaves it flat is accepted and refreshes the close date.
     const closingSell = (await t.run((ctx) => ctx.db.query("trades").collect())).find(
       (trade) => trade.episodeId === episodeId && trade.side === "sell",
     )!;
-    await asOwner(t).mutation(api.trades.updateTrade, {
-      quantity: 19,
-      tradeId: closingSell._id,
-    });
-    expect((await t.run((ctx) => ctx.db.get(episodeId)))!.lifecycle).toBe("closed");
+    await expect(
+      asOwner(t).mutation(api.trades.updateTrade, { quantity: 19, tradeId: closingSell._id }),
+    ).rejects.toMatchObject({ data: { code: "CONFLICT" } });
+    await expect(
+      asOwner(t).mutation(api.trades.updateTrade, { portfolioId: null, tradeId: closingSell._id }),
+    ).rejects.toMatchObject({ data: { code: "CONFLICT" } });
+    await asOwner(t).mutation(api.trades.updateTrade, { price: 101, tradeId: closingSell._id });
+    const afterFix = (await t.run((ctx) => ctx.db.get(episodeId)))!;
+    expect(afterFix.lifecycle).toBe("closed");
+    expect(afterFix.closedAt).toBe(11);
+    expect((await t.run((ctx) => ctx.db.get(closingSell._id)))!.episodeId).toBe(episodeId);
 
     // A late fill dated inside the closed episode's span stays unlinked.
     const backdated = await insertTrade({ date: 10, quantity: 1, side: "buy", ticker: "NVDA" });
@@ -754,5 +761,89 @@ describe("instrument threads and episodes", () => {
     expect(
       await asOwner(t).query(api.threads.getThreadPage, { ticker: "ORPH" }),
     ).not.toBeNull();
+  });
+
+  it("keeps the checkpoint when drafts push it out of the bounded version window", async () => {
+    const episodeId = await t.run(async (ctx) => {
+      const thread = await ensureThread(ctx, ownerId, "STX", "counterpart");
+      return (
+        await openEpisode(ctx, {
+          actor: "counterpart",
+          ownerId,
+          source: "user",
+          threadId: thread._id,
+          ticker: "STX",
+        })
+      )._id;
+    });
+    await t.run(async (ctx) => {
+      await draftPlanVersion(ctx, {
+        actor: "counterpart",
+        endorsed: false,
+        episodeId,
+        ownerId,
+        sections: { ...emptyPlanSections(), stop: [{ text: "Stop ~760", asOf: "2026-09-20" }] },
+        source: "conversation",
+      });
+      await endorsePlanVersion(ctx, { actor: "counterpart", episodeId, ownerId, versionNumber: 1 });
+      for (let i = 0; i < 205; i += 1) {
+        await draftPlanVersion(ctx, {
+          actor: "counterpart",
+          endorsed: false,
+          episodeId,
+          ownerId,
+          sections: emptyPlanSections(),
+          source: "conversation",
+        });
+      }
+    });
+    const resolved = await t.run(async (ctx) =>
+      resolveEpisode(ctx, (await ctx.db.get(episodeId))!),
+    );
+    expect(resolved.checkpoint?.versionNumber).toBe(1);
+    expect(resolved.draft?.versionNumber).toBe(206);
+    expect(resolved.planVersionsTruncated).toBe(true);
+    expect((await t.run((ctx) => ctx.db.get(episodeId)))!.lifecycle).toBe("watching");
+  });
+
+  it("reports truncation on thread notes instead of hiding older thread notes", async () => {
+    const swing = await insertPortfolio();
+    const { episodeId, threadId } = await t.run(async (ctx) => {
+      const thread = await ensureThread(ctx, ownerId, "WAB", "counterpart");
+      const episode = await openEpisode(ctx, {
+        actor: "counterpart",
+        ownerId,
+        portfolioId: swing,
+        source: "user",
+        threadId: thread._id,
+        ticker: "WAB",
+      });
+      await ctx.db.insert("notes", {
+        content: "old thread note",
+        noteDate: 1,
+        ownerId,
+        threadId: thread._id,
+        ticker: "WAB",
+      });
+      for (let i = 0; i < 1_001; i += 1) {
+        await ctx.db.insert("notes", {
+          content: `episode note ${i}`,
+          episodeId: episode._id,
+          noteDate: 10 + i,
+          ownerId,
+          ticker: "WAB",
+        });
+      }
+      return { episodeId: episode._id, threadId: thread._id };
+    });
+    const threadNotes = await asOwner(t).query(api.notes.getNotesByThread, { threadId });
+    expect(threadNotes.truncated).toBe(true);
+    expect(threadNotes.items.map((note) => note.content)).toEqual(["old thread note"]);
+    const episodeNotes = await asOwner(t).query(api.notes.getNotesByEpisode, { episodeId });
+    expect(episodeNotes.truncated).toBe(true);
+    expect(episodeNotes.items).toHaveLength(200);
+    const page = (await asOwner(t).query(api.threads.getThreadPage, { ticker: "WAB" }))!;
+    expect(page.notes.truncated).toBe(true);
+    expect(page.notes.items.map((note) => note.content)).toEqual(["old thread note"]);
   });
 });

@@ -19,6 +19,7 @@ import {
   type PlanLine,
 } from "./planModel";
 import {
+  MAX_CAMPAIGN_ELEMENTS,
   MAX_EPISODE_ELEMENTS,
   MAX_EPISODE_TRADES,
   MAX_THREAD_EPISODES,
@@ -32,7 +33,6 @@ export const MAX_NOTES_SCAN = 500;
 export const MAX_LIVE_EPISODES = 300;
 export const MAX_EPISODE_SCAN = 1_000;
 export const MAX_PLAN_VERSIONS = 200;
-export const MAX_CAMPAIGN_ELEMENTS = 500;
 export const MAX_THREADS = 2_000;
 
 const nullableString = v.union(v.string(), v.null());
@@ -234,7 +234,10 @@ export const resolvedEpisodeValidator = v.object({
   campaignRules: v.object({
     applicable: v.array(elementViewValidator),
     exempted: v.array(elementViewValidator),
+    truncated: v.boolean(),
   }),
+  /** True when the episode's elements exceeded the bounded read. */
+  elementsTruncated: v.boolean(),
   checkpoint: v.union(planVersionViewValidator, v.null()),
   draft: v.union(planVersionViewValidator, v.null()),
   episode: episodeSummaryValidator,
@@ -264,7 +267,12 @@ export const resolvedEpisodeValidator = v.object({
 });
 
 export type ResolvedEpisode = {
-  campaignRules: { applicable: ElementView[]; exempted: ElementView[] };
+  campaignRules: {
+    applicable: ElementView[];
+    exempted: ElementView[];
+    truncated: boolean;
+  };
+  elementsTruncated: boolean;
   checkpoint: PlanVersionView | null;
   draft: PlanVersionView | null;
   episode: EpisodeSummary;
@@ -337,16 +345,17 @@ export async function listCampaignElements(
   ctx: Ctx,
   ownerId: string,
   campaignId: Id<"campaigns">,
-): Promise<Doc<"planElements">[]> {
-  return await takeBounded(
-    ctx.db
-      .query("planElements")
-      .withIndex("by_owner_campaignId_revision", (q) =>
-        q.eq("ownerId", ownerId).eq("campaignId", campaignId),
-      ),
-    MAX_CAMPAIGN_ELEMENTS,
-    "Campaign element count",
-  );
+): Promise<{ items: Doc<"planElements">[]; truncated: boolean }> {
+  const rows = await ctx.db
+    .query("planElements")
+    .withIndex("by_owner_campaignId_revision", (q) =>
+      q.eq("ownerId", ownerId).eq("campaignId", campaignId),
+    )
+    .take(MAX_CAMPAIGN_ELEMENTS + 1);
+  return {
+    items: rows.slice(0, MAX_CAMPAIGN_ELEMENTS),
+    truncated: rows.length > MAX_CAMPAIGN_ELEMENTS,
+  };
 }
 
 export async function episodeSummary(
@@ -426,16 +435,13 @@ export async function resolveEpisode(
   episode: Doc<"episodes">,
 ): Promise<ResolvedEpisode> {
   const ownerId = episode.ownerId;
-  const [elements, versions, trades, notes] = await Promise.all([
-    takeBounded(
-      ctx.db
-        .query("planElements")
-        .withIndex("by_owner_episodeId_revision", (q) =>
-          q.eq("ownerId", ownerId).eq("episodeId", episode._id),
-        ),
-      MAX_EPISODE_ELEMENTS,
-      "Episode element count",
-    ),
+  const [elementRows, versions, trades, notes, currentVersion] = await Promise.all([
+    ctx.db
+      .query("planElements")
+      .withIndex("by_owner_episodeId_revision", (q) =>
+        q.eq("ownerId", ownerId).eq("episodeId", episode._id),
+      )
+      .take(MAX_EPISODE_ELEMENTS + 1),
     ctx.db
       .query("planVersions")
       .withIndex("by_owner_episodeId_versionNumber", (q) =>
@@ -459,17 +465,29 @@ export async function resolveEpisode(
       )
       .order("desc")
       .take(MAX_NOTES_PER_SCOPE + 1),
+    episode.currentPlanVersionId
+      ? ctx.db.get(episode.currentPlanVersionId)
+      : Promise.resolve(null),
   ]);
+  const elementsTruncated = elementRows.length > MAX_EPISODE_ELEMENTS;
+  const elements = elementRows.slice(0, MAX_EPISODE_ELEMENTS);
 
-  // Newest first from the index; the current checkpoint and draft are always
-  // within the bounded window because they are the newest versions.
+  // The checkpoint is loaded directly from the episode's pointer so a long
+  // run of drafts can never push it out of the bounded version listing.
+  const checkpoint =
+    currentVersion &&
+    currentVersion.ownerId === ownerId &&
+    currentVersion.episodeId === episode._id &&
+    currentVersion.endorsed
+      ? currentVersion
+      : null;
   const planVersionsTruncated = versions.length > MAX_PLAN_VERSIONS;
   const newestFirst = versions.slice(0, MAX_PLAN_VERSIONS);
-  const checkpoint = newestFirst.find((version) => version.endorsed) ?? null;
   const latest = newestFirst[0] ?? null;
   const oldestFirst = [...newestFirst].reverse();
   const latestRevision = Math.max(
     0,
+    checkpoint?.revision ?? 0,
     ...elements.map((element) => Math.max(element.revision, element.statusRevision)),
     ...newestFirst.map((version) => version.revision),
   );
@@ -484,6 +502,7 @@ export async function resolveEpisode(
   let campaignRules: ResolvedEpisode["campaignRules"] = {
     applicable: [],
     exempted: [],
+    truncated: false,
   };
   if (episode.campaignId) {
     const campaignElements = await listCampaignElements(
@@ -492,12 +511,13 @@ export async function resolveEpisode(
       episode.campaignId,
     );
     const resolved = resolveCampaignRules(
-      campaignElements,
+      campaignElements.items,
       new Set<string>(episode.campaignElementExemptions),
     );
     campaignRules = {
       applicable: resolved.applicable.map(elementView),
       exempted: resolved.exempted.map(elementView),
+      truncated: campaignElements.truncated,
     };
   }
 
@@ -506,6 +526,7 @@ export async function resolveEpisode(
     campaignRules,
     checkpoint: checkpoint ? planVersionView(checkpoint) : null,
     draft: draft ? planVersionView(draft) : null,
+    elementsTruncated,
     episode: await episodeSummary(ctx, episode),
     history: {
       items: historyItems.map(elementView),
@@ -556,6 +577,8 @@ export const threadSummaryValidator = v.object({
 });
 
 export const resolvedThreadValidator = v.object({
+  /** True when the thread's episodes exceeded the bounded read. */
+  episodesTruncated: v.boolean(),
   history: v.array(resolvedEpisodeValidator),
   liveEpisodes: v.array(resolvedEpisodeValidator),
   notes: v.object({
@@ -574,6 +597,7 @@ export type ThreadSummary = {
 };
 
 export type ResolvedThread = {
+  episodesTruncated: boolean;
   history: ResolvedEpisode[];
   liveEpisodes: ResolvedEpisode[];
   notes: ResolvedEpisode["notes"];
@@ -615,16 +639,17 @@ export async function listThreadEpisodes(
   ctx: Ctx,
   ownerId: string,
   threadId: Id<"instrumentThreads">,
-): Promise<Doc<"episodes">[]> {
-  return await takeBounded(
-    ctx.db
-      .query("episodes")
-      .withIndex("by_owner_threadId", (q) =>
-        q.eq("ownerId", ownerId).eq("threadId", threadId),
-      ),
-    MAX_THREAD_EPISODES,
-    "Thread episode count",
-  );
+): Promise<{ items: Doc<"episodes">[]; truncated: boolean }> {
+  const rows = await ctx.db
+    .query("episodes")
+    .withIndex("by_owner_threadId", (q) =>
+      q.eq("ownerId", ownerId).eq("threadId", threadId),
+    )
+    .take(MAX_THREAD_EPISODES + 1);
+  return {
+    items: rows.slice(0, MAX_THREAD_EPISODES),
+    truncated: rows.length > MAX_THREAD_EPISODES,
+  };
 }
 
 export async function listThreadNotes(
@@ -678,11 +703,12 @@ export async function resolveThread(
     listThreadCampaignLinks(ctx, thread.ownerId),
   ]);
   const resolved = await Promise.all(
-    episodes
+    episodes.items
       .sort((a, b) => b.openedAt - a.openedAt)
       .map((episode) => resolveEpisode(ctx, episode)),
   );
   return {
+    episodesTruncated: episodes.truncated,
     history: resolved.filter(
       (item) => item.episode.lifecycle === "closed",
     ),
@@ -882,7 +908,7 @@ export async function buildDesk(ctx: Ctx, ownerId: string) {
       ? await ctx.db.get(campaign.benchmarkThreadId)
       : null;
     const rules = resolveCampaignRules(
-      await listCampaignElements(ctx, ownerId, campaignId),
+      (await listCampaignElements(ctx, ownerId, campaignId)).items,
       new Set(),
     ).applicable;
     groups.push({

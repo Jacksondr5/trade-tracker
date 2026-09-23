@@ -339,6 +339,19 @@ describe("counterpart planning surface", () => {
         syncRunId: successRun,
         ticker: "TSM",
       });
+      // A priced mark with no currency cannot join a common-currency sum.
+      await ctx.db.insert("brokeragePositionSnapshots", {
+        assetType: "stock",
+        brokerageAccountId: "U1",
+        connectionId,
+        createdAt: now,
+        marketValue: 777,
+        ownerId,
+        quantity: 1,
+        reportDate: "2026-09-21",
+        syncRunId: successRun,
+        ticker: "NOCUR",
+      });
       // The Flex parser labels base totals BASE_SUMMARY; the account's
       // currency comes from the per-currency rows.
       await ctx.db.insert("brokerageCashSnapshots", {
@@ -455,8 +468,8 @@ describe("counterpart planning surface", () => {
       missingCash: false,
       missingMarks: ["TSM"],
       pricedPositions: 1,
-      totalPositions: 3,
-      unsupportedCurrencyMarks: ["SONY"],
+      totalPositions: 4,
+      unsupportedCurrencyMarks: ["NOCUR", "SONY"],
     });
     expect(context.valuation.reconstructed).toMatchObject({
       asOfDate: "2026-09-19",
@@ -469,6 +482,33 @@ describe("counterpart planning surface", () => {
     const daily = await t.query(internal.counterpart.getDailyContext, { now, ownerId });
     expect(daily.valuation.brokerReported?.equity).toBe(5_000);
     expect(daily.recentlyResolvedReconciliation).toHaveLength(1);
+
+    // A second cash currency makes the denomination unknown: nothing is
+    // summed as if it shared a currency, and every mark is reported instead.
+    await t.run(async (ctx) => {
+      const run = (await ctx.db.query("brokerageSyncRuns").collect()).find(
+        (row) => row.status === "succeeded",
+      )!;
+      await ctx.db.insert("brokerageCashSnapshots", {
+        brokerageAccountId: "U1",
+        cash: 50_000,
+        connectionId: run.connectionId,
+        createdAt: now,
+        currency: "JPY",
+        ownerId,
+        reportDate: "2026-09-21",
+        rowKind: "currency",
+        syncRunId: run._id,
+      });
+    });
+    const mixed = await t.query(internal.counterpart.getPortfolioContext, { now, ownerId });
+    expect(mixed.valuation.brokerReported).toMatchObject({
+      completeness: "partial",
+      currency: null,
+      marketValue: 0,
+      pricedPositions: 0,
+      unsupportedCurrencyMarks: ["BE", "NOCUR", "SONY"],
+    });
     expect(context.valuation.freshness).toEqual({
       ageDays: 1,
       latestAttemptStatus: "failed_retryable",

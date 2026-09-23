@@ -213,6 +213,7 @@ export const getDeskContext = internalQuery({
 const campaignContextValidator = v.object({
   benchmarkTicker: v.union(v.string(), v.null()),
   elements: v.array(elementViewValidator),
+  elementsTruncated: v.boolean(),
   id: v.id("campaigns"),
   linkedTickers: v.array(v.string()),
   name: v.string(),
@@ -250,7 +251,8 @@ export const listCampaignContexts = internalQuery({
         );
         return {
           benchmarkTicker: benchmark?.ticker ?? null,
-          elements: elements.map(elementView),
+          elements: elements.items.map(elementView),
+          elementsTruncated: elements.truncated,
           id: campaign._id,
           linkedTickers: linked
             .flatMap((thread) => (thread ? [thread.ticker] : []))
@@ -669,7 +671,8 @@ export const upsertCampaignForCounterpart = internalMutation({
     return {
       campaign: {
         benchmarkTicker: benchmark?.ticker ?? null,
-        elements: elements.map(elementView),
+        elements: elements.items.map(elementView),
+        elementsTruncated: elements.truncated,
         id: campaign._id,
         linkedTickers: linked
           .flatMap((thread) => (thread ? [thread.ticker] : []))
