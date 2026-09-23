@@ -24,23 +24,26 @@ import {
 } from "../../../../shared/e2e/testIds";
 
 const CHECKPOINT_COLUMNS = ["entry", "stop", "targets", "scenarios"] as const;
-const COLUMN_LABELS = [
-  "Ticker",
-  "Portfolio",
-  "Lifecycle",
-  "Position",
-  "Entry",
-  "Stop",
-  "Targets",
-  "Scenarios",
-  "Since checkpoint",
+const COLUMNS: Array<{ label: string; width: string }> = [
+  { label: "Ticker", width: "6%" },
+  { label: "Portfolio", width: "11%" },
+  { label: "Lifecycle", width: "6%" },
+  { label: "Position", width: "15%" },
+  { label: "Entry", width: "14%" },
+  { label: "Stop", width: "14%" },
+  { label: "Targets", width: "10%" },
+  { label: "Scenarios", width: "10%" },
+  { label: "Since checkpoint", width: "14%" },
 ];
 
 type DeskLine = NonNullable<DeskRow["checkpoint"]>["entry"][number];
 
 function deskLineText(line: DeskLine, leadWithValue: boolean): string {
   if (leadWithValue && line.value) {
-    return `${formatCompactValue(line.value)} · ${line.text}`;
+    const formatted = formatCompactValue(line.value);
+    const text = line.text.trimStart();
+    if (text.startsWith(formatted)) return text;
+    return `${formatted} · ${text}`;
   }
   return line.text;
 }
@@ -57,8 +60,8 @@ function CheckpointCell({
   const line = lines[0];
   const text = line ? deskLineText(line, leadWithValue) : null;
   return (
-    <td className="max-w-[16rem] px-3 py-2 text-sm whitespace-nowrap text-olive-12">
-      <span className="flex items-center gap-1.5">
+    <td className="px-3 py-2 text-sm whitespace-nowrap text-olive-12">
+      <span className="flex min-w-0 items-center gap-1.5">
         {exempt ? (
           <span className="shrink-0 rounded border border-amber-7 bg-amber-2 px-1 text-[10px] font-medium tracking-wide text-amber-11 uppercase">
             exempt
@@ -88,9 +91,9 @@ function SinceCheckpointCell({ items }: { items: DeskRow["itemsSinceCheckpoint"]
   const statusClass =
     latest.status === "agreed" ? "text-grass-11" : "text-amber-11";
   return (
-    <td className="max-w-[20rem] px-3 py-2 text-sm whitespace-nowrap text-olive-12">
+    <td className="px-3 py-2 text-sm whitespace-nowrap text-olive-12">
       <span
-        className={`flex items-center gap-1.5 ${
+        className={`flex min-w-0 items-center gap-1.5 ${
           isCounterpart ? "rounded border border-dashed border-blue-7 px-1.5" : ""
         }`}
         title={`${latest.statement} — ${ELEMENT_AUTHOR_LABELS[latest.author]}, ${ELEMENT_STATUS_LABELS[latest.status]}`}
@@ -130,7 +133,10 @@ function DeskEpisodeRow({ row }: { row: DeskRow }) {
           {episode.ticker}
         </Link>
       </td>
-      <td className="px-3 py-2 text-sm whitespace-nowrap text-olive-11">
+      <td
+        className="truncate px-3 py-2 text-sm whitespace-nowrap text-olive-11"
+        title={episode.portfolioName ?? undefined}
+      >
         {episode.portfolioName ?? "—"}
       </td>
       <td className="px-3 py-2">
@@ -138,7 +144,7 @@ function DeskEpisodeRow({ row }: { row: DeskRow }) {
           {LIFECYCLE_LABELS[episode.lifecycle]}
         </Badge>
       </td>
-      <td className="px-3 py-2 text-sm whitespace-nowrap text-slate-12 tabular-nums">
+      <td className="truncate px-3 py-2 text-sm whitespace-nowrap text-slate-12 tabular-nums">
         {row.position ? (
           <>
             <Badge
@@ -272,16 +278,21 @@ export default function DeskPageClient({
               }
             >
               <CampaignGroupHeader campaign={group.campaign} />
-              <div className="overflow-x-auto">
-                <table className="w-full table-auto">
+              <div className="overflow-hidden">
+                <table className="w-full table-fixed">
+                  <colgroup>
+                    {COLUMNS.map((column) => (
+                      <col key={column.label} style={{ width: column.width }} />
+                    ))}
+                  </colgroup>
                   <thead>
                     <tr>
-                      {COLUMN_LABELS.map((label) => (
+                      {COLUMNS.map((column) => (
                         <th
-                          key={label}
-                          className="px-3 py-2 text-left text-xs font-medium whitespace-nowrap text-slate-11"
+                          key={column.label}
+                          className="truncate px-3 py-2 text-left text-xs font-medium whitespace-nowrap text-slate-11"
                         >
-                          {label}
+                          {column.label}
                         </th>
                       ))}
                     </tr>
