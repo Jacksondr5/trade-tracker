@@ -86,4 +86,41 @@ describe("instrument thread smoke fixture", () => {
       await asOwner.query(api.threads.getThreadPage, { ticker: fixture.ticker }),
     ).toBeNull();
   });
+
+  it("seeds a planning demo into an empty account and refuses a non-empty one", async () => {
+    const demoOwner = "owner-b";
+    const result = await t.mutation(internal.e2eSeed.seedPlanningDemo, { ownerId: demoOwner });
+    expect(result.threads).toBeGreaterThanOrEqual(9);
+    const asDemo = t.withIdentity({ tokenIdentifier: demoOwner });
+
+    const desk = await asDemo.query(api.threads.getDesk, {});
+    const semis = desk.groups.find((group) => group.campaign?.name === "Semiconductors")!;
+    expect(semis.campaign?.benchmark?.ticker).toBe("SMH");
+    expect(semis.rows.map((row) => row.episode.ticker).sort()).toEqual([
+      "BE",
+      "MU",
+      "NVDA",
+      "SNDK",
+    ]);
+    const byTicker = Object.fromEntries(semis.rows.map((row) => [row.episode.ticker, row]));
+    expect(byTicker.NVDA!.episode.lifecycle).toBe("active");
+    expect(byTicker.NVDA!.checkpoint?.versionNumber).toBe(1);
+    expect(byTicker.NVDA!.itemsSinceCheckpoint).toHaveLength(2);
+    expect(byTicker.MU!.episode.lifecycle).toBe("watching");
+    expect(byTicker.SNDK!.episode.lifecycle).toBe("idea");
+    expect(byTicker.BE!.draftVersionNumber).toBe(2);
+    expect(byTicker.BE!.episode.campaignElementExemptions).toHaveLength(1);
+    const ungrouped = desk.groups.find((group) => group.campaign === null)!;
+    expect(ungrouped.rows.map((row) => row.episode.ticker).sort()).toEqual(["CF", "MSFT", "TSM"]);
+
+    const nvda = (await asDemo.query(api.threads.getThreadPage, { ticker: "NVDA" }))!;
+    expect(nvda.history).toHaveLength(1);
+    expect(nvda.notes.items).toHaveLength(1);
+    const amd = (await asDemo.query(api.threads.getThreadPage, { ticker: "AMD" }))!;
+    expect(amd.shelvedEpisodes).toHaveLength(1);
+
+    await expect(
+      t.mutation(internal.e2eSeed.seedPlanningDemo, { ownerId: demoOwner }),
+    ).rejects.toThrow(/only seeds an empty account/);
+  });
 });
