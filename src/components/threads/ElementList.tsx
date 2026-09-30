@@ -83,7 +83,7 @@ export function ElementRow({
               </span>
             ) : null}
             {element.noteId ? (
-              <span className="text-blue-11" title="Cites note">
+              <span className="text-slate-10" title="Recorded from a note">
                 §
               </span>
             ) : null}

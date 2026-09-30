@@ -15,10 +15,12 @@ export function PlanLineText({ line }: { line: DisplayLine }) {
         <span className="ml-2 text-xs text-slate-11">{formatAsOf(line.asOf)}</span>
       ) : null}
       {citation ? (
+        // A quiet source marker, not a link: the line was compiled from a
+        // recorded element or note.
         <span
-          className="ml-1 text-xs text-blue-11"
-          title={`Cites ${citation}`}
-          aria-label={`Cites ${citation}`}
+          className="ml-1 text-xs text-slate-10"
+          title={`Compiled from a recorded ${citation}`}
+          aria-label={`Compiled from a recorded ${citation}`}
         >
           §
         </span>

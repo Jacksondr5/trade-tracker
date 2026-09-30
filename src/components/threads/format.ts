@@ -47,7 +47,7 @@ export function elementStatusBadgeVariant(
 
 export const ELEMENT_AUTHOR_LABELS: Record<ElementView["author"], string> = {
   user: "User",
-  counterpart: "Counterpart",
+  counterpart: "Trade Assistant",
 };
 
 const numberFormatter = new Intl.NumberFormat("en-US", {

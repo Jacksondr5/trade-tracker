@@ -110,8 +110,8 @@ function SinceCheckpointCell({ items }: { items: DeskRow["itemsSinceCheckpoint"]
           {ELEMENT_STATUS_LABELS[latest.status]}
         </span>
         {isCounterpart ? (
-          <span className="shrink-0 text-[10px] font-semibold text-blue-11" aria-label="Counterpart">
-            C
+          <span className="shrink-0 text-[10px] font-semibold text-blue-11" aria-label="Trade Assistant">
+            TA
           </span>
         ) : null}
         <span className="min-w-0 truncate">{latest.statement}</span>
