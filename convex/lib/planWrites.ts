@@ -48,11 +48,14 @@ async function reopenEpisodeForCorrection(
   },
 ): Promise<void> {
   const remaining = await listEpisodeTrades(ctx, args.ownerId, args.episodeId);
-  if (derivePositionEpisodeState(remaining).netQuantity === 0) {
+  const netQuantity = derivePositionEpisodeState(remaining).netQuantity;
+  assertNotOverClosed(netQuantity, args.trade.ticker);
+  if (netQuantity === 0) {
     // Still flat after the correction: stays closed, with its dates refreshed.
     if (remaining.length > 0) {
       await ctx.db.patch(args.episodeId, {
         closedAt: Math.max(...remaining.map((row) => row.date)),
+        openedAt: Math.min(...remaining.map((row) => row.date)),
         updatedAt: Date.now(),
       });
     }
@@ -79,6 +82,16 @@ async function reopenEpisodeForCorrection(
     source: args.actor === "user" ? "app" : "conversation",
   });
   await recomputeEpisodeLifecycle(ctx, args.episodeId);
+}
+
+/** A correction can never leave a closed episode holding a negative position. */
+function assertNotOverClosed(netQuantity: number, ticker: string): void {
+  if (netQuantity < 0) {
+    throw planModelError(
+      "VALIDATION",
+      `This change would close more ${ticker} than the episode opened`,
+    );
+  }
 }
 
 function reopenRequiredError(
@@ -439,7 +452,10 @@ export async function syncTradeEpisodeLink(
         trade.ownerId,
         previousEpisode._id,
       );
-      if (derivePositionEpisodeState(remainingTrades).netQuantity !== 0) {
+      const netQuantity =
+        derivePositionEpisodeState(remainingTrades).netQuantity;
+      assertNotOverClosed(netQuantity, trade.ticker);
+      if (netQuantity !== 0) {
         if (!options.allowReopen) {
           throw reopenRequiredError(trade, previousEpisode._id);
         }
@@ -453,6 +469,7 @@ export async function syncTradeEpisodeLink(
       }
       await ctx.db.patch(previousEpisode._id, {
         closedAt: Math.max(...remainingTrades.map((row) => row.date)),
+        openedAt: Math.min(...remainingTrades.map((row) => row.date)),
         updatedAt: Date.now(),
       });
       return previousEpisode._id;
@@ -526,10 +543,9 @@ export async function syncTradeEpisodeLink(
       const remaining = (
         await listEpisodeTrades(ctx, trade.ownerId, previousEpisode._id)
       ).filter((row) => row._id !== trade._id);
-      if (
-        derivePositionEpisodeState(remaining).netQuantity !== 0 &&
-        !options.allowReopen
-      ) {
+      const netQuantity = derivePositionEpisodeState(remaining).netQuantity;
+      assertNotOverClosed(netQuantity, trade.ticker);
+      if (netQuantity !== 0 && !options.allowReopen) {
         throw reopenRequiredError(trade, previousEpisode._id);
       }
     }
@@ -1100,6 +1116,7 @@ export async function linkTrade(
     const remaining = await netWith(current._id, (rows) =>
       rows.filter((row) => row._id !== trade._id),
     );
+    assertNotOverClosed(remaining, trade.ticker);
     if (remaining !== 0 && !args.allowReopen) {
       throw reopenRequiredError(trade, current._id);
     }
@@ -1128,6 +1145,7 @@ export async function linkTrade(
     }
     if (target.lifecycle === "closed") {
       const after = await netWith(target._id, (rows) => [...rows, trade]);
+      assertNotOverClosed(after, trade.ticker);
       if (after !== 0 && !args.allowReopen) {
         throw reopenRequiredError(trade, target._id);
       }

@@ -928,6 +928,21 @@ describe("instrument threads and episodes", () => {
     const episodeId = (await t.run((ctx) => ctx.db.get(sell)))!.episodeId!;
     expect((await t.run((ctx) => ctx.db.get(episodeId)))!.lifecycle).toBe("closed");
 
+    // Over-closing is refused outright, with or without consent.
+    await expect(
+      asOwner(t).mutation(api.trades.updateTrade, {
+        quantity: 11,
+        reopenClosedEpisode: true,
+        tradeId: sell,
+      }),
+    ).rejects.toMatchObject({ data: { code: "VALIDATION" } });
+
+    // A flat date correction to the opening fill refreshes the opened date.
+    await asOwner(t).mutation(api.trades.updateTrade, { date: 8, tradeId: buy });
+    const redated = (await t.run((ctx) => ctx.db.get(episodeId)))!;
+    expect(redated.lifecycle).toBe("closed");
+    expect(redated.openedAt).toBe(8);
+
     // The broker corrected the sell to 9 shares: one share is still held.
     await expect(
       asOwner(t).mutation(api.trades.updateTrade, { quantity: 9, tradeId: sell }),
