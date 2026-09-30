@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { waitForAuthenticatedApp } from "../helpers/app";
 import { runConvexFunction } from "../helpers/convex";
+import { getConfiguredBaseUrl, isLocalPlaywrightTarget } from "../helpers/env";
 import {
   APP_PAGE_TITLES,
   getDeskCampaignGroup,
@@ -23,6 +24,12 @@ type InstrumentThreadFixtureIds = {
 test("seeded campaign episode renders on the desk and its thread page", async ({
   page,
 }) => {
+  const configuredBaseUrl = getConfiguredBaseUrl();
+  test.skip(
+    !configuredBaseUrl || !isLocalPlaywrightTarget(configuredBaseUrl),
+    "Fixture ids are read from Convex directly, which is only available against local Convex targets.",
+  );
+
   const fixture = runConvexFunction<InstrumentThreadFixtureIds>(
     "e2eSeed:getInstrumentThreadFixtureIds",
     {},

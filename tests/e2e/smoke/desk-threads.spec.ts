@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { waitForAuthenticatedApp } from "../helpers/app";
 import { runConvexFunction } from "../helpers/convex";
+import { getConfiguredBaseUrl, isLocalPlaywrightTarget } from "../helpers/env";
 import {
   APP_PAGE_TITLES,
   getElementKindInput,
@@ -31,6 +32,12 @@ test("threads page renders its title", async ({ page }) => {
 });
 
 test("open thread, start an episode, and add an element", async ({ page }) => {
+  const configuredBaseUrl = getConfiguredBaseUrl();
+  test.skip(
+    !configuredBaseUrl || !isLocalPlaywrightTarget(configuredBaseUrl),
+    "Fixture ids are read from Convex directly, which is only available against local Convex targets.",
+  );
+
   await page.goto("/threads");
   await waitForAuthenticatedApp(page, APP_PAGE_TITLES.threads);
 
