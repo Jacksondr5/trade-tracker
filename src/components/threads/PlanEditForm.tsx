@@ -137,9 +137,11 @@ export function PlanEditForm({
           caught,
           "Failed to save checkpoint",
         );
+        // The Reload button sits right below, so a conflict needs no extra
+        // instruction; the server message already says what changed.
         setError(
           isConflictError(caught)
-            ? `${message} Reload the page to see the latest checkpoint.`
+            ? "The plan changed while you were editing. Reload to start from the latest version."
             : message,
         );
       }

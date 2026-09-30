@@ -56,28 +56,41 @@ function Button({
   dataTestId,
   ...props
 }: ButtonProps) {
-  const Comp = asChild ? Slot : "button";
+  const classes = cn(buttonClassName({ variant, size, className }), {
+    "cursor-not-allowed opacity-70": isLoading,
+  });
+
+  // Slot merges its props into its single child element, so the child must be
+  // passed through untouched; wrapping it in a fragment drops the styling.
+  if (asChild) {
+    return (
+      <Slot
+        data-slot="button"
+        data-testid={dataTestId}
+        className={classes}
+        {...props}
+      >
+        {children}
+      </Slot>
+    );
+  }
 
   return (
-    <Comp
+    <button
       data-slot="button"
       data-testid={dataTestId}
-      className={cn(buttonClassName({ variant, size, className }), {
-        "cursor-not-allowed opacity-70": isLoading,
-      })}
+      className={classes}
       disabled={disabled || isLoading}
       {...props}
     >
-      <>
-        {isLoading && (
-          <Loader2
-            className="mr-2 size-4 animate-spin"
-            data-slot="button-loader"
-          />
-        )}
-        {children}
-      </>
-    </Comp>
+      {isLoading && (
+        <Loader2
+          className="mr-2 size-4 animate-spin"
+          data-slot="button-loader"
+        />
+      )}
+      {children}
+    </button>
   );
 }
 
