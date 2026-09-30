@@ -80,6 +80,9 @@ export function AddElementForm({
           statement: parsed.statement,
           status: parsed.status,
           supersedes: supersedes?.id,
+          // A superseding element keeps the replaced element's typed value,
+          // so a stop or level stays level-bearing for lifecycle inference.
+          value: supersedes?.value ?? undefined,
         });
         formApi.reset();
         onClearSupersedes();

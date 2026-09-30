@@ -1,7 +1,10 @@
 import { ConvexError } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
-import { derivePositionEpisodeState } from "./openPositions";
+import {
+  derivePositionEpisodeState,
+  getPositionQuantityDelta,
+} from "./openPositions";
 import {
   effectiveRevision,
   MAX_ELEMENT_STATEMENT_LENGTH,
@@ -412,10 +415,13 @@ export async function syncTradeEpisodeLink(
       // An open episode that began after this fill means the fill belongs to
       // neither it nor whatever closed before it.
       const predatesOpenEpisode = accepting.length > candidates.length;
+      // A closing-side fill never starts an engagement; with no open episode
+      // to join it stays unlinked instead of becoming a negative position.
+      const isClosingFill = getPositionQuantityDelta(trade) < 0;
       const target =
         exactMatch ??
         adoptable ??
-        (predatesOpenEpisode
+        (predatesOpenEpisode || isClosingFill
           ? null
           : await openEpisode(ctx, {
               actor: "system",

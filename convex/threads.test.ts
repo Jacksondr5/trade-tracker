@@ -878,4 +878,42 @@ describe("instrument threads and episodes", () => {
     await asOwner(t).mutation(api.trades.updateTrade, { date: 45, tradeId: again });
     expect((await t.run((ctx) => ctx.db.get(again)))!.episodeId).toBe(againEpisode);
   });
+
+  it("leaves an unmatched closing fill unlinked and lets trade-less episodes release a portfolio", async () => {
+    const swing = await insertPortfolio();
+    // A sell with no open episode to close never starts one.
+    const orphanSell = await insertTrade({ date: 50, portfolioId: swing, quantity: 5, side: "sell", ticker: "EOG" });
+    await t.run((ctx) => syncTradeEpisodeLink(ctx, orphanSell));
+    expect((await t.run((ctx) => ctx.db.get(orphanSell)))!.episodeId).toBeUndefined();
+    const eogPage = (await asOwner(t).query(api.threads.getThreadPage, { ticker: "EOG" }))!;
+    expect(eogPage.liveEpisodes).toEqual([]);
+
+    // An idea that only named the portfolio does not block deleting it.
+    const spare = await insertPortfolio("Spare");
+    const ideaId = await t.run(async (ctx) => {
+      const thread = await ensureThread(ctx, ownerId, "IBB", "counterpart");
+      return (
+        await openEpisode(ctx, {
+          actor: "counterpart",
+          ownerId,
+          portfolioId: spare,
+          source: "user",
+          threadId: thread._id,
+          ticker: "IBB",
+        })
+      )._id;
+    });
+    await asOwner(t).mutation(api.portfolios.deletePortfolio, { portfolioId: spare });
+    expect(await t.run((ctx) => ctx.db.get(spare))).toBeNull();
+    expect((await t.run((ctx) => ctx.db.get(ideaId)))!.portfolioId).toBeUndefined();
+
+    // A portfolio with trade history stays, and says why.
+    const buy = await insertTrade({ date: 60, portfolioId: swing, quantity: 5, side: "buy", ticker: "EOG" });
+    await t.run((ctx) => syncTradeEpisodeLink(ctx, buy));
+    await expect(
+      asOwner(t).mutation(api.portfolios.deletePortfolio, { portfolioId: swing }),
+    ).rejects.toMatchObject({
+      data: { code: "CONFLICT", message: expect.stringContaining("trade history") },
+    });
+  });
 });

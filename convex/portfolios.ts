@@ -2,6 +2,8 @@ import { mutation, query, type QueryCtx } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
 import { assertOwner, requireUser } from "./lib/auth";
 import { planModelError } from "./lib/planWrites";
+
+const MAX_EPISODES_CHECKED_ON_DELETE = 500;
 import { computeBrokerageFreshnessStatus } from "./lib/brokerageFreshness";
 import { tradeValidator } from "./lib/tradeValidator";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -112,20 +114,41 @@ export const deletePortfolio = mutation({
       "Portfolio not found",
     );
 
-    // Episodes are one position lifecycle in one portfolio; deleting the
-    // portfolio under them would strand their fills. Refuse until the
-    // episodes are relinked or the fills reassigned.
-    const referencingEpisode = await ctx.db
+    // Episodes are one position lifecycle in one portfolio. An episode with
+    // fills is trade history in this portfolio, so the portfolio cannot be
+    // deleted from under it. An episode with no fills (an idea or watching
+    // setup) only named the portfolio in advance and simply lets it go.
+    const referencingEpisodes = await ctx.db
       .query("episodes")
       .withIndex("by_owner_portfolioId", (q) =>
         q.eq("ownerId", ownerId).eq("portfolioId", args.portfolioId),
       )
-      .first();
-    if (referencingEpisode) {
+      .take(MAX_EPISODES_CHECKED_ON_DELETE + 1);
+    if (referencingEpisodes.length > MAX_EPISODES_CHECKED_ON_DELETE) {
       throw planModelError(
         "CONFLICT",
-        `Portfolio "${portfolio.name}" still has episodes (${referencingEpisode.ticker}); reassign its trades before deleting it`,
+        `Portfolio "${portfolio.name}" has trade history and cannot be deleted.`,
       );
+    }
+    for (const episode of referencingEpisodes) {
+      const fill = await ctx.db
+        .query("trades")
+        .withIndex("by_owner_episodeId", (q) =>
+          q.eq("ownerId", ownerId).eq("episodeId", episode._id),
+        )
+        .first();
+      if (fill) {
+        throw planModelError(
+          "CONFLICT",
+          `Portfolio "${portfolio.name}" has trade history (${episode.ticker}) and cannot be deleted.`,
+        );
+      }
+    }
+    for (const episode of referencingEpisodes) {
+      await ctx.db.patch(episode._id, {
+        portfolioId: undefined,
+        updatedAt: Date.now(),
+      });
     }
 
     // Unlink all trades with this portfolioId

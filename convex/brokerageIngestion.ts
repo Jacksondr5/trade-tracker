@@ -259,9 +259,19 @@ async function upsertPendingImportReviewIssue(
     )
     .unique();
   if (args.count === 0) {
-    // A re-sync that finds nothing pending resolves the earlier issue instead
-    // of leaving stale evidence presented as current.
-    if (existing) {
+    // This run staged nothing new, but earlier runs may still have trades
+    // awaiting review. Resolve only once the inbox has none left, so the
+    // issue never reads as resolved while review is still owed.
+    const stillPending = await ctx.db
+      .query("inboxTrades")
+      .withIndex("by_owner_source_status", (q) =>
+        q
+          .eq("ownerId", args.ownerId)
+          .eq("source", "ibkr")
+          .eq("status", "pending_review"),
+      )
+      .first();
+    if (existing && stillPending === null) {
       await ctx.db.patch(existing._id, {
         lastRecheckedAt: now,
         resolvedAt: now,

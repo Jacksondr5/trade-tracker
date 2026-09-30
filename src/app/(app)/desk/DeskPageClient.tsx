@@ -273,7 +273,9 @@ export default function DeskPageClient({
 
       {desk.truncated ? (
         <Alert variant="info" className="mb-4">
-          Showing the first {desk.liveEpisodeCount} live episodes.
+          Showing{" "}
+          {desk.groups.reduce((total, group) => total + group.rows.length, 0)}{" "}
+          of {desk.liveEpisodeCount} live episodes.
         </Alert>
       ) : null}
 

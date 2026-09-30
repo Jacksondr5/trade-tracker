@@ -434,7 +434,7 @@ export function EpisodeCard({
               <div className="mt-2 space-y-3">
                 {resolved.history.truncated ? (
                   <Alert variant="info">
-                    Showing the first {resolved.history.items.length} of{" "}
+                    Showing the latest {resolved.history.items.length} of{" "}
                     {resolved.history.total} items.
                   </Alert>
                 ) : null}
