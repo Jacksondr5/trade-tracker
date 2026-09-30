@@ -44,8 +44,8 @@ describe("proxy allowlist courtesy redirect", () => {
     );
 
     try {
-      await proxy(auth, { nextUrl: { pathname: "/dashboard" } });
-      await proxy(auth, { nextUrl: { pathname: "/dashboard" } });
+      await proxy(auth, { nextUrl: { pathname: "/desk" } });
+      await proxy(auth, { nextUrl: { pathname: "/desk" } });
 
       expect(warning).toHaveBeenCalledTimes(1);
       expect(warning).toHaveBeenCalledWith(

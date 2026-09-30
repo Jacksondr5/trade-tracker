@@ -8,6 +8,7 @@ import {
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { assertOwner, requireUser } from "./lib/auth";
+import { syncTradeEpisodeLink } from "./lib/planWrites";
 import { ensureMarketDataInstrumentReviewRecord } from "./lib/marketDataInstruments";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { ActionCtx, MutationCtx, QueryCtx } from "./_generated/server";
@@ -509,6 +510,7 @@ async function commitInboxTradeAcceptance(
   });
 
   await ctx.db.delete(args.inboxTrade._id);
+  await syncTradeEpisodeLink(ctx, tradeId);
 
   return { accepted: true, tradeId };
 }

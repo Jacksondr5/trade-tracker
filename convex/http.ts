@@ -2,6 +2,8 @@ import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
 import { acceptCounterpartTradeViaAction } from "./imports";
+import { PLAN_SECTION_KEYS } from "./lib/planModel";
+import { isPlanModelError } from "./lib/planWrites";
 
 type JsonObject = Record<string, unknown>;
 type CounterpartErrorCode =
@@ -20,6 +22,7 @@ class HttpRequestError extends Error {
     readonly status: number,
     readonly retryable: boolean,
     readonly retryAfterSeconds?: number,
+    readonly details?: Record<string, unknown>,
   ) {
     super(message);
   }
@@ -52,6 +55,7 @@ function errorResponse(error: HttpRequestError): Response {
         ...(error.retryAfterSeconds === undefined
           ? {}
           : { retryAfterSeconds: error.retryAfterSeconds }),
+        ...(error.details === undefined ? {} : { details: error.details }),
       },
       ok: false,
     },
@@ -295,9 +299,16 @@ export function validateEmptyBody(body: JsonObject) {
 }
 
 export function validateAddNoteBody(body: JsonObject) {
-  assertExactKeys(body, ["content", "noteDate", "ticker"]);
+  assertExactKeys(body, ["content", "noteDate", "ticker", "episodeId", "campaignId"]);
+  const episodeId = optionalString(body, "episodeId");
+  const campaignId = optionalString(body, "campaignId");
+  if (episodeId && campaignId) {
+    throw new JsonValidationError("A note attaches to an episode or a campaign, not both");
+  }
   return {
+    campaignId,
     content: requireString(body, "content"),
+    episodeId,
     noteDate: requireNumber(body, "noteDate"),
     ticker: optionalString(body, "ticker")?.toUpperCase(),
   };
@@ -356,6 +367,385 @@ export function validateFillDiscussionContextBody(body: JsonObject) {
   return { inboxTradeId: requireString(body, "inboxTradeId") };
 }
 
+// --- Phase 3 planning surface -------------------------------------------
+
+const WRITE_ACTORS = ["user", "counterpart", "agent", "system"] as const;
+const WRITE_SOURCES = ["conversation", "app", "migration"] as const;
+const ELEMENT_AUTHORS = ["user", "counterpart"] as const;
+const ELEMENT_WRITE_STATUSES = ["proposed", "agreed"] as const;
+const VALUE_UNITS = ["usd", "shares", "percent", "ratio"] as const;
+const VALUE_SCOPES = ["per_share", "position", "portfolio"] as const;
+const VALUE_PROVENANCES = [
+  "hypothetical",
+  "user_reported",
+  "broker_verified",
+] as const;
+const STOP_KINDS = ["planned_exit", "broker_order"] as const;
+const MAX_ELEMENTS_PER_WRITE = 50;
+
+function optionalOperationId(body: JsonObject): string | undefined {
+  const value = optionalString(body, "operationId");
+  if (value !== undefined && value.length > 200) {
+    throw new JsonValidationError("operationId must be at most 200 characters");
+  }
+  return value;
+}
+
+function requireActor(body: JsonObject) {
+  return requireLiteral(body, "actor", WRITE_ACTORS);
+}
+
+function optionalSource(body: JsonObject) {
+  return optionalLiteral(body, "source", WRITE_SOURCES) ?? "conversation";
+}
+
+function optionalElementValue(value: unknown, label: string) {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new JsonValidationError(`${label} must be an object`);
+  }
+  const object = value as JsonObject;
+  assertExactKeys(object, ["amount", "unit", "scope", "provenance", "stopKind"]);
+  return {
+    amount: requireNumber(object, "amount", `${label}.amount`),
+    provenance: requireLiteral(
+      object,
+      "provenance",
+      VALUE_PROVENANCES,
+      `${label}.provenance`,
+    ),
+    scope: requireLiteral(object, "scope", VALUE_SCOPES, `${label}.scope`),
+    stopKind: optionalLiteral(object, "stopKind", STOP_KINDS),
+    unit: requireLiteral(object, "unit", VALUE_UNITS, `${label}.unit`),
+  };
+}
+
+function requireElementInput(value: unknown, index: number) {
+  const label = `elements[${index}]`;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new JsonValidationError(`${label} must be an object`);
+  }
+  const object = value as JsonObject;
+  assertExactKeys(object, [
+    "statement",
+    "status",
+    "author",
+    "kind",
+    "asOf",
+    "noteId",
+    "supersedes",
+    "value",
+  ]);
+  return {
+    asOf: optionalEasternDate(object, "asOf"),
+    author: requireLiteral(object, "author", ELEMENT_AUTHORS, `${label}.author`),
+    kind: optionalString(object, "kind"),
+    noteId: optionalString(object, "noteId"),
+    statement: requireString(object, "statement", `${label}.statement`),
+    status: requireLiteral(
+      object,
+      "status",
+      ELEMENT_WRITE_STATUSES,
+      `${label}.status`,
+    ),
+    supersedes: optionalString(object, "supersedes"),
+    value: optionalElementValue(object.value, `${label}.value`),
+  };
+}
+
+function requirePlanSections(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new JsonValidationError("sections must be an object");
+  }
+  const object = value as JsonObject;
+  assertExactKeys(object, PLAN_SECTION_KEYS);
+  const sections = {} as Record<
+    (typeof PLAN_SECTION_KEYS)[number],
+    Array<{
+      asOf?: string;
+      noteId?: string;
+      elementId?: string;
+      text: string;
+      value?: ReturnType<typeof optionalElementValue>;
+    }>
+  >;
+  for (const key of PLAN_SECTION_KEYS) {
+    const lines = object[key] ?? [];
+    if (!Array.isArray(lines)) {
+      throw new JsonValidationError(`sections.${key} must be an array`);
+    }
+    sections[key] = lines.map((line, index) => {
+      const label = `sections.${key}[${index}]`;
+      if (!line || typeof line !== "object" || Array.isArray(line)) {
+        throw new JsonValidationError(`${label} must be an object`);
+      }
+      const lineObject = line as JsonObject;
+      assertExactKeys(lineObject, ["text", "elementId", "noteId", "asOf", "value"]);
+      return {
+        asOf: optionalEasternDate(lineObject, "asOf"),
+        elementId: optionalString(lineObject, "elementId"),
+        noteId: optionalString(lineObject, "noteId"),
+        text: requireString(lineObject, "text", `${label}.text`),
+        value: optionalElementValue(lineObject.value, `${label}.value`),
+      };
+    });
+  }
+  return sections;
+}
+
+export function validateThreadContextBody(body: JsonObject) {
+  assertExactKeys(body, ["ticker"]);
+  return { ticker: requireString(body, "ticker").toUpperCase() };
+}
+
+export function validateEpisodeContextBody(body: JsonObject) {
+  assertExactKeys(body, ["episodeId"]);
+  return { episodeId: requireString(body, "episodeId") };
+}
+
+export function validateEpisodeElementsBody(body: JsonObject) {
+  assertExactKeys(body, ["episodeId", "cursor", "numItems"]);
+  return {
+    cursor: optionalCursor(body),
+    episodeId: requireString(body, "episodeId"),
+    numItems: optionalInteger(body, "numItems", 1, 200, 50),
+  };
+}
+
+export function validatePlanVersionBody(body: JsonObject) {
+  assertExactKeys(body, ["episodeId", "versionNumber"]);
+  const versionNumber = requireNumber(body, "versionNumber");
+  if (!Number.isInteger(versionNumber) || versionNumber < 1) {
+    throw new JsonValidationError("versionNumber must be a positive integer");
+  }
+  return { episodeId: requireString(body, "episodeId"), versionNumber };
+}
+
+export function validateOpenEpisodeBody(body: JsonObject) {
+  assertExactKeys(body, [
+    "ticker",
+    "portfolioId",
+    "campaignId",
+    "actor",
+    "source",
+    "operationId",
+  ]);
+  return {
+    actor: requireActor(body),
+    campaignId: optionalString(body, "campaignId"),
+    operationId: optionalOperationId(body),
+    portfolioId: optionalString(body, "portfolioId"),
+    source: optionalSource(body),
+    ticker: requireString(body, "ticker").toUpperCase(),
+  };
+}
+
+export function validateRecordElementsBody(body: JsonObject) {
+  assertExactKeys(body, [
+    "episodeId",
+    "campaignId",
+    "elements",
+    "actor",
+    "source",
+    "operationId",
+  ]);
+  const elements = body.elements;
+  if (!Array.isArray(elements) || elements.length === 0) {
+    throw new JsonValidationError("elements must be a non-empty array");
+  }
+  if (elements.length > MAX_ELEMENTS_PER_WRITE) {
+    throw new JsonValidationError(
+      `elements may hold at most ${MAX_ELEMENTS_PER_WRITE} items`,
+    );
+  }
+  const episodeId = optionalString(body, "episodeId");
+  const campaignId = optionalString(body, "campaignId");
+  if ((episodeId === undefined) === (campaignId === undefined)) {
+    throw new JsonValidationError(
+      "Exactly one of episodeId or campaignId is required",
+    );
+  }
+  return {
+    actor: requireActor(body),
+    campaignId,
+    elements: elements.map(requireElementInput),
+    episodeId,
+    operationId: optionalOperationId(body),
+    source: optionalSource(body),
+  };
+}
+
+export function validateSetElementStatusBody(body: JsonObject) {
+  assertExactKeys(body, ["elementId", "status", "evidence", "actor", "operationId"]);
+  return {
+    actor: requireActor(body),
+    elementId: requireString(body, "elementId"),
+    evidence: optionalString(body, "evidence"),
+    operationId: optionalOperationId(body),
+    status: requireLiteral(body, "status", ["agreed", "dropped"] as const),
+  };
+}
+
+export function validateDraftPlanVersionBody(body: JsonObject) {
+  assertExactKeys(body, [
+    "episodeId",
+    "sections",
+    "compiledThroughRevision",
+    "observedRevision",
+    "actor",
+    "source",
+    "operationId",
+  ]);
+  const observedRevision = requireNumber(body, "observedRevision");
+  if (!Number.isInteger(observedRevision) || observedRevision < 0) {
+    throw new JsonValidationError("observedRevision must be a non-negative integer");
+  }
+  const compiledThroughRevision = body.compiledThroughRevision;
+  if (
+    compiledThroughRevision !== undefined &&
+    (typeof compiledThroughRevision !== "number" ||
+      !Number.isInteger(compiledThroughRevision) ||
+      compiledThroughRevision < 0)
+  ) {
+    throw new JsonValidationError(
+      "compiledThroughRevision must be a non-negative integer",
+    );
+  }
+  return {
+    actor: requireActor(body),
+    compiledThroughRevision: compiledThroughRevision as number | undefined,
+    episodeId: requireString(body, "episodeId"),
+    observedRevision,
+    operationId: optionalOperationId(body),
+    sections: requirePlanSections(body.sections),
+    source: optionalSource(body),
+  };
+}
+
+export function validateEndorsePlanVersionBody(body: JsonObject) {
+  assertExactKeys(body, [
+    "episodeId",
+    "versionNumber",
+    "agreeElementIds",
+    "actor",
+    "operationId",
+  ]);
+  const versionNumber = requireNumber(body, "versionNumber");
+  if (!Number.isInteger(versionNumber) || versionNumber < 1) {
+    throw new JsonValidationError("versionNumber must be a positive integer");
+  }
+  return {
+    actor: requireActor(body),
+    agreeElementIds: optionalStringArray(body, "agreeElementIds"),
+    episodeId: requireString(body, "episodeId"),
+    operationId: optionalOperationId(body),
+    versionNumber,
+  };
+}
+
+export function validateListThreadsBody(body: JsonObject) {
+  assertExactKeys(body, ["cursor", "numItems"]);
+  return {
+    cursor: optionalCursor(body),
+    numItems: optionalInteger(body, "numItems", 1, 200, 100),
+  };
+}
+
+export function validateLinkTradeBody(body: JsonObject) {
+  assertExactKeys(body, [
+    "tradeId",
+    "episodeId",
+    "reopenClosedEpisode",
+    "actor",
+    "operationId",
+  ]);
+  const episodeId = body.episodeId;
+  if (episodeId !== null && (typeof episodeId !== "string" || !episodeId.trim())) {
+    throw new JsonValidationError("episodeId must be a string or null");
+  }
+  return {
+    actor: requireActor(body),
+    episodeId: episodeId === null ? null : (episodeId as string).trim(),
+    operationId: optionalOperationId(body),
+    reopenClosedEpisode: optionalBoolean(body, "reopenClosedEpisode"),
+    tradeId: requireString(body, "tradeId"),
+  };
+}
+
+export function validateSetEpisodeCampaignBody(body: JsonObject) {
+  assertExactKeys(body, [
+    "episodeId",
+    "campaignId",
+    "exemptedCampaignElementIds",
+    "operationId",
+  ]);
+  const campaignId = body.campaignId;
+  if (campaignId !== null && (typeof campaignId !== "string" || !campaignId.trim())) {
+    throw new JsonValidationError("campaignId must be a string or null");
+  }
+  return {
+    campaignId: campaignId === null ? null : (campaignId as string).trim(),
+    episodeId: requireString(body, "episodeId"),
+    exemptedCampaignElementIds: optionalStringArray(
+      body,
+      "exemptedCampaignElementIds",
+    ),
+    operationId: optionalOperationId(body),
+  };
+}
+
+export function validateShelveEpisodeBody(body: JsonObject) {
+  assertExactKeys(body, ["episodeId", "shelved", "actor", "source", "operationId"]);
+  return {
+    actor: requireActor(body),
+    episodeId: requireString(body, "episodeId"),
+    operationId: optionalOperationId(body),
+    shelved: optionalBoolean(body, "shelved") ?? true,
+    source: optionalSource(body),
+  };
+}
+
+export function validateUpsertCampaignBody(body: JsonObject) {
+  assertExactKeys(body, [
+    "campaignId",
+    "name",
+    "thesis",
+    "benchmarkTicker",
+    "linkedTickers",
+    "actor",
+    "operationId",
+  ]);
+  const benchmarkTicker = body.benchmarkTicker;
+  if (
+    benchmarkTicker !== undefined &&
+    benchmarkTicker !== null &&
+    (typeof benchmarkTicker !== "string" || !benchmarkTicker.trim())
+  ) {
+    throw new JsonValidationError("benchmarkTicker must be a string or null");
+  }
+  const campaignId = optionalString(body, "campaignId");
+  const name = optionalString(body, "name");
+  if (!campaignId && !name) {
+    throw new JsonValidationError("name is required when creating a campaign");
+  }
+  return {
+    actor: requireActor(body),
+    benchmarkTicker:
+      benchmarkTicker === undefined
+        ? undefined
+        : benchmarkTicker === null
+          ? null
+          : (benchmarkTicker as string).trim().toUpperCase(),
+    campaignId,
+    linkedTickers: optionalStringArray(body, "linkedTickers")?.map((ticker) =>
+      ticker.toUpperCase(),
+    ),
+    name,
+    operationId: optionalOperationId(body),
+    thesis: body.thesis === undefined ? undefined : String(body.thesis),
+  };
+}
+
 async function authorizedJson(
   req: Request,
   handler: (body: JsonObject, ownerId: string) => Promise<Response>,
@@ -375,6 +765,24 @@ async function authorizedJson(
     return await handler(await readJson(req), ownerId);
   } catch (error) {
     if (error instanceof HttpRequestError) return errorResponse(error);
+    if (isPlanModelError(error)) {
+      const status =
+        error.data.code === "CONFLICT"
+          ? 409
+          : error.data.code === "NOT_FOUND"
+            ? 404
+            : 400;
+      return errorResponse(
+        new HttpRequestError(
+          error.data.code,
+          error.data.message,
+          status,
+          false,
+          undefined,
+          error.data.details,
+        ),
+      );
+    }
     console.error("counterpart_http_internal_error", error);
     return errorResponse(
       new HttpRequestError("INTERNAL", "Internal server error", 500, true),
@@ -549,6 +957,14 @@ http.route({
         ...args,
         ownerId,
       });
+      if (noteId === null) {
+        throw new HttpRequestError(
+          "NOT_FOUND",
+          "Episode or campaign not found",
+          404,
+          false,
+        );
+      }
       return successResponse({ noteId });
     });
   }),
@@ -618,6 +1034,263 @@ http.route({
   }),
   method: "POST",
   path: "/internal/counterpart/record-check-in-response",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
+      const args = validateThreadContextBody(body);
+      const data = await ctx.runQuery(
+        internal.counterpartPlanning.getThreadContext,
+        { ...args, now: Date.now(), ownerId },
+      );
+      if (!data) {
+        throw new HttpRequestError("NOT_FOUND", "Thread not found", 404, false);
+      }
+      return successResponse(data);
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/thread-context",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
+      const args = validateEpisodeContextBody(body);
+      const data = await ctx.runQuery(
+        internal.counterpartPlanning.getEpisodeContext,
+        { ...args, now: Date.now(), ownerId },
+      );
+      if (!data) {
+        throw new HttpRequestError("NOT_FOUND", "Episode not found", 404, false);
+      }
+      return successResponse(data);
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/episode-context",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
+      validateEmptyBody(body);
+      const data = await ctx.runQuery(
+        internal.counterpartPlanning.getDeskContext,
+        { ownerId },
+      );
+      return successResponse(data);
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/desk-context",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
+      const args = validateEpisodeElementsBody(body);
+      const data = await ctx.runQuery(
+        internal.counterpartPlanning.listEpisodeElementsForCounterpart,
+        { ...args, ownerId },
+      );
+      if (!data) {
+        throw new HttpRequestError("NOT_FOUND", "Episode not found", 404, false);
+      }
+      return successResponse(data);
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/episode-elements",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
+      const args = validatePlanVersionBody(body);
+      const version = await ctx.runQuery(
+        internal.counterpartPlanning.getPlanVersionForCounterpart,
+        { ...args, ownerId },
+      );
+      if (!version) {
+        throw new HttpRequestError(
+          "NOT_FOUND",
+          "Plan version not found",
+          404,
+          false,
+        );
+      }
+      return successResponse({ version });
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/plan-version",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
+      validateEmptyBody(body);
+      const campaigns = await ctx.runQuery(
+        internal.counterpartPlanning.listCampaignContexts,
+        { ownerId },
+      );
+      return successResponse({ campaigns });
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/list-campaigns",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
+      const args = validateOpenEpisodeBody(body);
+      const data = await ctx.runMutation(
+        internal.counterpartPlanning.openEpisodeForCounterpart,
+        { ...args, ownerId },
+      );
+      return successResponse(data);
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/open-episode",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
+      const args = validateRecordElementsBody(body);
+      const data = await ctx.runMutation(
+        internal.counterpartPlanning.recordElementsForCounterpart,
+        { ...args, ownerId },
+      );
+      return successResponse(data);
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/record-elements",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
+      const args = validateSetElementStatusBody(body);
+      const data = await ctx.runMutation(
+        internal.counterpartPlanning.setElementStatusForCounterpart,
+        { ...args, ownerId },
+      );
+      return successResponse(data);
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/set-element-status",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
+      const args = validateDraftPlanVersionBody(body);
+      const data = await ctx.runMutation(
+        internal.counterpartPlanning.draftPlanVersionForCounterpart,
+        { ...args, ownerId },
+      );
+      return successResponse(data);
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/draft-plan-version",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
+      const args = validateEndorsePlanVersionBody(body);
+      const data = await ctx.runMutation(
+        internal.counterpartPlanning.endorsePlanVersionForCounterpart,
+        { ...args, ownerId },
+      );
+      return successResponse(data);
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/endorse-plan-version",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
+      const args = validateListThreadsBody(body);
+      const data = await ctx.runQuery(
+        internal.counterpartPlanning.listThreadsForCounterpart,
+        { ...args, ownerId },
+      );
+      return successResponse(data);
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/list-threads",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
+      const args = validateLinkTradeBody(body);
+      const data = await ctx.runMutation(
+        internal.counterpartPlanning.linkTradeForCounterpart,
+        { ...args, ownerId },
+      );
+      return successResponse(data);
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/link-trade",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
+      const args = validateSetEpisodeCampaignBody(body);
+      const data = await ctx.runMutation(
+        internal.counterpartPlanning.setEpisodeCampaignForCounterpart,
+        { ...args, ownerId },
+      );
+      return successResponse(data);
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/set-episode-campaign",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
+      const args = validateShelveEpisodeBody(body);
+      const data = await ctx.runMutation(
+        internal.counterpartPlanning.shelveEpisodeForCounterpart,
+        { ...args, ownerId },
+      );
+      return successResponse(data);
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/shelve-episode",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
+      const args = validateUpsertCampaignBody(body);
+      const data = await ctx.runMutation(
+        internal.counterpartPlanning.upsertCampaignForCounterpart,
+        { ...args, ownerId },
+      );
+      return successResponse(data);
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/upsert-campaign",
 });
 
 export default http;

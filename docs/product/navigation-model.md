@@ -50,7 +50,9 @@ It is for switching domains such as:
 
 - Dashboard
 - Trades
-- Campaigns / Trade Plans
+- Desk
+- Threads
+- Campaigns
 - Notes
 - Strategy
 - Imports

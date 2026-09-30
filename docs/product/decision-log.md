@@ -6,6 +6,31 @@ This document records settled product decisions: what was decided, when, and why
 
 Add an entry when a decision is genuinely settled. Do not record open questions or proposals here.
 
+## 2026-09-22 — Phase 3 implementation decisions
+
+Product guidance applied when the model was built:
+
+- Trade plans stay dormant rather than deleted. The clean slate already
+  archived the layer, and removing the table would risk the archive and
+  repair modules and the deactivated Bravos path that still reference it.
+  Trade Plans left the sidebar; the routes stay reachable by URL.
+- Element kinds are a free optional string, not an enum, so they can be
+  formalized later without a migration. The one convention the model relies
+  on is `kind: "entry"` on an agreed element moving an episode to `Watching`.
+- Desk and Threads are top-level navigation beside Trades, and the desk is the
+  signed-in landing page. The dashboard stays reachable.
+- Trades without a portfolio stay unlinked. A fill after an episode closes
+  opens a new episode; closed episodes never reopen.
+- The counterpart's reads return resolved context with explicit truncation
+  markers; writes are keyed by operation id and surface conflicts (superseding
+  a closed element, endorsing a non-latest or stale version, moving the
+  compiled-through revision backwards) rather than overwriting.
+- Product's review of the contract settled three rules: `entry` is the one
+  reserved element kind; an as-of date is required only with a typed value;
+  and a late fill attaches to the open episode only when dated at or after
+  that episode's opened date, otherwise it stays unlinked ("unlinked is
+  tolerated data; wrong linkage is not").
+
 ## 2026-09-22 — Counterpart review: plans are checkpoints, dropping needs evidence
 
 The Discord counterpart reviewed the Phase 3 draft and Jackson answered it

@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { assertOwner, requireUser } from "./lib/auth";
+import { syncTradeEpisodeLink } from "./lib/planWrites";
 import { ensureMarketDataInstrumentReviewRecord } from "./lib/marketDataInstruments";
 import { resolveInstrumentForOwner } from "./marketData";
 import { tradeValidator } from "./lib/tradeValidator";
@@ -264,7 +265,7 @@ export const createTradeInternal = internalMutation({
       throw new ConvexError("Market data instrument does not match trade");
     }
 
-    return await ctx.db.insert("trades", {
+    const tradeId = await ctx.db.insert("trades", {
       assetType: args.assetType,
       date: args.date,
       direction: args.direction,
@@ -276,6 +277,8 @@ export const createTradeInternal = internalMutation({
       source: "manual",
       ticker: args.ticker,
     });
+    await syncTradeEpisodeLink(ctx, tradeId);
+    return tradeId;
   },
 });
 
@@ -332,6 +335,9 @@ export const updateTrade = mutation({
     portfolioId: v.optional(v.union(v.id("portfolios"), v.null())),
     price: v.optional(v.number()),
     quantity: v.optional(v.number()),
+    // Consent to reopen a closed episode when the correction shows the
+    // position was never flat.
+    reopenClosedEpisode: v.optional(v.boolean()),
     side: v.optional(v.union(v.literal("buy"), v.literal("sell"))),
     ticker: v.optional(v.string()),
     tradeId: v.id("trades"),
@@ -339,7 +345,7 @@ export const updateTrade = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
-    const { tradeId, ...updates } = args;
+    const { reopenClosedEpisode, tradeId, ...updates } = args;
 
     const existingTrade = assertOwner(
       await ctx.db.get(tradeId),
@@ -379,6 +385,10 @@ export const updateTrade = mutation({
     patch.ownerId = ownerId;
 
     await ctx.db.patch(tradeId, patch);
+    await syncTradeEpisodeLink(ctx, tradeId, {
+      actor: "user",
+      allowReopen: reopenClosedEpisode,
+    });
 
     return null;
   },
@@ -421,23 +431,26 @@ export const bulkUpdateTrades = mutation({
         args.portfolioId === null ? undefined : args.portfolioId;
     }
 
-    let updated = 0;
+    // Validate first, then write. A failure while writing aborts the whole
+    // mutation so no trade is left patched but unlinked. Fills are processed
+    // oldest first so an entry never trails its own exit into a new episode.
     const errors: string[] = [];
-
+    const owned: Doc<"trades">[] = [];
     for (const tradeId of args.tradeIds) {
-      try {
-        const trade = await ctx.db.get(tradeId);
-        assertOwner(trade, ownerId, "Trade not found");
-        await ctx.db.patch(tradeId, { ...patch, ownerId });
-        updated++;
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Unknown error";
-        errors.push(`${tradeId}: ${message}`);
+      const trade = await ctx.db.get(tradeId);
+      if (!trade || trade.ownerId !== ownerId) {
+        errors.push(`${tradeId}: Trade not found`);
+        continue;
       }
+      owned.push(trade);
+    }
+    owned.sort((a, b) => a.date - b.date || a._creationTime - b._creationTime);
+    for (const trade of owned) {
+      await ctx.db.patch(trade._id, { ...patch, ownerId });
+      await syncTradeEpisodeLink(ctx, trade._id);
     }
 
-    return { updated, errors };
+    return { updated: owned.length, errors };
   },
 });
 

@@ -114,6 +114,22 @@ export const E2E_SMOKE_FIXTURES = {
   tradesViewerScenario: {
     matchDates: TRADES_VIEWER_MATCH_DATES,
   },
+  instrumentThread: {
+    benchmarkTicker: "E2ESMH",
+    campaignName: "E2E Semiconductor & AI",
+    campaignThesis:
+      "Anticipatory entries sized small until the sector benchmark confirms.",
+    closedEpisode: {
+      entryDate: Date.parse("2026-06-01T14:30:00.000Z"),
+      exitDate: Date.parse("2026-06-20T15:00:00.000Z"),
+    },
+    liveEpisode: {
+      fillDate: Date.parse("2026-09-09T14:36:00.000Z"),
+      openedAt: Date.parse("2026-09-09T14:00:00.000Z"),
+      quantity: 17,
+    },
+    ticker: "E2EBE",
+  },
   inboxTrades: {
     linkedSuggested: {
       date: Date.parse("2026-02-05T14:30:00.000Z"),

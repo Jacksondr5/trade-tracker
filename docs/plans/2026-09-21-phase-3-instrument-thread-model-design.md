@@ -166,7 +166,7 @@ Status rules learned from the real history:
 - `superseded` points at the element that replaced it.
 - `dropped` requires evidence of withdrawal: the user said so, or an endorsed checkpoint deliberately omitted it. Nonmention is never evidence. A target nobody has cited for weeks stays `proposed`; a deliberate wait-for-structure candidate stays `proposed`. The counterpart must not infer abandonment from silence, because that is memory-driven trading reintroduced by the tool.
 
-Kinds are deliberately not fixed in Phase 3. The per-trade workflow is still converging. Kinds emerge from what the counterpart actually writes and are formalized when the calculator is defined.
+Kinds are deliberately not fixed in Phase 3. The per-trade workflow is still converging. Kinds emerge from what the counterpart actually writes and are formalized when the calculator is defined. One kind is reserved now: `entry`. An agreed `entry` element (or an agreed stop or per-share level) is what moves an episode from `Idea` to `Watching`.
 
 Elements are mostly conditions and rules, not price ladders: "add only if SMH confirms and a higher support forms." The read surface should expect text with optional numbers.
 
@@ -330,6 +330,16 @@ Where the principles were tested in this design:
 - Dropping from silence versus principle 2 (reduce cognitive load) and principle 3 (preserve evidence). Inferring abandonment from nonmention would have the tool forget on the user's behalf. Rejected; dropped requires evidence.
 - Execution verification versus principle 7 (minimize administrative work). Reported and imported execution are kept as an element and a trade with no reconciliation machinery between them.
 - Chart tool versus the charting-replacement boundary. Deferred with the boundary flagged.
+
+## Implementation Decisions
+
+Recorded during the 2026-09-22 implementation and product review; the detail lives in [2026-09-22-phase-3-implementation.md](2026-09-22-phase-3-implementation.md).
+
+- `entry` is the one reserved element kind. Everything else stays free text.
+- An as-of date is required only when a typed value is attached, so ordinary statements with incidental numbers write without friction.
+- Status moves are one-way: proposed to agreed, proposed to dropped, agreed to dropped. Un-agreeing is a supersession or an evidenced drop.
+- Late fills: a fill attaches to the open episode only when its execution date is at or after that episode's opened date. A fill dated before that, or inside a closed episode's span, stays unlinked for the counterpart to sort in conversation. Unlinked is tolerated data; wrong linkage is not.
+- A draft compiled before a later agreed element cannot be endorsed; the counterpart redrafts.
 
 ## Sequencing Within Phase 3
 

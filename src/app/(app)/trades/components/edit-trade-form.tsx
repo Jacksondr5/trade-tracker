@@ -1,7 +1,8 @@
 "use client";
 
 import { useMutation } from "convex/react";
-import { useState } from "react";
+import { ConvexError } from "convex/values";
+import { useRef, useState } from "react";
 import { z } from "zod";
 import { Alert, Button, useAppForm } from "~/components/ui";
 import { api } from "~/convex/_generated/api";
@@ -63,6 +64,11 @@ export function EditTradeForm({
 }: EditTradeFormProps) {
   const updateTrade = useMutation(api.trades.updateTrade);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Set when the fill belongs to a closed episode the correction would
+  // reopen; saving then needs an explicit second confirmation.
+  const [reopenMessage, setReopenMessage] = useState<string | null>(null);
+  // A ref, not state: the confirm button sets it and submits in one tick.
+  const confirmReopen = useRef(false);
 
   const form = useAppForm({
     defaultValues: initialValues satisfies EditTradeFormValues,
@@ -77,9 +83,13 @@ export function EditTradeForm({
     },
     onSubmit: async ({ value }) => {
       setErrorMessage(null);
+      setReopenMessage(null);
+      const reopenClosedEpisode = confirmReopen.current;
+      confirmReopen.current = false;
       try {
         const parsed = editTradeSchema.parse(value);
         await updateTrade({
+          reopenClosedEpisode,
           assetType: parsed.assetType,
           date: new Date(parsed.date).getTime(),
           direction: parsed.direction,
@@ -94,8 +104,22 @@ export function EditTradeForm({
         });
         onSaved();
       } catch (error) {
+        const data =
+          error instanceof ConvexError &&
+          typeof error.data === "object" &&
+          error.data !== null
+            ? (error.data as {
+                details?: { reopenRequired?: boolean };
+                message?: string;
+              })
+            : null;
+        if (data?.details?.reopenRequired) {
+          setReopenMessage(data.message ?? "This change reopens a closed episode.");
+          return;
+        }
         const message =
-          error instanceof Error ? error.message : "Failed to update trade";
+          data?.message ??
+          (error instanceof Error ? error.message : "Failed to update trade");
         setErrorMessage(message);
       }
     },
@@ -110,6 +134,29 @@ export function EditTradeForm({
           onDismiss={() => setErrorMessage(null)}
         >
           {errorMessage}
+        </Alert>
+      )}
+      {reopenMessage && (
+        <Alert
+          variant="warning"
+          className="mb-3"
+          data-testid="edit-trade-reopen-alert"
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            <span>{reopenMessage}</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              dataTestId="edit-trade-reopen-confirm"
+              onClick={() => {
+                confirmReopen.current = true;
+                void form.handleSubmit();
+              }}
+            >
+              Reopen episode and save
+            </Button>
+          </div>
         </Alert>
       )}
       <form

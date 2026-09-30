@@ -59,6 +59,8 @@ Why this phase comes second:
 
 ## Phase 3: Instrument Thread Model
 
+Status: implemented 2026-09-22 (data model, counterpart write surface, desk and thread page). Plan drafting at the trigger moments and the lazy migration are counterpart prompting work that continues in use. See [2026-09-22-phase-3-implementation.md](../plans/2026-09-22-phase-3-implementation.md).
+
 Goal: build the target data model under a ritual that has evidence.
 
 Includes:

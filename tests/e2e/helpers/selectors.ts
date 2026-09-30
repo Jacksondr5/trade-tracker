@@ -7,6 +7,8 @@ import {
   IMPORTS_INDEX_TEST_IDS,
   NAVIGATION_SECTION_TEST_IDS,
   NAVIGATION_TEST_IDS,
+  THREAD_PAGE_TEST_IDS,
+  THREADS_INDEX_TEST_IDS,
   TRADE_PLAN_DETAIL_TEST_IDS,
   TRADE_PLANS_INDEX_TEST_IDS,
   TRADES_INDEX_TEST_IDS,
@@ -23,6 +25,17 @@ import {
   getEditRetrospectiveButtonTestId,
   getStandaloneTradePlanCardTestId,
   getTradeRowTestId,
+  getElementAsOfInputTestId,
+  getElementKindInputTestId,
+  getElementRowTestId,
+  getElementStatementInputTestId,
+  getElementStatusSelectTestId,
+  getElementSubmitButtonTestId,
+  getDeskCampaignGroupTestId,
+  getDeskEpisodeRowTestId,
+  getEpisodeAddElementToggleTestId,
+  getEpisodeCardTestId,
+  getThreadRowTestId,
   getNoteComposerTextareaTestId,
   getNoteComposerSubmitButtonTestId,
   getNoteRowTestId,
@@ -663,4 +676,77 @@ export function getTradePlanDetailTradesEmptyState(page: Page): Locator {
 
 export function getTradePlansFilteredEmptyState(page: Page): Locator {
   return page.getByTestId(TRADE_PLANS_INDEX_TEST_IDS.filteredEmptyState);
+}
+
+export function getThreadOpenTickerInput(page: Page): Locator {
+  return page.getByTestId(THREADS_INDEX_TEST_IDS.openTickerInput);
+}
+
+export function getThreadOpenSubmitButton(page: Page): Locator {
+  return page.getByTestId(THREADS_INDEX_TEST_IDS.openSubmitButton);
+}
+
+export function getThreadRow(page: Page, ticker: string): Locator {
+  return page.getByTestId(getThreadRowTestId(ticker));
+}
+
+export function getThreadOpenEpisodeButton(page: Page): Locator {
+  return page.getByTestId(THREAD_PAGE_TEST_IDS.openEpisodeButton);
+}
+
+export function getEpisodeCard(page: Page, episodeId: string): Locator {
+  return page.getByTestId(getEpisodeCardTestId(episodeId));
+}
+
+export function getElementStatementInput(
+  page: Page,
+  episodeId: string,
+): Locator {
+  return page.getByTestId(getElementStatementInputTestId(episodeId));
+}
+
+export function getElementStatusSelect(page: Page, episodeId: string): Locator {
+  return page.getByTestId(getElementStatusSelectTestId(episodeId));
+}
+
+export function getElementKindInput(page: Page, episodeId: string): Locator {
+  return page.getByTestId(getElementKindInputTestId(episodeId));
+}
+
+export function getElementAsOfInput(page: Page, episodeId: string): Locator {
+  return page.getByTestId(getElementAsOfInputTestId(episodeId));
+}
+
+export function getElementSubmitButton(page: Page, episodeId: string): Locator {
+  return page.getByTestId(getElementSubmitButtonTestId(episodeId));
+}
+
+export function getElementRow(page: Page, elementId: string): Locator {
+  return page.getByTestId(getElementRowTestId(elementId));
+}
+
+export function getEpisodeAddElementToggle(
+  page: Page,
+  episodeId: string,
+): Locator {
+  return page.getByTestId(getEpisodeAddElementToggleTestId(episodeId));
+}
+
+export function getEpisodeCheckpoint(page: Page, episodeId: string): Locator {
+  return page.getByTestId(`episode-checkpoint-${episodeId}`);
+}
+
+export function getEpisodeSinceCheckpoint(
+  page: Page,
+  episodeId: string,
+): Locator {
+  return page.getByTestId(`episode-since-checkpoint-${episodeId}`);
+}
+
+export function getDeskCampaignGroup(page: Page, campaignId: string): Locator {
+  return page.getByTestId(getDeskCampaignGroupTestId(campaignId));
+}
+
+export function getDeskEpisodeRow(page: Page, episodeId: string): Locator {
+  return page.getByTestId(getDeskEpisodeRowTestId(episodeId));
 }

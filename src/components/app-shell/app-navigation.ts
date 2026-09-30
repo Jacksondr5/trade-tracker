@@ -10,10 +10,11 @@ import {
   GalleryVerticalEnd,
   Import as ImportIcon,
   LayoutDashboard,
+  LayoutList,
   Map,
+  MessagesSquare,
   NotebookPen,
   NotepadText,
-  SquareChartGantt,
   Wallet,
 } from "lucide-react";
 
@@ -45,6 +46,20 @@ export const appNavigationSections: AppNavigationSection[] = [
         matchPrefixes: ["/dashboard"],
       },
       {
+        href: "/desk",
+        icon: LayoutList,
+        label: "Desk",
+        matchPrefixes: ["/desk"],
+        testId: NAVIGATION_TEST_IDS.desk,
+      },
+      {
+        href: "/threads",
+        icon: MessagesSquare,
+        label: "Threads",
+        matchPrefixes: ["/threads"],
+        testId: NAVIGATION_TEST_IDS.threads,
+      },
+      {
         href: "/trades",
         icon: ChartCandlestick,
         label: "Trades",
@@ -57,13 +72,6 @@ export const appNavigationSections: AppNavigationSection[] = [
         label: "Campaigns",
         testId: NAVIGATION_TEST_IDS.campaigns,
         matchPrefixes: ["/campaigns"],
-      },
-      {
-        href: "/trade-plans",
-        icon: SquareChartGantt,
-        label: "Trade Plans",
-        matchPrefixes: ["/trade-plans"],
-        testId: NAVIGATION_TEST_IDS.tradePlans,
       },
     ],
   },

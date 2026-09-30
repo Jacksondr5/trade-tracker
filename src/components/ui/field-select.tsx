@@ -14,6 +14,7 @@ export interface FieldSelectOption {
 
 export const FieldSelect = ({
   className,
+  dataTestId,
   label,
   options,
   placeholder,
@@ -28,6 +29,7 @@ export const FieldSelect = ({
   | "value"
 > & {
   className?: string;
+  dataTestId?: string;
   label: string;
   options: FieldSelectOption[];
   placeholder?: string;
@@ -48,7 +50,7 @@ export const FieldSelect = ({
       <Select
         {...props}
         id={field.name}
-        dataTestId={`${field.name}-select`}
+        dataTestId={dataTestId ?? `${field.name}-select`}
         value={field.state.value || ""}
         onChange={(e) => field.handleChange(e.target.value)}
         onBlur={field.handleBlur}

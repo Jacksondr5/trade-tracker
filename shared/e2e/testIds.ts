@@ -10,6 +10,7 @@ export const APP_PAGE_TITLES = {
   accounts: "accounts-page-title",
   campaigns: "campaigns-page-title",
   dashboard: "dashboard-page-title",
+  desk: "desk-page-title",
   imports: "imports-page-title",
   importsBravos: "bravos-review-page-title",
   marketData: "market-data-page-title",
@@ -17,6 +18,8 @@ export const APP_PAGE_TITLES = {
   portfolios: "portfolios-page-title",
   positions: "positions-page-title",
   strategy: "strategy-page-title",
+  thread: "thread-page-title",
+  threads: "threads-page-title",
   tradePlans: "trade-plans-page-title",
   trades: "trades-page-title",
 } as const;
@@ -25,6 +28,7 @@ export const NAVIGATION_TEST_IDS = {
   accounts: "nav-accounts-link",
   campaigns: "nav-campaigns-link",
   dashboard: "nav-dashboard-link",
+  desk: "nav-desk-link",
   importsBravos: "nav-imports-bravos-link",
   importsTrades: "nav-imports-trades-link",
   marketData: "nav-market-data-link",
@@ -32,6 +36,7 @@ export const NAVIGATION_TEST_IDS = {
   portfolios: "nav-portfolios-link",
   positions: "nav-positions-link",
   strategy: "nav-strategy-link",
+  threads: "nav-threads-link",
   tradePlans: "nav-trade-plans-link",
   trades: "nav-trades-link",
 } as const;
@@ -669,4 +674,107 @@ export function getCancelRetrospectiveButtonTestId(prefix: string): string {
 
 export function getEditRetrospectiveButtonTestId(prefix: string): string {
   return `${prefix}-edit-retrospective-button`;
+}
+
+export const DESK_TEST_IDS = {
+  emptyState: "desk-empty-state",
+  campaignGroupNone: "desk-campaign-group-none",
+} as const;
+
+export const THREADS_INDEX_TEST_IDS = {
+  emptyState: "threads-empty-state",
+  openTickerInput: "thread-open-ticker-input",
+  openSubmitButton: "thread-open-submit-button",
+} as const;
+
+export const THREAD_PAGE_TEST_IDS = {
+  openEpisodeButton: "thread-open-episode-button",
+} as const;
+
+export function getDeskEpisodeRowTestId(episodeId: string): string {
+  return `desk-episode-row-${episodeId}`;
+}
+
+export function getDeskCampaignGroupTestId(campaignId: string): string {
+  return `desk-campaign-group-${campaignId}`;
+}
+
+export function getThreadRowTestId(ticker: string): string {
+  return `thread-row-${ticker}`;
+}
+
+export function getEpisodeCardTestId(episodeId: string): string {
+  return `episode-card-${episodeId}`;
+}
+
+export function getEpisodeEndorseDraftTestId(episodeId: string): string {
+  return `episode-endorse-draft-${episodeId}`;
+}
+
+export function getEpisodeHistoryToggleTestId(episodeId: string): string {
+  return `episode-history-toggle-${episodeId}`;
+}
+
+export function getEpisodeAddElementToggleTestId(episodeId: string): string {
+  return `episode-add-element-toggle-${episodeId}`;
+}
+
+export function getEpisodeAddElementFormTestId(episodeId: string): string {
+  return `episode-add-element-form-${episodeId}`;
+}
+
+export function getElementStatementInputTestId(episodeId: string): string {
+  return `element-statement-input-${episodeId}`;
+}
+
+export function getElementStatusSelectTestId(episodeId: string): string {
+  return `element-status-select-${episodeId}`;
+}
+
+export function getElementKindInputTestId(episodeId: string): string {
+  return `element-kind-input-${episodeId}`;
+}
+
+export function getElementAsOfInputTestId(episodeId: string): string {
+  return `element-asof-input-${episodeId}`;
+}
+
+export function getElementSubmitButtonTestId(episodeId: string): string {
+  return `element-submit-button-${episodeId}`;
+}
+
+export function getEpisodeEditPlanTestId(episodeId: string): string {
+  return `episode-edit-plan-${episodeId}`;
+}
+
+export function getEpisodePlanSaveTestId(episodeId: string): string {
+  return `episode-plan-save-${episodeId}`;
+}
+
+export function getEpisodeShelveTestId(episodeId: string): string {
+  return `episode-shelve-${episodeId}`;
+}
+
+export function getElementRowTestId(elementId: string): string {
+  return `element-row-${elementId}`;
+}
+
+export function getElementAgreeTestId(elementId: string): string {
+  return `element-agree-${elementId}`;
+}
+
+export function getElementDropTestId(elementId: string): string {
+  return `element-drop-${elementId}`;
+}
+
+export function getElementSupersedeTestId(elementId: string): string {
+  return `element-supersede-${elementId}`;
+}
+
+export function getElementDropEvidenceInputTestId(elementId: string): string {
+  return `element-drop-evidence-input-${elementId}`;
+}
+
+export function getElementDropSubmitTestId(elementId: string): string {
+  return `element-drop-submit-${elementId}`;
 }
