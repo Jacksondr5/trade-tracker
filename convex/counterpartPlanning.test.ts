@@ -174,9 +174,37 @@ describe("counterpart planning surface", () => {
     expect(exempt.status).toBe(200);
     expect(exempt.json.data.episode.campaignElementExemptions).toEqual([gateId]);
 
+    // Drafts compile what their author read. A decision recorded between the
+    // read and the draft is a conflict, never silently absorbed.
+    const beforeDraft = await post("episode-context", { episodeId });
+    const observedRevision = beforeDraft.json.data.latestRevision as number;
+    const missingRevision = await post("draft-plan-version", {
+      actor: "counterpart",
+      episodeId,
+      sections: { entry: [], scenarios: [], size: [], stop: [], structure: [], targets: [] },
+    });
+    expect(missingRevision.status).toBe(400);
+    const interim = await post("record-elements", {
+      actor: "counterpart",
+      elements: [{ author: "user", kind: "note", statement: "Holding through the retest", status: "agreed" }],
+      episodeId,
+    });
+    const staleDraft = await post("draft-plan-version", {
+      actor: "counterpart",
+      episodeId,
+      observedRevision,
+      sections: { entry: [], scenarios: [], size: [], stop: [], structure: [], targets: [] },
+    });
+    expect(staleDraft.status).toBe(409);
+    expect(staleDraft.json.error.details.staleAgreedElementIds).toEqual([
+      interim.json.data.elements[0].id,
+    ]);
+    const freshRead = await post("episode-context", { episodeId });
+
     const drafted = await post("draft-plan-version", {
       actor: "counterpart",
       episodeId,
+      observedRevision: freshRead.json.data.latestRevision,
       operationId: "draft-1",
       sections: {
         entry: [{ elementId: recorded.json.data.elements[0].id, text: "Filled 17 @ 273.36", asOf: "2026-09-09" }],
@@ -212,6 +240,9 @@ describe("counterpart planning surface", () => {
     expect(context.json.data.episode.lifecycle).toBe("watching");
     expect(context.json.data.checkpoint.versionNumber).toBe(1);
     expect(context.json.data.itemsSinceCheckpoint).toEqual([]);
+    expect(context.json.data.checkpoint.compiledThroughRevision).toBe(
+      freshRead.json.data.latestRevision,
+    );
     expect(
       context.json.data.openProposals.map(
         (item: { author: string; beforeCheckpoint: boolean }) => [
@@ -262,7 +293,7 @@ describe("counterpart planning surface", () => {
       numItems: 50,
     });
     expect(rest.json.data.hasMore).toBe(false);
-    expect(rest.json.data.items).toHaveLength(1);
+    expect(rest.json.data.items).toHaveLength(2);
 
     const version = await post("plan-version", { episodeId, versionNumber: 1 });
     expect(version.status).toBe(200);
@@ -515,5 +546,137 @@ describe("counterpart planning surface", () => {
       latestSuccessfulStatementDate: "2026-09-21",
       status: "current",
     });
+  });
+
+  it("endorses with agreements in one call, fingerprints operations, links trades, and scopes notes", async () => {
+    const swing = await t.run((ctx) => ctx.db.insert("portfolios", { name: "Swing", ownerId }));
+    const opened = await post("open-episode", { actor: "counterpart", portfolioId: swing, ticker: "NVDA" });
+    const episodeId = opened.json.data.episode.id as string;
+
+    const recorded = await post("record-elements", {
+      actor: "counterpart",
+      elements: [
+        { author: "user", kind: "entry", statement: "Starter on the retest", status: "agreed" },
+        { asOf: "2026-09-18", author: "user", kind: "stop", statement: "Stop 205-206 zone", status: "proposed" },
+        { asOf: "2026-09-18", author: "counterpart", kind: "analysis", statement: "2.1R to target (illustrative)", status: "proposed" },
+      ],
+      episodeId,
+    });
+    const [entryId, stopId, analysisId] = recorded.json.data.elements.map((e: { id: string }) => e.id);
+    const read = await post("episode-context", { episodeId });
+    const drafted = await post("draft-plan-version", {
+      actor: "counterpart",
+      episodeId,
+      observedRevision: read.json.data.latestRevision,
+      sections: {
+        entry: [{ elementId: entryId, text: "Starter on the retest" }],
+        scenarios: [],
+        size: [],
+        stop: [{ asOf: "2026-09-18", elementId: stopId, text: "Stop 205-206 zone" }],
+        structure: [],
+        targets: [],
+      },
+    });
+    expect(drafted.status).toBe(200);
+
+    // "Yes, go with that stop" agrees the cited proposal and endorses at once;
+    // the illustrative analysis stays proposed.
+    const endorsed = await post("endorse-plan-version", {
+      actor: "counterpart",
+      agreeElementIds: [stopId],
+      episodeId,
+      operationId: "endorse-1",
+      versionNumber: 1,
+    });
+    expect(endorsed.status).toBe(200);
+    const after = await post("episode-context", { episodeId });
+    expect(after.json.data.checkpoint.versionNumber).toBe(1);
+    expect(after.json.data.itemsSinceCheckpoint).toEqual([]);
+    expect(after.json.data.openProposals.map((e: { id: string }) => e.id)).toEqual([analysisId]);
+    const stop = after.json.data.history.items.find((e: { id: string }) => e.id === stopId);
+    expect(stop.status).toBe("agreed");
+    expect(stop.statusHistory.map((entry: { status: string }) => entry.status)).toEqual([
+      "proposed",
+      "agreed",
+    ]);
+
+    // Same operation id, same body: replay. Different body: conflict.
+    const replay = await post("endorse-plan-version", {
+      actor: "counterpart",
+      agreeElementIds: [stopId],
+      episodeId,
+      operationId: "endorse-1",
+      versionNumber: 1,
+    });
+    expect(replay.json.data.replayed).toBe(true);
+    const reused = await post("endorse-plan-version", {
+      actor: "counterpart",
+      episodeId,
+      operationId: "endorse-1",
+      versionNumber: 1,
+    });
+    expect(reused.status).toBe(409);
+
+    // Withdrawing a cited element after a draft makes that draft stale.
+    const read2 = await post("episode-context", { episodeId });
+    await post("draft-plan-version", {
+      actor: "counterpart",
+      episodeId,
+      observedRevision: read2.json.data.latestRevision,
+      sections: {
+        entry: [{ elementId: entryId, text: "Starter on the retest" }],
+        scenarios: [],
+        size: [],
+        stop: [{ asOf: "2026-09-18", elementId: stopId, text: "Stop 205-206 zone" }],
+        structure: [],
+        targets: [],
+      },
+    });
+    await post("set-element-status", {
+      actor: "counterpart",
+      elementId: stopId,
+      evidence: "Jackson: forget that zone, using the weekly line",
+      status: "dropped",
+    });
+    const staleEndorse = await post("endorse-plan-version", { actor: "counterpart", episodeId, versionNumber: 2 });
+    expect(staleEndorse.status).toBe(409);
+    expect(staleEndorse.json.error.details.staleAgreedElementIds).toEqual([stopId]);
+
+    // A late fill left unlinked can be placed deliberately.
+    const buy = await t.run((ctx) =>
+      ctx.db.insert("trades", {
+        assetType: "stock",
+        date: 100,
+        direction: "long",
+        ownerId,
+        portfolioId: swing,
+        price: 222,
+        quantity: 20,
+        side: "buy",
+        source: "ibkr",
+        ticker: "NVDA",
+      }),
+    );
+    const linked = await post("link-trade", { episodeId, operationId: "link-1", tradeId: buy });
+    expect(linked.status).toBe(200);
+    expect(linked.json.data.episodeId).toBe(episodeId);
+    const active = await post("episode-context", { episodeId });
+    expect(active.json.data.episode.lifecycle).toBe("active");
+    expect(active.json.data.position.netQuantity).toBe(20);
+    const unlinked = await post("link-trade", { episodeId: null, tradeId: buy });
+    expect(unlinked.json.data.episodeId).toBeNull();
+
+    // Rationale can be attached to the episode itself, even after it closes.
+    const note = await post("add-note", {
+      content: "Sold because the sector broke, not the name",
+      episodeId,
+      noteDate: 200,
+    });
+    expect(note.status).toBe(200);
+    const withNote = await post("episode-context", { episodeId });
+    expect(withNote.json.data.notes.items.map((n: { content: string }) => n.content)).toEqual([
+      "Sold because the sector broke, not the name",
+    ]);
+    expect((await post("add-note", { content: "x", episodeId: "nope", noteDate: 1 })).status).toBe(404);
   });
 });

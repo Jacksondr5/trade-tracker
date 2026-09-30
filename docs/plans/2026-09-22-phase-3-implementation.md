@@ -94,11 +94,42 @@ All writes accept an optional `operationId`. A retry with the same id returns th
 | `open-episode` | `{ ticker, portfolioId?, campaignId?, actor, source?, operationId? }` | creates the thread if needed |
 | `record-elements` | `{ episodeId \| campaignId, elements: [{ statement, status: proposed \| agreed, author, kind?, asOf?, noteId?, supersedes?, value? }], actor, source?, operationId? }` | up to 50 per call; `supersedes` marks the older element `superseded`, and superseding an element that is no longer open is a `CONFLICT` |
 | `set-element-status` | `{ elementId, status: agreed \| dropped, evidence?, actor, operationId? }` | only `proposed → agreed`, `proposed → dropped`, `agreed → dropped`; anything else is a `CONFLICT`; `dropped` requires `evidence` |
-| `draft-plan-version` | `{ episodeId, sections, compiledThroughRevision?, actor, source?, operationId? }` | `compiledThroughRevision` defaults to the latest revision and must be between 0 and that revision; moving it backwards from the previous version is a `CONFLICT` |
-| `endorse-plan-version` | `{ episodeId, versionNumber, actor, operationId? }` | actor must be `user` or `counterpart`; only the latest version can be endorsed, and only if no element was agreed after its `compiledThroughRevision`; otherwise `CONFLICT` with `details.staleAgreedElementIds` so the counterpart can redraft |
+| `draft-plan-version` | `{ episodeId, sections, observedRevision, compiledThroughRevision?, actor, source?, operationId? }` | `observedRevision` is required: the `latestRevision` from the read the draft was composed from. Any element changed or plan version written after it is a `CONFLICT` with `details.staleAgreedElementIds`; nothing unseen is ever absorbed. `compiledThroughRevision` defaults to `observedRevision`; moving it backwards from the previous version is a `CONFLICT` |
+| `endorse-plan-version` | `{ episodeId, versionNumber, agreeElementIds?, actor, operationId? }` | actor must be `user` or `counterpart`; only the latest version can be endorsed. `agreeElementIds` marks those proposals agreed as part of the same endorsement and absorbs them into the checkpoint. Refused with `CONFLICT` and `details.staleAgreedElementIds` if, after the draft's cutoff, any element was agreed or any element the draft cites was dropped or superseded |
+| `link-trade` | `{ tradeId, episodeId \| null, operationId? }` | places a fill deliberately after a conversation has sorted it out (a late or ambiguous fill), or unlinks it. Same ticker, portfolio, and direction required. A closed episode accepts or releases a fill only if it stays flat; otherwise `CONFLICT` |
 | `set-episode-campaign` | `{ episodeId, campaignId \| null, exemptedCampaignElementIds?, operationId? }` | links the thread to the campaign as a side effect |
 | `shelve-episode` | `{ episodeId, shelved?, actor, source?, operationId? }` | refused on closed episodes and on episodes with fills |
 | `upsert-campaign` | `{ campaignId?, name?, thesis?, benchmarkTicker?, linkedTickers?, actor, operationId? }` | light campaigns only; no plan snapshots |
+
+`add-note` also accepts an optional `episodeId` or `campaignId`, so rationale can attach to an episode (including after it closes) or a campaign instead of only the ticker's thread.
+
+### Operation ids and retries
+
+Every write accepts an optional `operationId`. The same id with the same body replays the recorded result with `replayed: true` and writes nothing. The same id with a different body, or used for a different write, is a `CONFLICT`. Each write is one transaction: it either fully applies or leaves nothing behind, so a multi-call sequence that stops partway can be resumed by retrying the remaining calls with their original ids. Every write response returns the records it produced (ids, statuses, revisions), which serve as the receipt.
+
+### Sequences
+
+**Drafting a checkpoint.** Read `episode-context`, compose the draft from what the read returned, then call `draft-plan-version` with `observedRevision` set to that read's `latestRevision`. On `CONFLICT`, read again and recompose; the conflict lists the element ids that changed.
+
+**Endorsing.** When Jackson agrees to the draft as a whole, call `endorse-plan-version` with `agreeElementIds` set to the draft's cited proposals he agreed to. When he agrees with exceptions, leave the exceptions out of `agreeElementIds`; if an exception is part of the plan's text, draft a new version without it first rather than endorsing a plan that contains it. One reply from Jackson is always one endorse call.
+
+**A withdrawal after drafting.** If Jackson withdraws something the draft cites, record the drop (with evidence) or the superseding element; the draft becomes stale and endorsing it is refused. Redraft from a fresh read.
+
+**Corrections and late fills.** Linking follows fills automatically. Closed history is never reopened: a fill correction that would reopen a closed episode or move a fill out of it is refused, and a late fill dated inside a closed span or before the open episode began is left unlinked. Neither is a reason to record a new execution. Discuss it, then place the fill with `link-trade` (which accepts it into a closed episode only when that episode stays flat), or leave it unlinked, which is tolerated data. Rationale about a closed engagement goes on the episode with `add-note { episodeId }` or as an element on that episode.
+
+### Status history
+
+Each element carries `statusHistory`: every status it has held, with actor, revision, time, and drop evidence, so a later supersede or drop never hides when it was agreed. Elements written before this existed show their current status as a single entry.
+
+### Where the rest of a truncated list lives
+
+| Flag | Where the remainder is |
+| --- | --- |
+| episode `history.truncated` | `episode-elements` pages every element of the episode, oldest first |
+| episode `planVersionsTruncated` | `plan-version` returns any version by number; the current checkpoint and newest draft are always returned directly |
+| episode `notes.truncated`, thread `notes.truncated` | `list-notes { ticker }` pages every note on the ticker with a cursor, including episode notes |
+| episode `elementsTruncated`, `campaignRules.truncated`, thread `episodesTruncated` | Structurally never true: writes are refused past the same ceilings (2,000 elements per episode, 500 per campaign, 500 episodes per thread), so the bounded read always holds the whole set |
+| desk `truncated` | Only above 300 live episodes; each omitted episode is still reachable through `thread-context { ticker }` |
 
 `portfolio-context` and `daily-context` now also return `sync` (`latestAttempt` with a concise `failure` summary, and `latestSuccessfulStatement`), reconciliation issues with `state`, `detectedAt`, `lastRecheckedAt`, and `resolvedAt`, `recentlyResolvedReconciliation`, and `valuation` (below).
 

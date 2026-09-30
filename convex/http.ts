@@ -299,9 +299,16 @@ export function validateEmptyBody(body: JsonObject) {
 }
 
 export function validateAddNoteBody(body: JsonObject) {
-  assertExactKeys(body, ["content", "noteDate", "ticker"]);
+  assertExactKeys(body, ["content", "noteDate", "ticker", "episodeId", "campaignId"]);
+  const episodeId = optionalString(body, "episodeId");
+  const campaignId = optionalString(body, "campaignId");
+  if (episodeId && campaignId) {
+    throw new JsonValidationError("A note attaches to an episode or a campaign, not both");
+  }
   return {
+    campaignId,
     content: requireString(body, "content"),
+    episodeId,
     noteDate: requireNumber(body, "noteDate"),
     ticker: optionalString(body, "ticker")?.toUpperCase(),
   };
@@ -584,10 +591,15 @@ export function validateDraftPlanVersionBody(body: JsonObject) {
     "episodeId",
     "sections",
     "compiledThroughRevision",
+    "observedRevision",
     "actor",
     "source",
     "operationId",
   ]);
+  const observedRevision = requireNumber(body, "observedRevision");
+  if (!Number.isInteger(observedRevision) || observedRevision < 0) {
+    throw new JsonValidationError("observedRevision must be a non-negative integer");
+  }
   const compiledThroughRevision = body.compiledThroughRevision;
   if (
     compiledThroughRevision !== undefined &&
@@ -603,6 +615,7 @@ export function validateDraftPlanVersionBody(body: JsonObject) {
     actor: requireActor(body),
     compiledThroughRevision: compiledThroughRevision as number | undefined,
     episodeId: requireString(body, "episodeId"),
+    observedRevision,
     operationId: optionalOperationId(body),
     sections: requirePlanSections(body.sections),
     source: optionalSource(body),
@@ -610,16 +623,36 @@ export function validateDraftPlanVersionBody(body: JsonObject) {
 }
 
 export function validateEndorsePlanVersionBody(body: JsonObject) {
-  assertExactKeys(body, ["episodeId", "versionNumber", "actor", "operationId"]);
+  assertExactKeys(body, [
+    "episodeId",
+    "versionNumber",
+    "agreeElementIds",
+    "actor",
+    "operationId",
+  ]);
   const versionNumber = requireNumber(body, "versionNumber");
   if (!Number.isInteger(versionNumber) || versionNumber < 1) {
     throw new JsonValidationError("versionNumber must be a positive integer");
   }
   return {
     actor: requireActor(body),
+    agreeElementIds: optionalStringArray(body, "agreeElementIds"),
     episodeId: requireString(body, "episodeId"),
     operationId: optionalOperationId(body),
     versionNumber,
+  };
+}
+
+export function validateLinkTradeBody(body: JsonObject) {
+  assertExactKeys(body, ["tradeId", "episodeId", "operationId"]);
+  const episodeId = body.episodeId;
+  if (episodeId !== null && (typeof episodeId !== "string" || !episodeId.trim())) {
+    throw new JsonValidationError("episodeId must be a string or null");
+  }
+  return {
+    episodeId: episodeId === null ? null : (episodeId as string).trim(),
+    operationId: optionalOperationId(body),
+    tradeId: requireString(body, "tradeId"),
   };
 }
 
@@ -908,6 +941,14 @@ http.route({
         ...args,
         ownerId,
       });
+      if (noteId === null) {
+        throw new HttpRequestError(
+          "NOT_FOUND",
+          "Episode or campaign not found",
+          404,
+          false,
+        );
+      }
       return successResponse({ noteId });
     });
   }),
@@ -1159,6 +1200,21 @@ http.route({
   }),
   method: "POST",
   path: "/internal/counterpart/endorse-plan-version",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
+      const args = validateLinkTradeBody(body);
+      const data = await ctx.runMutation(
+        internal.counterpartPlanning.linkTradeForCounterpart,
+        { ...args, ownerId },
+      );
+      return successResponse(data);
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/link-trade",
 });
 
 http.route({

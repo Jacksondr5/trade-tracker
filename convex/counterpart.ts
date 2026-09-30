@@ -1377,18 +1377,38 @@ export const getPortfolioContext = internalQuery({
 
 export const addNote = internalMutation({
   args: {
+    campaignId: v.optional(v.string()),
     content: v.string(),
+    episodeId: v.optional(v.string()),
     noteDate: v.number(),
     ownerId: v.string(),
     ticker: v.optional(v.string()),
   },
-  returns: v.id("notes"),
+  returns: v.union(v.id("notes"), v.null()),
   handler: async (ctx, args) => {
-    const ticker = normalizeOptionalTicker(args.ticker);
+    let ticker = normalizeOptionalTicker(args.ticker);
+    let episodeId: Id<"episodes"> | undefined;
+    let campaignId: Id<"campaigns"> | undefined;
+    if (args.episodeId !== undefined) {
+      // An episode note, including rationale recorded after it closed.
+      const normalized = ctx.db.normalizeId("episodes", args.episodeId);
+      const episode = normalized ? await ctx.db.get(normalized) : null;
+      if (!episode || episode.ownerId !== args.ownerId) return null;
+      episodeId = episode._id;
+      ticker = episode.ticker;
+    }
+    if (args.campaignId !== undefined) {
+      const normalized = ctx.db.normalizeId("campaigns", args.campaignId);
+      const campaign = normalized ? await ctx.db.get(normalized) : null;
+      if (!campaign || campaign.ownerId !== args.ownerId) return null;
+      campaignId = campaign._id;
+    }
     // A ticker-tagged note is a thread note; make sure the thread exists.
     if (ticker) await ensureThread(ctx, args.ownerId, ticker, "counterpart");
     return await ctx.db.insert("notes", {
+      campaignId,
       content: trimRequiredContent(args.content),
+      episodeId,
       noteDate: args.noteDate,
       ownerId: args.ownerId,
       ticker,

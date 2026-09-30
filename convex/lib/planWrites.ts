@@ -61,6 +61,15 @@ export function isPlanModelError(
 
 // Write ceilings. Reads stay bounded to the same numbers and flag truncation,
 // so no single record can grow past what a resolved read can return.
+type StatusHistoryEntry = NonNullable<Doc<"planElements">["statusHistory"]>[number];
+
+function appendStatusHistory(
+  element: Pick<Doc<"planElements">, "statusHistory">,
+  entry: StatusHistoryEntry,
+): StatusHistoryEntry[] {
+  return [...(element.statusHistory ?? []), entry];
+}
+
 export const MAX_EPISODE_ELEMENTS = 2_000;
 export const MAX_CAMPAIGN_ELEMENTS = 500;
 export const MAX_EPISODE_TRADES = 5_000;
@@ -366,7 +375,7 @@ export async function syncTradeEpisodeLink(
       if (!stillFlat) {
         throw planModelError(
           "CONFLICT",
-          `Trade ${trade._id} belongs to a closed episode; the change would reopen or move it. Record the correction as a new fill instead.`,
+          `Trade ${trade._id} belongs to a closed episode and this change would reopen or move it. Closed history stays as recorded; relink deliberately with link-trade if the fill belongs elsewhere.`,
         );
       }
       await ctx.db.patch(previousEpisode._id, {
@@ -600,17 +609,27 @@ export async function recordElements(
       status: input.status,
       statusChangedAt: now,
       statusChangedBy: args.actor,
+      statusHistory: [
+        { actor: args.actor, at: now, revision, status: input.status },
+      ],
       statusRevision: revision,
       value: input.value,
     });
     insertedIds.push(elementId);
 
     if (superseded) {
+      const supersedeRevision = await allocateRevision(ctx, args.ownerId);
       await ctx.db.patch(superseded._id, {
         status: "superseded",
         statusChangedAt: now,
         statusChangedBy: args.actor,
-        statusRevision: await allocateRevision(ctx, args.ownerId),
+        statusHistory: appendStatusHistory(superseded, {
+          actor: args.actor,
+          at: now,
+          revision: supersedeRevision,
+          status: "superseded",
+        }),
+        statusRevision: supersedeRevision,
         supersededById: elementId,
       });
     }
@@ -653,12 +672,21 @@ export async function setElementStatus(
     );
   }
   const now = Date.now();
+  const revision = await allocateRevision(ctx, args.ownerId);
+  const evidence = args.evidence?.trim() || undefined;
   await ctx.db.patch(element._id, {
     status: args.status,
     statusChangedAt: now,
     statusChangedBy: args.actor,
-    statusEvidence: args.evidence?.trim() || undefined,
-    statusRevision: await allocateRevision(ctx, args.ownerId),
+    statusEvidence: evidence,
+    statusHistory: appendStatusHistory(element, {
+      actor: args.actor,
+      at: now,
+      evidence,
+      revision,
+      status: args.status,
+    }),
+    statusRevision: revision,
   });
   if (element.episodeId) {
     await recomputeEpisodeLifecycle(ctx, element.episodeId);
@@ -786,7 +814,10 @@ export async function draftPlanVersion(
     }
   }
   const revision = await allocateRevision(ctx, args.ownerId);
-  const compiledThroughRevision = args.compiledThroughRevision ?? revision - 1;
+  // A draft compiles what its author read: the observed revision when given,
+  // otherwise everything recorded so far.
+  const compiledThroughRevision =
+    args.compiledThroughRevision ?? args.observedRevision ?? revision - 1;
   if (
     !Number.isSafeInteger(compiledThroughRevision) ||
     compiledThroughRevision < 0 ||
@@ -840,6 +871,12 @@ export async function draftPlanVersion(
 export async function endorsePlanVersion(
   ctx: MutationCtx,
   args: {
+    /**
+     * Proposed elements the user agreed to in the same breath as the plan.
+     * They are marked agreed as part of the endorsement and absorbed into
+     * the checkpoint, so one "yes" never needs two conflicting calls.
+     */
+    agreeElementIds?: Id<"planElements">[];
     actor: Actor;
     episodeId: Id<"episodes">;
     ownerId: string;
@@ -864,24 +901,67 @@ export async function endorsePlanVersion(
     );
   }
   if (latest.endorsed) return latest;
-  const agreedAfterDraft = (
-    await listEpisodeElements(ctx, args.ownerId, episode._id)
-  ).filter(
+  const elements = await listEpisodeElements(ctx, args.ownerId, episode._id);
+  const agreeIds = new Set<string>(args.agreeElementIds ?? []);
+  for (const id of agreeIds) {
+    const element = elements.find((row) => row._id === id);
+    if (!element) {
+      throw planModelError("NOT_FOUND", `Element ${id} is not on this episode`);
+    }
+    if (element.status !== "proposed" && element.status !== "agreed") {
+      throw planModelError(
+        "CONFLICT",
+        `Element ${id} is ${element.status} and cannot be agreed`,
+      );
+    }
+  }
+  // A draft is stale when anything it depends on moved after its cutoff: a
+  // newly agreed element, or a withdrawal or supersede of an element the
+  // draft cites.
+  const citedIds = new Set<string>();
+  for (const key of PLAN_SECTION_KEYS) {
+    for (const line of latest.sections[key]) {
+      if (line.elementId) citedIds.add(line.elementId);
+    }
+  }
+  const stale = elements.filter(
     (element) =>
-      element.status === "agreed" &&
-      effectiveRevision(element) > latest.compiledThroughRevision,
+      effectiveRevision(element) > latest.compiledThroughRevision &&
+      (element.status === "agreed" || citedIds.has(element._id)),
   );
-  if (agreedAfterDraft.length > 0) {
-    const ids = agreedAfterDraft.map((element) => element._id);
+  if (stale.length > 0) {
+    const ids = stale.map((element) => element._id);
     throw planModelError(
       "CONFLICT",
-      `Version ${latest.versionNumber} was compiled before agreed elements ${ids.join(", ")}; redraft before endorsing`,
+      `Version ${latest.versionNumber} was compiled before changes to elements ${ids.join(", ")}; redraft before endorsing`,
       { staleAgreedElementIds: ids },
     );
   }
   const now = Date.now();
+  for (const element of elements) {
+    if (!agreeIds.has(element._id) || element.status === "agreed") continue;
+    const revision = await allocateRevision(ctx, args.ownerId);
+    await ctx.db.patch(element._id, {
+      status: "agreed",
+      statusChangedAt: now,
+      statusChangedBy: args.actor,
+      statusHistory: appendStatusHistory(element, {
+        actor: args.actor,
+        at: now,
+        revision,
+        status: "agreed",
+      }),
+      statusRevision: revision,
+    });
+  }
+  // Agreements made with the endorsement are part of the checkpoint.
+  const compiledThroughRevision =
+    agreeIds.size > 0
+      ? await allocateRevision(ctx, args.ownerId)
+      : latest.compiledThroughRevision;
   // The endorser is always the user; the actor records who relayed it.
   await ctx.db.patch(latest._id, {
+    compiledThroughRevision,
     endorsed: true,
     endorsedAt: now,
     endorsedBy: "user",
@@ -893,6 +973,102 @@ export async function endorsePlanVersion(
   });
   await recomputeEpisodeLifecycle(ctx, episode._id);
   return (await ctx.db.get(latest._id))!;
+}
+
+/**
+ * Deliberately places one fill after a conversation has sorted it out: into
+ * a chosen episode, or out of any episode (`episodeId: null`). Closed history
+ * is only changed when it stays flat, so a missed fill can complete a closed
+ * episode's record but never reopen it.
+ */
+export async function linkTrade(
+  ctx: MutationCtx,
+  args: {
+    episodeId: Id<"episodes"> | null;
+    ownerId: string;
+    tradeId: Id<"trades">;
+  },
+): Promise<Doc<"trades">> {
+  const trade = await ctx.db.get(args.tradeId);
+  if (!trade || trade.ownerId !== args.ownerId) {
+    throw planModelError("NOT_FOUND", "Trade not found");
+  }
+  const current = trade.episodeId ? await ctx.db.get(trade.episodeId) : null;
+  if (current && current._id === args.episodeId) return trade;
+
+  const netWith = async (
+    episodeId: Id<"episodes">,
+    change: (rows: Doc<"trades">[]) => Doc<"trades">[],
+  ) =>
+    derivePositionEpisodeState(
+      change(await listEpisodeTrades(ctx, args.ownerId, episodeId)),
+    ).netQuantity;
+
+  if (current?.lifecycle === "closed") {
+    const remaining = await netWith(current._id, (rows) =>
+      rows.filter((row) => row._id !== trade._id),
+    );
+    if (remaining !== 0) {
+      throw planModelError(
+        "CONFLICT",
+        "Moving this fill would reopen a closed episode",
+      );
+    }
+  }
+
+  let target: Doc<"episodes"> | null = null;
+  if (args.episodeId) {
+    target = await getOwnedEpisode(ctx, args.ownerId, args.episodeId);
+    if (target.ticker !== normalizeTicker(trade.ticker)) {
+      throw planModelError("VALIDATION", "The episode is for a different ticker");
+    }
+    if (trade.portfolioId === undefined) {
+      throw planModelError(
+        "VALIDATION",
+        "Assign the fill to a portfolio before linking it to an episode",
+      );
+    }
+    if (
+      target.portfolioId !== undefined &&
+      target.portfolioId !== trade.portfolioId
+    ) {
+      throw planModelError("VALIDATION", "The episode is in a different portfolio");
+    }
+    if (target.direction !== undefined && target.direction !== trade.direction) {
+      throw planModelError("VALIDATION", "The episode has the opposite direction");
+    }
+    if (target.lifecycle === "closed") {
+      const after = await netWith(target._id, (rows) => [...rows, trade]);
+      if (after !== 0) {
+        throw planModelError(
+          "CONFLICT",
+          "Adding this fill would reopen a closed episode",
+        );
+      }
+    }
+  }
+
+  await ctx.db.patch(trade._id, { episodeId: target?._id });
+  const now = Date.now();
+  for (const episode of [current, target]) {
+    if (!episode) continue;
+    if (episode.lifecycle === "closed") {
+      const rows = await listEpisodeTrades(ctx, args.ownerId, episode._id);
+      if (rows.length > 0) {
+        await ctx.db.patch(episode._id, {
+          closedAt: Math.max(...rows.map((row) => row.date)),
+          openedAt: Math.min(...rows.map((row) => row.date)),
+          updatedAt: now,
+        });
+      }
+    } else {
+      if (target && episode._id === target._id && target.portfolioId === undefined) {
+        await ctx.db.patch(episode._id, { portfolioId: trade.portfolioId });
+      }
+      await recomputeEpisodeLifecycle(ctx, episode._id);
+    }
+  }
+  return (await ctx.db.get(trade._id))!;
 }
 
 export async function setEpisodeCampaign(
@@ -1013,14 +1189,48 @@ export async function setCampaignLinks(
  * Idempotent operation wrapper. A retry with the same operation id returns
  * the recorded result; the same id reused for a different kind is a conflict.
  */
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value as Record<string, unknown>)
+      .filter((key) => (value as Record<string, unknown>)[key] !== undefined)
+      .sort()
+      .map(
+        (key) =>
+          `${JSON.stringify(key)}:${stableStringify((value as Record<string, unknown>)[key])}`,
+      )
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/** FNV-1a over the canonical request body; enough to tell two bodies apart. */
+export function requestFingerprint(request: unknown): string {
+  const text = stableStringify(request);
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return `${text.length}:${hash.toString(16)}`;
+}
+
 export async function withOperation<T>(
   ctx: MutationCtx,
-  args: { kind: string; operationId?: string; ownerId: string },
+  args: {
+    kind: string;
+    operationId?: string;
+    ownerId: string;
+    /** The request body without its operation id. */
+    request?: unknown;
+  },
   run: () => Promise<T>,
 ): Promise<{ replayed: boolean; result: T }> {
   if (!args.operationId) {
     return { replayed: false, result: await run() };
   }
+  const requestHash =
+    args.request === undefined ? undefined : requestFingerprint(args.request);
   const existing = await ctx.db
     .query("counterpartOperations")
     .withIndex("by_owner_operationId", (q) =>
@@ -1034,6 +1244,16 @@ export async function withOperation<T>(
         `operationId ${args.operationId} was already used for ${existing.kind}`,
       );
     }
+    if (
+      requestHash !== undefined &&
+      existing.requestHash !== undefined &&
+      existing.requestHash !== requestHash
+    ) {
+      throw planModelError(
+        "CONFLICT",
+        `operationId ${args.operationId} was already used with a different request`,
+      );
+    }
     return { replayed: true, result: JSON.parse(existing.resultJson) as T };
   }
   const result = await run();
@@ -1042,6 +1262,7 @@ export async function withOperation<T>(
     kind: args.kind,
     operationId: args.operationId,
     ownerId: args.ownerId,
+    requestHash,
     resultJson: JSON.stringify(result),
   });
   return { replayed: false, result };

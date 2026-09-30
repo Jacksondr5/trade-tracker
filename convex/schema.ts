@@ -507,6 +507,19 @@ export default defineSchema({
     statusChangedBy: v.optional(actorValidator),
     // Required when dropped: the user said so, or a checkpoint omitted it.
     statusEvidence: v.optional(v.string()),
+    // Every status the element has held, in order, so a later drop or
+    // supersede never hides when it was agreed.
+    statusHistory: v.optional(
+      v.array(
+        v.object({
+          actor: actorValidator,
+          at: v.number(),
+          evidence: v.optional(v.string()),
+          revision: v.number(),
+          status: elementStatusValidator,
+        }),
+      ),
+    ),
     statusRevision: v.number(),
     supersededById: v.optional(v.id("planElements")),
     value: v.optional(elementValueValidator),
@@ -554,6 +567,9 @@ export default defineSchema({
     kind: v.string(),
     operationId: v.string(),
     ownerId: v.string(),
+    // Fingerprint of the request body; a reused id with a different body is
+    // a conflict rather than a silent replay.
+    requestHash: v.optional(v.string()),
     resultJson: v.string(),
   }).index("by_owner_operationId", ["ownerId", "operationId"]),
 

@@ -54,6 +54,15 @@ export const elementViewValidator = v.object({
   status: elementStatusValidator,
   statusChangedAt: v.number(),
   statusEvidence: nullableString,
+  statusHistory: v.array(
+    v.object({
+      actor: actorValidator,
+      at: v.number(),
+      evidence: v.union(v.string(), v.null()),
+      revision: v.number(),
+      status: elementStatusValidator,
+    }),
+  ),
   statusRevision: v.number(),
   supersededById: v.union(v.id("planElements"), v.null()),
   value: v.union(elementValueValidator, v.null()),
@@ -75,6 +84,13 @@ export type ElementView = {
   status: Doc<"planElements">["status"];
   statusChangedAt: number;
   statusEvidence: string | null;
+  statusHistory: Array<{
+    actor: Doc<"planElements">["actor"];
+    at: number;
+    evidence: string | null;
+    revision: number;
+    status: Doc<"planElements">["status"];
+  }>;
   statusRevision: number;
   supersededById: Id<"planElements"> | null;
   value: ElementValue | null;
@@ -97,6 +113,18 @@ export function elementView(element: Doc<"planElements">): ElementView {
     status: element.status,
     statusChangedAt: element.statusChangedAt,
     statusEvidence: element.statusEvidence ?? null,
+    // Elements written before history existed get their current status as
+    // a single entry.
+    statusHistory: (
+      element.statusHistory ?? [
+        {
+          actor: element.statusChangedBy ?? element.actor,
+          at: element.statusChangedAt,
+          revision: element.statusRevision,
+          status: element.status,
+        },
+      ]
+    ).map((entry) => ({ ...entry, evidence: entry.evidence ?? null })),
     statusRevision: element.statusRevision,
     supersededById: element.supersededById ?? null,
     value: element.value ?? null,
@@ -485,11 +513,17 @@ export async function resolveEpisode(
   const newestFirst = versions.slice(0, MAX_PLAN_VERSIONS);
   const latest = newestFirst[0] ?? null;
   const oldestFirst = [...newestFirst].reverse();
+  // Every revision a later write must have seen: element changes, version
+  // writes, and checkpoint cutoffs (an endorsement that absorbs agreements
+  // advances its cutoff past the elements it agreed).
   const latestRevision = Math.max(
     0,
     checkpoint?.revision ?? 0,
+    checkpoint?.compiledThroughRevision ?? 0,
     ...elements.map((element) => Math.max(element.revision, element.statusRevision)),
-    ...newestFirst.map((version) => version.revision),
+    ...newestFirst.map((version) =>
+      Math.max(version.revision, version.compiledThroughRevision),
+    ),
   );
   const draft =
     latest && !latest.endorsed && latest._id !== checkpoint?._id ? latest : null;

@@ -164,7 +164,7 @@ describe("counterpart service surface", () => {
       internal.counterpart.recordCheckInResponse,
       {
         checkInId: created.checkInId,
-        noteIds: [noteId],
+        noteIds: [noteId!],
         ownerId,
         respondedAt: now + 60_000,
       },

@@ -33,6 +33,7 @@ import {
   ensureThread,
   getOwnedCampaign,
   getOwnedEpisode,
+  linkTrade,
   openEpisode,
   planModelError,
   recordElements,
@@ -56,6 +57,13 @@ import {
  */
 
 const writeActorValidator = actorValidator;
+
+/** The request body that identifies an operation, without its id. */
+function requestOf<T extends { operationId?: string }>(args: T) {
+  const request: Record<string, unknown> = { ...args };
+  delete request.operationId;
+  return request;
+}
 
 const positionFreshnessValidator = v.object({
   latestAttemptStatus: v.union(v.string(), v.null()),
@@ -299,7 +307,8 @@ type NormalizableTable =
   | "episodes"
   | "notes"
   | "planElements"
-  | "portfolios";
+  | "portfolios"
+  | "trades";
 
 function normalizeIdOrThrow<TableName extends NormalizableTable>(
   ctx: { db: GenericDatabaseReader<DataModel> },
@@ -329,7 +338,7 @@ export const openEpisodeForCounterpart = internalMutation({
   handler: async (ctx, args) => {
     const { replayed, result } = await withOperation(
       ctx,
-      { kind: "open-episode", operationId: args.operationId, ownerId: args.ownerId },
+      { kind: "open-episode", operationId: args.operationId, ownerId: args.ownerId, request: requestOf(args) },
       async () => {
         const thread = await ensureThread(ctx, args.ownerId, args.ticker, args.actor);
         const portfolioId = args.portfolioId
@@ -406,7 +415,7 @@ export const recordElementsForCounterpart = internalMutation({
           };
     const { replayed, result } = await withOperation(
       ctx,
-      { kind: "record-elements", operationId: args.operationId, ownerId: args.ownerId },
+      { kind: "record-elements", operationId: args.operationId, ownerId: args.ownerId, request: requestOf(args) },
       async () => {
         const ids = await recordElements(ctx, {
           actor: args.actor,
@@ -453,7 +462,7 @@ export const setElementStatusForCounterpart = internalMutation({
     const elementId = normalizeIdOrThrow(ctx, "planElements", args.elementId, "Element");
     const { replayed, result } = await withOperation(
       ctx,
-      { kind: "set-element-status", operationId: args.operationId, ownerId: args.ownerId },
+      { kind: "set-element-status", operationId: args.operationId, ownerId: args.ownerId, request: requestOf(args) },
       async () => {
         const element = await setElementStatus(ctx, {
           actor: args.actor,
@@ -474,6 +483,9 @@ export const draftPlanVersionForCounterpart = internalMutation({
     actor: writeActorValidator,
     compiledThroughRevision: v.optional(v.number()),
     episodeId: v.string(),
+    // The episode's latestRevision from the read the draft was composed
+    // from. Anything recorded after it is a conflict, never absorbed.
+    observedRevision: v.number(),
     operationId: v.optional(v.string()),
     ownerId: v.string(),
     sections: planSectionsInputValidator,
@@ -500,13 +512,14 @@ export const draftPlanVersionForCounterpart = internalMutation({
     ) as PlanSections;
     const { replayed, result } = await withOperation(
       ctx,
-      { kind: "draft-plan-version", operationId: args.operationId, ownerId: args.ownerId },
+      { kind: "draft-plan-version", operationId: args.operationId, ownerId: args.ownerId, request: requestOf(args) },
       async () => {
         const version = await draftPlanVersion(ctx, {
           actor: args.actor,
           compiledThroughRevision: args.compiledThroughRevision,
           endorsed: false,
           episodeId,
+          observedRevision: args.observedRevision,
           operationId: args.operationId,
           ownerId: args.ownerId,
           sections,
@@ -522,6 +535,7 @@ export const draftPlanVersionForCounterpart = internalMutation({
 export const endorsePlanVersionForCounterpart = internalMutation({
   args: {
     actor: writeActorValidator,
+    agreeElementIds: v.optional(v.array(v.string())),
     episodeId: v.string(),
     operationId: v.optional(v.string()),
     ownerId: v.string(),
@@ -532,10 +546,13 @@ export const endorsePlanVersionForCounterpart = internalMutation({
     const episodeId = normalizeIdOrThrow(ctx, "episodes", args.episodeId, "Episode");
     const { replayed, result } = await withOperation(
       ctx,
-      { kind: "endorse-plan-version", operationId: args.operationId, ownerId: args.ownerId },
+      { kind: "endorse-plan-version", operationId: args.operationId, ownerId: args.ownerId, request: requestOf(args) },
       async () => {
         const version = await endorsePlanVersion(ctx, {
           actor: args.actor,
+          agreeElementIds: args.agreeElementIds?.map((id) =>
+            normalizeIdOrThrow(ctx, "planElements", id, "Element"),
+          ),
           episodeId,
           ownerId: args.ownerId,
           versionNumber: args.versionNumber,
@@ -544,6 +561,40 @@ export const endorsePlanVersionForCounterpart = internalMutation({
       },
     );
     return { replayed, version: planVersionView((await ctx.db.get(result.versionId))!) };
+  },
+});
+
+export const linkTradeForCounterpart = internalMutation({
+  args: {
+    episodeId: v.union(v.string(), v.null()),
+    operationId: v.optional(v.string()),
+    ownerId: v.string(),
+    tradeId: v.string(),
+  },
+  returns: v.object({
+    episodeId: v.union(v.id("episodes"), v.null()),
+    replayed: v.boolean(),
+    tradeId: v.id("trades"),
+  }),
+  handler: async (ctx, args) => {
+    const tradeId = normalizeIdOrThrow(ctx, "trades", args.tradeId, "Trade");
+    const { replayed } = await withOperation(
+      ctx,
+      { kind: "link-trade", operationId: args.operationId, ownerId: args.ownerId, request: requestOf(args) },
+      async () => {
+        await linkTrade(ctx, {
+          episodeId:
+            args.episodeId === null
+              ? null
+              : normalizeIdOrThrow(ctx, "episodes", args.episodeId, "Episode"),
+          ownerId: args.ownerId,
+          tradeId,
+        });
+        return { tradeId };
+      },
+    );
+    const trade = (await ctx.db.get(tradeId))!;
+    return { episodeId: trade.episodeId ?? null, replayed, tradeId };
   },
 });
 
@@ -560,7 +611,7 @@ export const setEpisodeCampaignForCounterpart = internalMutation({
     const episodeId = normalizeIdOrThrow(ctx, "episodes", args.episodeId, "Episode");
     const { replayed } = await withOperation(
       ctx,
-      { kind: "set-episode-campaign", operationId: args.operationId, ownerId: args.ownerId },
+      { kind: "set-episode-campaign", operationId: args.operationId, ownerId: args.ownerId, request: requestOf(args) },
       async () => {
         await setEpisodeCampaign(ctx, {
           campaignId: args.campaignId
@@ -594,7 +645,7 @@ export const shelveEpisodeForCounterpart = internalMutation({
     const episodeId = normalizeIdOrThrow(ctx, "episodes", args.episodeId, "Episode");
     const { replayed } = await withOperation(
       ctx,
-      { kind: "shelve-episode", operationId: args.operationId, ownerId: args.ownerId },
+      { kind: "shelve-episode", operationId: args.operationId, ownerId: args.ownerId, request: requestOf(args) },
       async () => {
         await shelveEpisode(ctx, {
           actor: args.actor,
@@ -626,7 +677,7 @@ export const upsertCampaignForCounterpart = internalMutation({
   handler: async (ctx, args) => {
     const { replayed, result } = await withOperation(
       ctx,
-      { kind: "upsert-campaign", operationId: args.operationId, ownerId: args.ownerId },
+      { kind: "upsert-campaign", operationId: args.operationId, ownerId: args.ownerId, request: requestOf(args) },
       async () => {
         let campaignId: Id<"campaigns">;
         if (args.campaignId) {
