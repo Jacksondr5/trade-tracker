@@ -335,6 +335,9 @@ export const updateTrade = mutation({
     portfolioId: v.optional(v.union(v.id("portfolios"), v.null())),
     price: v.optional(v.number()),
     quantity: v.optional(v.number()),
+    // Consent to reopen a closed episode when the correction shows the
+    // position was never flat.
+    reopenClosedEpisode: v.optional(v.boolean()),
     side: v.optional(v.union(v.literal("buy"), v.literal("sell"))),
     ticker: v.optional(v.string()),
     tradeId: v.id("trades"),
@@ -342,7 +345,7 @@ export const updateTrade = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const ownerId = await requireUser(ctx);
-    const { tradeId, ...updates } = args;
+    const { reopenClosedEpisode, tradeId, ...updates } = args;
 
     const existingTrade = assertOwner(
       await ctx.db.get(tradeId),
@@ -382,7 +385,10 @@ export const updateTrade = mutation({
     patch.ownerId = ownerId;
 
     await ctx.db.patch(tradeId, patch);
-    await syncTradeEpisodeLink(ctx, tradeId);
+    await syncTradeEpisodeLink(ctx, tradeId, {
+      actor: "user",
+      allowReopen: reopenClosedEpisode,
+    });
 
     return null;
   },

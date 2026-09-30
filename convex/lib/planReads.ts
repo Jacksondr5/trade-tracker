@@ -63,6 +63,8 @@ export const elementViewValidator = v.object({
       status: elementStatusValidator,
     }),
   ),
+  /** False for elements written before history was kept: only the current status is known. */
+  statusHistoryComplete: v.boolean(),
   statusRevision: v.number(),
   supersededById: v.union(v.id("planElements"), v.null()),
   value: v.union(elementValueValidator, v.null()),
@@ -91,6 +93,7 @@ export type ElementView = {
     revision: number;
     status: Doc<"planElements">["status"];
   }>;
+  statusHistoryComplete: boolean;
   statusRevision: number;
   supersededById: Id<"planElements"> | null;
   value: ElementValue | null;
@@ -125,6 +128,7 @@ export function elementView(element: Doc<"planElements">): ElementView {
         },
       ]
     ).map((entry) => ({ ...entry, evidence: entry.evidence ?? null })),
+    statusHistoryComplete: element.statusHistory !== undefined,
     statusRevision: element.statusRevision,
     supersededById: element.supersededById ?? null,
     value: element.value ?? null,

@@ -34,6 +34,7 @@ import {
   getOwnedCampaign,
   getOwnedEpisode,
   linkTrade,
+  MAX_THREAD_EPISODES,
   openEpisode,
   planModelError,
   recordElements,
@@ -207,6 +208,70 @@ export const getPlanVersionForCounterpart = internalQuery({
       )
       .unique();
     return version ? planVersionView(version) : null;
+  },
+});
+
+const MAX_THREAD_PAGE = 200;
+
+/**
+ * Every thread the owner has, paged by ticker, with live and total episode
+ * counts. This is the complete discovery path: a ticker the desk did not
+ * show, or one with only an unfilled idea, is still listed here.
+ */
+export const listThreadsForCounterpart = internalQuery({
+  args: {
+    cursor: v.union(v.string(), v.null()),
+    numItems: v.number(),
+    ownerId: v.string(),
+  },
+  returns: v.object({
+    hasMore: v.boolean(),
+    items: v.array(
+      v.object({
+        episodeCount: v.number(),
+        liveEpisodeCount: v.number(),
+        shelvedEpisodeCount: v.number(),
+        ticker: v.string(),
+      }),
+    ),
+    nextCursor: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query("instrumentThreads")
+      .withIndex("by_owner_ticker", (q) => q.eq("ownerId", args.ownerId))
+      .order("asc")
+      .paginate({
+        cursor: args.cursor,
+        numItems: Math.min(Math.max(args.numItems, 1), MAX_THREAD_PAGE),
+      });
+    const items = await Promise.all(
+      page.page.map(async (thread) => {
+        const episodes = await ctx.db
+          .query("episodes")
+          .withIndex("by_owner_threadId", (q) =>
+            q.eq("ownerId", args.ownerId).eq("threadId", thread._id),
+          )
+          .take(MAX_THREAD_EPISODES);
+        return {
+          episodeCount: episodes.length,
+          liveEpisodeCount: episodes.filter(
+            (episode) =>
+              episode.lifecycle !== "closed" && episode.shelvedAt === undefined,
+          ).length,
+          shelvedEpisodeCount: episodes.filter(
+            (episode) =>
+              episode.lifecycle !== "closed" && episode.shelvedAt !== undefined,
+          ).length,
+          ticker: thread.ticker,
+        };
+      }),
+    );
+    return {
+      hasMore: !page.isDone,
+      items,
+      nextCursor: page.isDone ? null : page.continueCursor,
+    };
   },
 });
 
@@ -566,9 +631,11 @@ export const endorsePlanVersionForCounterpart = internalMutation({
 
 export const linkTradeForCounterpart = internalMutation({
   args: {
+    actor: writeActorValidator,
     episodeId: v.union(v.string(), v.null()),
     operationId: v.optional(v.string()),
     ownerId: v.string(),
+    reopenClosedEpisode: v.optional(v.boolean()),
     tradeId: v.string(),
   },
   returns: v.object({
@@ -583,6 +650,8 @@ export const linkTradeForCounterpart = internalMutation({
       { kind: "link-trade", operationId: args.operationId, ownerId: args.ownerId, request: requestOf(args) },
       async () => {
         await linkTrade(ctx, {
+          actor: args.actor,
+          allowReopen: args.reopenClosedEpisode,
           episodeId:
             args.episodeId === null
               ? null

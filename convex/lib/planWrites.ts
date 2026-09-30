@@ -28,8 +28,69 @@ import {
 export type PlanModelErrorCode = "CONFLICT" | "NOT_FOUND" | "VALIDATION";
 
 export type PlanModelErrorDetails = {
+  /** Set when a correction would reopen a closed episode and needs consent. */
+  reopenRequired?: boolean;
+  reopenEpisodeId?: string;
   staleAgreedElementIds?: string[];
 };
+
+/**
+ * Reopens a closed episode because a corrected fill shows it was never flat,
+ * and records why as a visible item so the reopening is never silent.
+ */
+async function reopenEpisodeForCorrection(
+  ctx: MutationCtx,
+  args: {
+    actor: Actor;
+    episodeId: Id<"episodes">;
+    ownerId: string;
+    trade: Doc<"trades">;
+  },
+): Promise<void> {
+  const remaining = await listEpisodeTrades(ctx, args.ownerId, args.episodeId);
+  if (derivePositionEpisodeState(remaining).netQuantity === 0) {
+    // Still flat after the correction: stays closed, with its dates refreshed.
+    if (remaining.length > 0) {
+      await ctx.db.patch(args.episodeId, {
+        closedAt: Math.max(...remaining.map((row) => row.date)),
+        updatedAt: Date.now(),
+      });
+    }
+    return;
+  }
+  await ctx.db.patch(args.episodeId, {
+    closedAt: undefined,
+    lifecycle: "active",
+    updatedAt: Date.now(),
+  });
+  const day = new Date(args.trade.date).toISOString().slice(0, 10);
+  await recordElements(ctx, {
+    actor: args.actor,
+    elements: [
+      {
+        author: "user",
+        kind: "correction",
+        statement: `Reopened: a correction to the ${args.trade.side} of ${args.trade.quantity} ${args.trade.ticker} on ${day} left the position open`,
+        status: "agreed",
+      },
+    ],
+    ownerId: args.ownerId,
+    scope: { episodeId: args.episodeId, kind: "episode" },
+    source: args.actor === "user" ? "app" : "conversation",
+  });
+  await recomputeEpisodeLifecycle(ctx, args.episodeId);
+}
+
+function reopenRequiredError(
+  trade: Doc<"trades">,
+  episodeId: Id<"episodes">,
+): ConvexError<PlanModelErrorData> {
+  return planModelError(
+    "CONFLICT",
+    `This fill belongs to a closed ${trade.ticker} episode, and the change would leave that position open. Confirm reopening the episode to save it.`,
+    { reopenEpisodeId: episodeId, reopenRequired: true },
+  );
+}
 
 export type PlanModelErrorData = {
   code: PlanModelErrorCode;
@@ -342,6 +403,14 @@ async function listThreadEpisodesForLinking(
 export async function syncTradeEpisodeLink(
   ctx: MutationCtx,
   tradeId: Id<"trades">,
+  options: {
+    actor?: Actor;
+    /**
+     * Consent to reopen a closed episode when a correction shows it was never
+     * flat. Without it such a correction is refused with reopenRequired.
+     */
+    allowReopen?: boolean;
+  } = {},
 ): Promise<Id<"episodes"> | null> {
   const trade = await ctx.db.get(tradeId);
   if (!trade) return null;
@@ -361,22 +430,26 @@ export async function syncTradeEpisodeLink(
       previousEpisode.portfolioId === trade.portfolioId &&
       (previousEpisode.direction === undefined ||
         previousEpisode.direction === trade.direction);
-    if (previousEpisode?.lifecycle === "closed") {
-      // Closed history is terminal. A correction is accepted only while it
-      // leaves the episode flat; anything else needs a deliberate relink.
+    if (previousEpisode?.lifecycle === "closed" && stillFits) {
+      // Closed history changes only deliberately. A correction that keeps the
+      // episode flat just refreshes its dates; one that leaves a position
+      // open reopens it, and only with consent.
       const remainingTrades = await listEpisodeTrades(
         ctx,
         trade.ownerId,
         previousEpisode._id,
       );
-      const stillFlat =
-        stillFits &&
-        derivePositionEpisodeState(remainingTrades).netQuantity === 0;
-      if (!stillFlat) {
-        throw planModelError(
-          "CONFLICT",
-          `Trade ${trade._id} belongs to a closed episode and this change would reopen or move it. Closed history stays as recorded; relink deliberately with link-trade if the fill belongs elsewhere.`,
-        );
+      if (derivePositionEpisodeState(remainingTrades).netQuantity !== 0) {
+        if (!options.allowReopen) {
+          throw reopenRequiredError(trade, previousEpisode._id);
+        }
+        await reopenEpisodeForCorrection(ctx, {
+          actor: options.actor ?? "user",
+          episodeId: previousEpisode._id,
+          ownerId: trade.ownerId,
+          trade,
+        });
+        return previousEpisode._id;
       }
       await ctx.db.patch(previousEpisode._id, {
         closedAt: Math.max(...remainingTrades.map((row) => row.date)),
@@ -448,10 +521,17 @@ export async function syncTradeEpisodeLink(
 
   if (previousEpisodeId !== targetEpisodeId) {
     if (previousEpisode?.lifecycle === "closed") {
-      throw planModelError(
-        "CONFLICT",
-        `Trade ${trade._id} belongs to a closed episode and cannot be moved out of it`,
-      );
+      // Moving a fill out of closed history leaves that history open unless
+      // the fill had no net effect; that also needs consent.
+      const remaining = (
+        await listEpisodeTrades(ctx, trade.ownerId, previousEpisode._id)
+      ).filter((row) => row._id !== trade._id);
+      if (
+        derivePositionEpisodeState(remaining).netQuantity !== 0 &&
+        !options.allowReopen
+      ) {
+        throw reopenRequiredError(trade, previousEpisode._id);
+      }
     }
     await ctx.db.patch(tradeId, { episodeId: targetEpisodeId });
   }
@@ -459,7 +539,16 @@ export async function syncTradeEpisodeLink(
     await recomputeEpisodeLifecycle(ctx, targetEpisodeId);
   }
   if (previousEpisode && previousEpisodeId !== targetEpisodeId) {
-    await recomputeEpisodeLifecycle(ctx, previousEpisode._id);
+    if (previousEpisode.lifecycle === "closed") {
+      await reopenEpisodeForCorrection(ctx, {
+        actor: options.actor ?? "user",
+        episodeId: previousEpisode._id,
+        ownerId: trade.ownerId,
+        trade,
+      });
+    } else {
+      await recomputeEpisodeLifecycle(ctx, previousEpisode._id);
+    }
   }
   return targetEpisodeId ?? null;
 }
@@ -984,6 +1073,9 @@ export async function endorsePlanVersion(
 export async function linkTrade(
   ctx: MutationCtx,
   args: {
+    actor: Actor;
+    /** Consent to reopen a closed episode the move would leave open. */
+    allowReopen?: boolean;
     episodeId: Id<"episodes"> | null;
     ownerId: string;
     tradeId: Id<"trades">;
@@ -1008,11 +1100,8 @@ export async function linkTrade(
     const remaining = await netWith(current._id, (rows) =>
       rows.filter((row) => row._id !== trade._id),
     );
-    if (remaining !== 0) {
-      throw planModelError(
-        "CONFLICT",
-        "Moving this fill would reopen a closed episode",
-      );
+    if (remaining !== 0 && !args.allowReopen) {
+      throw reopenRequiredError(trade, current._id);
     }
   }
 
@@ -1039,11 +1128,8 @@ export async function linkTrade(
     }
     if (target.lifecycle === "closed") {
       const after = await netWith(target._id, (rows) => [...rows, trade]);
-      if (after !== 0) {
-        throw planModelError(
-          "CONFLICT",
-          "Adding this fill would reopen a closed episode",
-        );
+      if (after !== 0 && !args.allowReopen) {
+        throw reopenRequiredError(trade, target._id);
       }
     }
   }
@@ -1056,11 +1142,17 @@ export async function linkTrade(
       const rows = await listEpisodeTrades(ctx, args.ownerId, episode._id);
       if (rows.length > 0) {
         await ctx.db.patch(episode._id, {
-          closedAt: Math.max(...rows.map((row) => row.date)),
           openedAt: Math.min(...rows.map((row) => row.date)),
           updatedAt: now,
         });
       }
+      // Reopens (with a recorded reason) only if the move left it open.
+      await reopenEpisodeForCorrection(ctx, {
+        actor: args.actor,
+        episodeId: episode._id,
+        ownerId: args.ownerId,
+        trade,
+      });
     } else {
       if (target && episode._id === target._id && target.portfolioId === undefined) {
         await ctx.db.patch(episode._id, { portfolioId: trade.portfolioId });

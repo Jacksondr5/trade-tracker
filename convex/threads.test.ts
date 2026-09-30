@@ -196,7 +196,9 @@ describe("instrument threads and episodes", () => {
     )!;
     await expect(
       asOwner(t).mutation(api.trades.updateTrade, { quantity: 19, tradeId: closingSell._id }),
-    ).rejects.toMatchObject({ data: { code: "CONFLICT" } });
+    ).rejects.toMatchObject({
+      data: { code: "CONFLICT", details: { reopenEpisodeId: episodeId, reopenRequired: true } },
+    });
     await expect(
       asOwner(t).mutation(api.trades.updateTrade, { portfolioId: null, tradeId: closingSell._id }),
     ).rejects.toMatchObject({ data: { code: "CONFLICT" } });
@@ -915,5 +917,38 @@ describe("instrument threads and episodes", () => {
     ).rejects.toMatchObject({
       data: { code: "CONFLICT", message: expect.stringContaining("trade history") },
     });
+  });
+
+  it("reopens a closed episode only with consent when a correction leaves it open", async () => {
+    const swing = await insertPortfolio();
+    const buy = await insertTrade({ date: 10, portfolioId: swing, quantity: 10, side: "buy", ticker: "MU" });
+    const sell = await insertTrade({ date: 20, portfolioId: swing, quantity: 10, side: "sell", ticker: "MU" });
+    await t.run((ctx) => syncTradeEpisodeLink(ctx, buy));
+    await t.run((ctx) => syncTradeEpisodeLink(ctx, sell));
+    const episodeId = (await t.run((ctx) => ctx.db.get(sell)))!.episodeId!;
+    expect((await t.run((ctx) => ctx.db.get(episodeId)))!.lifecycle).toBe("closed");
+
+    // The broker corrected the sell to 9 shares: one share is still held.
+    await expect(
+      asOwner(t).mutation(api.trades.updateTrade, { quantity: 9, tradeId: sell }),
+    ).rejects.toMatchObject({ data: { details: { reopenRequired: true } } });
+    expect((await t.run((ctx) => ctx.db.get(sell)))!.quantity).toBe(10);
+
+    await asOwner(t).mutation(api.trades.updateTrade, {
+      quantity: 9,
+      reopenClosedEpisode: true,
+      tradeId: sell,
+    });
+    const reopened = (await t.run((ctx) => ctx.db.get(episodeId)))!;
+    expect(reopened.lifecycle).toBe("active");
+    expect(reopened.closedAt).toBeUndefined();
+    const resolved = await t.run(async (ctx) => resolveEpisode(ctx, (await ctx.db.get(episodeId))!));
+    expect(resolved.position?.netQuantity).toBe(1);
+    const reason = resolved.itemsSinceCheckpoint.find((item) => item.kind === "correction")!;
+    expect(reason.statement).toContain("left the position open");
+    expect(reason.author).toBe("user");
+    expect(reason.statusHistoryComplete).toBe(true);
+    const desk = await asOwner(t).query(api.threads.getDesk, {});
+    expect(desk.groups.flatMap((group) => group.rows).map((row) => row.episode.id)).toContain(episodeId);
   });
 });

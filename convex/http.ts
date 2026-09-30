@@ -643,15 +643,31 @@ export function validateEndorsePlanVersionBody(body: JsonObject) {
   };
 }
 
+export function validateListThreadsBody(body: JsonObject) {
+  assertExactKeys(body, ["cursor", "numItems"]);
+  return {
+    cursor: optionalCursor(body),
+    numItems: optionalInteger(body, "numItems", 1, 200, 100),
+  };
+}
+
 export function validateLinkTradeBody(body: JsonObject) {
-  assertExactKeys(body, ["tradeId", "episodeId", "operationId"]);
+  assertExactKeys(body, [
+    "tradeId",
+    "episodeId",
+    "reopenClosedEpisode",
+    "actor",
+    "operationId",
+  ]);
   const episodeId = body.episodeId;
   if (episodeId !== null && (typeof episodeId !== "string" || !episodeId.trim())) {
     throw new JsonValidationError("episodeId must be a string or null");
   }
   return {
+    actor: requireActor(body),
     episodeId: episodeId === null ? null : (episodeId as string).trim(),
     operationId: optionalOperationId(body),
+    reopenClosedEpisode: optionalBoolean(body, "reopenClosedEpisode"),
     tradeId: requireString(body, "tradeId"),
   };
 }
@@ -1200,6 +1216,21 @@ http.route({
   }),
   method: "POST",
   path: "/internal/counterpart/endorse-plan-version",
+});
+
+http.route({
+  handler: httpAction(async (ctx, req) => {
+    return await authorizedJson(req, async (body, ownerId) => {
+      const args = validateListThreadsBody(body);
+      const data = await ctx.runQuery(
+        internal.counterpartPlanning.listThreadsForCounterpart,
+        { ...args, ownerId },
+      );
+      return successResponse(data);
+    });
+  }),
+  method: "POST",
+  path: "/internal/counterpart/list-threads",
 });
 
 http.route({

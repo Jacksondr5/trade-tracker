@@ -51,7 +51,7 @@ Status moves are one-way: `proposed → agreed`, `proposed → dropped`, and `ag
 - otherwise, an endorsed plan version or an agreed level-bearing element (`kind: "entry"`, a stop, or a per-share dollar value): `watching`
 - otherwise: `idea`
 
-Fills win. Closed is terminal: a later fill opens a new episode, and an edit to a fill inside a closed episode is accepted only while the episode stays flat (a price or date correction); an edit that would reopen it or move the fill to another portfolio is refused with a `CONFLICT` so the correction is recorded deliberately as a new fill instead. Shelving (`shelvedAt`, with `shelvedBy` and `shelvedSource`) is a disposition, not a lifecycle state, allowed only on open episodes with no fills, and cleared automatically if a fill arrives.
+Fills win. A later fill opens a new episode rather than reopening a closed one. Closed history changes only deliberately: an edit to a fill inside a closed episode that keeps it flat (a price or date correction) just refreshes its dates, while one that leaves a position open (a corrected quantity, or moving the fill to another portfolio) is refused with `CONFLICT` and `details.reopenRequired` until it is repeated with consent (`reopenClosedEpisode: true`). With consent the episode reopens with the remaining position and records a visible agreed item, kind `correction`, saying why. No correction ever requires recording a new execution.
 
 ### Trade linking
 
@@ -75,6 +75,7 @@ All routes live under `/internal/counterpart/` in `convex/http.ts`, use the exis
 | `episode-context` | `{ episodeId }` | one resolved episode (below) plus `positionFreshness` and `valuation` |
 | `desk-context` | `{}` | every live episode grouped by campaign, with checkpoint key lines and agreed or proposed items since the checkpoint; episodes outside any campaign appear in a final "Not in a campaign" group; bare episodes appear with position only and no counts of anything owed |
 | `list-campaigns` | `{}` | campaigns with benchmark ticker, linked tickers, and campaign elements |
+| `list-threads` | `{ cursor?, numItems? }` | every thread by ticker, paged, with live, shelved, and total episode counts; the complete discovery path |
 
 A resolved episode contains: `episode` (summary with lifecycle, portfolio, campaign, exemptions), `checkpoint` (latest endorsed version or null), `draft` (latest unendorsed version newer than the checkpoint or null), `itemsSinceCheckpoint` (every element created or changed after `compiledThroughRevision`, ordered by the revision of its last change, so agreeing or dropping an older proposal shows as a delta item), `openProposals` (every proposed element, before and after the checkpoint, each with `beforeCheckpoint`), `history` (elements created at or before the checkpoint, last 50, with `total` and `truncated`), `campaignRules` (`applicable` and `exempted`), `trades`, `position` (derived from linked fills), `notes`, `planVersions` (newest 200, with `planVersionsTruncated`), and `latestRevision` (the highest revision touching the episode, for edit conflict checks).
 
@@ -96,7 +97,7 @@ All writes accept an optional `operationId`. A retry with the same id returns th
 | `set-element-status` | `{ elementId, status: agreed \| dropped, evidence?, actor, operationId? }` | only `proposed → agreed`, `proposed → dropped`, `agreed → dropped`; anything else is a `CONFLICT`; `dropped` requires `evidence` |
 | `draft-plan-version` | `{ episodeId, sections, observedRevision, compiledThroughRevision?, actor, source?, operationId? }` | `observedRevision` is required: the `latestRevision` from the read the draft was composed from. Any element changed or plan version written after it is a `CONFLICT` with `details.staleAgreedElementIds`; nothing unseen is ever absorbed. `compiledThroughRevision` defaults to `observedRevision`; moving it backwards from the previous version is a `CONFLICT` |
 | `endorse-plan-version` | `{ episodeId, versionNumber, agreeElementIds?, actor, operationId? }` | actor must be `user` or `counterpart`; only the latest version can be endorsed. `agreeElementIds` marks those proposals agreed as part of the same endorsement and absorbs them into the checkpoint. Refused with `CONFLICT` and `details.staleAgreedElementIds` if, after the draft's cutoff, any element was agreed or any element the draft cites was dropped or superseded |
-| `link-trade` | `{ tradeId, episodeId \| null, operationId? }` | places a fill deliberately after a conversation has sorted it out (a late or ambiguous fill), or unlinks it. Same ticker, portfolio, and direction required. A closed episode accepts or releases a fill only if it stays flat; otherwise `CONFLICT` |
+| `link-trade` | `{ tradeId, episodeId \| null, actor, reopenClosedEpisode?, operationId? }` | places a fill deliberately after a conversation has sorted it out (a late or ambiguous fill), or unlinks it. Same ticker, portfolio, and direction required. A move that would leave a closed episode open is refused with `details.reopenRequired` unless `reopenClosedEpisode` is true, in which case the episode reopens with a recorded reason |
 | `set-episode-campaign` | `{ episodeId, campaignId \| null, exemptedCampaignElementIds?, operationId? }` | links the thread to the campaign as a side effect |
 | `shelve-episode` | `{ episodeId, shelved?, actor, source?, operationId? }` | refused on closed episodes and on episodes with fills |
 | `upsert-campaign` | `{ campaignId?, name?, thesis?, benchmarkTicker?, linkedTickers?, actor, operationId? }` | light campaigns only; no plan snapshots |
@@ -115,11 +116,11 @@ Every write accepts an optional `operationId`. The same id with the same body re
 
 **A withdrawal after drafting.** If Jackson withdraws something the draft cites, record the drop (with evidence) or the superseding element; the draft becomes stale and endorsing it is refused. Redraft from a fresh read.
 
-**Corrections and late fills.** Linking follows fills automatically. Closed history is never reopened: a fill correction that would reopen a closed episode or move a fill out of it is refused, and a late fill dated inside a closed span or before the open episode began is left unlinked. Neither is a reason to record a new execution. Discuss it, then place the fill with `link-trade` (which accepts it into a closed episode only when that episode stays flat), or leave it unlinked, which is tolerated data. Rationale about a closed engagement goes on the episode with `add-note { episodeId }` or as an element on that episode.
+**Corrections and late fills.** Linking follows fills automatically. Executions are corrected in place, never by recording a new execution. Jackson corrects a fill in the app (the trade edit form); when the correction shows a closed position was never flat, the form asks him to confirm reopening the episode, which then carries the remaining position and a `correction` item explaining it. A late fill dated inside a closed span or before the open episode began is left unlinked: discuss it, then place it with `link-trade`, or leave it unlinked, which is tolerated data. Rationale about a closed engagement goes on the episode with `add-note { episodeId }` or as an element on that episode.
 
 ### Status history
 
-Each element carries `statusHistory`: every status it has held, with actor, revision, time, and drop evidence, so a later supersede or drop never hides when it was agreed. Elements written before this existed show their current status as a single entry.
+Each element carries `statusHistory`: every status it has held, with actor, revision, time, and drop evidence, so a later supersede or drop never hides when it was agreed. `statusHistoryComplete` is false for elements written before history was kept; their history holds only the current status and must not be read as their full transition record.
 
 ### Where the rest of a truncated list lives
 
@@ -129,7 +130,7 @@ Each element carries `statusHistory`: every status it has held, with actor, revi
 | episode `planVersionsTruncated` | `plan-version` returns any version by number; the current checkpoint and newest draft are always returned directly |
 | episode `notes.truncated`, thread `notes.truncated` | `list-notes { ticker }` pages every note on the ticker with a cursor, including episode notes |
 | episode `elementsTruncated`, `campaignRules.truncated`, thread `episodesTruncated` | Structurally never true: writes are refused past the same ceilings (2,000 elements per episode, 500 per campaign, 500 episodes per thread), so the bounded read always holds the whole set |
-| desk `truncated` | Only above 300 live episodes; each omitted episode is still reachable through `thread-context { ticker }` |
+| desk `truncated` | Only above 300 live episodes. `list-threads { cursor?, numItems? }` pages every thread with its live, shelved, and total episode counts, so omitted tickers (including unfilled, non-campaign ideas) are discoverable, then `thread-context { ticker }` resolves each |
 
 `portfolio-context` and `daily-context` now also return `sync` (`latestAttempt` with a concise `failure` summary, and `latestSuccessfulStatement`), reconciliation issues with `state`, `detectedAt`, `lastRecheckedAt`, and `resolvedAt`, `recentlyResolvedReconciliation`, and `valuation` (below).
 

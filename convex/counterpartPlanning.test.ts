@@ -657,13 +657,25 @@ describe("counterpart planning surface", () => {
         ticker: "NVDA",
       }),
     );
-    const linked = await post("link-trade", { episodeId, operationId: "link-1", tradeId: buy });
+    const linked = await post("link-trade", { actor: "counterpart", episodeId, operationId: "link-1", tradeId: buy });
     expect(linked.status).toBe(200);
     expect(linked.json.data.episodeId).toBe(episodeId);
     const active = await post("episode-context", { episodeId });
     expect(active.json.data.episode.lifecycle).toBe("active");
     expect(active.json.data.position.netQuantity).toBe(20);
-    const unlinked = await post("link-trade", { episodeId: null, tradeId: buy });
+    const unlinked = await post("link-trade", { actor: "counterpart", episodeId: null, tradeId: buy });
+
+    // Discovery: every thread is listed, including ones the desk would not
+    // show, such as a ticker known only from a note.
+    await post("add-note", { content: "Watching the fab spend", noteDate: 150, ticker: "TSM" });
+    const threads = await post("list-threads", { numItems: 1 });
+    expect(threads.status).toBe(200);
+    expect(threads.json.data.items).toHaveLength(1);
+    expect(threads.json.data.hasMore).toBe(true);
+    const rest = await post("list-threads", { cursor: threads.json.data.nextCursor, numItems: 200 });
+    const tickers = [threads.json.data.items[0].ticker, ...rest.json.data.items.map((item: { ticker: string }) => item.ticker)];
+    expect(tickers.sort()).toEqual(["NVDA", "TSM"]);
+    expect(rest.json.data.hasMore).toBe(false);
     expect(unlinked.json.data.episodeId).toBeNull();
 
     // Rationale can be attached to the episode itself, even after it closes.
