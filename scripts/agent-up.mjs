@@ -354,6 +354,10 @@ function convexFunctionsAreReady() {
         cwd: PROJECT_ROOT,
         encoding: "utf8",
         env: withoutConvexSelectors(process.env),
+        // The function spec exceeds Node's default 1 MiB spawnSync buffer once
+        // the planning validators are included; a truncated child is killed
+        // and the backend would read as never ready.
+        maxBuffer: 64 * 1024 * 1024,
         timeout: 5_000,
       },
     );

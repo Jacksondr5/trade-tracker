@@ -1475,4 +1475,53 @@ describe("brokerage ingestion", () => {
     expect(syncRun?.rawReportId).toBeUndefined();
     expect(rawReport).toBeNull();
   });
+
+  it("keeps the pending-review issue open until the inbox is empty", async () => {
+    const connectionId = await createConnection();
+    const { syncRunId } = await t.mutation(
+      internal.brokerageIngestion.beginSyncRunForConnection,
+      { connectionId, reportDate: "2026-05-14", reportType: "activity" },
+    );
+    const payload = {
+      cashSnapshots: [],
+      positionSnapshots: [],
+      syncRunId,
+      trades: [
+        {
+          assetType: "stock" as const,
+          brokerageAccountId: "U1234567",
+          date: Date.UTC(2026, 4, 14, 9, 30, 5),
+          direction: "long" as const,
+          externalId: "0000e1.pending.01",
+          price: 189.5,
+          quantity: 10,
+          side: "buy" as const,
+          ticker: "aapl",
+        },
+      ],
+    };
+    const pendingIssues = async () =>
+      (await listOpenReconciliationIssues()).filter(
+        (issue) => issue.issueType === "pending_import_review",
+      );
+
+    await t.mutation(internal.brokerageIngestion.ingestParsedFlexReport, payload);
+    expect(await pendingIssues()).toHaveLength(1);
+
+    // A re-sync that stages nothing new must not resolve owed review.
+    await t.mutation(internal.brokerageIngestion.ingestParsedFlexReport, payload);
+    expect(await pendingIssues()).toHaveLength(1);
+
+    // Once the inbox is cleared, the next sync resolves it.
+    await t.run(async (ctx) => {
+      for (const row of await ctx.db.query("inboxTrades").collect()) {
+        await ctx.db.delete(row._id);
+      }
+    });
+    await t.mutation(internal.brokerageIngestion.ingestParsedFlexReport, {
+      ...payload,
+      trades: [],
+    });
+    expect(await pendingIssues()).toHaveLength(0);
+  });
 });

@@ -33,14 +33,18 @@ const noteValidator = v.object({
   contextHref: v.union(v.string(), v.null()),
   contextKind: v.union(
     v.literal("campaign"),
+    v.literal("episode"),
     v.literal("general"),
+    v.literal("thread"),
     v.literal("tradePlan"),
   ),
   contextLabel: v.string(),
+  episodeId: v.optional(v.id("episodes")),
   evidence: v.optional(v.array(noteEvidenceValidator)),
   noteDate: v.number(),
   ownerId: v.string(),
   origin: v.optional(v.literal("retrospective")),
+  threadId: v.optional(v.id("instrumentThreads")),
   ticker: v.optional(v.string()),
   tradePlanId: v.optional(v.id("tradePlans")),
 });
@@ -54,6 +58,11 @@ type NoteEvidenceInput = {
 };
 
 type NotesCtx = QueryCtx | MutationCtx;
+
+// Thread and episode note lists are bounded; the newest notes win. The scan
+// is wider than the list because filtering happens after the index read.
+const MAX_SCOPED_NOTES = 200;
+const MAX_SCOPED_NOTES_SCAN = 1_000;
 
 function trimNoteContent(content: string): string {
   const trimmed = content.trim();
@@ -114,11 +123,16 @@ function normalizeEvidence(
 
 function validateSingleParent(args: {
   campaignId?: string;
+  episodeId?: string;
+  threadId?: string;
   tradePlanId?: string;
 }) {
-  const parentCount = [args.campaignId, args.tradePlanId].filter(
-    Boolean,
-  ).length;
+  const parentCount = [
+    args.campaignId,
+    args.episodeId,
+    args.threadId,
+    args.tradePlanId,
+  ].filter(Boolean).length;
   if (parentCount > 1) {
     throw new ConvexError("A note can only belong to one parent");
   }
@@ -246,6 +260,50 @@ async function serializeNotes(ctx: NotesCtx, notes: Doc<"notes">[]) {
         };
       }
 
+      if (note.episodeId) {
+        const episode = await ctx.db.get(note.episodeId);
+        return {
+          _creationTime: note._creationTime,
+          _id: note._id,
+          campaignId: note.campaignId,
+          chartUrls,
+          content: note.content,
+          contextHref: episode ? `/threads/${episode.ticker}` : null,
+          contextKind: "episode" as const,
+          contextLabel: episode ? `${episode.ticker} episode` : "Episode",
+          episodeId: note.episodeId,
+          evidence,
+          noteDate: note.noteDate,
+          ownerId: note.ownerId,
+          origin: note.origin,
+          threadId: note.threadId,
+          ticker: note.ticker,
+          tradePlanId: note.tradePlanId,
+        };
+      }
+
+      if (note.threadId) {
+        const thread = await ctx.db.get(note.threadId);
+        return {
+          _creationTime: note._creationTime,
+          _id: note._id,
+          campaignId: note.campaignId,
+          chartUrls,
+          content: note.content,
+          contextHref: thread ? `/threads/${thread.ticker}` : null,
+          contextKind: "thread" as const,
+          contextLabel: thread ? `${thread.ticker} thread` : "Thread",
+          episodeId: note.episodeId,
+          evidence,
+          noteDate: note.noteDate,
+          ownerId: note.ownerId,
+          origin: note.origin,
+          threadId: note.threadId,
+          ticker: note.ticker,
+          tradePlanId: note.tradePlanId,
+        };
+      }
+
       if (note.tradePlanId) {
         const tradePlan = lookups.tradePlans.get(note.tradePlanId);
         return {
@@ -291,8 +349,10 @@ export const addNote = mutation({
     campaignId: v.optional(v.id("campaigns")),
     chartUrls: v.optional(v.array(v.string())),
     content: v.string(),
+    episodeId: v.optional(v.id("episodes")),
     evidence: v.optional(v.array(noteEvidenceInputValidator)),
     noteDate: v.optional(v.number()),
+    threadId: v.optional(v.id("instrumentThreads")),
     tradePlanId: v.optional(v.id("tradePlans")),
   },
   returns: v.id("notes"),
@@ -311,14 +371,34 @@ export const addNote = mutation({
       const tradePlan = await ctx.db.get(args.tradePlanId);
       assertOwner(tradePlan, ownerId, "Trade plan not found");
     }
+    let ticker: string | undefined;
+    if (args.threadId) {
+      const thread = assertOwner(
+        await ctx.db.get(args.threadId),
+        ownerId,
+        "Thread not found",
+      );
+      ticker = thread.ticker;
+    }
+    if (args.episodeId) {
+      const episode = assertOwner(
+        await ctx.db.get(args.episodeId),
+        ownerId,
+        "Episode not found",
+      );
+      ticker = episode.ticker;
+    }
 
     return await ctx.db.insert("notes", {
       campaignId: args.campaignId,
       chartUrls,
       content,
+      episodeId: args.episodeId,
       evidence,
       noteDate: args.noteDate ?? Date.now(),
       ownerId,
+      threadId: args.threadId,
+      ticker,
       tradePlanId: args.tradePlanId,
     });
   },
@@ -422,6 +502,79 @@ export const getNotesByTradePlan = query({
   },
 });
 
+const boundedNotesValidator = v.object({
+  items: v.array(noteValidator),
+  truncated: v.boolean(),
+});
+
+export const getNotesByThread = query({
+  args: { threadId: v.id("instrumentThreads") },
+  returns: boundedNotesValidator,
+  handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    const thread = assertOwner(
+      await ctx.db.get(args.threadId),
+      ownerId,
+      "Thread not found",
+    );
+    const [byTicker, byThread] = await Promise.all([
+      ctx.db
+        .query("notes")
+        .withIndex("by_owner_ticker_noteDate", (q) =>
+          q.eq("ownerId", ownerId).eq("ticker", thread.ticker),
+        )
+        .order("desc")
+        .take(MAX_SCOPED_NOTES_SCAN + 1),
+      ctx.db
+        .query("notes")
+        .withIndex("by_owner_threadId_noteDate", (q) =>
+          q.eq("ownerId", ownerId).eq("threadId", thread._id),
+        )
+        .order("desc")
+        .take(MAX_SCOPED_NOTES_SCAN + 1),
+    ]);
+    // Episode and campaign notes share the ticker index, so the scan is wider
+    // than the list and any capped scan is reported as truncation.
+    const scanHitCap =
+      byTicker.length > MAX_SCOPED_NOTES_SCAN ||
+      byThread.length > MAX_SCOPED_NOTES_SCAN;
+    const seen = new Set<Id<"notes">>();
+    const notes = [...byTicker, ...byThread].filter((note) => {
+      if (seen.has(note._id) || note.campaignId || note.episodeId) return false;
+      seen.add(note._id);
+      return true;
+    });
+    notes.sort(sortNotesDesc);
+    return {
+      items: await serializeNotes(ctx, notes.slice(0, MAX_SCOPED_NOTES)),
+      truncated: scanHitCap || notes.length > MAX_SCOPED_NOTES,
+    };
+  },
+});
+
+export const getNotesByEpisode = query({
+  args: { episodeId: v.id("episodes") },
+  returns: boundedNotesValidator,
+  handler: async (ctx, args) => {
+    const ownerId = await requireUser(ctx);
+    assertOwner(await ctx.db.get(args.episodeId), ownerId, "Episode not found");
+    const rows = await ctx.db
+      .query("notes")
+      .withIndex("by_owner_episodeId_noteDate", (q) =>
+        q.eq("ownerId", ownerId).eq("episodeId", args.episodeId),
+      )
+      .order("desc")
+      .take(MAX_SCOPED_NOTES + 1);
+    return {
+      items: await serializeNotes(
+        ctx,
+        rows.slice(0, MAX_SCOPED_NOTES).sort(sortNotesDesc),
+      ),
+      truncated: rows.length > MAX_SCOPED_NOTES,
+    };
+  },
+});
+
 export const getGeneralNotes = query({
   args: {},
   returns: v.array(noteValidator),
@@ -435,7 +588,13 @@ export const getGeneralNotes = query({
     return await serializeNotes(
       ctx,
       notes
-        .filter((note) => !note.campaignId && !note.tradePlanId)
+        .filter(
+          (note) =>
+            !note.campaignId &&
+            !note.episodeId &&
+            !note.threadId &&
+            !note.tradePlanId,
+        )
         .sort(sortNotesDesc),
     );
   },

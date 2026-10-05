@@ -6,6 +6,8 @@ import { assertOwner, requireUser } from "./lib/auth";
 
 const watchlistItemTypeValidator = v.union(
   v.literal("campaign"),
+  v.literal("episode"),
+  v.literal("thread"),
   v.literal("tradePlan"),
 );
 
@@ -13,6 +15,14 @@ const watchTargetValidator = v.union(
   v.object({
     campaignId: v.id("campaigns"),
     itemType: v.literal("campaign"),
+  }),
+  v.object({
+    episodeId: v.id("episodes"),
+    itemType: v.literal("episode"),
+  }),
+  v.object({
+    itemType: v.literal("thread"),
+    threadId: v.id("instrumentThreads"),
   }),
   v.object({
     itemType: v.literal("tradePlan"),
@@ -24,35 +34,39 @@ const watchlistItemValidator = v.object({
   _creationTime: v.number(),
   _id: v.id("watchlist"),
   campaignId: v.optional(v.id("campaigns")),
+  episodeId: v.optional(v.id("episodes")),
   itemType: watchlistItemTypeValidator,
   ownerId: v.string(),
+  threadId: v.optional(v.id("instrumentThreads")),
   tradePlanId: v.optional(v.id("tradePlans")),
   watchedAt: v.number(),
 });
 
 type WatchTarget =
-  | {
-      campaignId: Id<"campaigns">;
-      itemType: "campaign";
-    }
-  | {
-      itemType: "tradePlan";
-      tradePlanId: Id<"tradePlans">;
-    };
+  | { campaignId: Id<"campaigns">; itemType: "campaign" }
+  | { episodeId: Id<"episodes">; itemType: "episode" }
+  | { itemType: "thread"; threadId: Id<"instrumentThreads"> }
+  | { itemType: "tradePlan"; tradePlanId: Id<"tradePlans"> };
 
 async function assertTargetExists(
   ctx: MutationCtx,
   ownerId: string,
   target: WatchTarget,
 ) {
-  if (target.itemType === "campaign") {
-    const campaign = await ctx.db.get(target.campaignId as Id<"campaigns">);
-    assertOwner(campaign, ownerId, "Campaign not found");
-    return;
+  switch (target.itemType) {
+    case "campaign":
+      assertOwner(await ctx.db.get(target.campaignId), ownerId, "Campaign not found");
+      return;
+    case "episode":
+      assertOwner(await ctx.db.get(target.episodeId), ownerId, "Episode not found");
+      return;
+    case "thread":
+      assertOwner(await ctx.db.get(target.threadId), ownerId, "Thread not found");
+      return;
+    case "tradePlan":
+      assertOwner(await ctx.db.get(target.tradePlanId), ownerId, "Trade plan not found");
+      return;
   }
-
-  const tradePlan = await ctx.db.get(target.tradePlanId as Id<"tradePlans">);
-  assertOwner(tradePlan, ownerId, "Trade plan not found");
 }
 
 async function getExistingWatch(
@@ -60,21 +74,36 @@ async function getExistingWatch(
   ownerId: string,
   target: WatchTarget,
 ) {
-  if (target.itemType === "campaign") {
-    return await ctx.db
-      .query("watchlist")
-      .withIndex("by_owner_campaignId", (q) =>
-        q.eq("ownerId", ownerId).eq("campaignId", target.campaignId as Id<"campaigns">),
-      )
-      .unique();
+  switch (target.itemType) {
+    case "campaign":
+      return await ctx.db
+        .query("watchlist")
+        .withIndex("by_owner_campaignId", (q) =>
+          q.eq("ownerId", ownerId).eq("campaignId", target.campaignId),
+        )
+        .unique();
+    case "episode":
+      return await ctx.db
+        .query("watchlist")
+        .withIndex("by_owner_episodeId", (q) =>
+          q.eq("ownerId", ownerId).eq("episodeId", target.episodeId),
+        )
+        .unique();
+    case "thread":
+      return await ctx.db
+        .query("watchlist")
+        .withIndex("by_owner_threadId", (q) =>
+          q.eq("ownerId", ownerId).eq("threadId", target.threadId),
+        )
+        .unique();
+    case "tradePlan":
+      return await ctx.db
+        .query("watchlist")
+        .withIndex("by_owner_tradePlanId", (q) =>
+          q.eq("ownerId", ownerId).eq("tradePlanId", target.tradePlanId),
+        )
+        .unique();
   }
-
-  return await ctx.db
-    .query("watchlist")
-    .withIndex("by_owner_tradePlanId", (q) =>
-      q.eq("ownerId", ownerId).eq("tradePlanId", target.tradePlanId as Id<"tradePlans">),
-    )
-    .unique();
 }
 
 export const watchItem = mutation({
@@ -94,8 +123,11 @@ export const watchItem = mutation({
     return await ctx.db.insert("watchlist", {
       campaignId:
         args.item.itemType === "campaign" ? args.item.campaignId : undefined,
+      episodeId:
+        args.item.itemType === "episode" ? args.item.episodeId : undefined,
       itemType: args.item.itemType,
       ownerId,
+      threadId: args.item.itemType === "thread" ? args.item.threadId : undefined,
       tradePlanId:
         args.item.itemType === "tradePlan" ? args.item.tradePlanId : undefined,
       watchedAt: Date.now(),
@@ -137,6 +169,16 @@ export const listWatchedItems = query({
           if (!item.campaignId) return null;
           const campaign = await ctx.db.get(item.campaignId);
           return campaign && campaign.ownerId === ownerId ? item : null;
+        }
+        if (item.itemType === "episode") {
+          if (!item.episodeId) return null;
+          const episode = await ctx.db.get(item.episodeId);
+          return episode && episode.ownerId === ownerId ? item : null;
+        }
+        if (item.itemType === "thread") {
+          if (!item.threadId) return null;
+          const thread = await ctx.db.get(item.threadId);
+          return thread && thread.ownerId === ownerId ? item : null;
         }
 
         if (!item.tradePlanId) return null;

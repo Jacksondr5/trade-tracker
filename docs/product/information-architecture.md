@@ -16,11 +16,12 @@ Use [glossary.md](glossary.md) for the canonical meaning of shared object names,
 
 ## Architectural Summary
 
-Trade Tracker is organized around a core chain of strategic thinking, tactical planning, and execution:
+Trade Tracker is organized around a permanent per-instrument spine with bounded engagements under it and an optional thematic layer above:
 
-1. `Campaign`
-2. `Trade Plan`
-3. `Trade`
+1. `Campaign` (thematic, instrument-optional)
+2. `Instrument Thread` (permanent, per ticker)
+3. `Episode` (one position lifecycle in one portfolio), holding `Elements` and `Plan Versions`
+4. `Trade`
 
 That core chain is supported by additional layers:
 
@@ -37,9 +38,7 @@ The architecture is intentionally flexible. The product prefers structured workf
 
 ## Model Direction
 
-This document describes the currently implemented model. The settled direction is to evolve it: the instrument becomes a first-class object (the instrument thread), trade plans' role is carried by bounded episodes born into threads, and campaigns remain the instrument-optional thematic layer. See [instrument-threads.md](instrument-threads.md) for the target model and its reasoning, and [roadmap.md](roadmap.md) for sequencing — migration follows evidence from the flywheel probe.
-
-Where this document and the target model diverge, this document remains authoritative for the implemented system until migration.
+This document describes the model as implemented in Phase 3. See [instrument-threads.md](instrument-threads.md) for the reasoning behind it and the parts later phases still owe (retrospective drafting and endorsed lessons). Trade plans were replaced by episodes; the `tradePlans` table is dormant and its records are legacy data.
 
 ## Object Taxonomy
 
@@ -48,7 +47,8 @@ The system is easiest to understand in five groups.
 ### 1. Core thesis-and-execution objects
 
 - `Campaign`
-- `Trade Plan`
+- `Instrument Thread`
+- `Episode`, with its `Elements` and `Plan Versions`
 - `Trade`
 
 These represent the main trading workflow from idea to execution.
@@ -91,42 +91,56 @@ Typical contents:
 
 - a thesis
 - campaign status
+- an optional benchmark link to an ordinary instrument thread
+- linked instrument threads
+- campaign elements: rules and scenarios that apply across member episodes
 - campaign notes
-- related trade plans
 - campaign-level retrospective once complete
 
 Role:
 
 - campaigns organize self-developed ideas at the macro or thematic level
 
-Important constraint:
+Important constraints:
 
-- Not every trade plan must belong to a campaign.
+- Not every episode must belong to a campaign.
+- Membership is explicit per episode. Linking a thread to a campaign applies nothing to that thread's episodes.
+- Campaigns carry no plan snapshots.
 
-### Trade Plan
+### Instrument Thread
 
 Typical contents:
 
-- instrument symbol
-- rationale
-- entry conditions
-- target conditions
-- exit conditions
-- instrument notes
-- status
-- linked notes
-- linked trades
+- the ticker
+- running thread notes (ticker-tagged notes belong here)
+- links to every episode
+- links to campaigns, including any campaign that uses the thread as its benchmark
 
 Role:
 
-- trade plans are the main tactical bridge between thesis and execution
+- the permanent per-instrument memory; created automatically for every traded or note-tagged ticker
 
-Trade plans may be:
+### Episode
 
-- linked to a campaign
-- standalone
+Typical contents:
 
-That flexibility is intentional and reflects real trading workflows.
+- portfolio, direction, source, and an inferred lifecycle
+- elements: the event stream, each with author, status, optional kind and value, and an as-of date on numbers
+- plan versions: fixed-section checkpoints with citations, drafted by the counterpart and endorsed by the user
+- campaign membership and exemptions from specific campaign elements
+- linked trades and episode notes
+- a reserved retrospective slot
+
+Role:
+
+- episodes are the tactical bridge between thesis and execution and the unit the desk reads
+
+Rules:
+
+- lifecycle is inferred from elements, checkpoints, and fills; fills win
+- an episode with fills and no plan is tolerated data, not a warning
+- elements after a checkpoint are its delta; they never regenerate it
+- `dropped` requires evidence; nonmention is never evidence
 
 ### Trade
 
@@ -139,17 +153,19 @@ Typical contents:
 - quantity
 - brokerage account
 - optional portfolio
-- optional trade plan
+- optional episode, maintained automatically from ticker, portfolio, and direction
 
 Role:
 
 - trades are the execution record used for history, review, and analytics
-- supporting reasoning should remain attached to campaigns or trade plans rather than directly to trades
+- trades drive episode lifecycle
+- supporting reasoning should remain attached to threads, episodes, or campaigns rather than directly to trades
 
 Important constraint:
 
 - Trades do not link directly to campaigns.
-- Campaign relationships are derived through trade plans.
+- Campaign relationships are derived through episodes.
+- A trade without a portfolio stays unlinked rather than being guessed into an episode.
 
 ## Supporting Object Roles
 
@@ -158,14 +174,16 @@ Important constraint:
 A note belongs to exactly one of:
 
 - a campaign
-- a trade plan
+- an instrument thread (a ticker-tagged note is a thread note)
+- an episode
 - no parent at all
 
 Preferred interpretation:
 
-- campaign notes, trade-plan notes, and general notes all live in one unified notes table
-- note types are distinguished by parent IDs (campaignId or tradePlanId; none means general notes)
+- all notes live in one unified notes table
+- note types are distinguished by parent IDs (campaignId, threadId, episodeId; none means general notes)
 - notes do not attach directly to trades
+- the legacy tradePlanId attachment remains only on old records
 
 ### Strategy
 
@@ -289,26 +307,27 @@ Important constraint:
 
 The foundational chain is:
 
-- `Campaign -> Trade Plan -> Trade`
+- `Instrument Thread -> Episode -> Trade`, with `Campaign` linking across threads and episodes
 
 More precisely:
 
-- a campaign can have many trade plans
-- a trade plan can have many trades
-- a trade may optionally belong to a trade plan
-- a trade plan may optionally belong to a campaign
+- a thread has many episodes, and several may be live at once (one per portfolio)
+- an episode has many elements, many plan versions, and many trades
+- a trade may optionally belong to an episode
+- an episode may optionally belong to a campaign, and a campaign may link many threads and one benchmark thread
+- campaign elements apply to member episodes minus each episode's exemptions
 
 ### Evidence relationships
 
-- a campaign can have many notes
-- a trade plan can have many notes
-- screenshots belong to notes, not directly to campaigns, trade plans, or trades
+- a campaign, a thread, or an episode can have many notes
+- an element may cite the note it came from; a plan line may cite an element or a note
+- screenshots belong to notes, not directly to campaigns, episodes, or trades
 
 ### Overlay relationships
 
 - a portfolio can have many trades
 - a portfolio can have many inbox trades
-- a portfolio's relationship to campaigns is derived through `trades -> tradePlans -> campaigns`
+- a portfolio's relationship to campaigns is derived through `trades -> episodes -> campaigns`
 - portfolio cash ledger entries belong to portfolios
 - portfolio daily valuations belong to portfolios
 - market price snapshots belong to market data instruments
@@ -319,23 +338,19 @@ Trade Tracker intentionally distinguishes between the ideal workflow and tolerat
 
 ### Ideal workflow
 
-1. Develop a campaign
-2. Add one or more trade plans
-3. Execute trades against those trade plans
-4. Take notes during the campaign and trade-plan lifecycle
-5. Review outcomes later through retrospectives and analytics
+1. Plan in conversation with the counterpart; elements and checkpoints fall out as exhaust
+2. Fills arrive by import and attach to the episode
+3. Read the current plan on the desk or the thread page
+4. Review outcomes later through retrospectives and analytics
 
 ### Tolerated workflow
 
-- standalone trade plans may exist without a campaign
-- trades may exist without a trade plan
+- theme-first (campaign, then threads) and instrument-first (thread or episode, later a campaign or never) are co-equal
+- episodes may exist without a campaign, a checkpoint, or any agreed element
+- trades may exist without an episode
 - imports may temporarily hold incomplete associations
 
-This tolerance exists mainly to reduce administrative burden and avoid blocking data capture.
-
-The product should support that flexibility without treating it as the preferred steady state.
-
-The target model revises this judgment: there, theme-first and instrument-first entry are co-equal ways for ideas to form, and bare records are tolerated data rather than a lesser state. This section describes the implemented product; see [instrument-threads.md](instrument-threads.md) for the revised posture.
+Bare records are tolerated data, never a lesser state or a pile of owed work.
 
 ## Status Model
 
@@ -347,14 +362,16 @@ Use [glossary.md](glossary.md) for the canonical definitions of these terms.
 - `active`
 - `closed`
 
-### Trade plan statuses
+### Episode lifecycle
 
 - `idea`
 - `watching`
 - `active`
 - `closed`
 
-A trade plan could reasonably be:
+Lifecycle is inferred, never set. `shelved` is a separate disposition for unfilled ideas.
+
+An episode could reasonably be:
 
 - `watching` and watched
 - `active` and watched
@@ -364,12 +381,13 @@ These concepts should remain separate in the architecture. Navigation and presen
 
 ## Summary
 
-Trade Tracker's information architecture is centered on a flexible strategic hierarchy:
+Trade Tracker's information architecture is centered on a permanent per-instrument spine:
 
-- campaigns organize high-level ideas
-- trade plans express tactical setups
-- trades record execution
+- instrument threads hold an instrument's memory
+- episodes express one engagement, as an event stream of elements distilled into endorsed checkpoints
+- campaigns organize high-level ideas across threads and episodes
+- trades record execution and drive lifecycle
 
 That core structure is supported by evidence objects, workflow staging objects, overlay groupings, and singleton/global documents.
 
-The architecture depends on keeping those distinctions clear while preserving tolerated flexibility around standalone trade plans, unlinked trades, and operational import staging.
+The architecture depends on keeping those distinctions clear while preserving tolerated flexibility around bare episodes, unlinked trades, and operational import staging.

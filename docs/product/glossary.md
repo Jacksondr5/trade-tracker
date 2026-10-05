@@ -22,11 +22,7 @@ Lifecycle states:
 
 ### Trade Plan
 
-A tactical setup for a specific instrument or expression of an idea.
-
-Trade plans connect thesis to execution and may be linked to a campaign or exist as standalone plans.
-
-In the target model, the trade plan's role is carried by `Episode` under an `Instrument Thread`. See [instrument-threads.md](instrument-threads.md).
+Retired. The trade plan's role is carried by `Episode` under an `Instrument Thread` (see below and [instrument-threads.md](instrument-threads.md)). The `tradePlans` table and its routes remain dormant and reachable by URL only; nothing new is written to them.
 
 Lifecycle states:
 
@@ -39,13 +35,13 @@ Lifecycle states:
 
 A recorded execution event.
 
-Trades preserve the execution record and may optionally link to a trade plan.
+Trades preserve the execution record and link to an episode when their portfolio is known. A trade with no episode is tolerated data.
 
 ### Note
 
 A time-stamped reasoning record with optional chart screenshots.
 
-Notes may belong to a campaign, a trade plan, or no parent object.
+Notes may belong to a campaign, an instrument thread, an episode, or no parent object. A ticker-tagged note belongs to that ticker's thread.
 
 ### Strategy
 
@@ -69,9 +65,9 @@ Portfolios are overlays on the core hierarchy, not the main thesis structure.
 
 A translation from a raw brokerage account identifier to a user-friendly account name.
 
-## Target Model Objects
+## Instrument Thread Model Objects
 
-These objects define the intended model direction described in [instrument-threads.md](instrument-threads.md). They coexist with the current objects above until migration.
+These objects are the implemented planning model described in [instrument-threads.md](instrument-threads.md).
 
 ### Instrument Thread
 
@@ -95,7 +91,23 @@ An episode holds setup conditions (entry, target, stop, required macro condition
 
 Episodes carry a source. Most are authored by the user; trades from an external service may attach to a thread as episodes for context without being part of the user's own planning.
 
-Lifecycle states: `Idea`, `Watching`, `Active`, `Closed` (same meanings as trade plan states). When an episode closes, its retrospective conclusions become candidate lessons on the thread.
+Lifecycle states are inferred, never set by hand: `Idea` on the first element, `Watching` on the first agreed entry condition or endorsed checkpoint, `Active` on the first linked fill, `Closed` when the position is flat. `Shelved` is a separate disposition the user can give an unfilled idea so it leaves the desk. When an episode closes, its retrospective conclusions become candidate lessons on the thread.
+
+An episode with fills and no plan is a fact the desk shows, not a warning.
+
+### Element
+
+One statement in an episode's or a campaign's event stream: a proposal, decision, observation, rule, or fact. Every element records who authored it (the user or the counterpart), a status (`proposed`, `agreed`, `superseded`, or `dropped`), an as-of date whenever it carries a number, and optionally a kind, a typed value, and the note it came from.
+
+`dropped` requires evidence of withdrawal. Nonmention is never evidence.
+
+### Checkpoint
+
+The display label for an endorsed plan version: the distilled, authored snapshot of an episode's technical plan at a decision moment. It has six fixed sections (entry, stop, targets, scenarios, structure, size), each a short list of lines with citations. A plan version is drafted by the counterpart and endorsed by the user; a user edit in the app creates a new endorsed version. Elements recorded after a checkpoint are its delta and do not regenerate it.
+
+### Desk
+
+The app view of every live episode at once: instrument, portfolio, lifecycle, position, the latest checkpoint's key lines, and the agreed and proposed items since it, grouped by campaign.
 
 ### Endorsed Lesson
 
@@ -131,15 +143,13 @@ The intended engagement loop: automated ingestion deposits data without user dis
 
 ## Relationship Terms
 
-### Standalone Trade Plan
+### Campaign Membership
 
-A trade plan that does not belong to a campaign.
+An episode belongs to a campaign only when that membership is recorded explicitly. Linking a thread to a campaign applies nothing to the thread's episodes by itself. A member episode inherits the campaign's elements and may exempt itself from specific ones.
 
-Standalone trade plans are valid first-class objects, not incomplete data.
+### Benchmark
 
-### Linked Trade Plan
-
-A trade plan that belongs to a campaign.
+An ordinary instrument thread that a campaign points at for its rules and scenarios, such as SMH for a semiconductor campaign. It is never a special ticker.
 
 ## Focus Terms
 
@@ -160,9 +170,9 @@ An object that has been added to `Watchlist`.
 - Keep lifecycle and focus separate.
 - Do not use `watching` to mean `on Watchlist`.
 - Do not use `priority`, `pinned`, `starred`, and `watched` interchangeably unless the product explicitly adopts one of those terms later.
-- Do not treat portfolios as the parent structure for campaigns or trade plans.
-- Do not treat standalone trade plans as exceptions or broken data.
-- Do not treat bare records (a trade without an episode, a thread without a campaign) as debt or unfinished homework.
+- Do not treat portfolios as the parent structure for campaigns or episodes.
+- Do not treat bare records (a trade without an episode, a thread without a campaign, an episode without a checkpoint) as debt or unfinished homework.
+- Do not present counts of episodes that "need" a plan or any other owed-work queue.
 - Do not present AI inference as endorsed fact, and do not suppress inference because it is unendorsed.
 
 ## Naming Rule

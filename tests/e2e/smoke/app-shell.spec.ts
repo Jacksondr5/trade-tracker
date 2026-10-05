@@ -17,12 +17,12 @@ import {
   getTradePlanNameDisplay,
 } from "../helpers/selectors";
 
-test("authenticated users are redirected from the entry page to dashboard", async ({
+test("authenticated users are redirected from the entry page to the desk", async ({
   page,
 }) => {
   await page.goto("/");
-  await page.waitForURL(/\/dashboard$/);
-  await waitForAuthenticatedApp(page, APP_PAGE_TITLES.dashboard);
+  await page.waitForURL(/\/desk$/);
+  await waitForAuthenticatedApp(page, APP_PAGE_TITLES.desk);
 });
 
 test("authenticated app shell renders primary navigation", async ({ page }) => {
@@ -35,9 +35,10 @@ test("authenticated app shell renders primary navigation", async ({ page }) => {
   await expect(getNavigationSection(page, "settings")).toBeVisible();
 
   await expect(getNavigationLink(page, "dashboard")).toBeVisible();
+  await expect(getNavigationLink(page, "desk")).toBeVisible();
+  await expect(getNavigationLink(page, "threads")).toBeVisible();
   await expect(getNavigationLink(page, "trades")).toBeVisible();
   await expect(getNavigationLink(page, "campaigns")).toBeVisible();
-  await expect(getNavigationLink(page, "tradePlans")).toBeVisible();
   await expect(getNavigationLink(page, "portfolios")).toBeVisible();
   await expect(getNavigationLink(page, "importsTrades")).toBeVisible();
   await expect(getNavigationLink(page, "positions")).toBeVisible();
@@ -48,9 +49,10 @@ test("authenticated app shell renders primary navigation", async ({ page }) => {
 
   const routeChecks = [
     ["dashboard", "dashboard", "/dashboard"],
+    ["desk", "desk", "/desk"],
+    ["threads", "threads", "/threads"],
     ["trades", "trades", "/trades"],
     ["campaigns", "campaigns", "/campaigns"],
-    ["tradePlans", "tradePlans", "/trade-plans"],
     ["positions", "positions", "/positions"],
     ["portfolios", "portfolios", "/portfolios"],
     ["importsTrades", "imports", "/imports"],

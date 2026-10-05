@@ -13,7 +13,9 @@ const nullableNumberValidator = v.union(v.number(), v.null());
 const campaignValidator = v.object({
   _creationTime: v.number(),
   _id: v.id("campaigns"),
+  benchmarkThreadId: v.optional(v.id("instrumentThreads")),
   closedAt: v.optional(v.number()),
+  linkedThreadIds: v.optional(v.array(v.id("instrumentThreads"))),
   name: v.string(),
   ownerId: v.string(),
   status: v.union(
