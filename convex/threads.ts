@@ -47,6 +47,18 @@ import {
 } from "./lib/planWrites";
 
 const MAX_BACKFILL_NOTES = 20_000;
+const MAX_RESET_EPISODES = 5_000;
+
+const backfillResultValidator = v.object({
+  episodesCreated: v.number(),
+  threadsCreated: v.number(),
+  // Fills whose history disagrees across portfolios, or closes more than it
+  // opened, stay unlinked instead of being guessed into an episode.
+  tradesLeftUncertain: v.number(),
+  tradesLinked: v.number(),
+  tradesWithoutPortfolio: v.number(),
+  uncertainTickers: v.array(v.string()),
+});
 
 /** App edits stop when an episode closes; closed history is read-only. */
 async function assertEpisodeEditableFromApp(
@@ -312,8 +324,10 @@ export async function backfillThreadsAndEpisodesForOwner(
 ): Promise<{
   episodesCreated: number;
   threadsCreated: number;
+  tradesLeftUncertain: number;
   tradesLinked: number;
   tradesWithoutPortfolio: number;
+  uncertainTickers: string[];
 }> {
   const trades = await ctx.db
     .query("trades")
@@ -379,71 +393,252 @@ export async function backfillThreadsAndEpisodesForOwner(
     byPortfolio.set(key, [...(byPortfolio.get(key) ?? []), trade]);
   }
 
+  // What the ticker's fills say overall, across every portfolio. A
+  // per-portfolio open run is only trusted when the open runs for that
+  // instrument add up to this; older history often has a buy in one
+  // portfolio and its sell in another, which per portfolio looks like an
+  // open long beside a negative position. Uncertain history stays unlinked
+  // rather than being guessed into an episode.
+  const instrumentKey = (trade: Doc<"trades">) =>
+    `${trade.ticker.toUpperCase()}:${trade.direction}`;
+  // Same 12-decimal normalization as the position math, with a tolerance so
+  // fractional fills that sum to dust read as flat.
+  const FLAT_EPSILON = 1e-9;
+  const round = (value: number) => {
+    const normalized = Number(value.toFixed(12));
+    return Math.abs(normalized) < FLAT_EPSILON ? 0 : normalized;
+  };
+  const expectedOpenNet = new Map<string, number>();
+  for (const trade of trades) {
+    // Fills already linked are accounted for by their own episodes, and a
+    // fill deliberately left unlinked in an already-linked group is that
+    // group's question, not evidence against another portfolio's run.
+    if (trade.episodeId !== undefined) continue;
+    if (
+      trade.portfolioId !== undefined &&
+      linkedGroups.has(
+        `${trade.portfolioId}:${trade.ticker.toUpperCase()}:${trade.direction}`,
+      )
+    ) {
+      continue;
+    }
+    const key = instrumentKey(trade);
+    expectedOpenNet.set(
+      key,
+      round((expectedOpenNet.get(key) ?? 0) + getPositionQuantityDelta(trade)),
+    );
+  }
+
+  type Run = { net: number; plausible: boolean; trades: Doc<"trades">[] };
+  const closedRuns: Run[] = [];
+  const openRunsByInstrument = new Map<string, Run[]>();
+  const uncertainTickers = new Set<string>();
+  let tradesLeftUncertain = 0;
+
   for (const portfolioTrades of byPortfolio.values()) {
     const runsByInstrument = deriveInstrumentPositionEpisodes(portfolioTrades);
     for (const state of runsByInstrument.values()) {
-      // Walk the ordered trades and cut a new bare episode at each flat point.
-      let current: Doc<"trades">[] = [];
-      let net = 0;
-      const runs: Doc<"trades">[][] = [];
+      // Walk the ordered trades and cut a run at each flat point.
+      let current: Run = { net: 0, plausible: true, trades: [] };
+      const runs: Run[] = [];
       for (const trade of state.orderedTrades) {
-        current.push(trade);
-        net = Number((net + getPositionQuantityDelta(trade)).toFixed(12));
-        if (net === 0 || Object.is(net, -0)) {
+        current.trades.push(trade);
+        current.net = round(current.net + getPositionQuantityDelta(trade));
+        // A run that ever goes negative closed more than it opened.
+        if (current.net < 0) current.plausible = false;
+        if (current.net === 0) {
           runs.push(current);
-          current = [];
-          net = 0;
+          current = { net: 0, plausible: true, trades: [] };
         }
       }
-      if (current.length > 0) runs.push(current);
+      if (current.trades.length > 0) runs.push(current);
 
       for (const run of runs) {
-        const first = run[0]!;
-        const thread = threadsByTicker.get(first.ticker.toUpperCase())!;
-        const episode = await openEpisode(ctx, {
-          actor: "system",
-          direction: first.direction,
-          openedAt: first.date,
-          ownerId,
-          portfolioId: first.portfolioId,
-          source: "user",
-          threadId: thread._id,
-          ticker: first.ticker,
-        });
-        episodesCreated += 1;
-        for (const trade of run) {
-          await ctx.db.patch(trade._id, { episodeId: episode._id });
-          tradesLinked += 1;
+        const key = instrumentKey(run.trades[0]!);
+        if (!run.plausible) {
+          tradesLeftUncertain += run.trades.length;
+          uncertainTickers.add(run.trades[0]!.ticker.toUpperCase());
+        } else if (run.net === 0) {
+          closedRuns.push(run);
+        } else {
+          openRunsByInstrument.set(key, [
+            ...(openRunsByInstrument.get(key) ?? []),
+            run,
+          ]);
         }
-        await recomputeEpisodeLifecycle(ctx, episode._id);
       }
     }
   }
 
-  return { episodesCreated, threadsCreated, tradesLinked, tradesWithoutPortfolio };
+  const trustedRuns = [...closedRuns];
+  for (const [key, runs] of openRunsByInstrument) {
+    const openNet = round(runs.reduce((total, run) => total + run.net, 0));
+    if (Math.abs(openNet - (expectedOpenNet.get(key) ?? 0)) < 1e-6) {
+      trustedRuns.push(...runs);
+    } else {
+      for (const run of runs) {
+        tradesLeftUncertain += run.trades.length;
+        uncertainTickers.add(run.trades[0]!.ticker.toUpperCase());
+      }
+    }
+  }
+
+  trustedRuns.sort((a, b) => a.trades[0]!.date - b.trades[0]!.date);
+  for (const run of trustedRuns) {
+    const first = run.trades[0]!;
+    const thread = threadsByTicker.get(first.ticker.toUpperCase())!;
+    const episode = await openEpisode(ctx, {
+      actor: "system",
+      direction: first.direction,
+      openedAt: first.date,
+      ownerId,
+      portfolioId: first.portfolioId,
+      provenance: "backfill",
+      source: "user",
+      threadId: thread._id,
+      ticker: first.ticker,
+    });
+    episodesCreated += 1;
+    for (const trade of run.trades) {
+      await ctx.db.patch(trade._id, { episodeId: episode._id });
+      tradesLinked += 1;
+    }
+    await recomputeEpisodeLifecycle(ctx, episode._id);
+  }
+
+  return {
+    episodesCreated,
+    threadsCreated,
+    tradesLeftUncertain,
+    tradesLinked,
+    tradesWithoutPortfolio,
+    uncertainTickers: [...uncertainTickers].sort(),
+  };
 }
+
+/**
+ * Removes episodes the backfill created that nothing has touched since: no
+ * elements, plan versions, notes, campaign, shelving, or watchlist entry.
+ * Their fills become unlinked again so the backfill can be re-run with
+ * corrected rules. Anything a person or the Trade Assistant has worked on
+ * is left exactly as it is, and so is every episode a live fill opened:
+ * rebuilding those could re-link a late fill that was deliberately left out.
+ *
+ * `includeUnmarked` also takes system episodes written before provenance was
+ * recorded. It exists for the one production run made before the marker; the
+ * caller must have verified those episodes all came from the backfill.
+ */
+export async function resetBareBackfilledEpisodesForOwner(
+  ctx: MutationCtx,
+  ownerId: string,
+  options: { includeUnmarked?: boolean } = {},
+): Promise<{ episodesKept: number; episodesRemoved: number; tradesUnlinked: number }> {
+  const episodes = await ctx.db
+    .query("episodes")
+    .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+    .take(MAX_RESET_EPISODES + 1);
+  if (episodes.length > MAX_RESET_EPISODES) {
+    throw new ConvexError(
+      `Reset exceeds the ${MAX_RESET_EPISODES}-episode limit`,
+    );
+  }
+  let episodesKept = 0;
+  let episodesRemoved = 0;
+  let tradesUnlinked = 0;
+  for (const episode of episodes) {
+    const backfilled =
+      episode.provenance === "backfill" ||
+      (options.includeUnmarked === true && episode.provenance === undefined);
+    const untouched =
+      backfilled &&
+      episode.createdBy === "system" &&
+      episode.campaignId === undefined &&
+      episode.shelvedAt === undefined &&
+      episode.currentPlanVersionId === undefined &&
+      (await ctx.db
+        .query("planElements")
+        .withIndex("by_owner_episodeId_revision", (q) =>
+          q.eq("ownerId", ownerId).eq("episodeId", episode._id),
+        )
+        .first()) === null &&
+      (await ctx.db
+        .query("planVersions")
+        .withIndex("by_owner_episodeId_versionNumber", (q) =>
+          q.eq("ownerId", ownerId).eq("episodeId", episode._id),
+        )
+        .first()) === null &&
+      (await ctx.db
+        .query("notes")
+        .withIndex("by_owner_episodeId_noteDate", (q) =>
+          q.eq("ownerId", ownerId).eq("episodeId", episode._id),
+        )
+        .first()) === null &&
+      (await ctx.db
+        .query("watchlist")
+        .withIndex("by_owner_episodeId", (q) =>
+          q.eq("ownerId", ownerId).eq("episodeId", episode._id),
+        )
+        .first()) === null;
+    if (!untouched) {
+      episodesKept += 1;
+      continue;
+    }
+    const linked = await ctx.db
+      .query("trades")
+      .withIndex("by_owner_episodeId", (q) =>
+        q.eq("ownerId", ownerId).eq("episodeId", episode._id),
+      )
+      .take(MAX_DERIVED_POSITION_TRADES);
+    for (const trade of linked) {
+      await ctx.db.patch(trade._id, { episodeId: undefined });
+      tradesUnlinked += 1;
+    }
+    await ctx.db.delete(episode._id);
+    episodesRemoved += 1;
+  }
+  return { episodesKept, episodesRemoved, tradesUnlinked };
+}
+
 
 export const backfillThreadsAndEpisodes = internalMutation({
   args: { ownerId: v.string() },
-  returns: v.object({
-    episodesCreated: v.number(),
-    threadsCreated: v.number(),
-    tradesLinked: v.number(),
-    tradesWithoutPortfolio: v.number(),
-  }),
+  returns: backfillResultValidator,
   handler: async (ctx, args) => {
     return await backfillThreadsAndEpisodesForOwner(ctx, args.ownerId);
   },
 });
 
+/**
+ * Clears untouched backfilled episodes and backfills again in one
+ * transaction. Use after the backfill rules change; it never removes an
+ * episode that carries any planning.
+ */
+export const rebuildBareEpisodes = internalMutation({
+  args: {
+    // Also rebuild system episodes written before provenance was recorded.
+    includeUnmarked: v.optional(v.boolean()),
+    ownerId: v.string(),
+  },
+  returns: v.object({
+    backfill: backfillResultValidator,
+    reset: v.object({
+      episodesKept: v.number(),
+      episodesRemoved: v.number(),
+      tradesUnlinked: v.number(),
+    }),
+  }),
+  handler: async (ctx, args) => {
+    const reset = await resetBareBackfilledEpisodesForOwner(ctx, args.ownerId, {
+      includeUnmarked: args.includeUnmarked,
+    });
+    const backfill = await backfillThreadsAndEpisodesForOwner(ctx, args.ownerId);
+    return { backfill, reset };
+  },
+});
+
 export const backfillThreadsAndEpisodesForCurrentUser = mutation({
   args: {},
-  returns: v.object({
-    episodesCreated: v.number(),
-    threadsCreated: v.number(),
-    tradesLinked: v.number(),
-    tradesWithoutPortfolio: v.number(),
-  }),
+  returns: backfillResultValidator,
   handler: async (ctx) => {
     const ownerId = await requireUser(ctx);
     return await backfillThreadsAndEpisodesForOwner(ctx, ownerId);

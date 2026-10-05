@@ -90,8 +90,10 @@ describe("instrument threads and episodes", () => {
     expect(result).toEqual({
       episodesCreated: 3,
       threadsCreated: 3,
+      tradesLeftUncertain: 0,
       tradesLinked: 4,
       tradesWithoutPortfolio: 1,
+      uncertainTickers: [],
     });
 
     const page = await asOwner(t).query(api.threads.getThreadPage, { ticker: "mu" });
@@ -119,8 +121,10 @@ describe("instrument threads and episodes", () => {
     ).toEqual({
       episodesCreated: 0,
       threadsCreated: 0,
+      tradesLeftUncertain: 0,
       tradesLinked: 0,
       tradesWithoutPortfolio: 1,
+      uncertainTickers: [],
     });
     const threads = await asOwner(t).query(api.threads.listThreads, {});
     expect(threads.map((thread) => thread.ticker).sort()).toEqual([
@@ -965,5 +969,109 @@ describe("instrument threads and episodes", () => {
     expect(reason.statusHistoryComplete).toBe(true);
     const desk = await asOwner(t).query(api.threads.getDesk, {});
     expect(desk.groups.flatMap((group) => group.rows).map((row) => row.episode.id)).toContain(episodeId);
+  });
+
+  it("leaves history that disagrees across portfolios unlinked instead of inventing positions", async () => {
+    const swing = await insertPortfolio("Swing");
+    const bravos = await insertPortfolio("Bravos");
+    const longTerm = await insertPortfolio("Long Term");
+    // Bought in one portfolio, sold in another: truly flat overall.
+    await insertTrade({ date: 1, portfolioId: swing, quantity: 60, side: "buy", ticker: "AA" });
+    await insertTrade({ date: 2, portfolioId: bravos, quantity: 60, side: "sell", ticker: "AA" });
+    // A sell with no recorded buy: closes more than was opened.
+    await insertTrade({ date: 3, portfolioId: swing, quantity: 18, side: "sell", ticker: "KLAC" });
+    // Bought in two portfolios, sold from a third.
+    await insertTrade({ date: 4, portfolioId: bravos, quantity: 240, side: "buy", ticker: "SRUUF" });
+    await insertTrade({ date: 5, portfolioId: longTerm, quantity: 530, side: "buy", ticker: "SRUUF" });
+    await insertTrade({ date: 6, portfolioId: swing, quantity: 770, side: "sell", ticker: "SRUUF" });
+    // A clean closed swing followed by an inconsistent remainder keeps the clean part.
+    await insertTrade({ date: 7, portfolioId: swing, quantity: 5, side: "buy", ticker: "GS" });
+    await insertTrade({ date: 8, portfolioId: swing, quantity: 5, side: "sell", ticker: "GS" });
+    await insertTrade({ date: 9, portfolioId: swing, quantity: 5, side: "buy", ticker: "GS" });
+    await insertTrade({ date: 10, portfolioId: bravos, quantity: 5, side: "sell", ticker: "GS" });
+    // Fractional fills that sum to dust are flat, not a tiny open position.
+    await insertTrade({ date: 20, portfolioId: swing, quantity: 0.1, side: "buy", ticker: "SQQQ" });
+    await insertTrade({ date: 21, portfolioId: swing, quantity: 0.2, side: "buy", ticker: "SQQQ" });
+    await insertTrade({ date: 22, portfolioId: swing, quantity: 0.3, side: "sell", ticker: "SQQQ" });
+    // Genuinely held in two portfolios at once: consistent, so both are live.
+    await insertTrade({ date: 11, portfolioId: swing, quantity: 10, side: "buy", ticker: "MSFT" });
+    await insertTrade({ date: 12, portfolioId: longTerm, quantity: 4, side: "buy", ticker: "MSFT" });
+
+    const result = await t.mutation(internal.threads.backfillThreadsAndEpisodes, { ownerId });
+    expect(result.uncertainTickers).toEqual(["AA", "GS", "KLAC", "SRUUF"]);
+    expect(result.episodesCreated).toBe(4);
+    expect(result.tradesLinked).toBe(7);
+    expect(result.tradesLeftUncertain).toBe(8);
+
+    const desk = await asOwner(t).query(api.threads.getDesk, {});
+    const rows = desk.groups.flatMap((group) => group.rows);
+    expect(rows.map((row) => `${row.episode.ticker} ${row.episode.portfolioName} ${row.position?.netQuantity}`).sort()).toEqual([
+      "MSFT Long Term 4",
+      "MSFT Swing 10",
+    ]);
+    const gs = (await asOwner(t).query(api.threads.getThreadPage, { ticker: "GS" }))!;
+    expect(gs.liveEpisodes).toEqual([]);
+    expect(gs.history).toHaveLength(1);
+    // Every ticker still has a thread, even with nothing linked.
+    expect(await asOwner(t).query(api.threads.getThreadPage, { ticker: "KLAC" })).not.toBeNull();
+
+    // Rerunning changes nothing.
+    const rerun = await t.mutation(internal.threads.backfillThreadsAndEpisodes, { ownerId });
+    expect(rerun.episodesCreated).toBe(0);
+    expect(rerun.tradesLinked).toBe(0);
+  });
+
+  it("rebuilds untouched backfilled episodes and keeps anything with planning", async () => {
+    const swing = await insertPortfolio("Swing");
+    const bravos = await insertPortfolio("Bravos");
+    const keepBuy = await insertTrade({ date: 1, portfolioId: swing, quantity: 10, side: "buy", ticker: "NVDA" });
+    const phantomBuy = await insertTrade({ date: 2, portfolioId: swing, quantity: 60, side: "buy", ticker: "AA" });
+    const phantomSell = await insertTrade({ date: 3, portfolioId: bravos, quantity: 60, side: "sell", ticker: "AA" });
+    // Simulate the first, naive backfill: every fill linked, marked backfilled.
+    for (const id of [keepBuy, phantomBuy]) await t.run((ctx) => syncTradeEpisodeLink(ctx, id));
+    const phantomEpisode = (await t.run((ctx) => ctx.db.get(phantomBuy)))!.episodeId!;
+    await t.run((ctx) => ctx.db.patch(phantomEpisode, { provenance: "backfill" }));
+    const keptEpisode = (await t.run((ctx) => ctx.db.get(keepBuy)))!.episodeId!;
+    // An episode a live fill opened is never rebuilt, even with no planning.
+    const liveBuy = await insertTrade({ date: 4, portfolioId: swing, quantity: 3, side: "buy", ticker: "TSM" });
+    await t.run((ctx) => syncTradeEpisodeLink(ctx, liveBuy));
+    const liveEpisode = (await t.run((ctx) => ctx.db.get(liveBuy)))!.episodeId!;
+    expect((await t.run((ctx) => ctx.db.get(liveEpisode)))!.provenance).toBe("live");
+    await t.run(async (ctx) => {
+      await ctx.db.patch(keptEpisode, { provenance: "backfill" });
+      await recordElements(ctx, {
+        actor: "counterpart",
+        elements: [{ author: "user", kind: "entry", statement: "Starter on the retest", status: "agreed" }],
+        ownerId,
+        scope: { episodeId: keptEpisode, kind: "episode" },
+        source: "conversation",
+      });
+    });
+
+    const result = await t.mutation(internal.threads.rebuildBareEpisodes, { ownerId });
+    expect(result.reset).toEqual({ episodesKept: 2, episodesRemoved: 1, tradesUnlinked: 1 });
+    expect((await t.run((ctx) => ctx.db.get(liveBuy)))!.episodeId).toBe(liveEpisode);
+    expect(result.backfill.uncertainTickers).toEqual(["AA"]);
+    expect(await t.run((ctx) => ctx.db.get(phantomEpisode))).toBeNull();
+    expect((await t.run((ctx) => ctx.db.get(phantomBuy)))!.episodeId).toBeUndefined();
+    expect((await t.run((ctx) => ctx.db.get(phantomSell)))!.episodeId).toBeUndefined();
+    // Episodes written before provenance existed are only rebuilt on request.
+    const legacyBuy = await insertTrade({ date: 5, portfolioId: swing, quantity: 2, side: "buy", ticker: "CF" });
+    await t.run((ctx) => syncTradeEpisodeLink(ctx, legacyBuy));
+    const legacyEpisode = (await t.run((ctx) => ctx.db.get(legacyBuy)))!.episodeId!;
+    await t.run((ctx) => ctx.db.patch(legacyEpisode, { provenance: undefined }));
+    const untouched = await t.mutation(internal.threads.rebuildBareEpisodes, { ownerId });
+    expect(untouched.reset.episodesRemoved).toBe(0);
+    expect(await t.run((ctx) => ctx.db.get(legacyEpisode))).not.toBeNull();
+    const withLegacy = await t.mutation(internal.threads.rebuildBareEpisodes, {
+      includeUnmarked: true,
+      ownerId,
+    });
+    expect(await t.run((ctx) => ctx.db.get(legacyEpisode))).toBeNull();
+    expect(withLegacy.backfill.episodesCreated).toBeGreaterThanOrEqual(1);
+    expect((await t.run((ctx) => ctx.db.get(legacyBuy)))!.episodeId).toBeDefined();
+    // The episode with planning is untouched and still holds its fill.
+    expect((await t.run((ctx) => ctx.db.get(keepBuy)))!.episodeId).toBe(keptEpisode);
+    expect((await t.run((ctx) => ctx.db.get(keptEpisode)))!.lifecycle).toBe("active");
   });
 });

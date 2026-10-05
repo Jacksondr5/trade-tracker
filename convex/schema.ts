@@ -471,6 +471,10 @@ export default defineSchema({
     openedAt: v.number(),
     ownerId: v.string(),
     portfolioId: v.optional(v.id("portfolios")),
+    // How a system-created episode came to exist: derived from history by
+    // the backfill, or opened by a fill as it arrived. Only backfilled
+    // episodes may be rebuilt.
+    provenance: v.optional(v.union(v.literal("backfill"), v.literal("live"))),
     // Reserved for Phase 4 retrospective drafting.
     retrospective: v.optional(v.string()),
     revision: v.number(),
