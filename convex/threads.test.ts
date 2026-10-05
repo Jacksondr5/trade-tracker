@@ -1027,13 +1027,18 @@ describe("instrument threads and episodes", () => {
     const keepBuy = await insertTrade({ date: 1, portfolioId: swing, quantity: 10, side: "buy", ticker: "NVDA" });
     const phantomBuy = await insertTrade({ date: 2, portfolioId: swing, quantity: 60, side: "buy", ticker: "AA" });
     const phantomSell = await insertTrade({ date: 3, portfolioId: bravos, quantity: 60, side: "sell", ticker: "AA" });
-    // Simulate the first, naive backfill: every fill linked through live linking.
+    // Simulate the first, naive backfill: every fill linked, marked backfilled.
     for (const id of [keepBuy, phantomBuy]) await t.run((ctx) => syncTradeEpisodeLink(ctx, id));
     const phantomEpisode = (await t.run((ctx) => ctx.db.get(phantomBuy)))!.episodeId!;
-    await t.run((ctx) => ctx.db.patch(phantomEpisode, { createdBy: "system" }));
+    await t.run((ctx) => ctx.db.patch(phantomEpisode, { provenance: "backfill" }));
     const keptEpisode = (await t.run((ctx) => ctx.db.get(keepBuy)))!.episodeId!;
+    // An episode a live fill opened is never rebuilt, even with no planning.
+    const liveBuy = await insertTrade({ date: 4, portfolioId: swing, quantity: 3, side: "buy", ticker: "TSM" });
+    await t.run((ctx) => syncTradeEpisodeLink(ctx, liveBuy));
+    const liveEpisode = (await t.run((ctx) => ctx.db.get(liveBuy)))!.episodeId!;
+    expect((await t.run((ctx) => ctx.db.get(liveEpisode)))!.provenance).toBe("live");
     await t.run(async (ctx) => {
-      await ctx.db.patch(keptEpisode, { createdBy: "system" });
+      await ctx.db.patch(keptEpisode, { provenance: "backfill" });
       await recordElements(ctx, {
         actor: "counterpart",
         elements: [{ author: "user", kind: "entry", statement: "Starter on the retest", status: "agreed" }],
@@ -1044,11 +1049,27 @@ describe("instrument threads and episodes", () => {
     });
 
     const result = await t.mutation(internal.threads.rebuildBareEpisodes, { ownerId });
-    expect(result.reset).toEqual({ episodesKept: 1, episodesRemoved: 1, tradesUnlinked: 1 });
+    expect(result.reset).toEqual({ episodesKept: 2, episodesRemoved: 1, tradesUnlinked: 1 });
+    expect((await t.run((ctx) => ctx.db.get(liveBuy)))!.episodeId).toBe(liveEpisode);
     expect(result.backfill.uncertainTickers).toEqual(["AA"]);
     expect(await t.run((ctx) => ctx.db.get(phantomEpisode))).toBeNull();
     expect((await t.run((ctx) => ctx.db.get(phantomBuy)))!.episodeId).toBeUndefined();
     expect((await t.run((ctx) => ctx.db.get(phantomSell)))!.episodeId).toBeUndefined();
+    // Episodes written before provenance existed are only rebuilt on request.
+    const legacyBuy = await insertTrade({ date: 5, portfolioId: swing, quantity: 2, side: "buy", ticker: "CF" });
+    await t.run((ctx) => syncTradeEpisodeLink(ctx, legacyBuy));
+    const legacyEpisode = (await t.run((ctx) => ctx.db.get(legacyBuy)))!.episodeId!;
+    await t.run((ctx) => ctx.db.patch(legacyEpisode, { provenance: undefined }));
+    const untouched = await t.mutation(internal.threads.rebuildBareEpisodes, { ownerId });
+    expect(untouched.reset.episodesRemoved).toBe(0);
+    expect(await t.run((ctx) => ctx.db.get(legacyEpisode))).not.toBeNull();
+    const withLegacy = await t.mutation(internal.threads.rebuildBareEpisodes, {
+      includeUnmarked: true,
+      ownerId,
+    });
+    expect(await t.run((ctx) => ctx.db.get(legacyEpisode))).toBeNull();
+    expect(withLegacy.backfill.episodesCreated).toBeGreaterThanOrEqual(1);
+    expect((await t.run((ctx) => ctx.db.get(legacyBuy)))!.episodeId).toBeDefined();
     // The episode with planning is untouched and still holds its fill.
     expect((await t.run((ctx) => ctx.db.get(keepBuy)))!.episodeId).toBe(keptEpisode);
     expect((await t.run((ctx) => ctx.db.get(keptEpisode)))!.lifecycle).toBe("active");

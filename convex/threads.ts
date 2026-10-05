@@ -410,8 +410,18 @@ export async function backfillThreadsAndEpisodesForOwner(
   };
   const expectedOpenNet = new Map<string, number>();
   for (const trade of trades) {
-    // Fills already linked are accounted for by their own episodes.
+    // Fills already linked are accounted for by their own episodes, and a
+    // fill deliberately left unlinked in an already-linked group is that
+    // group's question, not evidence against another portfolio's run.
     if (trade.episodeId !== undefined) continue;
+    if (
+      trade.portfolioId !== undefined &&
+      linkedGroups.has(
+        `${trade.portfolioId}:${trade.ticker.toUpperCase()}:${trade.direction}`,
+      )
+    ) {
+      continue;
+    }
     const key = instrumentKey(trade);
     expectedOpenNet.set(
       key,
@@ -483,6 +493,7 @@ export async function backfillThreadsAndEpisodesForOwner(
       openedAt: first.date,
       ownerId,
       portfolioId: first.portfolioId,
+      provenance: "backfill",
       source: "user",
       threadId: thread._id,
       ticker: first.ticker,
@@ -510,11 +521,17 @@ export async function backfillThreadsAndEpisodesForOwner(
  * elements, plan versions, notes, campaign, shelving, or watchlist entry.
  * Their fills become unlinked again so the backfill can be re-run with
  * corrected rules. Anything a person or the Trade Assistant has worked on
- * is left exactly as it is.
+ * is left exactly as it is, and so is every episode a live fill opened:
+ * rebuilding those could re-link a late fill that was deliberately left out.
+ *
+ * `includeUnmarked` also takes system episodes written before provenance was
+ * recorded. It exists for the one production run made before the marker; the
+ * caller must have verified those episodes all came from the backfill.
  */
 export async function resetBareBackfilledEpisodesForOwner(
   ctx: MutationCtx,
   ownerId: string,
+  options: { includeUnmarked?: boolean } = {},
 ): Promise<{ episodesKept: number; episodesRemoved: number; tradesUnlinked: number }> {
   const episodes = await ctx.db
     .query("episodes")
@@ -529,7 +546,11 @@ export async function resetBareBackfilledEpisodesForOwner(
   let episodesRemoved = 0;
   let tradesUnlinked = 0;
   for (const episode of episodes) {
+    const backfilled =
+      episode.provenance === "backfill" ||
+      (options.includeUnmarked === true && episode.provenance === undefined);
     const untouched =
+      backfilled &&
       episode.createdBy === "system" &&
       episode.campaignId === undefined &&
       episode.shelvedAt === undefined &&
@@ -593,7 +614,11 @@ export const backfillThreadsAndEpisodes = internalMutation({
  * episode that carries any planning.
  */
 export const rebuildBareEpisodes = internalMutation({
-  args: { ownerId: v.string() },
+  args: {
+    // Also rebuild system episodes written before provenance was recorded.
+    includeUnmarked: v.optional(v.boolean()),
+    ownerId: v.string(),
+  },
   returns: v.object({
     backfill: backfillResultValidator,
     reset: v.object({
@@ -603,7 +628,9 @@ export const rebuildBareEpisodes = internalMutation({
     }),
   }),
   handler: async (ctx, args) => {
-    const reset = await resetBareBackfilledEpisodesForOwner(ctx, args.ownerId);
+    const reset = await resetBareBackfilledEpisodesForOwner(ctx, args.ownerId, {
+      includeUnmarked: args.includeUnmarked,
+    });
     const backfill = await backfillThreadsAndEpisodesForOwner(ctx, args.ownerId);
     return { backfill, reset };
   },

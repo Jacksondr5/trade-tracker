@@ -342,6 +342,7 @@ export async function openEpisode(
     openedAt?: number;
     ownerId: string;
     portfolioId?: Id<"portfolios">;
+    provenance?: "backfill" | "live";
     source: "user" | "external";
     threadId: Id<"instrumentThreads">;
     ticker: string;
@@ -369,6 +370,7 @@ export async function openEpisode(
     openedAt: args.openedAt ?? now,
     ownerId: args.ownerId,
     portfolioId: args.portfolioId,
+    provenance: args.provenance,
     revision: await allocateRevision(ctx, args.ownerId),
     source: args.source,
     threadId: args.threadId,
@@ -528,6 +530,7 @@ export async function syncTradeEpisodeLink(
               openedAt: trade.date,
               ownerId: trade.ownerId,
               portfolioId: trade.portfolioId,
+              provenance: "live",
               source: "user",
               threadId: thread._id,
               ticker: trade.ticker,
