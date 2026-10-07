@@ -12,6 +12,14 @@ const MAX_PRICE_DIFFERENCE_RATIO = 0.005;
 const MAX_REFERENCE_ROWS = 5_000;
 const MAX_OPEN_FETCH_JOBS = 1_000;
 
+// A scan that hits its ceiling may have missed a reference, and deleting the
+// trade would then leave it dangling.
+function assertFullyScanned(rows: unknown[], limit: number, what: string) {
+  if (rows.length > limit) {
+    throw new ConvexError(`Too many ${what} to check for references`);
+  }
+}
+
 function assertSameExecution(
   duplicate: Doc<"trades">,
   survivor: Doc<"trades">,
@@ -117,7 +125,8 @@ export const removeDuplicateManualTrade = internalMutation({
             .eq("ownerId", args.ownerId)
             .eq("portfolioId", duplicate.portfolioId!),
         )
-        .take(MAX_REFERENCE_ROWS);
+        .take(MAX_REFERENCE_ROWS + 1);
+      assertFullyScanned(marks, MAX_REFERENCE_ROWS, "price marks");
       for (const mark of marks) {
         if (mark.sourceTradeId !== duplicate._id) continue;
         await ctx.db.patch(mark._id, {
@@ -138,7 +147,8 @@ export const removeDuplicateManualTrade = internalMutation({
         .withIndex("by_ownerId_and_status_and_updatedAt", (q) =>
           q.eq("ownerId", args.ownerId).eq("status", status),
         )
-        .take(MAX_OPEN_FETCH_JOBS);
+        .take(MAX_OPEN_FETCH_JOBS + 1);
+      assertFullyScanned(jobs, MAX_OPEN_FETCH_JOBS, `${status} fetch jobs`);
       for (const job of jobs) {
         if (!job.sourceTradeIds.includes(duplicate._id)) continue;
         await ctx.db.patch(job._id, {
@@ -158,7 +168,8 @@ export const removeDuplicateManualTrade = internalMutation({
     const checkIns = await ctx.db
       .query("checkIns")
       .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
-      .take(MAX_REFERENCE_ROWS);
+      .take(MAX_REFERENCE_ROWS + 1);
+    assertFullyScanned(checkIns, MAX_REFERENCE_ROWS, "check-ins");
     for (const checkIn of checkIns) {
       const surfaced = checkIn.surfacedTradeIds ?? [];
       if (!surfaced.includes(duplicate._id)) continue;

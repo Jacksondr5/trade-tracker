@@ -121,8 +121,7 @@ describe("removeDuplicateManualTrade", () => {
     await remove(manual, imported);
 
     const episode = (await t.run((ctx) => ctx.db.get(episodeId)))!;
-    expect(episode.lifecycle).not.toBe("active");
-    expect(episode.lifecycle).not.toBe("closed");
+    expect(episode.lifecycle).toBe("idea");
     expect(
       (await t.run((ctx) => ctx.db.get(imported)))!.episodeId,
     ).toBeUndefined();
