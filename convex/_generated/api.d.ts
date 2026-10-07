@@ -49,6 +49,7 @@ import type * as positions from "../positions.js";
 import type * as retrospectives from "../retrospectives.js";
 import type * as strategyDoc from "../strategyDoc.js";
 import type * as threads from "../threads.js";
+import type * as tradeDuplicates from "../tradeDuplicates.js";
 import type * as tradePlans from "../tradePlans.js";
 import type * as trades from "../trades.js";
 import type * as watchlist from "../watchlist.js";
@@ -101,6 +102,7 @@ declare const fullApi: ApiFromModules<{
   retrospectives: typeof retrospectives;
   strategyDoc: typeof strategyDoc;
   threads: typeof threads;
+  tradeDuplicates: typeof tradeDuplicates;
   tradePlans: typeof tradePlans;
   trades: typeof trades;
   watchlist: typeof watchlist;
