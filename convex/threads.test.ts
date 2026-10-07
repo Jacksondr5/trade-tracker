@@ -1074,4 +1074,43 @@ describe("instrument threads and episodes", () => {
     expect((await t.run((ctx) => ctx.db.get(keepBuy)))!.episodeId).toBe(keptEpisode);
     expect((await t.run((ctx) => ctx.db.get(keptEpisode)))!.lifecycle).toBe("active");
   });
+
+  it("re-cuts a named ticker's episodes, including ones live fills opened", async () => {
+    const swing = await insertPortfolio("Swing");
+    // Two round trips that hand correction left merged in one live episode.
+    const fills = [
+      await insertTrade({ date: 1, portfolioId: swing, quantity: 10, side: "buy", ticker: "SMH" }),
+      await insertTrade({ date: 2, portfolioId: swing, quantity: 10, side: "sell", ticker: "SMH" }),
+      await insertTrade({ date: 3, portfolioId: swing, quantity: 4, side: "buy", ticker: "SMH" }),
+      await insertTrade({ date: 4, portfolioId: swing, quantity: 4, side: "sell", ticker: "SMH" }),
+    ];
+    await t.run((ctx) => syncTradeEpisodeLink(ctx, fills[0]!));
+    const merged = (await t.run((ctx) => ctx.db.get(fills[0]!)))!.episodeId!;
+    await t.run(async (ctx) => {
+      for (const id of fills) await ctx.db.patch(id, { episodeId: merged });
+    });
+    const otherBuy = await insertTrade({ date: 5, portfolioId: swing, quantity: 3, side: "buy", ticker: "TSM" });
+    await t.run((ctx) => syncTradeEpisodeLink(ctx, otherBuy));
+    const otherEpisode = (await t.run((ctx) => ctx.db.get(otherBuy)))!.episodeId!;
+
+    const result = await t.mutation(internal.threads.rebuildBareEpisodes, {
+      ownerId,
+      tickers: ["smh"],
+    });
+
+    expect(result.reset).toEqual({ episodesKept: 0, episodesRemoved: 1, tradesUnlinked: 4 });
+    expect(result.backfill.episodesCreated).toBe(2);
+    const linked = await Promise.all(
+      fills.map(async (id) => (await t.run((ctx) => ctx.db.get(id)))!.episodeId),
+    );
+    expect(linked[0]).toBeDefined();
+    expect(linked[1]).toBe(linked[0]);
+    expect(linked[3]).toBe(linked[2]);
+    expect(linked[2]).not.toBe(linked[0]);
+    for (const episodeId of [linked[0]!, linked[2]!]) {
+      expect((await t.run((ctx) => ctx.db.get(episodeId)))!.lifecycle).toBe("closed");
+    }
+    // Another ticker's live episode is left alone.
+    expect((await t.run((ctx) => ctx.db.get(otherBuy)))!.episodeId).toBe(otherEpisode);
+  });
 });

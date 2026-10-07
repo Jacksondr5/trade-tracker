@@ -527,12 +527,21 @@ export async function backfillThreadsAndEpisodesForOwner(
  * `includeUnmarked` also takes system episodes written before provenance was
  * recorded. It exists for the one production run made before the marker; the
  * caller must have verified those episodes all came from the backfill.
+ *
+ * `tickers` narrows the reset to those instruments and, for them, also takes
+ * untouched episodes a live fill opened. It is for history that was corrected
+ * by hand: once a ticker's fills are right, its episodes are re-cut from
+ * scratch, and the caller accepts that every one of its fills is re-linked.
  */
 export async function resetBareBackfilledEpisodesForOwner(
   ctx: MutationCtx,
   ownerId: string,
-  options: { includeUnmarked?: boolean } = {},
+  options: { includeUnmarked?: boolean; tickers?: string[] } = {},
 ): Promise<{ episodesKept: number; episodesRemoved: number; tradesUnlinked: number }> {
+  const tickers =
+    options.tickers === undefined
+      ? null
+      : new Set(options.tickers.map((ticker) => ticker.trim().toUpperCase()));
   const episodes = await ctx.db
     .query("episodes")
     .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
@@ -546,8 +555,10 @@ export async function resetBareBackfilledEpisodesForOwner(
   let episodesRemoved = 0;
   let tradesUnlinked = 0;
   for (const episode of episodes) {
+    if (tickers !== null && !tickers.has(episode.ticker.toUpperCase())) continue;
     const backfilled =
       episode.provenance === "backfill" ||
+      (tickers !== null && episode.provenance === "live") ||
       (options.includeUnmarked === true && episode.provenance === undefined);
     const untouched =
       backfilled &&
@@ -618,6 +629,9 @@ export const rebuildBareEpisodes = internalMutation({
     // Also rebuild system episodes written before provenance was recorded.
     includeUnmarked: v.optional(v.boolean()),
     ownerId: v.string(),
+    // Rebuild only these tickers, including untouched episodes that live
+    // fills opened. Use after correcting a ticker's history by hand.
+    tickers: v.optional(v.array(v.string())),
   },
   returns: v.object({
     backfill: backfillResultValidator,
@@ -630,6 +644,7 @@ export const rebuildBareEpisodes = internalMutation({
   handler: async (ctx, args) => {
     const reset = await resetBareBackfilledEpisodesForOwner(ctx, args.ownerId, {
       includeUnmarked: args.includeUnmarked,
+      tickers: args.tickers,
     });
     const backfill = await backfillThreadsAndEpisodesForOwner(ctx, args.ownerId);
     return { backfill, reset };
