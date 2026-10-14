@@ -20,6 +20,13 @@ import {
   buildValuationSnapshot,
   valuationSnapshotValidator,
 } from "./lib/valuationSnapshot";
+import {
+  elementStatusValidator,
+  elementValueValidator,
+  episodeLifecycleValidator,
+  normalizeTicker,
+  writeSourceValidator,
+} from "./lib/planModel";
 import { ensureThread } from "./lib/planWrites";
 import { parseIbkrEasternTimestamp } from "../shared/brokerage/ibkr-flex/time";
 
@@ -39,6 +46,16 @@ const MAX_MARKET_PRICE_ROWS_TO_INSPECT = 25;
 const FILL_DISCUSSION_LOOKBACK_DAYS = 1;
 const MAX_FILL_DISCUSSION_CHECK_INS = 100;
 const MAX_FILL_DISCUSSION_NOTES_PER_CHECK_IN = 100;
+// What the user said they did, as opposed to what they plan: an entry or an
+// exit they reported in conversation, recorded before the fill arrived.
+const REPORTED_EXECUTION_KINDS = ["entry", "exit"] as const;
+const MAX_REPORTED_ENTRY_EPISODES = 200;
+// Newest elements first, so a long-lived episode still shows a recent report.
+const MAX_REPORTED_ENTRY_ELEMENTS_PER_EPISODE = 300;
+const MAX_CAMPAIGN_PORTFOLIO_RULES = 25;
+const CAMPAIGN_PORTFOLIO_RULE_KIND = "portfolio";
+// Writes refuse a campaign's 501st element, so this reads the whole set.
+const MAX_CAMPAIGN_RULE_ELEMENTS_TO_SCAN = 500;
 
 const checkInWindowValidator = v.union(
   v.literal("late_morning"),
@@ -87,7 +104,13 @@ const pendingFillValidator = v.object({
   ticker: v.union(v.string(), v.null()),
 });
 
-const fillValidator = v.union(acceptedFillValidator, pendingFillValidator);
+// A hint, not a verdict: how many entries or exits the user reported on the
+// ticker's live episodes around this fill. The rows are in fill discussion
+// context.
+const undiscussedFillValidator = v.union(
+  acceptedFillValidator.extend({ reportedEntryCount: v.number() }),
+  pendingFillValidator.extend({ reportedEntryCount: v.number() }),
+);
 
 const positionValidator = v.object({
   avgEntryPrice: v.number(),
@@ -151,6 +174,52 @@ const fillDiscussionEvidenceWindowValidator = v.object({
   startDate: v.string(),
 });
 
+const reportedEntryValidator = v.object({
+  asOf: v.union(v.string(), v.null()),
+  campaign: v.union(
+    v.object({
+      campaignId: v.id("campaigns"),
+      name: v.string(),
+      // Agreed campaign rules that fix which portfolio its trades belong to.
+      portfolioRules: v.array(
+        v.object({
+          elementId: v.id("planElements"),
+          statement: v.string(),
+        }),
+      ),
+    }),
+    v.null(),
+  ),
+  elementId: v.id("planElements"),
+  episode: v.object({
+    direction: v.union(directionValidator, v.null()),
+    episodeId: v.id("episodes"),
+    lifecycle: episodeLifecycleValidator,
+    portfolio: v.union(
+      v.object({ name: v.string(), portfolioId: v.id("portfolios") }),
+      v.null(),
+    ),
+  }),
+  kind: v.union(v.literal("entry"), v.literal("exit")),
+  // Facts for the agent to weigh. Null means the fill or the report does not
+  // carry what the comparison needs.
+  matchSignals: v.object({
+    asOfDaysFromFillDate: v.union(v.number(), v.null()),
+    kindFitsFillSide: v.union(v.boolean(), v.null()),
+    priceDifferencePercent: v.union(v.number(), v.null()),
+    quantityDifference: v.union(v.number(), v.null()),
+    recordedBeforeFill: v.union(v.boolean(), v.null()),
+  }),
+  price: v.union(v.number(), v.null()),
+  quantity: v.union(v.number(), v.null()),
+  recordedAt: v.number(),
+  source: writeSourceValidator,
+  statement: v.string(),
+  status: elementStatusValidator,
+  supersededById: v.union(v.id("planElements"), v.null()),
+  value: v.union(elementValueValidator, v.null()),
+});
+
 const fillDiscussionContextValidator = v.object({
   checkIns: v.array(fillDiscussionCheckInValidator),
   evidenceWindow: fillDiscussionEvidenceWindowValidator,
@@ -170,6 +239,7 @@ const fillDiscussionContextValidator = v.object({
     v.object({ state: v.literal("accepted"), tradeId: v.id("trades") }),
     v.object({ state: v.literal("unknown") }),
   ),
+  reportedEntries: v.array(reportedEntryValidator),
 });
 
 const skippedOrderValidator = v.object({
@@ -385,6 +455,225 @@ function fillDiscussionEvidenceWindow(
   };
 }
 
+type ReportedExecutionKind = (typeof REPORTED_EXECUTION_KINDS)[number];
+
+function reportedExecutionKind(
+  element: Doc<"planElements">,
+): ReportedExecutionKind | null {
+  const kind = element.kind?.trim().toLowerCase();
+  return (
+    REPORTED_EXECUTION_KINDS.find((candidate) => candidate === kind) ?? null
+  );
+}
+
+interface FillForReportedEntries {
+  date: number | null;
+  price: number | null;
+  quantity: number | null;
+  side: "buy" | "sell" | null;
+}
+
+function calendarDaysBetween(from: string, to: string): number {
+  return Math.round(
+    (Date.parse(`${to}T12:00:00.000Z`) - Date.parse(`${from}T12:00:00.000Z`)) /
+      86_400_000,
+  );
+}
+
+function roundTo(value: number, digits: number): number {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+}
+
+/**
+ * User-authored entry and exit reports on the ticker's live episodes, newest
+ * first. Dropped elements are left out; superseded ones stay, because the
+ * report that replaced one often keeps its price only in prose.
+ */
+async function getReportedExecutionElements(
+  ctx: QueryCtx,
+  ownerId: string,
+  ticker: string,
+) {
+  const thread = await ctx.db
+    .query("instrumentThreads")
+    .withIndex("by_owner_ticker", (q) =>
+      q.eq("ownerId", ownerId).eq("ticker", normalizeTicker(ticker)),
+    )
+    .first();
+  if (!thread) return [];
+
+  const episodes = (
+    await ctx.db
+      .query("episodes")
+      .withIndex("by_owner_threadId", (q) =>
+        q.eq("ownerId", ownerId).eq("threadId", thread._id),
+      )
+      .order("desc")
+      .take(MAX_REPORTED_ENTRY_EPISODES)
+  ).filter(
+    (episode) =>
+      episode.lifecycle !== "closed" && episode.shelvedAt === undefined,
+  );
+
+  const reports = await Promise.all(
+    episodes.map(async (episode) => {
+      const elements = await ctx.db
+        .query("planElements")
+        .withIndex("by_owner_episodeId_revision", (q) =>
+          q.eq("ownerId", ownerId).eq("episodeId", episode._id),
+        )
+        .order("desc")
+        .take(MAX_REPORTED_ENTRY_ELEMENTS_PER_EPISODE);
+      return elements.flatMap((element) => {
+        const kind = reportedExecutionKind(element);
+        return kind !== null &&
+          element.author === "user" &&
+          element.status !== "dropped"
+          ? [{ element, episode, kind }]
+          : [];
+      });
+    }),
+  );
+  return reports
+    .flat()
+    .sort((left, right) => right.element.createdAt - left.element.createdAt);
+}
+
+type ReportedExecution = Awaited<
+  ReturnType<typeof getReportedExecutionElements>
+>[number];
+
+/** A report belongs to a fill when it was made, or dated, inside its window. */
+function reportedInWindow(report: ReportedExecution, windowStartDate: string) {
+  const recordedDate = getEasternDateString(report.element.createdAt);
+  return (
+    recordedDate >= windowStartDate ||
+    (report.element.asOf !== undefined &&
+      report.element.asOf >= windowStartDate)
+  );
+}
+
+async function reportedEntriesForFill(
+  ctx: QueryCtx,
+  ownerId: string,
+  reports: ReportedExecution[],
+  fill: FillForReportedEntries,
+) {
+  const episodeContext = new Map<
+    Id<"episodes">,
+    {
+      campaign: {
+        campaignId: Id<"campaigns">;
+        name: string;
+        portfolioRules: { elementId: Id<"planElements">; statement: string }[];
+      } | null;
+      portfolio: { name: string; portfolioId: Id<"portfolios"> } | null;
+    }
+  >();
+  for (const { episode } of reports) {
+    if (episodeContext.has(episode._id)) continue;
+    const portfolio = episode.portfolioId
+      ? await ctx.db.get(episode.portfolioId)
+      : null;
+    const campaign = episode.campaignId
+      ? await ctx.db.get(episode.campaignId)
+      : null;
+    const campaignElements =
+      campaign?.ownerId === ownerId
+        ? await ctx.db
+            .query("planElements")
+            .withIndex("by_owner_campaignId_revision", (q) =>
+              q.eq("ownerId", ownerId).eq("campaignId", campaign._id),
+            )
+            .order("desc")
+            .take(MAX_CAMPAIGN_RULE_ELEMENTS_TO_SCAN)
+        : [];
+    episodeContext.set(episode._id, {
+      campaign:
+        campaign?.ownerId === ownerId
+          ? {
+              campaignId: campaign._id,
+              name: campaign.name,
+              portfolioRules: campaignElements
+                .filter(
+                  (element) =>
+                    element.status === "agreed" &&
+                    element.kind?.trim().toLowerCase() ===
+                      CAMPAIGN_PORTFOLIO_RULE_KIND,
+                )
+                .slice(0, MAX_CAMPAIGN_PORTFOLIO_RULES)
+                .map((element) => ({
+                  elementId: element._id,
+                  statement: element.statement,
+                })),
+            }
+          : null,
+      portfolio:
+        portfolio?.ownerId === ownerId
+          ? { name: portfolio.name, portfolioId: portfolio._id }
+          : null,
+    });
+  }
+
+  const fillDate = fill.date !== null ? getEasternDateString(fill.date) : null;
+  return reports.map(({ element, episode, kind }) => {
+    const value = element.value ?? null;
+    const price =
+      value?.unit === "usd" && value.scope === "per_share"
+        ? value.amount
+        : null;
+    const quantity = value?.unit === "shares" ? value.amount : null;
+    // A buy adds to a long and reduces a short; an episode with no direction
+    // yet is read as long, which is what an entry on it opens.
+    const fillAddsToPosition =
+      fill.side === null
+        ? null
+        : (fill.side === "buy") === ((episode.direction ?? "long") === "long");
+    const { campaign, portfolio } = episodeContext.get(episode._id)!;
+    return {
+      asOf: element.asOf ?? null,
+      campaign,
+      elementId: element._id,
+      episode: {
+        direction: episode.direction ?? null,
+        episodeId: episode._id,
+        lifecycle: episode.lifecycle,
+        portfolio,
+      },
+      kind,
+      matchSignals: {
+        asOfDaysFromFillDate:
+          element.asOf !== undefined && fillDate !== null
+            ? calendarDaysBetween(fillDate, element.asOf)
+            : null,
+        kindFitsFillSide:
+          fillAddsToPosition === null
+            ? null
+            : (kind === "entry") === fillAddsToPosition,
+        priceDifferencePercent:
+          price !== null && fill.price !== null && fill.price !== 0
+            ? roundTo(((price - fill.price) / fill.price) * 100, 2)
+            : null,
+        quantityDifference:
+          quantity !== null && fill.quantity !== null
+            ? roundTo(quantity - fill.quantity, 8)
+            : null,
+        recordedBeforeFill:
+          fill.date !== null ? element.createdAt < fill.date : null,
+      },
+      price,
+      quantity,
+      recordedAt: element.createdAt,
+      source: element.source,
+      statement: element.statement,
+      status: element.status,
+      supersededById: element.supersededById ?? null,
+      value,
+    };
+  });
+}
+
 function reconciliationIssueFromDocument(
   issue: Doc<"brokerageReconciliationIssues">,
 ) {
@@ -407,7 +696,8 @@ function instrumentReconciliationIssueFromDocument(
     message: issue.message,
     reportDate: issue.reportDate,
     resolvedAt: issue.resolvedAt ?? null,
-    state: issue.status === "open" ? ("active" as const) : ("resolved" as const),
+    state:
+      issue.status === "open" ? ("active" as const) : ("resolved" as const),
   };
 }
 
@@ -710,7 +1000,7 @@ export const getDailyContext = internalQuery({
     sync: syncSummaryValidator,
     syncStatus: syncStatusValidator,
     todayCheckIns: v.array(checkInHistoryValidator),
-    undiscussedFills: v.array(fillValidator),
+    undiscussedFills: v.array(undiscussedFillValidator),
     valuation: valuationSnapshotValidator,
   }),
   handler: async (ctx, args) => {
@@ -772,12 +1062,38 @@ export const getDailyContext = internalQuery({
         .filter((checkIn) => checkIn.respondedAt !== undefined)
         .flatMap((checkIn) => checkIn.surfacedTradeIds ?? []),
     );
-    const undiscussedFills = [
+    const unansweredFills = [
       ...recentTrades.map(acceptedFillFromTrade),
       ...recentInboxTrades.map(pendingFillFromInboxTrade),
     ]
       .filter((fill) => !answeredFillIds.has(fill.id))
       .sort((a, b) => (b.date ?? 0) - (a.date ?? 0));
+    const reportsByTicker = new Map<string, ReportedExecution[]>();
+    for (const fill of unansweredFills) {
+      if (!fill.ticker || reportsByTicker.has(fill.ticker)) continue;
+      reportsByTicker.set(
+        fill.ticker,
+        await getReportedExecutionElements(ctx, args.ownerId, fill.ticker),
+      );
+    }
+    const undiscussedFills = unansweredFills.map((fill) => {
+      const windowStartDate = fillDiscussionEvidenceWindow(
+        fill.date ?? undefined,
+        args.now,
+      ).startDate;
+      return {
+        ...fill,
+        // Superseded reports are restated by the element that replaced them.
+        reportedEntryCount: (fill.ticker
+          ? reportsByTicker.get(fill.ticker)!
+          : []
+        ).filter(
+          (report) =>
+            report.element.status !== "superseded" &&
+            reportedInWindow(report, windowStartDate),
+        ).length,
+      };
+    });
     const openPositions = buildOpenPositions(positionTrades);
     const relevantTickers = new Set([
       ...undiscussedFills.flatMap((fill) => (fill.ticker ? [fill.ticker] : [])),
@@ -1365,10 +1681,7 @@ export const getPortfolioContext = internalQuery({
       },
       reconciliation: openIssues.map(reconciliationIssueFromDocument),
       recentlyResolvedReconciliation: recentlyResolved,
-      sync: syncSummaryFromRuns(
-        latestActivityRun,
-        latestSuccessfulActivityRun,
-      ),
+      sync: syncSummaryFromRuns(latestActivityRun, latestSuccessfulActivityRun),
       syncStatus: syncStatusFromRun(latestActivityRun ?? undefined),
       valuation,
     };
@@ -1551,9 +1864,35 @@ export const getFillDiscussionContext = internalQuery({
         }),
     );
 
+    // Reports are read against the whole window the fill could be discussed
+    // in, not the part of it the check-in scan reached.
+    const reportedFill = ownedPendingFill ?? receipt?.trade ?? null;
+    const reportedEntries = reportedFill?.ticker
+      ? await reportedEntriesForFill(
+          ctx,
+          args.ownerId,
+          (
+            await getReportedExecutionElements(
+              ctx,
+              args.ownerId,
+              reportedFill.ticker,
+            )
+          ).filter((report) =>
+            reportedInWindow(report, evidenceWindow.startDate),
+          ),
+          {
+            date: reportedFill.date ?? null,
+            price: reportedFill.price ?? null,
+            quantity: reportedFill.quantity ?? null,
+            side: reportedFill.side ?? null,
+          },
+        )
+      : [];
+
     return {
       checkIns,
       evidenceWindow: resolvedEvidenceWindow,
+      reportedEntries,
       fill: ownedPendingFill
         ? {
             assetType: ownedPendingFill.assetType ?? null,

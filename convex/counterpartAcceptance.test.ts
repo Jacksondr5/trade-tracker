@@ -1702,4 +1702,355 @@ describe("counterpart trade acceptance", () => {
       ok: false,
     });
   });
+
+  describe("reported entries", () => {
+    const fillDate = Date.UTC(2026, 9, 8, 14, 0, 0);
+    const now = Date.UTC(2026, 9, 9, 15, 0, 0);
+
+    async function seedEpisode(args: {
+      campaignId?: Id<"campaigns">;
+      direction?: "long" | "short";
+      lifecycle?: "idea" | "watching" | "active" | "closed";
+      portfolioId?: Id<"portfolios">;
+      shelvedAt?: number;
+      ticker?: string;
+    }) {
+      return await t.run(async (ctx) => {
+        const ticker = args.ticker ?? "AMD";
+        const existing = (
+          await ctx.db.query("instrumentThreads").collect()
+        ).find((thread) => thread.ticker === ticker);
+        const threadId =
+          existing?._id ??
+          (await ctx.db.insert("instrumentThreads", {
+            createdAt: fillDate,
+            createdBy: "user",
+            ownerId,
+            ticker,
+          }));
+        return await ctx.db.insert("episodes", {
+          campaignElementExemptions: [],
+          campaignId: args.campaignId,
+          createdBy: "user",
+          direction: args.direction,
+          lifecycle: args.lifecycle ?? "watching",
+          openedAt: fillDate,
+          ownerId,
+          portfolioId: args.portfolioId,
+          revision: 1,
+          shelvedAt: args.shelvedAt,
+          source: "user",
+          threadId,
+          ticker,
+          updatedAt: fillDate,
+        });
+      });
+    }
+
+    async function seedElement(args: {
+      asOf?: string;
+      author?: "user" | "counterpart";
+      campaignId?: Id<"campaigns">;
+      createdAt?: number;
+      episodeId?: Id<"episodes">;
+      kind: string;
+      statement?: string;
+      status?: "proposed" | "agreed" | "superseded" | "dropped";
+      value?: {
+        amount: number;
+        scope: "per_share" | "position";
+        unit: "usd" | "shares";
+      };
+    }) {
+      return await t.run(async (ctx) => {
+        const createdAt = args.createdAt ?? fillDate - 60_000;
+        return await ctx.db.insert("planElements", {
+          actor: "counterpart",
+          asOf: args.asOf,
+          author: args.author ?? "user",
+          campaignId: args.campaignId,
+          createdAt,
+          episodeId: args.episodeId,
+          kind: args.kind,
+          ownerId,
+          revision: 1,
+          source: "conversation",
+          statement: args.statement ?? "Bought AMD at $621.95.",
+          status: args.status ?? "agreed",
+          statusChangedAt: createdAt,
+          statusRevision: 1,
+          value: args.value && { ...args.value, provenance: "user_reported" },
+        });
+      });
+    }
+
+    it("returns the user's reported entry with its episode, campaign rule, and match facts", async () => {
+      const portfolioId = await seedPortfolio("Swing");
+      const campaignId = await t.run(async (ctx) =>
+        ctx.db.insert("campaigns", {
+          name: "Semiconductors",
+          ownerId,
+          status: "active",
+          thesis: "AI buildout",
+        }),
+      );
+      await seedElement({
+        campaignId,
+        kind: "portfolio",
+        statement: "Every trade planned in this theme is a Swing trade.",
+      });
+      await seedElement({
+        campaignId,
+        kind: "sizing",
+        statement: "Small positions.",
+      });
+      const episodeId = await seedEpisode({ campaignId, portfolioId });
+      const elementId = await seedElement({
+        asOf: "2026-10-08",
+        episodeId,
+        kind: "entry",
+        value: { amount: 621.95, scope: "per_share", unit: "usd" },
+      });
+      const inboxTradeId = await seedPendingTrade({
+        date: fillDate,
+        price: 620,
+        quantity: 5,
+        ticker: "AMD",
+      });
+
+      const context = await t.query(
+        internal.counterpart.getFillDiscussionContext,
+        { inboxTradeId, now, ownerId },
+      );
+
+      expect(context.reportedEntries).toEqual([
+        {
+          asOf: "2026-10-08",
+          campaign: {
+            campaignId,
+            name: "Semiconductors",
+            portfolioRules: [
+              {
+                elementId: expect.any(String),
+                statement:
+                  "Every trade planned in this theme is a Swing trade.",
+              },
+            ],
+          },
+          elementId,
+          episode: {
+            direction: null,
+            episodeId,
+            lifecycle: "watching",
+            portfolio: { name: "Swing", portfolioId },
+          },
+          kind: "entry",
+          matchSignals: {
+            asOfDaysFromFillDate: 0,
+            kindFitsFillSide: true,
+            priceDifferencePercent: 0.31,
+            quantityDifference: null,
+            recordedBeforeFill: true,
+          },
+          price: 621.95,
+          quantity: null,
+          recordedAt: fillDate - 60_000,
+          source: "conversation",
+          statement: "Bought AMD at $621.95.",
+          status: "agreed",
+          supersededById: null,
+          value: {
+            amount: 621.95,
+            provenance: "user_reported",
+            scope: "per_share",
+            unit: "usd",
+          },
+        },
+      ]);
+
+      const daily = await t.query(internal.counterpart.getDailyContext, {
+        now,
+        ownerId,
+      });
+      expect(daily.undiscussedFills).toEqual([
+        expect.objectContaining({ id: inboxTradeId, reportedEntryCount: 1 }),
+      ]);
+    });
+
+    it("leaves out plans, other authors, dropped reports, stale reports, and episodes that are not live", async () => {
+      const liveEpisodeId = await seedEpisode({ lifecycle: "active" });
+      const closedEpisodeId = await seedEpisode({ lifecycle: "closed" });
+      const shelvedEpisodeId = await seedEpisode({ shelvedAt: fillDate });
+      const otherTickerEpisodeId = await seedEpisode({ ticker: "NVDA" });
+      await seedElement({ episodeId: liveEpisodeId, kind: "stop" });
+      await seedElement({
+        author: "counterpart",
+        episodeId: liveEpisodeId,
+        kind: "entry",
+      });
+      await seedElement({
+        episodeId: liveEpisodeId,
+        kind: "entry",
+        status: "dropped",
+      });
+      await seedElement({
+        createdAt: Date.UTC(2026, 8, 1, 14, 0, 0),
+        episodeId: liveEpisodeId,
+        kind: "entry",
+      });
+      await seedElement({ episodeId: closedEpisodeId, kind: "entry" });
+      await seedElement({ episodeId: shelvedEpisodeId, kind: "entry" });
+      await seedElement({ episodeId: otherTickerEpisodeId, kind: "entry" });
+      const inboxTradeId = await seedPendingTrade({
+        date: fillDate,
+        ticker: "AMD",
+      });
+
+      const context = await t.query(
+        internal.counterpart.getFillDiscussionContext,
+        { inboxTradeId, now, ownerId },
+      );
+      expect(context.reportedEntries).toEqual([]);
+
+      const daily = await t.query(internal.counterpart.getDailyContext, {
+        now,
+        ownerId,
+      });
+      expect(daily.undiscussedFills).toEqual([
+        expect.objectContaining({ id: inboxTradeId, reportedEntryCount: 0 }),
+      ]);
+    });
+
+    it("keeps a superseded report as evidence but counts only its replacement", async () => {
+      const episodeId = await seedEpisode({ direction: "long" });
+      const replacementId = await seedElement({
+        asOf: "2026-10-08",
+        createdAt: fillDate + 3_600_000,
+        episodeId,
+        kind: "Entry",
+        statement: "Confirmed: 5 shares at $621.95.",
+        value: { amount: 5, scope: "position", unit: "shares" },
+      });
+      const supersededId = await seedElement({
+        episodeId,
+        kind: "entry",
+        status: "superseded",
+        value: { amount: 621.95, scope: "per_share", unit: "usd" },
+      });
+      await t.run(async (ctx) => {
+        await ctx.db.patch(supersededId, { supersededById: replacementId });
+      });
+      const inboxTradeId = await seedPendingTrade({
+        date: fillDate,
+        price: 621.95,
+        quantity: 5,
+        ticker: "AMD",
+      });
+
+      const context = await t.query(
+        internal.counterpart.getFillDiscussionContext,
+        { inboxTradeId, now, ownerId },
+      );
+      expect(context.reportedEntries).toMatchObject([
+        {
+          elementId: replacementId,
+          matchSignals: {
+            priceDifferencePercent: null,
+            quantityDifference: 0,
+            recordedBeforeFill: false,
+          },
+          price: null,
+          quantity: 5,
+          status: "agreed",
+          supersededById: null,
+        },
+        {
+          elementId: supersededId,
+          matchSignals: { priceDifferencePercent: 0, quantityDifference: null },
+          price: 621.95,
+          status: "superseded",
+          supersededById: replacementId,
+        },
+      ]);
+
+      const daily = await t.query(internal.counterpart.getDailyContext, {
+        now,
+        ownerId,
+      });
+      expect(daily.undiscussedFills).toEqual([
+        expect.objectContaining({ id: inboxTradeId, reportedEntryCount: 1 }),
+      ]);
+    });
+
+    it("reads an exit report against a sell and an old report dated to the fill", async () => {
+      const episodeId = await seedEpisode({
+        direction: "long",
+        lifecycle: "active",
+      });
+      const exitId = await seedElement({
+        // Recorded long before the window, but dated to the fill.
+        asOf: "2026-10-08",
+        createdAt: Date.UTC(2026, 8, 1, 14, 0, 0),
+        episodeId,
+        kind: "exit",
+        statement: "Sold AMD at $640.",
+      });
+      const entryId = await seedElement({ episodeId, kind: "entry" });
+      const inboxTradeId = await seedPendingTrade({
+        date: fillDate,
+        side: "sell",
+        ticker: "AMD",
+      });
+
+      const context = await t.query(
+        internal.counterpart.getFillDiscussionContext,
+        { inboxTradeId, now, ownerId },
+      );
+      expect(context.reportedEntries).toMatchObject([
+        { elementId: entryId, matchSignals: { kindFitsFillSide: false } },
+        {
+          elementId: exitId,
+          kind: "exit",
+          matchSignals: { asOfDaysFromFillDate: 0, kindFitsFillSide: true },
+        },
+      ]);
+    });
+
+    it("returns no reports for a pending row without a ticker or an unknown fill", async () => {
+      const episodeId = await seedEpisode({});
+      await seedElement({ episodeId, kind: "entry" });
+      const untickered = await t.run(async (ctx) =>
+        ctx.db.insert("inboxTrades", {
+          date: fillDate,
+          ownerId,
+          source: "ibkr",
+          status: "pending_review",
+          validationErrors: [],
+          validationWarnings: [],
+        }),
+      );
+
+      const context = await t.query(
+        internal.counterpart.getFillDiscussionContext,
+        { inboxTradeId: untickered, now, ownerId },
+      );
+      expect(context.reportedEntries).toEqual([]);
+      const unknown = await t.query(
+        internal.counterpart.getFillDiscussionContext,
+        { inboxTradeId: "missing", now, ownerId },
+      );
+      expect(unknown).toMatchObject({
+        fill: { state: "unknown" },
+        reportedEntries: [],
+      });
+
+      const daily = await t.query(internal.counterpart.getDailyContext, {
+        now,
+        ownerId,
+      });
+      expect(daily.undiscussedFills).toEqual([
+        expect.objectContaining({ id: untickered, reportedEntryCount: 0 }),
+      ]);
+    });
+  });
 });

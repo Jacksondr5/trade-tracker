@@ -114,6 +114,7 @@ describe("counterpart service surface", () => {
       id: pending,
       price: null,
       quantity: null,
+      reportedEntryCount: 0,
       reviewStatus: "pending_review",
       side: null,
       source: "ibkr",
