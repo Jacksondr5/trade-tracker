@@ -136,6 +136,8 @@ Each element carries `statusHistory`: every status it has held, with actor, revi
 
 `portfolio-context` and `daily-context` now also return `sync` (`latestAttempt` with a concise `failure` summary, and `latestSuccessfulStatement`), reconciliation issues with `state`, `detectedAt`, `lastRecheckedAt`, and `resolvedAt`, `recentlyResolvedReconciliation`, and `valuation` (below).
 
+`fill-discussion-context` also returns `reportedEntries`: the user-authored `entry` and `exit` elements on the ticker's live episodes (not closed, not shelved) that were recorded, or dated by `asOf`, inside the fill's evidence window. Dropped elements are left out; superseded ones stay and name their replacement in `supersededById`. Each row carries the statement, `value` with `price` and `quantity` lifted out when the value is a per-share dollar amount or a share count, `recordedAt`, `status`, the `episode` (lifecycle, direction, portfolio), the `campaign` with its agreed `portfolio`-kind rules, and `matchSignals` (`kindFitsFillSide`, `priceDifferencePercent`, `quantityDifference`, `asOfDaysFromFillDate`, `recordedBeforeFill`). The signals are facts, not a verdict; whether a report confirms the fill stays the agent's call. Each `daily-context` `undiscussedFills` row carries `reportedEntryCount`, counting the same rows without the superseded ones.
+
 ### Valuation snapshot
 
 ```
