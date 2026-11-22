@@ -33,6 +33,12 @@ pnpm typecheck        # TypeScript type checking (tsc --noEmit)
 
 This repo uses Vitest for unit-style tests and Playwright for end-to-end tests. CI runs lint, typecheck, test, and build.
 
+Convex gotchas:
+
+- Convex pushes type-check `convex/` with `convex/tsconfig.json`, whose `lib` is ES2021 (no `Array.prototype.at`) and which also checks `convex/*.test.ts`. A type error there silently blocks every push while the watcher keeps running. Check with `pnpm exec tsc -p convex/tsconfig.json --noEmit`.
+- Strict `v.object` return validators must be extended whenever a table gains fields, or every query returning that table crashes.
+- A Vercel preview's Convex deployment needs the full name: `convex run --deployment "jackson-miller:trade-tracker-42b0b:preview/<branch>"`. The short `preview/<branch>` form fails because `.env.local` selects a local deployment. Each push resets the preview's data.
+
 ## Worktree Bootstrap
 
 New Git worktrees may be missing `.env.local`, `node_modules/`, and a Convex deployment. Bootstrap and start all three with one command:
